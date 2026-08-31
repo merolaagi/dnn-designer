@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.4.1
+
+- Fixed: the versioning test used Starlette's `TestClient`, which needs an HTTP
+  client library the project does not otherwise depend on, so the suite failed
+  in a plain virtual environment. It calls the route functions directly now.
+  The suite is meant to run in a bare checkout and pulling in a dependency for
+  a filesystem test defeated that.
+
+## 1.4.0
+
+- **Designs are versioned.** Save writes the next version instead of
+  overwriting, and a selector beside the name opens any earlier one. A design
+  you liked three edits ago is still there. Flat saves from before this are read
+  as version 1 and left alone.
+- **Navigation rail** down the left, replacing six tabs competing for width in
+  the drawer. Design keeps the drawer collapsed so the canvas dominates;
+  everything else opens it.
+- **Warning count always visible** on the rail, green at zero, rather than only
+  when the Problems tab is open.
+- Delete removes a single version or the whole history.
+
 ## 1.3.0
 
 A guided project catalogue: pick something to build, and it builds a layer at a

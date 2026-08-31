@@ -7,6 +7,7 @@ PyTorch produces — a designer whose predictions disagree with the framework is
 worse than no designer.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -579,6 +580,64 @@ def _():
     result = projectloader.suggest("underwater basket weaving")
     assert not result["confident"]
     assert result["advice"], "a miss should still say something useful"
+
+
+# --------------------------------------------------------------------------
+# saved designs are versioned
+# --------------------------------------------------------------------------
+
+@check("saving a design creates a new version rather than overwriting")
+def _():
+    # The route functions are called directly rather than through Starlette's
+    # TestClient, which needs an HTTP client library. The suite is meant to run
+    # in a bare checkout, so it should not pull one in for a filesystem test.
+    import main
+    from fastapi import HTTPException
+
+    name = "__version_test__"
+    payload = type("Body", (), {})()
+
+    def cleanup():
+        try:
+            main.delete_graph(name)
+        except HTTPException:
+            pass
+
+    cleanup()
+    graph = {"name": name, "nodes": [
+        {"id": "i", "type": "Input", "params": {"shape": [4]}},
+        {"id": "l", "type": "Linear", "params": {"units": 2}},
+        {"id": "o", "type": "Output", "params": {}}],
+        "edges": [{"id": "e1", "source": "i", "target": "l"},
+                  {"id": "e2", "source": "l", "target": "o"}]}
+    try:
+        widths = [2, 8, 32]
+        reply = None
+        for width in widths:
+            graph["nodes"][1]["params"]["units"] = width
+            payload.graph = json.loads(json.dumps(graph))
+            reply = main.save_graph(name, payload)
+        assert reply["version"] == 3, reply
+
+        listed = main.graph_versions(name)
+        assert len(listed["versions"]) == 3, listed
+        assert listed["latest"] == 3, listed
+
+        for version, width in zip((1, 2, 3), widths):
+            got = main.load_graph(name, version=version)
+            assert got["nodes"][1]["params"]["units"] == width, \
+                f"version {version} should still hold width {width}, got {got['nodes'][1]['params']}"
+
+        assert main.load_graph(name)["nodes"][1]["params"]["units"] == 32, \
+            "loading without a version should give the newest"
+
+        try:
+            main.load_graph(name, version=99)
+            raise AssertionError("a version that does not exist should raise")
+        except HTTPException as exc:
+            assert exc.status_code == 404
+    finally:
+        cleanup()
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

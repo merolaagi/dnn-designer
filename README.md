@@ -126,7 +126,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Thirty-five checks, with the torch-dependent ones skipping themselves when it is
+Thirty-six checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -198,6 +198,12 @@ logits.
 Freezing is a count of trailing stages left trainable. Zero trains only your
 head; raise it once the head has settled. A non-RGB Input is handled by averaging
 the pretrained stem's kernels across the colour axis.
+
+## Saved designs
+
+Save writes a new version each time rather than overwriting. The selector beside
+the design name lists every version with its timestamp, and switching loads that
+one onto the canvas. Deleting takes either one version or the whole history.
 
 ## Saved weights
 
@@ -424,4 +430,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.3.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.4.1 — see `CHANGELOG.md`.

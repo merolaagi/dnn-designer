@@ -64,6 +64,38 @@ header{
 
 /* ---------------- shell ---------------- */
 .shell{flex:1;display:flex;min-height:0}
+
+/* navigation rail — one place to move between the parts of the app,
+   instead of six tabs competing for width in the drawer */
+#rail{
+  width:62px;flex:none;background:var(--ink-2);border-right:1px solid #26344A;
+  display:flex;flex-direction:column;padding:7px 0;gap:2px;overflow-y:auto;
+}
+#rail button{
+  background:none;border:none;color:#6A809A;padding:8px 2px 7px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-size:9px;letter-spacing:.03em;position:relative;
+}
+#rail button i{font-style:normal;font-size:16px;line-height:1}
+#rail button:hover{color:#AFC2D6;background:#22303F}
+#rail button.on{color:var(--amber)}
+#rail button.on::before{
+  content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;
+  background:var(--amber);border-radius:0 2px 2px 0;
+}
+#rail .spacer{flex:1}
+#rail .count{
+  position:absolute;top:4px;right:9px;background:var(--bad);color:#fff;
+  border-radius:8px;font-size:8.5px;padding:0 4px;line-height:13px;min-width:13px;
+}
+#rail .count.clean{background:var(--good)}
+
+#versionPick{
+  background:#22303F;border:1px solid #33445A;color:#D8E1EB;border-radius:6px;
+  padding:5px 8px;font-size:12px;max-width:132px;
+}
+#versionPick:focus{outline:none;border-color:var(--amber)}
+.pane.full{position:absolute;inset:0;background:var(--paper);z-index:5;overflow:auto}
 .panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
 #palette{width:212px;border-right:1px solid var(--paper-3);flex:none}
 #inspector{width:268px;border-left:1px solid var(--paper-3);flex:none}
@@ -409,6 +441,7 @@ pre#code .kw{color:#F0A202}
 <header>
   <div class="brand"><b>Deep Network Designer</b><span id="ver">tensor drafting</span></div>
   <input id="gname" value="MyNet" spellcheck="false" aria-label="Design name">
+  <select id="versionPick" title="Saved versions"><option value="">unsaved</option></select>
   <div class="spacer"></div>
   <div class="stat"><i id="statParams">—</i><u>learnables</u></div>
   <div class="stat"><i id="statLayers">0</i><u>layers</u></div>
@@ -423,6 +456,18 @@ pre#code .kw{color:#F0A202}
 </header>
 
 <div class="shell">
+  <nav id="rail">
+    <button data-view="design" class="on" title="Canvas"><i>&#9634;</i>Design</button>
+    <button data-view="paneBuild" title="Guided projects"><i>&#9776;</i>Build</button>
+    <button data-view="paneCode" title="Generated code"><i>&#60;&#62;</i>Code</button>
+    <button data-view="paneTrain" title="Training"><i>&#9654;</i>Train</button>
+    <button data-view="paneChat" title="Talk to a trained model"><i>&#9998;</i>Chat</button>
+    <button data-view="paneBlocks" title="Blocks and recipes"><i>&#9881;</i>Extend</button>
+    <span class="spacer"></span>
+    <button data-view="paneProbs" title="Problems"><i>&#9888;</i>Checks
+      <span class="count clean" id="railCount">0</span></button>
+  </nav>
+
   <aside class="panel" id="palette">
     <h2>Layers</h2>
     <input id="search" placeholder="Filter layers" spellcheck="false">
@@ -644,7 +689,7 @@ const state = {
   nodeCode:{}, checkpoints:[], augmentations:[], corpus:null,
   recipes:[], recipeConfig:{}, extraModels:{},
   projects:[], projectCategories:[], projectCat:"", projectId:null,
-  project:null, stepAt:0, stepIds:{},
+  project:null, stepAt:0, stepIds:{}, version:null,
   selection:new Set(), history:[], future:[], clipboard:null,
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0
 };
@@ -1633,6 +1678,11 @@ function showProblems(){
   const badge = $("probCount");
   badge.style.display = items.length ? "inline" : "none";
   badge.textContent = items.length;
+  const rail = $("railCount");
+  if (rail){
+    rail.textContent = items.length;
+    rail.classList.toggle("clean", items.length === 0);
+  }
   $("btnTrain").disabled = !(rep && rep.ok);
 }
 
@@ -1704,7 +1754,45 @@ $("btnSave").addEventListener("click", async () => {
     method:"PUT", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ graph: state.graph })
   });
-  toast(res.ok ? `Saved as ${state.graph.name}` : "Save failed");
+  if (!res.ok){ toast("Save failed"); return; }
+  const d = await res.json();
+  state.version = d.version;
+  await refreshVersions(state.graph.name, d.version);
+  toast(`Saved ${d.name} as version ${d.version}`);
+});
+
+async function refreshVersions(name, select){
+  const pick = $("versionPick");
+  if (!name){ pick.innerHTML = `<option value="">unsaved</option>`; return; }
+  let d;
+  try { d = await (await fetch(API + "/api/graphs/"
+                               + encodeURIComponent(name) + "/versions")).json(); }
+  catch { return; }
+  if (!d.versions){ pick.innerHTML = `<option value="">unsaved</option>`; return; }
+  pick.innerHTML = d.versions.slice().reverse().map(v =>
+    `<option value="${v.version}">Version ${v.version}`
+    + `${v.version === d.latest ? " (latest)" : ""} · ${v.saved_at.slice(5)}</option>`
+  ).join("");
+  pick.value = String(select || d.latest);
+  state.version = Number(pick.value);
+}
+
+$("versionPick").addEventListener("change", async () => {
+  const name = $("gname").value;
+  const version = $("versionPick").value;
+  if (!name || !version) return;
+  const r = await fetch(API + "/api/graphs/" + encodeURIComponent(name)
+                        + "?version=" + version);
+  if (!r.ok){ toast("Could not load that version"); return; }
+  pushHistory();
+  const g = await r.json();
+  state.version = g._version;
+  delete g._version; delete g._latest;
+  state.graph = g;
+  state.seq = g.nodes.length + g.edges.length + 300;
+  clearSelection();
+  render(); fitView(); analyze();
+  toast(`Opened version ${version}`);
 });
 
 $("btnLoad").addEventListener("click", async () => {
@@ -1712,7 +1800,9 @@ $("btnLoad").addEventListener("click", async () => {
   const data = await res.json();
   if (!data.graphs.length){ toast("Nothing saved yet"); return; }
   const pick = prompt("Open which design?\n\n" +
-    data.graphs.map(g => `${g.name}  (${g.saved_at})`).join("\n"), data.graphs[0].name);
+    data.graphs.map(g => `${g.name}  ·  ${g.versions} version`
+      + `${g.versions > 1 ? "s" : ""}, latest ${g.saved_at}`).join("\n"),
+    data.graphs[0].name);
   if (!pick) return;
   const r2 = await fetch(API + "/api/graphs/" + encodeURIComponent(pick.trim()));
   if (!r2.ok){ toast("No design under that name"); return; }
@@ -1720,24 +1810,53 @@ $("btnLoad").addEventListener("click", async () => {
   state.graph = await r2.json();
   state.seq = state.graph.nodes.length + state.graph.edges.length + 100;
   $("gname").value = state.graph.name || pick;
+  state.version = state.graph._version;
+  delete state.graph._version; delete state.graph._latest;
   clearSelection();
   render(); fitView(); analyze();
+  refreshVersions($("gname").value, state.version);
 });
 
-/* ============================ drawer ============================ */
+/* ======================= navigation and drawer ======================= */
+
+function showPane(pane){
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("on", t.dataset.pane === pane));
+  document.querySelectorAll(".pane").forEach(p =>
+    p.classList.toggle("on", p.id === pane));
+  $("drawer").classList.remove("min");
+  $("btnDrawer").textContent = "Hide";
+  if (pane === "paneTrain") drawChart();
+  if (pane === "paneBlocks") refreshBlocks();
+  if (pane === "paneChat") refreshChatModels();
+  if (pane === "paneBuild") loadProjects();
+}
 
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("on"));
-    document.querySelectorAll(".pane").forEach(p => p.classList.remove("on"));
-    tab.classList.add("on");
-    $(tab.dataset.pane).classList.add("on");
-    $("drawer").classList.remove("min");
-    $("btnDrawer").textContent = "Hide";
-    if (tab.dataset.pane === "paneTrain") drawChart();
-    if (tab.dataset.pane === "paneBlocks") refreshBlocks();
-    if (tab.dataset.pane === "paneChat") refreshChatModels();
-    if (tab.dataset.pane === "paneBuild") loadProjects();
+    showPane(tab.dataset.pane);
+    document.querySelectorAll("#rail button").forEach(b =>
+      b.classList.toggle("on", b.dataset.view === tab.dataset.pane));
+  });
+});
+
+// The rail decides how much room the drawer gets: Design keeps it small so the
+// canvas dominates, everything else opens it to full height.
+document.querySelectorAll("#rail button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#rail button").forEach(b =>
+      b.classList.toggle("on", b === btn));
+    const view = btn.dataset.view;
+    const drawer = $("drawer");
+    if (view === "design"){
+      drawer.style.height = "";
+      drawer.classList.add("min");
+      $("btnDrawer").textContent = "Show";
+      return;
+    }
+    showPane(view);
+    drawer.style.height = "min(64vh, 560px)";
+    drawMinimap();
   });
 });
 $("btnDrawer").addEventListener("click", () => {

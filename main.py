@@ -503,38 +503,115 @@ def _safe(name: str) -> str:
     return slug[:64]
 
 
+# Designs are versioned: every save writes a new file rather than overwriting,
+# so a design you liked three edits ago is still there. A flat <name>.json from
+# before versioning is treated as version 1 and left where it is.
+
+def _folder(name: str) -> Path:
+    return SAVED / _safe(name)
+
+
+def _versions(name: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    legacy = SAVED / f"{_safe(name)}.json"
+    if legacy.exists():
+        out.append({"version": 1, "path": legacy,
+                    "saved_at": legacy.stat().st_mtime, "legacy": True})
+    folder = _folder(name)
+    if folder.is_dir():
+        for path in folder.glob("v*.json"):
+            try:
+                number = int(path.stem[1:])
+            except ValueError:
+                continue
+            out.append({"version": number, "path": path,
+                        "saved_at": path.stat().st_mtime, "legacy": False})
+    out.sort(key=lambda v: v["version"])
+    return out
+
+
+def _describe(entry: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "version": entry["version"],
+        "saved_at": time.strftime("%Y-%m-%d %H:%M", time.localtime(entry["saved_at"])),
+    }
+
+
 @app.get("/api/graphs")
 def list_graphs():
+    names = {p.stem for p in SAVED.glob("*.json")}
+    names |= {p.name for p in SAVED.iterdir() if p.is_dir()}
     items = []
-    for path in sorted(SAVED.glob("*.json")):
+    for name in sorted(names):
+        versions = _versions(name)
+        if not versions:
+            continue
+        newest = versions[-1]
         items.append({
-            "name": path.stem,
-            "saved_at": time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime)),
+            "name": name,
+            "latest": newest["version"],
+            "versions": len(versions),
+            "saved_at": time.strftime("%Y-%m-%d %H:%M",
+                                      time.localtime(newest["saved_at"])),
         })
     return {"graphs": items}
 
 
+@app.get("/api/graphs/{name}/versions")
+def graph_versions(name: str):
+    versions = _versions(name)
+    if not versions:
+        raise HTTPException(404, detail={"message": "No design saved under that name."})
+    return {"name": _safe(name), "versions": [_describe(v) for v in versions],
+            "latest": versions[-1]["version"]}
+
+
 @app.get("/api/graphs/{name}")
-def load_graph(name: str):
-    path = SAVED / f"{_safe(name)}.json"
-    if not path.exists():
-        raise HTTPException(404, "No design saved under that name.")
-    return json.loads(path.read_text())
+def load_graph(name: str, version: Optional[int] = None):
+    versions = _versions(name)
+    if not versions:
+        raise HTTPException(404, detail={"message": "No design saved under that name."})
+    chosen = versions[-1]
+    if version is not None:
+        match = [v for v in versions if v["version"] == version]
+        if not match:
+            raise HTTPException(404, detail={
+                "message": f"{_safe(name)} has no version {version}."})
+        chosen = match[0]
+    graph = json.loads(chosen["path"].read_text())
+    graph["_version"] = chosen["version"]
+    graph["_latest"] = versions[-1]["version"]
+    return graph
 
 
 @app.put("/api/graphs/{name}")
 def save_graph(name: str, body: GraphPayload):
-    path = SAVED / f"{_safe(name)}.json"
-    path.write_text(json.dumps(body.graph, indent=2))
-    return {"ok": True, "name": path.stem}
+    """Saving always creates the next version. Nothing is overwritten."""
+    folder = _folder(name)
+    folder.mkdir(parents=True, exist_ok=True)
+    versions = _versions(name)
+    number = (versions[-1]["version"] + 1) if versions else 1
+    (folder / f"v{number}.json").write_text(json.dumps(body.graph, indent=2))
+    return {"ok": True, "name": _safe(name), "version": number,
+            "versions": len(versions) + 1}
 
 
 @app.delete("/api/graphs/{name}")
-def delete_graph(name: str):
-    path = SAVED / f"{_safe(name)}.json"
-    if path.exists():
-        path.unlink()
-    return {"ok": True}
+def delete_graph(name: str, version: Optional[int] = None):
+    """Without a version this removes the whole design and its history."""
+    if version is None:
+        (SAVED / f"{_safe(name)}.json").unlink(missing_ok=True)
+        folder = _folder(name)
+        if folder.is_dir():
+            for path in folder.glob("*.json"):
+                path.unlink()
+            folder.rmdir()
+        return {"ok": True, "removed": "all"}
+    for entry in _versions(name):
+        if entry["version"] == version:
+            entry["path"].unlink(missing_ok=True)
+            return {"ok": True, "removed": version}
+    raise HTTPException(404, detail={"message": f"No version {version}."})
 
 
 # --------------------------------------------------------------------------
