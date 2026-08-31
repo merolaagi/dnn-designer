@@ -36,9 +36,9 @@ cannot drift apart. There is a test asserting it.
 table, or a text corpus. Checkpoints save automatically with the design embedded,
 so you can reopen the network that produced a set of weights.
 
-**It is extensible.** Everything past the core layers is a file in `blocks/`.
-Drop one in, hit Reload, and it appears in the palette — editable from inside the
-app, with hot reload and isolated failures.
+**It is extensible in two directions.** Layers past the core set are files in
+`blocks/`. Training loops are files in `recipes/`. Both hot reload, both are
+editable from inside the app, and a broken one is the only thing that breaks.
 
 ## What it is not
 
@@ -100,13 +100,22 @@ matter far more at this scale than they would on a large model. To generate
 outside the app, run the exported file — `build_runtime()` returns the sampler,
 already pointed at the vocabulary.
 
+## Releasing
+
+```
+./release.sh "what changed in one line"
+```
+
+Runs the tests, commits, tags from `version.py`, and pushes. It will not push if
+the tests fail, because a tagged commit that does not pass is worse than no tag.
+
 ## Tests
 
 ```
 python tests/test_designer.py
 ```
 
-Seventeen checks, with the torch-dependent ones skipping themselves when it is
+Twenty-nine checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -286,6 +295,74 @@ shape rule and a code snippet per framework without a server restart. Anything i
 braces is evaluated with `shape`, `shapes` and `p` in scope, so
 `MyLayer(dim={p['dim']})` picks up whatever you put in its values field.
 
+## Recipes: pluggable training loops
+
+`blocks/` makes the layer set extensible. `recipes/` does the same for the
+training loop, which is what was actually blocking the harder workflows. GANs,
+diffusion, contrastive pretraining and reinforcement learning all build fine on
+the canvas — what stopped them was a loop that assumed one model, one optimizer,
+and a loss computed from predictions and labels.
+
+A recipe owns its own backward pass and optimizer steps, so it can run two
+optimizers, rewrite the forward pass, construct its own batches, or roll out an
+environment. It reports a dictionary of numbers and the trainer charts them.
+
+Three ship:
+
+| Recipe | What it proves |
+| --- | --- |
+| `Autoencoder` | A target that is not a label — reconstruction, with optional denoising |
+| `Contrastive` | A recipe constructing its own batch: two augmented views, NT-Xent loss, no labels at all |
+| `Diffusion` | A recipe rewriting the forward pass: noise schedule, timestep conditioning, DDIM sampling |
+| `GAN` | Two networks and two optimizers, alternating. The discriminator is a second saved design |
+| `Reinforce` | A loop with no dataset at all: the policy acts, CartPole answers, the episode is the batch |
+| `Detection` | Variable-length targets assigned to grid cells before any loss can be computed |
+
+Pick one from the top of the Training tab and its settings appear below. Recipes
+can refuse a graph they cannot train — the autoencoder names the shapes that
+disagree, diffusion tells you exactly what to set the Input to.
+
+### Writing one
+
+```python
+from recipes_sdk import Param, Recipe, install
+
+
+def setup(ctx):
+    import torch
+    ctx.optimizers["main"] = torch.optim.AdamW(ctx.parameters(), lr=ctx.cfg["lr"])
+
+
+def step(ctx, xs, y):
+    import torch.nn.functional as F
+    loss = F.mse_loss(ctx.model(*xs), xs[0])
+    opt = ctx.optimizers["main"]
+    opt.zero_grad(set_to_none=True)
+    loss.backward()
+    opt.step()
+    return {"loss": float(loss.item())}
+
+
+install(Recipe(name="MyLoop", doc="...", params=[Param("lr", "float", 1e-3)],
+               setup=setup, step=step))
+```
+
+`ctx` holds the models, the device, your settings and a scratch `state` dict.
+Return any numbers you want charted. Add a `check(ctx)` returning a complaint
+string to reject graphs that will not work.
+
+Three further hooks cover the harder cases. `extra_models=["discriminator"]`
+asks for another network, built from a saved design the user picks.
+`data_shape(ctx)` tells the loader what the data looks like when it differs from
+the model's Input, which a GAN needs because it takes noise but reads images.
+`self_supplied=True` skips the DataLoader entirely and calls `step` a fixed
+number of times per epoch, which is the only way to express a reinforcement
+learning rollout.
+
+Set `objective` to the metric that matters — `Reinforce` uses `return` with
+`lower_is_better=False`, so checkpoints keep the best policy rather than the
+lowest loss.
+
 ## Shape convention
 
 The graph is channels-first with the batch dimension left out: `[C, H, W]` for
@@ -310,6 +387,9 @@ blocks_sdk.py    the Block/Param surface plug-ins write against
 blockloader.py   scans blocks/, hot-reloads, isolates failures
 version.py       release number, read by the header and /health
 blocks/          plug-in blocks, one file each
+recipes/         plug-in training loops, one file each
+recipes_sdk.py   the Recipe/Context surface training loops write against
+recipeloader.py  scans recipes/, hot-reloads, isolates failures
 checkpoints/     saved weights, each carrying the design that made it
 saved/           designs saved from the Open/Save buttons
 uploads/         tables and corpora
@@ -330,4 +410,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.0.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.2.0 — see `CHANGELOG.md`.

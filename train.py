@@ -16,6 +16,7 @@ so that a graph with two Input layers is no more special than a graph with one:
 from __future__ import annotations
 
 import math
+import json
 import queue
 import re
 import threading
@@ -765,6 +766,179 @@ def _shape_target(y, task, batch_size):
     return y
 
 
+def _build_saved(design_name: str, device: str):
+    """Build a second network from a saved design, for recipes that need one."""
+    import codegen
+    import graph as G
+
+    path = Path(__file__).resolve().parent / "saved" / f"{Path(design_name).stem}.json"
+    if not path.exists():
+        raise DataError(f"No saved design named {path.stem}.")
+    blob = json.loads(path.read_text())
+    g = G.parse(blob)
+    report = G.analyze(g)
+    if not report["ok"]:
+        raise DataError(f"The saved design {path.stem} does not analyze cleanly.")
+    return build_model(codegen.to_pytorch(g, report),
+                       codegen.model_class_name(g)).to(device)
+
+
+def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
+                name_hint, device) -> None:
+    """Hand the loop to a plug-in recipe.
+
+    The recipe owns its backward pass and optimizer steps, so this does no more
+    than move batches, aggregate whatever numbers come back, and checkpoint on
+    the metric the recipe nominates.
+    """
+    import recipeloader
+    import recipes_sdk
+    import torch
+
+    recipeloader.load_all()
+    recipe = recipes_sdk.REGISTRY.get(cfg["recipe"])
+    if recipe is None:
+        raise DataError(
+            f"No training recipe named {cfg['recipe']}. Check the Recipes tab.")
+
+    settings = {**recipe.defaults(), **(cfg.get("recipe_config") or {})}
+    models = {"main": model}
+
+    for slot in recipe.extra_models:
+        design = (cfg.get("extra_models") or {}).get(slot)
+        if not design:
+            raise DataError(
+                f"{recipe.name} needs a second network for '{slot}'. Design it, "
+                f"save it, and pick it in the training form.")
+        models[slot] = _build_saved(design, device)
+        job.emit("weights", file=f"{design} as {slot}",
+                 loaded=sum(1 for _ in models[slot].parameters()),
+                 skipped=[], skipped_count=0, missing_count=0)
+
+    ctx = recipes_sdk.Context(
+        models=models, device=device, cfg=settings,
+        in_shapes=[list(s) for s in in_shapes],
+        out_shape=list(out_shape) if out_shape else None)
+
+    if recipe.check:
+        complaint = recipe.check(ctx)
+        if complaint:
+            raise DataError(complaint)
+
+    if recipe.self_supplied:
+        train_loader = val_loader = None
+        meta = {}
+    else:
+        data_shapes = recipe.data_shape(ctx) if recipe.data_shape else in_shapes
+        train_loader, val_loader, meta = _make_loaders(
+            cfg, data_shapes, [], out_shape, "classification", job)
+
+    if recipe.setup:
+        recipe.setup(ctx)
+
+    job.epochs = int(cfg.get("epochs", 5))
+    job.status = "running"
+    best = float("inf") if recipe.lower_is_better else float("-inf")
+    save_every = bool(cfg.get("save_checkpoints", True))
+
+    def aggregate(rows, weights):
+        total = sum(weights) or 1
+        keys = {k for r in rows for k in r}
+        return {k: round(sum(r.get(k, 0.0) * w for r, w in zip(rows, weights)) / total, 5)
+                for k in keys}
+
+    for epoch in range(1, job.epochs + 1):
+        if job.stop.is_set():
+            break
+        job.epoch = epoch
+        ctx.epoch = epoch
+        model.train()
+        rows, weights = [], []
+
+        if recipe.self_supplied:
+            for index in range(int(settings.get("steps_per_epoch",
+                                                recipe.steps_per_epoch))):
+                if job.stop.is_set():
+                    break
+                ctx.step_index = index
+                rows.append(recipe.step(ctx, None, None) or {})
+                weights.append(1)
+                if index % 20 == 0 and rows:
+                    job.emit("step", epoch=epoch, step=index,
+                             loss=round(rows[-1].get(recipe.objective, 0.0), 5))
+        else:
+            for index, (xs, y) in enumerate(train_loader):
+                if job.stop.is_set():
+                    break
+                ctx.step_index = index
+                xs = [x.to(device) for x in xs]
+                y = y.to(device) if hasattr(y, "to") else y
+                rows.append(recipe.step(ctx, xs, y) or {})
+                weights.append(xs[0].size(0))
+                if index % 10 == 0 and rows:
+                    job.emit("step", epoch=epoch, step=index,
+                             loss=round(rows[-1].get(recipe.objective, 0.0), 5))
+
+        train_metrics = aggregate(rows, weights)
+
+        val_rows, val_weights = [], []
+        if recipe.evaluate and val_loader is not None:
+            model.eval()
+            with torch.no_grad():
+                for xs, y in val_loader:
+                    xs = [x.to(device) for x in xs]
+                    y = y.to(device) if hasattr(y, "to") else y
+                    val_rows.append(recipe.evaluate(ctx, xs, y) or {})
+                    val_weights.append(xs[0].size(0))
+        val_metrics = aggregate(val_rows, val_weights) if val_rows else {}
+
+        # The chart reads train_loss and val_loss, so the recipe's objective goes
+        # there whatever it is called. A metric literally named "loss" would
+        # otherwise overwrite it — REINFORCE reports both a loss and a return,
+        # and the return is the one that matters.
+        def field(prefix, key):
+            name = f"{prefix}_{key}"
+            return f"{prefix}_metric_{key}" if name in ("train_loss", "val_loss") else name
+
+        row = {"epoch": epoch}
+        for k, v in train_metrics.items():
+            if k != recipe.objective:
+                row[field("train", k)] = v
+        for k, v in val_metrics.items():
+            if k != recipe.objective:
+                row[field("val", k)] = v
+        row["train_loss"] = train_metrics.get(recipe.objective, 0.0)
+        row["val_loss"] = val_metrics.get(
+            recipe.objective, train_metrics.get(recipe.objective, 0.0))
+        row["objective"] = recipe.objective
+        job.history.append(row)
+        job.emit("epoch", **row)
+
+        if recipe.preview:
+            try:
+                job.emit("sample", epoch=epoch, text=str(recipe.preview(ctx)))
+            except Exception as exc:  # noqa: BLE001
+                job.emit("warning", message=f"preview failed: {exc}")
+
+        score = row["val_loss"]
+        better = score < best if recipe.lower_is_better else score > best
+        if save_every and better:
+            best = score
+            path = save_checkpoint(job, model, graph_blob, epoch, row, "best",
+                                   name_hint, _vocab_extra(meta))
+            job.emit("checkpoint", file=path.name, tag="best", epoch=epoch,
+                     val_loss=score)
+
+    if save_every:
+        last = save_checkpoint(job, model, graph_blob, job.epoch,
+                               job.history[-1] if job.history else {},
+                               "last", name_hint, _vocab_extra(meta))
+        job.emit("checkpoint", file=last.name, tag="last", epoch=job.epoch)
+
+    job.status = "stopped" if job.stop.is_set() else "done"
+    job.emit("finished", status=job.status)
+
+
 def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
          out_shape, tasks: List[str], class_name: Optional[str] = None) -> None:
     try:
@@ -781,6 +955,12 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
             report = load_into(model, cfg["init_from"],
                                strict=bool(cfg.get("init_strict")))
             job.emit("weights", **report)
+
+        if cfg.get("recipe"):
+            _run_recipe(job, model, cfg, in_shapes, out_shape,
+                        cfg.get("graph") or {},
+                        (cfg.get("graph") or {}).get("name") or "model", device)
+            return
 
         train_loader, val_loader, meta = _make_loaders(
             cfg, in_shapes, in_ids, out_shape, tasks[0], job)

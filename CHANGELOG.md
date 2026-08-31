@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.2.0
+
+The rest of the out-of-reach list, plus a release script.
+
+- **GAN** recipe. Two networks, two optimizers, alternating updates, the
+  non-saturating generator loss. The canvas graph is the generator; the
+  discriminator is a second saved design picked in the form. This is the case
+  that justified recipes owning their own backward pass. `Generator.json` and
+  `Discriminator.json` ship as a working pair.
+- **Reinforce** recipe. Policy gradients with a moving baseline and a CartPole
+  environment built in, so it runs with no dependencies and no dataset. Solves
+  the task: mean return climbs from 14 to the 300-step cap within four epochs.
+- **Detection** recipe. Grid-based single-shot detection — objectness, box
+  regression and class per cell, with centre-cell assignment. Draws its own
+  squares and circles so the loss and the assignment can be exercised without
+  annotated images; reaches recall 0.93 and class accuracy 0.95. Real
+  annotations still need a loader.
+- **`self_supplied` recipes** drive their own loop with no DataLoader at all,
+  which is what reinforcement learning needs and nothing in a dataset can
+  express.
+- **`extra_models`** lets a recipe request further networks, built from saved
+  designs.
+- **`data_shape`** lets a recipe tell the loader what the data looks like when
+  it differs from the model's Input — a GAN takes noise but reads images.
+- **`release.sh`**: runs the tests, commits, tags from `version.py`, and pushes.
+  It refuses to push if the tests fail.
+- Fixed: a recipe metric named `loss` overwrote the objective in the epoch row,
+  so REINFORCE reported its policy loss where the return should have been —
+  including negative numbers for a quantity that cannot be negative. Non-objective
+  metrics are now renamed on collision, and a test asserts the return stays
+  positive.
+- Six more tests, 29 in total.
+
+## 1.1.0
+
+Training loops become pluggable.
+
+The five things listed as out of reach — GANs, diffusion, reinforcement
+learning, contrastive pretraining, detection — were never architecture problems.
+Every one of those networks already built on the canvas. What blocked them was
+`train.py` assuming one model, one optimizer, and a loss computed from
+predictions and labels. So rather than special-casing five workflows, the loop
+itself is now a plug-in.
+
+- **`recipes/` folder**, the same shape as `blocks/`: hot reload, isolated
+  failures, editable in the app, scaffold from the New button.
+- A recipe owns its **backward pass and optimizer steps**. Anything less general
+  could not express a GAN, where two updates interleave and each needs its own
+  graph handling.
+- A recipe can **refuse a graph it cannot train**, with a specific message. The
+  autoencoder says which shapes disagree; diffusion says exactly what to set the
+  Input to.
+- **Autoencoder** recipe — reconstruction and denoising. There is no label, which
+  the old loop could not express at all.
+- **Contrastive** recipe — SimCLR. Builds its own two augmented views per step
+  and uses NT-Xent. Verified on structured images: within-class cosine
+  similarity 1.000 against between-class -0.466, with no labels used.
+- **Diffusion** recipe — DDPM training with a cosine schedule, timestep carried
+  as an extra input channel, DDIM sampling for previews.
+- Fixed during development: the first diffusion sampler used per-step DDPM
+  coefficients while skipping steps, which under-denoises and diverges — samples
+  came out in the range ±150 against data in [0, 1]. Replaced with DDIM, which
+  is valid at any stride. The preview reports the sampled range against the data
+  range so this class of failure is visible rather than silent.
+- Six more tests, 23 in total.
+
 ## 1.0.1
 
 - README rewritten as a repository landing page: what the tool is and is not,

@@ -20,12 +20,15 @@ from pydantic import BaseModel
 import blockloader
 import codegen
 import importer
+import recipeloader
+import recipes_sdk
 import graph as G
 import train as T
 from layers import catalog
 from version import __version__
 
 blockloader.load_all()
+recipeloader.load_all()
 
 HERE = Path(__file__).resolve().parent
 
@@ -102,6 +105,7 @@ def get_catalog():
         ] + [{"id": "csv", "label": "Uploaded table (CSV)", "shape": None, "classes": None}],
         "optimizers": ["adamw", "adam", "sgd", "rmsprop"],
         "augmentations": T.AUGMENTATIONS,
+        "recipes": recipes_sdk.catalog(),
         "version": __version__,
     }
 
@@ -137,7 +141,8 @@ def post_train(body: TrainPayload):
     in_shapes = [report["nodes"][n.id]["out_shape"] for n in inputs]
     in_ids = [n.id for n in inputs]
     out_shape = report["nodes"][outputs[0].id]["out_shape"]
-    tasks = [G.resolved_params(n).get("task", "classification") for n in outputs]
+    tasks = [G.resolved_params(n).get("task", "classification") for n in outputs] \
+        or ["classification"]
 
     cfg = dict(body.config)
     cfg["graph"] = body.graph          # stored inside the checkpoint
@@ -537,6 +542,47 @@ def delete_graph(name: str):
 # --------------------------------------------------------------------------
 # plug-in blocks
 # --------------------------------------------------------------------------
+
+@app.get("/api/recipes")
+def get_recipes():
+    return {"files": recipeloader.listing(), "errors": recipeloader.LAST_ERRORS,
+            "recipes": recipes_sdk.catalog()}
+
+
+@app.get("/api/recipes/new/{name}")
+def new_recipe(name: str):
+    return {"file": f"{name.lower()}.py", "source": recipeloader.scaffold(name)}
+
+
+@app.get("/api/recipes/{file}")
+def get_recipe(file: str):
+    try:
+        return {"file": file, "source": recipeloader.read(file)}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, detail={"message": str(exc)})
+
+
+@app.put("/api/recipes/{file}")
+def put_recipe(file: str, body: BlockPayload):
+    errors = recipeloader.write(file, body.source)
+    mine = [e for e in errors if e["file"] == Path(file).name]
+    return {"ok": not mine, "errors": errors, "mine": mine,
+            "files": recipeloader.listing(), "recipes": recipes_sdk.catalog()}
+
+
+@app.delete("/api/recipes/{file}")
+def remove_recipe(file: str):
+    errors = recipeloader.delete(file)
+    return {"ok": True, "errors": errors, "files": recipeloader.listing(),
+            "recipes": recipes_sdk.catalog()}
+
+
+@app.post("/api/recipes/reload")
+def reload_recipes():
+    errors = recipeloader.load_all()
+    return {"ok": not errors, "errors": errors, "files": recipeloader.listing(),
+            "recipes": recipes_sdk.catalog()}
+
 
 @app.get("/api/blocks")
 def get_blocks():

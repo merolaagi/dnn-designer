@@ -568,8 +568,9 @@ const state = {
   view:{x:120, y:60, k:1},
   report:null, code:{pytorch:"", keras:""},
   job:null, es:null, seq:1,
-  blocks:[], blockFile:null, blockDraft:false, colmap:null, csv:null,
+  blocks:[], blockFile:null, blockDraft:false, blockKind:"blocks", colmap:null, csv:null,
   nodeCode:{}, checkpoints:[], augmentations:[], corpus:null,
+  recipes:[], recipeConfig:{}, extraModels:{},
   selection:new Set(), history:[], future:[], clipboard:null,
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0
 };
@@ -594,6 +595,7 @@ async function boot(){
   state.datasets = data.datasets;
   state.optimizers = data.optimizers;
   state.augmentations = data.augmentations || [];
+  state.recipes = data.recipes || [];
   if (data.version) $("ver").textContent = "v" + data.version;
   data.layers.forEach(s => state.specs[s.name] = s);
   buildPalette();
@@ -1864,13 +1866,14 @@ function showBlockErrors(errors){
   box.textContent = shown.map(e => `${e.file}\n${e.detail || e.message}`).join("\n\n");
 }
 
-async function openBlock(file){
-  const r = await fetch(API + "/api/blocks/" + encodeURIComponent(file));
+async function openBlock(file, kind){
+  state.blockKind = kind || state.blockKind || "blocks";
+  const r = await fetch(API + "/api/" + state.blockKind + "/" + encodeURIComponent(file));
   if (!r.ok){ toast("Could not open " + file); return; }
   const d = await r.json();
   state.blockFile = file;
   state.blockDraft = false;
-  $("blockPath").textContent = "blocks/" + file;
+  $("blockPath").textContent = state.blockKind + "/" + file;
   $("blockSrc").value = d.source;
   document.querySelectorAll(".blockitem").forEach(el =>
     el.classList.toggle("on", el.querySelector("b").textContent === file));
@@ -1879,11 +1882,12 @@ async function openBlock(file){
 $("btnNewBlock").addEventListener("click", async () => {
   const name = prompt("Name for the new block class", "MyBlock");
   if (!name) return;
-  const r = await fetch(API + "/api/blocks/new/" + encodeURIComponent(name));
+  const kind = state.blockKind || "blocks";
+  const r = await fetch(API + "/api/" + kind + "/new/" + encodeURIComponent(name));
   const d = await r.json();
   state.blockFile = d.file;
   state.blockDraft = true;
-  $("blockPath").textContent = "blocks/" + d.file + "  (unsaved)";
+  $("blockPath").textContent = (state.blockKind || "blocks") + "/" + d.file + "  (unsaved)";
   $("blockSrc").value = d.source;
   $("blockErr").style.display = "none";
   $("blockSrc").focus();
@@ -1903,8 +1907,8 @@ $("btnReloadBlocks").addEventListener("click", async () => {
 $("btnDeleteBlock").addEventListener("click", async () => {
   if (!state.blockFile) return;
   if (!confirm(`Delete blocks/${state.blockFile}? Any layer it installs disappears from the palette.`)) return;
-  const r = await fetch(API + "/api/blocks/" + encodeURIComponent(state.blockFile),
-                        { method:"DELETE" });
+  const r = await fetch(API + "/api/" + (state.blockKind || "blocks") + "/"
+                        + encodeURIComponent(state.blockFile), { method:"DELETE" });
   const d = await r.json();
   adoptCatalog(d.layers);
   state.blockFile = null;
@@ -1916,15 +1920,17 @@ $("btnDeleteBlock").addEventListener("click", async () => {
 
 async function saveBlock(){
   if (!state.blockFile){ toast("Nothing open to save"); return; }
-  const r = await fetch(API + "/api/blocks/" + encodeURIComponent(state.blockFile), {
+  const kind = state.blockKind || "blocks";
+  const r = await fetch(API + "/api/" + kind + "/" + encodeURIComponent(state.blockFile), {
     method:"PUT", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ source: $("blockSrc").value })
   });
   const d = await r.json();
   adoptCatalog(d.layers);
+  if (d.recipes){ state.recipes = d.recipes; if ($("t_recipe")) buildTrainForm(); }
   showBlockErrors(d.mine.length ? d.mine : d.errors);
   state.blockDraft = false;
-  $("blockPath").textContent = "blocks/" + state.blockFile;
+  $("blockPath").textContent = (state.blockKind || "blocks") + "/" + state.blockFile;
   await refreshBlocks();
   toast(d.ok ? "Saved and reloaded" : "Saved, but the block did not load");
   analyze();
@@ -1979,6 +1985,15 @@ function buildTrainForm(){
     `<option value="${d.id}">${d.label}</option>`).join("");
   const optOpts = state.optimizers.map(o => `<option value="${o}">${o}</option>`).join("");
   f.innerHTML = `
+    <div class="field wide section"><label>Training loop</label>
+      <select id="t_recipe">
+        <option value="">Standard — predictions against labels</option>
+        ${(state.recipes || []).map(r => `<option value="${r.name}">${r.name}</option>`).join("")}
+      </select>
+      <div class="help" id="recipeDoc">The built-in loop, driven by the Output layer's task.</div>
+    </div>
+    <div class="section wide" id="recipeParams" style="display:none"></div>
+
     <div class="field wide section"><label>Dataset</label>
       <select id="t_dataset">${dsOpts}</select></div>
 
@@ -2077,6 +2092,7 @@ function buildTrainForm(){
   $("btnStart").addEventListener("click", startTraining);
   $("btnStop").addEventListener("click", stopTraining);
   $("t_dataset").addEventListener("change", onDatasetChange);
+  $("t_recipe").addEventListener("change", onRecipeChange);
   $("btnScanFolder").addEventListener("click", scanFolder);
   $("t_corpus").addEventListener("change", () => describeCorpus($("t_corpus").value));
   $("btnUploadText").addEventListener("click", () => $("textFile").click());
@@ -2103,7 +2119,87 @@ function buildTrainForm(){
   onDatasetChange();
 }
 
+function onRecipeChange(){
+  const name = $("t_recipe").value;
+  const recipe = (state.recipes || []).find(r => r.name === name);
+  const host = $("recipeParams");
+  if (!recipe){
+    $("recipeDoc").textContent = "The built-in loop, driven by the Output layer's task.";
+    host.style.display = "none"; host.innerHTML = "";
+    state.recipeConfig = {};
+    return;
+  }
+  $("recipeDoc").textContent = recipe.doc || "";
+  onDatasetChange();
+  state.recipeConfig = {};
+  state.extraModels = {};
+  recipe.params.forEach(q => state.recipeConfig[q.name] = q.default);
+
+  host.style.display = "block";
+  host.innerHTML = `<label style="font-size:11px;color:var(--muted);font-weight:600">
+    ${recipe.name} settings</label>`
+    + (recipe.extra_models || []).map(slot =>
+        `<div class="field" style="margin:5px 0"><label>${slot} network</label>
+           <select data-extra="${slot}"><option value="">choose a saved design</option></select>
+           <div class="help">Design it on the canvas, Save it, then pick it here.</div></div>`
+      ).join("")
+    + recipe.params.map(q => {
+    const v = q.default;
+    if (q.kind === "bool"){
+      return `<div class="row" style="gap:7px;margin:5px 0;font-size:11.5px">
+        <input type="checkbox" data-rp="${q.name}" ${v ? "checked" : ""}>${q.name.replace(/_/g," ")}</div>`;
+    }
+    if (q.kind === "select"){
+      return `<div class="field" style="margin:5px 0"><label>${q.name.replace(/_/g," ")}</label>
+        <select data-rp="${q.name}">${q.options.map(o =>
+          `<option value="${o}" ${String(o)===String(v)?"selected":""}>${o}</option>`).join("")}</select>
+        ${q.help ? `<div class="help">${q.help}</div>` : ""}</div>`;
+    }
+    const step = q.kind === "float" ? "any" : "1";
+    return `<div class="field" style="margin:5px 0"><label>${q.name.replace(/_/g," ")}</label>
+      <input type="${q.kind === "text" ? "text" : "number"}" step="${step}"
+             data-rp="${q.name}" value="${v}">
+      ${q.help ? `<div class="help">${q.help}</div>` : ""}</div>`;
+  }).join("");
+
+  if ((recipe.extra_models || []).length){
+    fetch(API + "/api/graphs").then(r => r.json()).then(d => {
+      host.querySelectorAll("[data-extra]").forEach(sel => {
+        sel.innerHTML = `<option value="">choose a saved design</option>`
+          + d.graphs.map(x => `<option value="${x.name}">${x.name}</option>`).join("");
+        sel.addEventListener("change", () => {
+          state.extraModels = state.extraModels || {};
+          state.extraModels[sel.dataset.extra] = sel.value;
+        });
+      });
+    }).catch(() => {});
+  }
+
+  host.querySelectorAll("[data-rp]").forEach(el => {
+    const q = recipe.params.find(x => x.name === el.dataset.rp);
+    el.addEventListener("input", () => {
+      let v = el.type === "checkbox" ? el.checked : el.value;
+      if (q.kind === "int") v = parseInt(v || 0, 10);
+      else if (q.kind === "float") v = parseFloat(v || 0);
+      state.recipeConfig[q.name] = v;
+    });
+    el.addEventListener("change", () => {
+      let v = el.type === "checkbox" ? el.checked : el.value;
+      if (q.kind === "int") v = parseInt(v || 0, 10);
+      else if (q.kind === "float") v = parseFloat(v || 0);
+      state.recipeConfig[q.name] = v;
+    });
+  });
+}
+
 function onDatasetChange(){
+  const recipe = (state.recipes || []).find(r => r.name === $("t_recipe").value);
+  if (recipe && (recipe.accepts || []).includes("none")){
+    ["csvBlock","folderBlock","textBlock","builtinBlock"].forEach(id => {
+      const el = $(id); if (el) el.style.display = "none";
+    });
+    return;
+  }
   const kind = $("t_dataset").value;
   $("csvBlock").style.display = kind === "csv" ? "block" : "none";
   $("folderBlock").style.display = kind === "folder" ? "block" : "none";
@@ -2342,6 +2438,13 @@ async function startTraining(){
     config.train_samples = +$("t_limit").value;
   }
   config.early_stop = +$("t_early").value;
+  if ($("t_recipe").value){
+    config.recipe = $("t_recipe").value;
+    config.recipe_config = state.recipeConfig || {};
+    if (state.extraModels && Object.keys(state.extraModels).length){
+      config.extra_models = state.extraModels;
+    }
+  }
   if ($("t_init").value) config.init_from = $("t_init").value;
   $("btnStart").disabled = true;
   $("trainStatus").textContent = "starting";
@@ -2411,7 +2514,12 @@ async function startTraining(){
       state.job.history.push(m);
       const acc = m.val_acc !== undefined ? ` · val acc ${(m.val_acc*100).toFixed(1)}%` : "";
       const ppl = m.perplexity !== undefined ? ` · perplexity ${m.perplexity}` : "";
-      logLine(`epoch <b>${m.epoch}</b> — train ${m.train_loss} · val ${m.val_loss}${acc}${ppl}`);
+      const label = m.objective && m.objective !== "loss" ? m.objective : "loss";
+      const extras = Object.keys(m).filter(k =>
+        k.startsWith("train_") && !["train_loss","train_acc"].includes(k))
+        .map(k => ` · ${k.replace("train_","")} ${m[k]}`).join("");
+      logLine(`epoch <b>${m.epoch}</b> — train ${label} ${m.train_loss} · `
+              + `val ${label} ${m.val_loss}${acc}${ppl}${extras}`);
       drawChart();
     } else if (m.kind === "error"){
       logLine(m.message, "e");

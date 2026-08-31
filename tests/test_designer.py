@@ -298,6 +298,171 @@ if HAVE_TORCH:
         assert mine == ref, f"rebuilt {mine:,} against the original {ref:,}"
 
 
+# --------------------------------------------------------------------------
+# training recipes
+# --------------------------------------------------------------------------
+
+import recipeloader  # noqa: E402
+import recipes_sdk  # noqa: E402
+
+recipeloader.load_all()
+print(f"\nrecipes: {len(recipes_sdk.REGISTRY)} loaded")
+
+
+@check("recipes all load without error")
+def _():
+    errors = recipeloader.load_all()
+    assert not errors, f"{len(errors)} recipe(s) failed: {errors}"
+
+
+@check("every recipe declares a step function")
+def _():
+    for name, recipe in recipes_sdk.REGISTRY.items():
+        assert recipe.step is not None, f"{name} has no step"
+        assert recipe.doc, f"{name} has no description"
+
+
+@check("a recipe rejects a graph it cannot train")
+def _():
+    ctx = recipes_sdk.Context(models={}, device="cpu",
+                              cfg=recipes_sdk.REGISTRY["Autoencoder"].defaults(),
+                              in_shapes=[[16]], out_shape=[4])
+    complaint = recipes_sdk.REGISTRY["Autoencoder"].check(ctx)
+    assert complaint and "16" in complaint, complaint
+
+
+@check("diffusion insists on the timestep channel")
+def _():
+    ctx = recipes_sdk.Context(models={}, device="cpu",
+                              cfg=recipes_sdk.REGISTRY["Diffusion"].defaults(),
+                              in_shapes=[[3, 32, 32]], out_shape=[3, 32, 32])
+    complaint = recipes_sdk.REGISTRY["Diffusion"].check(ctx)
+    assert complaint and "[4, 32, 32]" in complaint, complaint
+
+
+if HAVE_TORCH:
+    @check("an autoencoder trains through the recipe path")
+    def _():
+        import torch
+        import train as T
+
+        payload = build(
+            [("i", "Input", {"shape": [12]}), ("e", "Linear", {"units": 4}),
+             ("a", "Activation", {"kind": "tanh"}), ("d", "Linear", {"units": 12}),
+             ("o", "Output", {})],
+            [("i", "e", 0), ("e", "a", 0), ("a", "d", 0), ("d", "o", 0)], "AE")
+        g, rep = analyzed(payload)
+        assert rep["ok"], rep["errors"]
+        job = T.start(codegen.to_pytorch(g, rep),
+                      {"recipe": "Autoencoder", "dataset": "synthetic", "epochs": 3,
+                       "device": "cpu", "train_samples": 256, "graph": payload,
+                       "save_checkpoints": False,
+                       "recipe_config": {"lr": 0.02, "noise": 0.0}},
+                      [[12]], ["i"], [12], ["classification"], "Ae")
+        losses = []
+        while True:
+            ev = job.events.get(timeout=180)
+            if ev["kind"] == "epoch":
+                losses.append(ev["val_loss"])
+            if ev["kind"] == "error":
+                raise AssertionError(ev["message"])
+            if ev["kind"] == "finished":
+                break
+        assert len(losses) == 3, losses
+        assert losses[-1] < losses[0], f"reconstruction did not improve: {losses}"
+
+    @check("the DDIM sampler stays inside the data range")
+    def _():
+        import torch
+        recipe = recipes_sdk.REGISTRY["Diffusion"]
+        ctx = recipes_sdk.Context(
+            models={"main": torch.nn.Conv2d(4, 3, 1)}, device="cpu",
+            cfg={**recipe.defaults(), "steps": 40, "preview_steps": 10},
+            in_shapes=[[4, 16, 16]], out_shape=[3, 16, 16])
+        recipe.setup(ctx)
+        ctx.state["lo"], ctx.state["hi"] = 0.0, 1.0
+        text = recipe.preview(ctx)
+        assert "diverging" not in text, text
+
+
+@check("every recipe that needs a second network says so")
+def _():
+    gan = recipes_sdk.REGISTRY["GAN"]
+    assert gan.extra_models == ["discriminator"], gan.extra_models
+    ctx = recipes_sdk.Context(models={}, device="cpu", cfg=gan.defaults(),
+                              in_shapes=[[3, 32, 32]], out_shape=[3, 32, 32])
+    complaint = gan.check(ctx)
+    assert complaint and "noise" in complaint, complaint
+
+
+@check("self-supplied recipes declare it")
+def _():
+    for name in ("Reinforce", "Detection"):
+        r = recipes_sdk.REGISTRY[name]
+        assert r.self_supplied, f"{name} makes its own data but does not say so"
+        assert "none" in r.accepts, f"{name} should not ask for a dataset"
+
+
+@check("the GAN loader is told about images, not noise")
+def _():
+    gan = recipes_sdk.REGISTRY["GAN"]
+    ctx = recipes_sdk.Context(models={}, device="cpu", cfg=gan.defaults(),
+                              in_shapes=[[64]], out_shape=[3, 32, 32])
+    assert gan.data_shape(ctx) == [[3, 32, 32]], gan.data_shape(ctx)
+
+
+@check("detection checks the head width against the class count")
+def _():
+    d = recipes_sdk.REGISTRY["Detection"]
+    ctx = recipes_sdk.Context(models={}, device="cpu", cfg=d.defaults(),
+                              in_shapes=[[3, 64, 64]], out_shape=[4, 8, 8])
+    complaint = d.check(ctx)
+    assert complaint and "7 channels" in complaint, complaint
+
+
+@check("reinforce checks the policy against the environment")
+def _():
+    r = recipes_sdk.REGISTRY["Reinforce"]
+    ctx = recipes_sdk.Context(models={}, device="cpu", cfg=r.defaults(),
+                              in_shapes=[[8]], out_shape=[2])
+    complaint = r.check(ctx)
+    assert complaint and "4 observations" in complaint, complaint
+
+
+if HAVE_TORCH:
+    @check("a self-supplied recipe trains with no dataset at all")
+    def _():
+        import train as T
+
+        payload = build(
+            [("i", "Input", {"shape": [4]}), ("h", "Linear", {"units": 32}),
+             ("a", "Activation", {"kind": "tanh"}), ("o2", "Linear", {"units": 2}),
+             ("o", "Output", {})],
+            [("i", "h", 0), ("h", "a", 0), ("a", "o2", 0), ("o2", "o", 0)], "Policy")
+        g, rep = analyzed(payload)
+        assert rep["ok"], rep["errors"]
+        job = T.start(codegen.to_pytorch(g, rep),
+                      {"recipe": "Reinforce", "epochs": 2, "device": "cpu",
+                       "graph": payload, "save_checkpoints": False,
+                       "recipe_config": {"lr": 0.01, "steps_per_epoch": 8,
+                                         "max_steps": 60}},
+                      [[4]], ["i"], [2], ["classification"], "Policy")
+        rows = []
+        while True:
+            ev = job.events.get(timeout=300)
+            if ev["kind"] == "epoch":
+                rows.append(ev)
+            if ev["kind"] == "error":
+                raise AssertionError(ev["message"])
+            if ev["kind"] == "finished":
+                break
+        assert len(rows) == 2, rows
+        # the objective is the return, and a return can never be negative here
+        assert rows[-1]["objective"] == "return"
+        assert rows[-1]["train_loss"] > 0, \
+            f"return reported as {rows[-1]['train_loss']}: the metric collided again"
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
