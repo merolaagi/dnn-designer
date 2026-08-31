@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+- README rewritten as a repository landing page: what the tool is and is not,
+  a quickstart above the fold, the worked example as the hook, and the reference
+  material after it rather than before. No content dropped — the multi-input,
+  core-layer and sampling sections are all still there, further down.
+
 ## 1.0.0
 
 Packaged for release.
