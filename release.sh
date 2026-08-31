@@ -17,6 +17,10 @@ if [ -z "$MESSAGE" ]; then
 fi
 
 VERSION=$(python3 -c 'import version; print(version.__version__)')
+case "$VERSION" in
+  [0-9]*.[0-9]*.[0-9]*) ;;
+  *) echo "version.py gave '$VERSION', which is not a version number" >&2; exit 1 ;;
+esac
 echo "==> version $VERSION"
 
 echo "==> tests"

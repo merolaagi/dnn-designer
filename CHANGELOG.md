@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1
+
+- Fixed `release.sh`: it scraped the version with a regex for the first quoted
+  string, which matched the docstring at the top of `version.py` rather than the
+  number, and then tried to name a git tag after it. It imports the module now.
+- The script also refuses anything that is not `N.N.N`, so a malformed version
+  stops the release instead of reaching `git tag`.
+
 ## 1.2.0
 
 The rest of the out-of-reach list, plus a release script.
