@@ -1,0 +1,2483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Network Designer</title>
+<style>
+:root{
+  --ink:#141C28;          /* canvas */
+  --ink-2:#1B2635;        /* raised surfaces on canvas */
+  --grid:#253449;
+  --paper:#E9EDF2;        /* side panels */
+  --paper-2:#DDE3EB;
+  --paper-3:#CFD7E1;
+  --text:#16202E;
+  --muted:#5C6B7F;
+  --amber:#F0A202;        /* selection, active state */
+  --wire:#6FD0E0;         /* data flow */
+  --bad:#FF5F56;
+  --good:#3DA35D;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --ui:"Avenir Next","Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  font-family:var(--ui);color:var(--text);background:var(--ink);
+  display:flex;flex-direction:column;overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+.eyebrow{
+  font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;
+}
+
+/* ---------------- header ---------------- */
+header{
+  display:flex;align-items:center;gap:16px;padding:0 16px;height:52px;
+  background:var(--ink);border-bottom:1px solid #2A3A4E;color:#DCE4EE;flex:none;
+}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.brand span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5E738C}
+#gname{
+  background:transparent;border:1px solid #2E3F55;border-radius:5px;
+  padding:5px 9px;color:#DCE4EE;width:190px;font-size:13px;
+}
+#gname:focus{outline:none;border-color:var(--amber)}
+.spacer{flex:1}
+.stat{display:flex;flex-direction:column;line-height:1.15;padding-right:4px}
+.stat i{font-style:normal;font-family:var(--mono);font-size:13px;color:var(--wire)}
+.stat u{text-decoration:none;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5E738C}
+.btn{
+  background:#22303F;border:1px solid #33445A;color:#D8E1EB;
+  border-radius:6px;padding:6px 12px;font-size:12.5px;
+}
+.btn:hover{background:#2A3A4C;border-color:#455872}
+.btn.go{background:var(--amber);border-color:var(--amber);color:#1B1200;font-weight:600}
+.btn.go:hover{background:#FFB524}
+.btn.stop{background:#4A2320;border-color:#7A3B35;color:#FFC9C4}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ---------------- shell ---------------- */
+.shell{flex:1;display:flex;min-height:0}
+.panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
+#palette{width:212px;border-right:1px solid var(--paper-3);flex:none}
+#inspector{width:268px;border-left:1px solid var(--paper-3);flex:none}
+.panel h2{
+  margin:0;padding:11px 14px 8px;font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);font-weight:700;
+}
+.scroll{overflow-y:auto;flex:1;padding:0 10px 16px}
+.scroll::-webkit-scrollbar{width:9px}
+.scroll::-webkit-scrollbar-thumb{background:var(--paper-3);border-radius:5px}
+
+#search{
+  width:calc(100% - 20px);margin:0 10px 10px;padding:6px 9px;
+  border:1px solid var(--paper-3);border-radius:5px;background:#fff;font-size:12.5px;
+}
+#search:focus{outline:none;border-color:var(--amber)}
+.cat{margin:12px 0 5px;padding-left:4px}
+.chip{
+  display:flex;align-items:center;gap:8px;background:#fff;
+  border:1px solid var(--paper-3);border-left:3px solid var(--c,#888);
+  border-radius:5px;padding:7px 9px;margin-bottom:4px;font-size:12.5px;
+  cursor:grab;user-select:none;transition:transform .08s,box-shadow .08s;
+}
+.chip:hover{transform:translateX(2px);box-shadow:0 1px 5px rgba(20,28,40,.12)}
+.chip:active{cursor:grabbing}
+.chip small{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+/* ---------------- canvas ---------------- */
+#stage{flex:1;position:relative;min-width:0;background:var(--ink);overflow:hidden}
+#svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.node-card{
+  fill:#F7F9FB;stroke:#B9C4D2;stroke-width:1;
+  filter:drop-shadow(0 3px 6px rgba(0,0,0,.35));
+}
+.node.sel .node-card{stroke:var(--amber);stroke-width:2}
+.node.err .node-card{stroke:var(--bad);stroke-width:1.6}
+.node-rail{stroke-width:0}
+.node-title{font-size:12.5px;font-weight:600;fill:#16202E}
+.node-sub{font-size:10px;fill:#61708A;font-family:var(--mono)}
+.node text{pointer-events:none;user-select:none}
+.port{fill:#1B2635;stroke:#4E6580;stroke-width:1.5;cursor:crosshair}
+.port:hover,.port.hot{fill:var(--amber);stroke:var(--amber)}
+.wire{fill:none;stroke:var(--wire);stroke-linecap:round;opacity:.85}
+.wire.sel{stroke:var(--amber);opacity:1}
+.wire-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+.dim{
+  font-family:var(--mono);font-size:10px;fill:#9FD9E6;
+  paint-order:stroke;stroke:var(--ink);stroke-width:4px;stroke-linejoin:round;
+}
+.badge{font-family:var(--mono);font-size:9.5px;fill:#FFB4AE}
+#hint{
+  position:absolute;left:0;right:0;bottom:14px;text-align:center;
+  color:#4A5D75;font-size:11.5px;pointer-events:none;letter-spacing:.02em;
+}
+#ghost{
+  position:fixed;pointer-events:none;z-index:99;background:#F7F9FB;
+  border:1px solid #B9C4D2;border-left:3px solid var(--c,#888);border-radius:5px;
+  padding:7px 10px;font-size:12.5px;box-shadow:0 6px 18px rgba(0,0,0,.4);display:none;
+}
+.zoombar{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:5px}
+.zoombar button.on{background:var(--amber);border-color:var(--amber);color:#1B1200}
+
+#minimap{
+  position:absolute;right:12px;bottom:12px;width:172px;height:120px;
+  background:rgba(16,24,34,.9);border:1px solid #2E3F55;border-radius:7px;
+  cursor:crosshair;display:none;
+}
+#minimap.on{display:block}
+#minimap .mm-node{fill:#4E6580}
+#minimap .mm-node.sel{fill:var(--amber)}
+#minimap .mm-view{fill:rgba(240,162,2,.13);stroke:var(--amber);stroke-width:1.2}
+#marquee{
+  position:absolute;border:1px solid var(--amber);background:rgba(240,162,2,.10);
+  pointer-events:none;display:none;
+}
+#palette-cmd{
+  position:fixed;inset:0;background:rgba(10,16,24,.6);z-index:160;
+  display:none;align-items:flex-start;justify-content:center;padding-top:14vh;
+}
+#palette-cmd.on{display:flex}
+.cmdbox{
+  width:460px;max-width:92vw;background:var(--paper);border-radius:9px;
+  box-shadow:0 20px 50px rgba(0,0,0,.5);overflow:hidden;
+}
+.cmdbox input{
+  width:100%;border:none;padding:13px 15px;font-size:14px;background:#fff;
+  border-bottom:1px solid var(--paper-3);
+}
+.cmdbox input:focus{outline:none}
+.cmdlist{max-height:320px;overflow-y:auto}
+.cmditem{padding:8px 15px;font-size:12.5px;cursor:pointer;display:flex;gap:9px;align-items:baseline}
+.cmditem.on{background:var(--paper-2)}
+.cmditem b{font-weight:600}
+.cmditem span{color:var(--muted);font-family:var(--mono);font-size:10.5px;margin-left:auto}
+.cmditem i{font-style:normal;width:3px;height:13px;border-radius:2px;background:var(--c,#888)}
+.zoombar button{
+  width:30px;height:28px;border-radius:6px;background:#22303F;
+  border:1px solid #33445A;color:#C6D2E0;font-size:13px;line-height:1;
+}
+.zoombar button:hover{background:#2A3A4C}
+
+/* ---------------- inspector ---------------- */
+.field{margin:0 4px 11px}
+.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600}
+.field input[type=text],.field input[type=number],.field select,.field textarea{
+  width:100%;padding:6px 8px;border:1px solid var(--paper-3);
+  border-radius:5px;background:#fff;font-size:12.5px;
+}
+.field textarea{font-family:var(--mono);font-size:11.5px;min-height:52px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--amber)}
+.field .help{font-size:10.5px;color:#7C8BA0;margin-top:3px;line-height:1.35}
+.row{display:flex;align-items:center;gap:8px}
+.row input[type=checkbox]{width:15px;height:15px;accent-color:var(--amber)}
+.shapebox{
+  font-family:var(--mono);font-size:12px;background:var(--ink);color:var(--wire);
+  padding:8px 10px;border-radius:6px;margin:0 4px 12px;
+}
+.errbox{
+  background:#FFE9E7;border-left:3px solid var(--bad);color:#8C2F27;
+  padding:8px 10px;border-radius:0 5px 5px 0;font-size:11.5px;
+  margin:0 4px 12px;line-height:1.4;
+}
+.doc{font-size:11.5px;color:var(--muted);line-height:1.45;margin:0 4px 14px}
+.empty{color:#8A97A8;font-size:12px;padding:6px 4px;line-height:1.5}
+
+/* ---------------- drawer ---------------- */
+#drawer{
+  height:236px;flex:none;background:var(--paper);
+  border-top:1px solid var(--paper-3);display:flex;flex-direction:column;min-height:0;
+}
+#drawer.min{height:38px}
+.tabs{display:flex;align-items:center;gap:2px;padding:0 8px;height:38px;flex:none;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2)}
+.tab{
+  background:none;border:none;padding:6px 12px;font-size:11px;font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+  border-bottom:2px solid transparent;
+}
+.tab.on{color:var(--text);border-bottom-color:var(--amber)}
+.tab .count{
+  font-family:var(--mono);background:var(--bad);color:#fff;border-radius:8px;
+  padding:0 5px;margin-left:5px;font-size:9.5px;letter-spacing:0;
+}
+.pane{flex:1;overflow:auto;display:none;min-height:0}
+.pane.on{display:block}
+pre#code{
+  margin:0;padding:12px 14px;font-family:var(--mono);font-size:11.5px;
+  line-height:1.55;background:var(--ink);color:#C8D6E5;min-height:100%;
+  white-space:pre;
+}
+pre#code .kw{color:#F0A202}
+.probs{padding:10px 14px;font-size:12px;line-height:1.6}
+.probs li{margin-bottom:4px;color:#8C2F27}
+.probs .fine{color:var(--good)}
+.trainwrap{display:flex;height:100%;min-height:0}
+.trainform{
+  width:300px;flex:none;padding:10px 12px;border-right:1px solid var(--paper-3);
+  overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;
+}
+.trainform .field{margin:0}
+.trainform .wide{grid-column:1/3}
+.section{grid-column:1/3;margin-top:4px;padding-top:8px;border-top:1px solid var(--paper-3)}
+.section:first-child{border-top:none;margin-top:0;padding-top:0}
+.maprow{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.maprow b{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--muted);
+  min-width:78px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maprow input{flex:1;padding:4px 7px;border:1px solid var(--paper-3);border-radius:4px;
+  font-family:var(--mono);font-size:11px;background:#fff}
+.maprow input:focus{outline:none;border-color:var(--amber)}
+.maprow .need{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.maprow.bad input{border-color:var(--bad);background:#FFF6F5}
+.filerow{display:flex;gap:6px;align-items:center}
+.filerow select{flex:1}
+.linkbtn{background:none;border:none;color:#2D7DD2;font-size:11.5px;padding:2px 4px;text-decoration:underline}
+.cols{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:4px;
+  max-height:52px;overflow-y:auto;font-family:var(--mono)}
+.trainview{flex:1;display:flex;flex-direction:column;min-width:0}
+#chart{flex:1;min-height:0;background:var(--ink)}
+#log{
+  height:78px;flex:none;overflow-y:auto;background:#101821;color:#96A9BD;
+  font-family:var(--mono);font-size:11px;padding:6px 10px;line-height:1.5;
+}
+#log b{color:var(--wire);font-weight:400}
+#log .e{color:#FF9A92}
+.legend{display:flex;gap:14px;padding:6px 12px;font-size:11px;color:var(--muted);
+  border-bottom:1px solid var(--paper-3);align-items:center}
+.legend i{width:16px;height:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+.srcbox{
+  background:var(--ink);color:#C8D6E5;font-family:var(--mono);font-size:10.5px;
+  line-height:1.5;padding:8px 10px;border-radius:6px;margin:0 4px 6px;
+  white-space:pre-wrap;word-break:break-word;overflow-x:auto;
+}
+.srcbox .self{color:var(--amber)}
+.srchead{
+  display:flex;align-items:center;gap:6px;margin:14px 4px 5px;
+}
+.srchead .eyebrow{flex:1}
+.srchead button{
+  background:none;border:1px solid var(--paper-3);border-radius:4px;
+  font-size:10px;padding:2px 7px;color:var(--muted);
+}
+.srchead button:hover{border-color:var(--amber);color:var(--text)}
+.classsrc{
+  max-height:190px;overflow:auto;background:var(--ink);color:#9FD9E6;
+  font-family:var(--mono);font-size:10.5px;line-height:1.5;padding:8px 10px;
+  border-radius:6px;margin:0 4px 6px;white-space:pre;display:none;
+}
+.classsrc.open{display:block}
+.origin{font-size:10.5px;color:var(--muted);margin:0 4px 10px;font-family:var(--mono)}
+.blockwrap{display:flex;height:100%;min-height:0}
+.blocklist{width:196px;flex:none;border-right:1px solid var(--paper-3);
+  overflow-y:auto;padding:8px}
+.blockitem{padding:6px 8px;border-radius:5px;font-size:12px;cursor:pointer;
+  border:1px solid transparent;margin-bottom:2px}
+.blockitem:hover{background:var(--paper-2)}
+.blockitem.on{background:#fff;border-color:var(--amber)}
+.blockitem b{display:block;font-family:var(--mono);font-size:11.5px;font-weight:500}
+.blockitem span{font-size:10px;color:var(--muted)}
+.blockitem.broken b{color:#8C2F27}
+.blockedit{flex:1;display:flex;flex-direction:column;min-width:0}
+.editbar{display:flex;align-items:center;gap:6px;padding:6px 10px;flex:none;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2)}
+.editbar .path{font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#blockSrc{
+  flex:1;min-height:0;width:100%;border:none;resize:none;padding:10px 12px;
+  background:var(--ink);color:#C8D6E5;font-family:var(--mono);font-size:11.5px;
+  line-height:1.55;tab-size:4;white-space:pre;overflow:auto;
+}
+#blockSrc:focus{outline:none}
+#blockErr{
+  flex:none;max-height:96px;overflow-y:auto;background:#2B1512;color:#FFB4AE;
+  font-family:var(--mono);font-size:11px;padding:7px 12px;line-height:1.5;
+  white-space:pre-wrap;display:none;
+}
+.chip.blockchip{border-style:dashed}
+.node.runtime .node-card{stroke-dasharray:5 3;fill:#EEF3F8}
+.chatwrap{display:flex;height:100%;min-height:0}
+.chatside{width:216px;flex:none;border-right:1px solid var(--paper-3);
+  padding:10px 12px;overflow-y:auto}
+.chatmain{flex:1;display:flex;flex-direction:column;min-width:0}
+#chatLog{
+  flex:1;min-height:0;overflow-y:auto;padding:12px 16px;background:var(--ink);
+  display:flex;flex-direction:column;gap:9px;
+}
+.bubble{
+  max-width:78%;padding:8px 12px;border-radius:11px;font-size:12.5px;
+  line-height:1.5;white-space:pre-wrap;word-break:break-word;
+}
+.bubble.me{align-self:flex-end;background:var(--amber);color:#1B1200}
+.bubble.it{align-self:flex-start;background:#22303F;color:#DCE4EE;font-family:var(--mono);font-size:11.5px}
+.bubble.sys{align-self:center;background:none;color:#4E6580;font-size:11px;font-style:italic}
+.bubble.thinking{opacity:.6}
+.chatbar{
+  flex:none;display:flex;gap:8px;padding:9px 12px;border-top:1px solid var(--paper-3);
+  background:var(--paper-2);
+}
+#chatInput{
+  flex:1;padding:8px 11px;border:1px solid var(--paper-3);border-radius:6px;
+  background:#fff;font-size:12.5px;
+}
+#chatInput:focus{outline:none;border-color:var(--amber)}
+.chatside .field{margin-bottom:9px}
+.chatside .field label{font-size:10.5px}
+#modal{
+  position:fixed;inset:0;background:rgba(10,16,24,.72);z-index:150;
+  display:none;align-items:center;justify-content:center;
+}
+#modal.on{display:flex}
+.sheet{
+  background:var(--paper);border-radius:10px;width:430px;max-width:92vw;
+  box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden;
+}
+.sheet h3{margin:0;padding:13px 16px;font-size:13px;background:var(--paper-2);
+  border-bottom:1px solid var(--paper-3);font-weight:600}
+.sheet .inner{padding:14px 16px;max-height:60vh;overflow-y:auto}
+.sheet .foot{display:flex;gap:8px;padding:11px 16px;border-top:1px solid var(--paper-3);
+  background:var(--paper-2)}
+.sheet .foot .grow{flex:1}
+#importNote{
+  font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:10px;
+  max-height:120px;overflow-y:auto;
+}
+#importNote .warn{color:#8C2F27}
+.toast{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+  background:#22303F;color:#E4EBF3;padding:9px 16px;border-radius:7px;
+  font-size:12.5px;border:1px solid #3B4E66;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.4);
+  opacity:0;transition:opacity .18s;pointer-events:none;
+}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><b>Deep Network Designer</b><span id="ver">tensor drafting</span></div>
+  <input id="gname" value="MyNet" spellcheck="false" aria-label="Design name">
+  <div class="spacer"></div>
+  <div class="stat"><i id="statParams">—</i><u>learnables</u></div>
+  <div class="stat"><i id="statLayers">0</i><u>layers</u></div>
+  <button class="btn" id="btnUndo" title="Undo (Cmd/Ctrl+Z)" disabled>&#8630;</button>
+  <button class="btn" id="btnRedo" title="Redo (Cmd/Ctrl+Shift+Z)" disabled>&#8631;</button>
+  <button class="btn" id="btnTidy">Tidy</button>
+  <button class="btn" id="btnImport">Import</button>
+  <button class="btn" id="btnSave">Save</button>
+  <button class="btn" id="btnLoad">Open</button>
+  <button class="btn" id="btnDownload">Download code</button>
+  <button class="btn go" id="btnTrain">Train</button>
+</header>
+
+<div class="shell">
+  <aside class="panel" id="palette">
+    <h2>Layers</h2>
+    <input id="search" placeholder="Filter layers" spellcheck="false">
+    <div class="scroll" id="palList"></div>
+  </aside>
+
+  <main id="stage">
+    <svg id="svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="1" fill="#253449"></circle>
+        </pattern>
+      </defs>
+      <rect id="bg" width="100%" height="100%" fill="url(#dots)"></rect>
+      <g id="world">
+        <g id="wires"></g>
+        <g id="nodes"></g>
+        <path id="draft" class="wire" stroke-dasharray="5 4" stroke-width="2" style="display:none"></path>
+      </g>
+    </svg>
+    <div class="zoombar">
+      <button id="zin" title="Zoom in">+</button>
+      <button id="zout" title="Zoom out">−</button>
+      <button id="zfit" title="Fit to view">⤢</button>
+      <button id="zfind" title="Find a layer (Cmd/Ctrl+K)">&#9906;</button>
+      <button id="zroute" title="Straight or curved wires">&#8735;</button>
+      <button id="zsnap" title="Snap to grid">#</button>
+      <button id="zmap" title="Minimap" class="on">&#9634;</button>
+    </div>
+    <svg id="minimap" class="on" viewBox="0 0 172 120" preserveAspectRatio="none"></svg>
+    <div id="marquee"></div>
+    <div id="hint">Drag a layer in from the left. Drag from the bottom dot of one layer to the top dot of another to connect them.</div>
+  </main>
+
+  <aside class="panel" id="inspector">
+    <h2>Layer settings</h2>
+    <div class="scroll" id="inspBody">
+      <div class="empty">Select a layer on the canvas to edit it.</div>
+    </div>
+  </aside>
+</div>
+
+<div id="drawer">
+  <div class="tabs">
+    <button class="tab on" data-pane="paneCode">Code</button>
+    <button class="tab" data-pane="paneTrain">Training</button>
+    <button class="tab" data-pane="paneChat">Chat</button>
+    <button class="tab" data-pane="paneBlocks">Blocks</button>
+    <button class="tab" data-pane="paneProbs">Problems<span class="count" id="probCount" style="display:none">0</span></button>
+    <div class="spacer"></div>
+    <select id="framework" style="border:1px solid var(--paper-3);border-radius:5px;padding:4px 7px;font-size:12px;background:#fff">
+      <option value="pytorch">PyTorch</option>
+      <option value="keras">Keras</option>
+    </select>
+    <button class="btn" id="btnCopy" style="margin-left:8px;background:#fff;color:var(--text);border-color:var(--paper-3)">Copy</button>
+    <button class="btn" id="btnDrawer" style="margin-left:6px;background:#fff;color:var(--text);border-color:var(--paper-3)">Hide</button>
+  </div>
+
+  <div class="pane on" id="paneCode"><pre id="code">Building…</pre></div>
+
+  <div class="pane" id="paneChat">
+    <div class="chatwrap">
+      <div class="chatside">
+        <div class="field"><label>Trained model</label>
+          <select id="ch_model"></select>
+          <div class="help" id="ch_note">Only checkpoints trained on text can answer.</div>
+        </div>
+        <div class="field"><label>Temperature</label>
+          <input type="number" id="ch_temp" value="0.7" step="0.1" min="0.05"></div>
+        <div class="field"><label>Top-k</label>
+          <input type="number" id="ch_topk" value="40" min="0"></div>
+        <div class="field"><label>Max characters</label>
+          <input type="number" id="ch_max" value="200" min="10"></div>
+        <div class="field"><label>Prompt format</label>
+          <select id="ch_format">
+            <option value="dialogue">user / model turns</option>
+            <option value="raw">continue my text</option>
+          </select>
+          <div class="help">Dialogue wraps what you type in the turn format the corpus uses.</div>
+        </div>
+        <button class="btn" id="btnChatClear" style="width:100%;background:#fff;color:var(--text);border-color:var(--paper-3)">Clear</button>
+      </div>
+      <div class="chatmain">
+        <div id="chatLog"></div>
+        <div class="chatbar">
+          <input id="chatInput" placeholder="Ask it something" spellcheck="false">
+          <button class="btn go" id="btnChatSend">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane" id="paneBlocks">
+    <div class="blockwrap">
+      <div class="blocklist" id="blockList"></div>
+      <div class="blockedit">
+        <div class="editbar">
+          <span class="path" id="blockPath">Pick a block to edit its source</span>
+          <button class="btn" id="btnNewBlock" style="background:#fff;color:var(--text);border-color:var(--paper-3)">New</button>
+          <button class="btn" id="btnReloadBlocks" style="background:#fff;color:var(--text);border-color:var(--paper-3)">Reload</button>
+          <button class="btn" id="btnDeleteBlock" style="background:#fff;color:#8C2F27;border-color:var(--paper-3)">Delete</button>
+          <button class="btn go" id="btnSaveBlock">Save and reload</button>
+        </div>
+        <textarea id="blockSrc" spellcheck="false" wrap="off"
+          placeholder="Select a block on the left, or press New to start one."></textarea>
+        <div id="blockErr"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane" id="paneProbs"><ul class="probs" id="probList"></ul></div>
+
+  <div class="pane" id="paneTrain">
+    <div class="trainwrap">
+      <div class="trainform" id="trainForm"></div>
+      <div class="trainview">
+        <div class="legend">
+          <span><i style="background:#F0A202"></i>train loss</span>
+          <span><i style="background:#6FD0E0"></i>validation loss</span>
+          <span id="trainStatus" style="margin-left:auto;font-family:var(--mono)"></span>
+        </div>
+        <svg id="chart"></svg>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="palette-cmd">
+  <div class="cmdbox">
+    <input id="cmdInput" placeholder="Find a layer by name or type" spellcheck="false">
+    <div class="cmdlist" id="cmdList"></div>
+  </div>
+</div>
+
+<div id="modal">
+  <div class="sheet">
+    <h3>Import an existing model</h3>
+    <div class="inner">
+      <div class="field"><label>Pretrained architecture</label>
+        <select id="im_arch"></select>
+        <div class="help">Traced with torch.fx, so what lands on the canvas is editable layers.</div>
+      </div>
+      <div class="field"><label>Weights</label>
+        <select id="im_weights">
+          <option value="none">architecture only</option>
+          <option value="DEFAULT">pretrained (downloads)</option>
+        </select></div>
+      <div class="field"><label>Input shape</label>
+        <input type="text" id="im_shape" value="3,224,224" spellcheck="false">
+        <div class="help">Channels first, no batch dimension. Tracing carries no shapes, so this seeds the analysis.</div>
+      </div>
+      <div class="field"><label>Or upload a file</label>
+        <div class="filerow">
+          <input type="text" id="im_file_label" placeholder="no file chosen" readonly>
+          <button class="btn" id="btnPickModel" style="background:#fff;color:var(--text);border-color:var(--paper-3)">Choose</button>
+        </div>
+        <input type="file" id="im_file" accept=".onnx,.pt,.pth" style="display:none">
+        <div class="help">An .onnx export, or a .pt holding the module itself. A state_dict has no architecture to show.</div>
+      </div>
+      <div id="importNote"></div>
+    </div>
+    <div class="foot">
+      <span class="grow"></span>
+      <button class="btn" id="btnImportCancel">Cancel</button>
+      <button class="btn go" id="btnImportGo">Import</button>
+    </div>
+  </div>
+</div>
+
+<div id="ghost"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const API = "";
+const CAT_COLOR = {
+  Data:"#2D7DD2", Dense:"#7B61FF", Convolution:"#E8873A", Pooling:"#D45D79",
+  Normalization:"#3DA35D", Activation:"#E0B33C", Shape:"#6C7A89",
+  Merge:"#C2569B", Recurrent:"#2AA1A8", Sequence:"#5B7FE0", Custom:"#8D6E63"
+};
+const NW = 178, NH = 46;
+
+const state = {
+  graph:{ name:"MyNet", nodes:[], edges:[] },
+  specs:{}, catalog:[], datasets:[], optimizers:[],
+  sel:null, selEdge:null,
+  view:{x:120, y:60, k:1},
+  report:null, code:{pytorch:"", keras:""},
+  job:null, es:null, seq:1,
+  blocks:[], blockFile:null, blockDraft:false, colmap:null, csv:null,
+  nodeCode:{}, checkpoints:[], augmentations:[], corpus:null,
+  selection:new Set(), history:[], future:[], clipboard:null,
+  orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0
+};
+
+const $ = (id) => document.getElementById(id);
+const svg = $("svg"), world = $("world"), gWires = $("wires"), gNodes = $("nodes");
+
+function uid(prefix){ return prefix + (state.seq++); }
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on"), 2100);
+}
+function specOf(type){ return state.specs[type]; }
+function nodeById(id){ return state.graph.nodes.find(n=>n.id===id); }
+
+/* ============================ boot ============================ */
+
+async function boot(){
+  const res = await fetch(API + "/api/catalog");
+  const data = await res.json();
+  state.catalog = data.layers;
+  state.datasets = data.datasets;
+  state.optimizers = data.optimizers;
+  state.augmentations = data.augmentations || [];
+  if (data.version) $("ver").textContent = "v" + data.version;
+  data.layers.forEach(s => state.specs[s.name] = s);
+  buildPalette();
+  buildTrainForm();
+  starterGraph();
+  updateHistoryButtons();
+  render();
+  analyze();
+}
+
+function starterGraph(){
+  const add = (type, params, x, y) => {
+    const n = { id: uid("n"), type, params: params||{}, label:"", x, y };
+    state.graph.nodes.push(n); return n;
+  };
+  const link = (a,b) => state.graph.edges.push({ id: uid("e"), source:a.id, target:b.id, port:0 });
+  const inp = add("Input", {shape:[1,28,28]}, 0, 0);
+  const c1  = add("Conv2d", {filters:32, kernel:3, padding:"same"}, 0, 100);
+  const b1  = add("BatchNorm2d", {}, 0, 200);
+  const a1  = add("Activation", {kind:"relu"}, 0, 300);
+  const p1  = add("MaxPool2d", {kernel:2}, 0, 400);
+  const fl  = add("Flatten", {}, 0, 500);
+  const d1  = add("Linear", {units:10}, 0, 600);
+  const out = add("Output", {task:"classification"}, 0, 700);
+  [[inp,c1],[c1,b1],[b1,a1],[a1,p1],[p1,fl],[fl,d1],[d1,out]].forEach(p=>link(p[0],p[1]));
+}
+
+/* ============================ palette ============================ */
+
+function buildPalette(){
+  const list = $("palList");
+  const term = ($("search").value || "").toLowerCase();
+  const groups = {};
+  state.catalog.forEach(s => {
+    if (term && !s.name.toLowerCase().includes(term) && !s.category.toLowerCase().includes(term)) return;
+    (groups[s.category] = groups[s.category] || []).push(s);
+  });
+  list.innerHTML = "";
+  Object.keys(groups).forEach(cat => {
+    const h = document.createElement("div");
+    h.className = "cat eyebrow"; h.textContent = cat;
+    list.appendChild(h);
+    groups[cat].forEach(s => {
+      const el = document.createElement("div");
+      el.className = "chip" + (s.source === "block" ? " blockchip" : "");
+      el.style.setProperty("--c", CAT_COLOR[cat] || "#8D6E63");
+      const tag = s.kind === "runtime" ? "runtime"
+                : (s.n_inputs < 0 ? "n-in" : (s.keras === false ? "torch" : ""));
+      el.innerHTML = `<span>${s.name}</span>` + (tag ? `<small>${tag}</small>` : "");
+      el.title = s.doc || "";
+      el.addEventListener("pointerdown", e => startPaletteDrag(e, s));
+      list.appendChild(el);
+    });
+  });
+}
+$("search").addEventListener("input", buildPalette);
+
+let dragNew = null;
+function startPaletteDrag(e, spec){
+  e.preventDefault();
+  const g = $("ghost");
+  g.textContent = spec.name;
+  g.style.setProperty("--c", CAT_COLOR[spec.category] || "#888");
+  g.style.display = "block";
+  dragNew = spec;
+  moveGhost(e);
+  window.addEventListener("pointermove", moveGhost);
+  window.addEventListener("pointerup", dropNew, { once:true });
+}
+function moveGhost(e){
+  const g = $("ghost");
+  g.style.left = (e.clientX + 12) + "px";
+  g.style.top  = (e.clientY - 14) + "px";
+}
+function dropNew(e){
+  window.removeEventListener("pointermove", moveGhost);
+  $("ghost").style.display = "none";
+  const spec = dragNew; dragNew = null;
+  if (!spec) return;
+  const rect = svg.getBoundingClientRect();
+  if (e.clientX < rect.left || e.clientX > rect.right ||
+      e.clientY < rect.top  || e.clientY > rect.bottom) return;
+  pushHistory();
+  const pt = toWorld(e.clientX, e.clientY);
+  const node = { id: uid("n"), type: spec.name, params:{}, label:"",
+                 x: Math.round(pt.x - NW/2), y: Math.round(pt.y - NH/2) };
+  const prev = state.sel ? nodeById(state.sel) : null;
+  state.graph.nodes.push(node);
+  // dropping while a layer is selected wires them together, the usual next step
+  const prevIsOutput = prev && prev.type === "Output";
+  const newIsRuntime = specOf(spec.name).kind === "runtime";
+  if (prev && prev.id !== node.id && specOf(spec.name).n_inputs !== 0 &&
+      (!prevIsOutput || newIsRuntime)) {
+    state.graph.edges.push({ id: uid("e"), source: prev.id, target: node.id, port: 0 });
+  }
+  selectOnly(node.id);
+  render(); renderInspector(); analyze();
+}
+
+/* ==================== history, selection, clipboard ==================== */
+
+function snapshot(){ return JSON.stringify(state.graph); }
+
+function pushHistory(){
+  state.history.push(snapshot());
+  if (state.history.length > 60) state.history.shift();
+  state.future.length = 0;
+  updateHistoryButtons();
+}
+
+function restore(json){
+  state.graph = JSON.parse(json);
+  const ids = new Set(state.graph.nodes.map(n => n.id));
+  state.selection = new Set([...state.selection].filter(id => ids.has(id)));
+  state.sel = state.selection.size ? [...state.selection][0] : null;
+  state.selEdge = null;
+  $("gname").value = state.graph.name || "MyNet";
+  render(); renderInspector(); analyze();
+}
+
+function undo(){
+  if (!state.history.length){ toast("Nothing to undo"); return; }
+  state.future.push(snapshot());
+  restore(state.history.pop());
+  updateHistoryButtons();
+}
+
+function redo(){
+  if (!state.future.length){ toast("Nothing to redo"); return; }
+  state.history.push(snapshot());
+  restore(state.future.pop());
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons(){
+  const u = $("btnUndo"), r = $("btnRedo");
+  if (u) u.disabled = !state.history.length;
+  if (r) r.disabled = !state.future.length;
+}
+
+function clearSelection(){
+  state.selection.clear();
+  state.sel = null;
+  state.selEdge = null;
+}
+
+function selectOnly(id){
+  state.selection = new Set([id]);
+  state.sel = id;
+  state.selEdge = null;
+}
+
+function toggleSelection(id){
+  if (state.selection.has(id)){
+    state.selection.delete(id);
+    if (state.sel === id) state.sel = [...state.selection][0] || null;
+  } else {
+    state.selection.add(id);
+    state.sel = id;
+  }
+  state.selEdge = null;
+}
+
+function deleteSelection(){
+  if (state.selection.size){
+    pushHistory();
+    const gone = state.selection;
+    state.graph.nodes = state.graph.nodes.filter(n => !gone.has(n.id));
+    state.graph.edges = state.graph.edges.filter(
+      e => !gone.has(e.source) && !gone.has(e.target));
+    clearSelection();
+    render(); renderInspector(); analyze();
+  } else if (state.selEdge){
+    pushHistory();
+    state.graph.edges = state.graph.edges.filter(x => x.id !== state.selEdge);
+    state.selEdge = null;
+    render(); renderInspector(); analyze();
+  }
+}
+
+function copySelection(){
+  if (!state.selection.size) return;
+  const ids = state.selection;
+  state.clipboard = {
+    nodes: state.graph.nodes.filter(n => ids.has(n.id)).map(n => JSON.parse(JSON.stringify(n))),
+    // edges wholly inside the selection travel with it; the rest are dropped
+    edges: state.graph.edges.filter(e => ids.has(e.source) && ids.has(e.target))
+                            .map(e => JSON.parse(JSON.stringify(e)))
+  };
+  toast(`Copied ${state.clipboard.nodes.length} layer${state.clipboard.nodes.length>1?"s":""}`);
+}
+
+function pasteClipboard(){
+  if (!state.clipboard || !state.clipboard.nodes.length) return;
+  pushHistory();
+  const remap = {};
+  const fresh = state.clipboard.nodes.map(n => {
+    const id = uid("n");
+    remap[n.id] = id;
+    return { ...JSON.parse(JSON.stringify(n)), id, x: n.x + 32, y: n.y + 32 };
+  });
+  const edges = state.clipboard.edges.map(e => ({
+    ...e, id: uid("e"), source: remap[e.source], target: remap[e.target] }));
+  state.graph.nodes.push(...fresh);
+  state.graph.edges.push(...edges);
+  state.selection = new Set(fresh.map(n => n.id));
+  state.sel = fresh[0].id;
+  render(); renderInspector(); analyze();
+}
+
+/* ============================ view maths ============================ */
+
+function toWorld(cx, cy){
+  const r = svg.getBoundingClientRect();
+  return { x: (cx - r.left - state.view.x) / state.view.k,
+           y: (cy - r.top  - state.view.y) / state.view.k };
+}
+function applyView(){
+  world.setAttribute("transform",
+    `translate(${state.view.x},${state.view.y}) scale(${state.view.k})`);
+  const p = document.querySelector("#dots");
+  p.setAttribute("patternTransform",
+    `translate(${state.view.x},${state.view.y}) scale(${state.view.k})`);
+}
+function zoomBy(f, cx, cy){
+  const r = svg.getBoundingClientRect();
+  cx = cx ?? r.width/2; cy = cy ?? r.height/2;
+  const k2 = Math.min(2.2, Math.max(0.25, state.view.k * f));
+  const wx = (cx - state.view.x) / state.view.k;
+  const wy = (cy - state.view.y) / state.view.k;
+  state.view.k = k2;
+  state.view.x = cx - wx * k2;
+  state.view.y = cy - wy * k2;
+  applyView();
+  drawMinimap();
+}
+$("zin").onclick  = () => zoomBy(1.2);
+$("zout").onclick = () => zoomBy(1/1.2);
+$("zfit").onclick = fitView;
+
+function fitView(){
+  const ns = state.graph.nodes;
+  if (!ns.length) return;
+  const r = svg.getBoundingClientRect();
+  const x0 = Math.min(...ns.map(n=>n.x)) - 60, x1 = Math.max(...ns.map(n=>n.x)) + NW + 60;
+  const y0 = Math.min(...ns.map(n=>n.y)) - 50, y1 = Math.max(...ns.map(n=>n.y)) + NH + 70;
+  const k = Math.min(r.width/(x1-x0), r.height/(y1-y0), 1.4);
+  state.view.k = k;
+  state.view.x = (r.width - (x1-x0)*k)/2 - x0*k;
+  state.view.y = (r.height - (y1-y0)*k)/2 - y0*k;
+  applyView();
+}
+
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomBy(e.deltaY < 0 ? 1.08 : 1/1.08, e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+
+/* pan on empty canvas */
+svg.addEventListener("pointerdown", e => {
+  if (e.target.id !== "bg" && e.target.id !== "svg") return;
+
+  if (e.shiftKey){
+    // shift-drag on empty canvas sweeps a selection box
+    const box = $("marquee");
+    const rect = svg.getBoundingClientRect();
+    const start = { x: e.clientX, y: e.clientY };
+    box.style.display = "block";
+    const draw = ev => {
+      const x = Math.min(start.x, ev.clientX), y = Math.min(start.y, ev.clientY);
+      const w = Math.abs(ev.clientX - start.x), h = Math.abs(ev.clientY - start.y);
+      box.style.left = (x - rect.left) + "px"; box.style.top = (y - rect.top) + "px";
+      box.style.width = w + "px"; box.style.height = h + "px";
+    };
+    const finish = ev => {
+      window.removeEventListener("pointermove", draw);
+      window.removeEventListener("pointerup", finish);
+      box.style.display = "none";
+      const a = toWorld(Math.min(start.x, ev.clientX), Math.min(start.y, ev.clientY));
+      const b = toWorld(Math.max(start.x, ev.clientX), Math.max(start.y, ev.clientY));
+      state.selection = new Set(state.graph.nodes.filter(n =>
+        n.x + NW > a.x && n.x < b.x && n.y + NH > a.y && n.y < b.y).map(n => n.id));
+      state.sel = [...state.selection][0] || null;
+      state.selEdge = null;
+      render(); renderInspector();
+      if (state.selection.size) toast(`${state.selection.size} layers selected`);
+    };
+    window.addEventListener("pointermove", draw);
+    window.addEventListener("pointerup", finish);
+    return;
+  }
+
+  clearSelection(); render(); renderInspector();
+  const sx = e.clientX, sy = e.clientY, ox = state.view.x, oy = state.view.y;
+  const move = ev => { state.view.x = ox + (ev.clientX - sx);
+                       state.view.y = oy + (ev.clientY - sy); applyView(); };
+  const up = () => { window.removeEventListener("pointermove", move);
+                     window.removeEventListener("pointerup", up); };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+/* ======================= navigation aids ======================= */
+
+function graphBounds(){
+  const ns = state.graph.nodes;
+  if (!ns.length) return null;
+  return {
+    x0: Math.min(...ns.map(n => n.x)) - 40,
+    x1: Math.max(...ns.map(n => n.x)) + NW + 40,
+    y0: Math.min(...ns.map(n => n.y)) - 40,
+    y1: Math.max(...ns.map(n => n.y)) + NH + 40
+  };
+}
+
+function drawMinimap(){
+  const map = $("minimap");
+  if (!map.classList.contains("on")) return;
+  const b = graphBounds();
+  if (!b){ map.innerHTML = ""; return; }
+
+  const W = 172, H = 120, pad = 5;
+  const k = Math.min((W - pad*2) / (b.x1 - b.x0), (H - pad*2) / (b.y1 - b.y0));
+  const ox = pad + ((W - pad*2) - (b.x1 - b.x0) * k) / 2;
+  const oy = pad + ((H - pad*2) - (b.y1 - b.y0) * k) / 2;
+  state.mm = { b, k, ox, oy };
+
+  const parts = state.graph.nodes.map(n => {
+    const x = ox + (n.x - b.x0) * k, y = oy + (n.y - b.y0) * k;
+    const w = Math.max(2, NW * k), h = Math.max(1.5, NH * k);
+    return `<rect class="mm-node${state.selection.has(n.id) ? " sel" : ""}" `
+         + `x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" `
+         + `height="${h.toFixed(1)}" rx="1"></rect>`;
+  });
+
+  // the slab of world currently on screen
+  const r = svg.getBoundingClientRect();
+  const tl = toWorld(r.left, r.top), br = toWorld(r.right, r.bottom);
+  const vx = ox + (tl.x - b.x0) * k, vy = oy + (tl.y - b.y0) * k;
+  const vw = (br.x - tl.x) * k, vh = (br.y - tl.y) * k;
+  parts.push(`<rect class="mm-view" x="${vx.toFixed(1)}" y="${vy.toFixed(1)}" `
+           + `width="${Math.max(3,vw).toFixed(1)}" height="${Math.max(3,vh).toFixed(1)}" rx="2"></rect>`);
+  map.innerHTML = parts.join("");
+}
+
+function minimapJump(ev){
+  if (!state.mm) return;
+  const r = $("minimap").getBoundingClientRect();
+  const { b, k, ox, oy } = state.mm;
+  const wx = b.x0 + ((ev.clientX - r.left) * (172 / r.width) - ox) / k;
+  const wy = b.y0 + ((ev.clientY - r.top) * (120 / r.height) - oy) / k;
+  const s = svg.getBoundingClientRect();
+  state.view.x = s.width / 2 - wx * state.view.k;
+  state.view.y = s.height / 2 - wy * state.view.k;
+  applyView(); drawMinimap();
+}
+$("minimap").addEventListener("pointerdown", ev => {
+  minimapJump(ev);
+  const move = e2 => minimapJump(e2);
+  const up = () => { window.removeEventListener("pointermove", move);
+                     window.removeEventListener("pointerup", up); };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+$("zmap").addEventListener("click", () => {
+  $("minimap").classList.toggle("on");
+  $("zmap").classList.toggle("on");
+  drawMinimap();
+});
+$("zroute").addEventListener("click", () => {
+  state.orthogonal = !state.orthogonal;
+  $("zroute").classList.toggle("on", state.orthogonal);
+  render();
+});
+$("zsnap").addEventListener("click", () => {
+  state.snap = !state.snap;
+  $("zsnap").classList.toggle("on", state.snap);
+  toast(state.snap ? "Snapping to a 20px grid" : "Free placement");
+});
+
+/* ---------- find a layer ---------- */
+
+function openFinder(){
+  $("palette-cmd").classList.add("on");
+  $("cmdInput").value = "";
+  $("cmdInput").focus();
+  buildFinder();
+}
+function closeFinder(){ $("palette-cmd").classList.remove("on"); }
+
+function buildFinder(){
+  const term = $("cmdInput").value.toLowerCase();
+  const rep = state.report;
+  const hits = state.graph.nodes.filter(n => {
+    const hay = ((n.label || "") + " " + n.type).toLowerCase();
+    return !term || hay.includes(term);
+  }).slice(0, 60);
+  state.finderHits = hits;
+  state.finderAt = 0;
+  $("cmdList").innerHTML = hits.length ? hits.map((n, i) => {
+    const spec = specOf(n.type) || {};
+    const shape = rep && rep.nodes[n.id] && rep.nodes[n.id].out_shape;
+    return `<div class="cmditem${i===0?" on":""}" data-i="${i}"
+              style="--c:${CAT_COLOR[spec.category] || "#888"}">
+      <i></i><b>${n.label || n.type}</b>
+      <span>${shape ? shape.join("×") : n.type}</span></div>`;
+  }).join("") : `<div class="cmditem"><b>No layer matches.</b></div>`;
+  $("cmdList").querySelectorAll(".cmditem[data-i]").forEach(el =>
+    el.addEventListener("click", () => jumpTo(hits[+el.dataset.i])));
+}
+
+function jumpTo(node){
+  if (!node) return;
+  closeFinder();
+  selectOnly(node.id);
+  const r = svg.getBoundingClientRect();
+  state.view.k = Math.max(state.view.k, 0.8);
+  state.view.x = r.width / 2 - (node.x + NW/2) * state.view.k;
+  state.view.y = r.height / 2 - (node.y + NH/2) * state.view.k;
+  applyView(); render(); renderInspector();
+}
+
+$("zfind").addEventListener("click", openFinder);
+$("cmdInput").addEventListener("input", buildFinder);
+$("palette-cmd").addEventListener("click", e => {
+  if (e.target.id === "palette-cmd") closeFinder();
+});
+$("cmdInput").addEventListener("keydown", e => {
+  const hits = state.finderHits || [];
+  if (e.key === "Escape"){ closeFinder(); return; }
+  if (e.key === "Enter"){ jumpTo(hits[state.finderAt || 0]); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    const step = e.key === "ArrowDown" ? 1 : -1;
+    state.finderAt = Math.max(0, Math.min(hits.length - 1, (state.finderAt || 0) + step));
+    const items = $("cmdList").querySelectorAll(".cmditem[data-i]");
+    items.forEach((el, i) => el.classList.toggle("on", i === state.finderAt));
+    const active = items[state.finderAt];
+    if (active) active.scrollIntoView({ block:"nearest" });
+  }
+});
+
+/* ============================ render ============================ */
+
+function volume(shape){
+  if (!shape || !shape.length) return 1;
+  return shape.reduce((a,b)=>a*Math.max(1,b), 1);
+}
+function wireWidth(shape){
+  return Math.max(1.2, Math.min(6, 1.2 + Math.log10(volume(shape)) * 0.62));
+}
+function el(tag, attrs, parent){
+  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function subtitle(n){
+  const p = n.params || {};
+  switch(n.type){
+    case "Input": return (p.shape || []).join("×");
+    case "Conv2d": case "Conv1d": case "SeparableConv2d": case "ConvTranspose2d":
+      return `${p.filters ?? specDefault(n,"filters")} filters · k${p.kernel ?? specDefault(n,"kernel")}`;
+    case "Linear": return `${p.units ?? specDefault(n,"units")} units`;
+    case "Activation": return p.kind || "relu";
+    case "Dropout": case "Dropout2d": return `p=${p.rate ?? specDefault(n,"rate")}`;
+    case "MaxPool2d": case "AvgPool2d": case "MaxPool1d": return `k${p.kernel ?? 2}`;
+    case "LSTM": case "GRU": case "SimpleRNN": return `${p.units ?? 128} units`;
+    case "Embedding": return `${p.vocab ?? 10000} × ${p.dim ?? 256}`;
+    case "SelfAttention": return `${p.heads ?? 8} heads`;
+    case "TransformerEncoder": return `${p.depth ?? 2} × ${p.heads ?? 8} heads`;
+    case "Reshape": return (p.shape || [-1]).join("×");
+    case "Output": return p.task || "classification";
+    case "Custom": return p.label || "custom";
+    case "MCTSSearch": return `${p.simulations ?? 400} simulations`;
+    case "ResidualBlock": return `${p.filters ?? 64} filters`;
+    case "PolicyHead": return `${p.actions ?? 362} actions`;
+    default: {
+      const s2 = specOf(n.type);
+      if (s2 && s2.kind === "runtime") return "runtime";
+      if (s2 && s2.params.length){
+        const q = s2.params[0];
+        const v = p[q.name] !== undefined ? p[q.name] : q.default;
+        return `${q.name} ${v}`;
+      }
+      return "";
+    }
+  }
+}
+function specDefault(n, key){
+  const s = specOf(n.type); if (!s) return "";
+  const q = s.params.find(q=>q.name===key); return q ? q.default : "";
+}
+
+function render(){
+  gWires.innerHTML = ""; gNodes.innerHTML = "";
+  const rep = state.report;
+
+  state.graph.edges.forEach(e => {
+    const a = nodeById(e.source), b = nodeById(e.target);
+    if (!a || !b) return;
+    const x1 = a.x + NW/2, y1 = a.y + NH, x2 = b.x + NW/2, y2 = b.y;
+    let d;
+    if (state.orthogonal){
+      // right-angled runs read better once a graph has hundreds of nodes
+      const mid = y1 + Math.max(20, (y2 - y1) / 2);
+      const r = Math.min(10, Math.abs(x2-x1)/2, Math.abs(mid-y1), Math.abs(y2-mid) || 10);
+      d = Math.abs(x2 - x1) < 1
+        ? `M${x1},${y1} L${x2},${y2}`
+        : `M${x1},${y1} L${x1},${mid-r} Q${x1},${mid} ${x1+Math.sign(x2-x1)*r},${mid} `
+          + `L${x2-Math.sign(x2-x1)*r},${mid} Q${x2},${mid} ${x2},${mid+r} L${x2},${y2}`;
+    } else {
+      const dy = Math.max(28, Math.abs(y2-y1) * 0.42);
+      d = `M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`;
+    }
+    const shape = rep && rep.edges[e.id] ? rep.edges[e.id].shape : null;
+    const path = el("path", { d, class:"wire" + (state.selEdge===e.id?" sel":""),
+                              "stroke-width": wireWidth(shape) }, gWires);
+    const hit = el("path", { d, class:"wire-hit" }, gWires);
+    hit.addEventListener("pointerdown", ev => {
+      ev.stopPropagation();
+      state.selection.clear(); state.sel = null; state.selEdge = e.id;
+      render(); renderInspector();
+    });
+    if (shape && state.graph.nodes.length <= 60){
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      const t = el("text", { x: mx + 9, y: my + 3, class:"dim" }, gWires);
+      t.textContent = shape.join("×");
+    }
+  });
+
+  state.graph.nodes.forEach(n => {
+    const spec = specOf(n.type) || { category:"Custom", n_inputs:1 };
+    const info = rep && rep.nodes[n.id];
+    const bad = info && info.error;
+    const isRuntime = spec.kind === "runtime";
+    const g = el("g", { class:"node" + (state.selection.has(n.id)?" sel":"") + (bad?" err":"")
+                        + (isRuntime?" runtime":""),
+                        transform:`translate(${n.x},${n.y})` }, gNodes);
+
+    el("rect", { class:"node-card", width:NW, height:NH, rx:7 }, g);
+    el("rect", { class:"node-rail", width:4, height:NH-2, x:1, y:1, rx:2,
+                 fill: CAT_COLOR[spec.category] || "#888" }, g);
+
+    const title = el("text", { class:"node-title", x:15, y:20 }, g);
+    title.textContent = n.label || n.type;
+    const sub = el("text", { class:"node-sub", x:15, y:34 }, g);
+    sub.textContent = subtitle(n);
+
+    if (bad){
+      const b = el("text", { class:"badge", x:NW-11, y:20, "text-anchor":"end" }, g);
+      b.textContent = "!";
+    }
+
+    if (spec.n_inputs !== 0){
+      const p = el("circle", { class:"port", cx:NW/2, cy:0, r:5.5, "data-in":n.id }, g);
+      p.addEventListener("pointerup", ev => finishLink(ev, n.id));
+    }
+    if (!isRuntime){
+      const p = el("circle", { class:"port", cx:NW/2, cy:NH, r:5.5 }, g);
+      p.addEventListener("pointerdown", ev => startLink(ev, n.id));
+    }
+
+    g.addEventListener("pointerdown", ev => {
+      if (ev.target.classList.contains("port")) return;
+      ev.stopPropagation();
+
+      if (ev.shiftKey || ev.metaKey || ev.ctrlKey){
+        toggleSelection(n.id);
+        render(); renderInspector();
+        return;
+      }
+      if (!state.selection.has(n.id)) selectOnly(n.id);
+      else { state.sel = n.id; state.selEdge = null; }
+      render(); renderInspector();
+
+      const start = toWorld(ev.clientX, ev.clientY);
+      const moving = [...state.selection].map(id => nodeById(id)).filter(Boolean)
+                       .map(node => ({ node, ox: node.x, oy: node.y }));
+      let dirty = false;
+      const move = e2 => {
+        const p = toWorld(e2.clientX, e2.clientY);
+        const dx = p.x - start.x, dy = p.y - start.y;
+        if (!dirty && (Math.abs(dx) > 1 || Math.abs(dy) > 1)){
+          pushHistory(); dirty = true;
+        }
+        const q = v => state.snap ? Math.round(v / 20) * 20 : Math.round(v);
+        moving.forEach(m => {
+          m.node.x = q(m.ox + dx);
+          m.node.y = q(m.oy + dy);
+        });
+        render();
+      };
+      const up = () => { window.removeEventListener("pointermove", move);
+                         window.removeEventListener("pointerup", up); };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  });
+
+  applyView();
+  drawMinimap();
+  $("statLayers").textContent = state.graph.nodes.length;
+  $("hint").style.display = state.graph.nodes.length ? "none" : "block";
+}
+
+/* ---------- linking ---------- */
+let linking = null;
+function startLink(e, sourceId){
+  e.stopPropagation(); e.preventDefault();
+  linking = { source: sourceId };
+  const draft = $("draft");
+  draft.style.display = "block";
+  const move = ev => {
+    const a = nodeById(sourceId);
+    const p = toWorld(ev.clientX, ev.clientY);
+    const x1 = a.x + NW/2, y1 = a.y + NH;
+    const dy = Math.max(28, Math.abs(p.y-y1) * 0.42);
+    draft.setAttribute("d", `M${x1},${y1} C${x1},${y1+dy} ${p.x},${p.y-dy} ${p.x},${p.y}`);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    setTimeout(()=>{ draft.style.display="none"; linking=null; }, 0);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+function finishLink(e, targetId){
+  if (!linking || linking.source === targetId) return;
+  e.stopPropagation();
+  pushHistory();
+  const spec = specOf(nodeById(targetId).type);
+  const existing = state.graph.edges.filter(x => x.target === targetId);
+  if (spec.n_inputs === 1 && existing.length){
+    state.graph.edges = state.graph.edges.filter(x => x.target !== targetId);
+  }
+  const dupe = state.graph.edges.some(x => x.source===linking.source && x.target===targetId);
+  if (!dupe){
+    state.graph.edges.push({ id: uid("e"), source: linking.source, target: targetId,
+                             port: existing.length });
+  }
+  linking = null;
+  render(); analyze();
+}
+
+/* ---------- keyboard ---------- */
+window.addEventListener("keydown", e => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if (typing) return;
+  const mod = e.metaKey || e.ctrlKey;
+
+  if (mod && e.key.toLowerCase() === "z"){
+    e.preventDefault();
+    e.shiftKey ? redo() : undo();
+    return;
+  }
+  if (mod && e.key.toLowerCase() === "y"){ e.preventDefault(); redo(); return; }
+  if (mod && e.key.toLowerCase() === "k"){ e.preventDefault(); openFinder(); return; }
+  if (mod && e.key.toLowerCase() === "a"){
+    e.preventDefault();
+    state.selection = new Set(state.graph.nodes.map(n => n.id));
+    state.sel = state.graph.nodes.length ? state.graph.nodes[0].id : null;
+    render(); renderInspector();
+    return;
+  }
+  if (mod && e.key.toLowerCase() === "c"){ e.preventDefault(); copySelection(); return; }
+  if (mod && e.key.toLowerCase() === "v"){ e.preventDefault(); pasteClipboard(); return; }
+  if (mod && e.key.toLowerCase() === "d"){
+    e.preventDefault(); copySelection(); pasteClipboard(); return;
+  }
+  if (e.key === "Delete" || e.key === "Backspace"){
+    e.preventDefault(); deleteSelection(); return;
+  }
+  if (e.key === "Escape"){ clearSelection(); render(); renderInspector(); }
+});
+
+$("btnUndo").addEventListener("click", undo);
+$("btnRedo").addEventListener("click", redo);
+
+/* ============================ inspector ============================ */
+
+function renderInspector(){
+  const body = $("inspBody");
+  if (state.selEdge){
+    const e = state.graph.edges.find(x=>x.id===state.selEdge);
+    const shape = state.report && state.report.edges[state.selEdge];
+    body.innerHTML =
+      `<div class="doc">Connection from <b>${nodeById(e.source)?.type}</b> to <b>${nodeById(e.target)?.type}</b>.</div>` +
+      (shape ? `<div class="shapebox">carries ${shape.shape.join(" × ")}</div>` : "") +
+      `<div class="empty">Press Delete to remove it.</div>`;
+    return;
+  }
+  if (state.selection.size > 1){
+    const kinds = {};
+    state.selection.forEach(id => {
+      const n = nodeById(id); if (n) kinds[n.type] = (kinds[n.type] || 0) + 1;
+    });
+    body.innerHTML = `<div class="doc"><b>${state.selection.size} layers selected.</b><br>` +
+      Object.entries(kinds).map(([k,v]) => `${v} × ${k}`).join("<br>") + `</div>` +
+      `<div class="empty">Drag to move them together. Cmd/Ctrl+C then V duplicates the group with its internal connections. Delete removes them.</div>`;
+    return;
+  }
+  if (!state.sel){ body.innerHTML = `<div class="empty">Select a layer on the canvas to edit it.</div>`; return; }
+
+  const n = nodeById(state.sel);
+  if (!n){ body.innerHTML = ""; return; }
+  const spec = specOf(n.type);
+  const info = state.report && state.report.nodes[n.id];
+  body.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "field";
+  head.innerHTML = `<label>Name on canvas</label>
+    <input type="text" id="f_label" value="${(n.label||"").replace(/"/g,"&quot;")}"
+           placeholder="${n.type}">`;
+  body.appendChild(head);
+  head.querySelector("input").addEventListener("input", ev => {
+    n.label = ev.target.value; render();
+  });
+
+  if (spec && spec.doc){
+    const d = document.createElement("div");
+    d.className = "doc"; d.textContent = spec.doc;
+    body.appendChild(d);
+  }
+  if (spec && spec.kind === "runtime"){
+    const r = document.createElement("div");
+    r.className = "shapebox";
+    r.textContent = "no activation — wraps the model";
+    body.appendChild(r);
+  }
+  if (info && info.out_shape){
+    const s = document.createElement("div");
+    s.className = "shapebox";
+    s.textContent = "out  " + info.out_shape.join(" × ") +
+      (info.learnables ? `\n${info.learnables.toLocaleString()} learnables` : "");
+    s.style.whiteSpace = "pre";
+    body.appendChild(s);
+  }
+  if (info && info.error){
+    const e = document.createElement("div");
+    e.className = "errbox"; e.textContent = info.error;
+    body.appendChild(e);
+  }
+
+  (spec ? spec.params : []).forEach(q => {
+    const val = n.params[q.name] !== undefined ? n.params[q.name] : q.default;
+    const f = document.createElement("div");
+    f.className = "field";
+    const label = `<label>${q.name.replace(/_/g," ")}</label>`;
+    let widget = "";
+
+    if (q.kind === "bool"){
+      f.innerHTML = `<div class="row"><input type="checkbox" ${val?"checked":""}>${label.replace("<label>","<label style='margin:0'>")}</div>`;
+      f.querySelector("input").addEventListener("change", ev => setParam(n, q.name, ev.target.checked));
+    } else {
+      if (q.kind === "select"){
+        widget = `<select>` + q.options.map(o =>
+          `<option value="${o}" ${String(o)===String(val)?"selected":""}>${o}</option>`).join("") + `</select>`;
+      } else if (q.kind === "padding"){
+        const opts = ["same","0","1","2","3"];
+        widget = `<select>` + opts.map(o =>
+          `<option value="${o}" ${String(o)===String(val)?"selected":""}>${o}</option>`).join("") + `</select>`;
+      } else if (q.kind === "int" || q.kind === "float"){
+        const step = q.kind === "float" ? "any" : "1";
+        widget = `<input type="number" step="${step}" value="${val}">`;
+      } else if (q.kind === "shape"){
+        widget = `<input type="text" value="${Array.isArray(val)?val.join(","):val}" placeholder="3,32,32">`;
+      } else if (q.kind === "code"){
+        widget = `<textarea spellcheck="false">${String(val||"").replace(/</g,"&lt;")}</textarea>`;
+      } else if (q.kind === "dict"){
+        widget = `<textarea spellcheck="false">${JSON.stringify(val||{}, null, 1)}</textarea>`;
+      } else {
+        widget = `<input type="text" value="${String(val||"").replace(/"/g,"&quot;")}">`;
+      }
+      f.innerHTML = label + widget + (q.help ? `<div class="help">${q.help}</div>` : "");
+      const w = f.querySelector("select,input,textarea");
+      const commit = ev => {
+        let v = ev.target.value;
+        if (q.kind === "int") v = parseInt(v || 0, 10);
+        else if (q.kind === "float") v = parseFloat(v || 0);
+        else if (q.kind === "shape") v = v.split(/[^-\d]+/).filter(Boolean).map(Number);
+        else if (q.kind === "padding") v = (v === "same") ? "same" : parseInt(v, 10);
+        else if (q.kind === "dict"){ try { v = JSON.parse(v || "{}"); } catch { return; } }
+        setParam(n, q.name, v);
+      };
+      w.addEventListener(q.kind === "select" || q.kind === "padding" ? "change" : "input", commit);
+    }
+    body.appendChild(f);
+  });
+
+  renderNodeSource(body, n);
+}
+
+function renderNodeSource(body, node){
+  const code = state.nodeCode && state.nodeCode[node.id];
+  const spec = specOf(node.type) || {};
+  if (!code) return;
+
+  const head = document.createElement("div");
+  head.className = "srchead";
+  head.innerHTML = `<span class="eyebrow">Generated code</span>`;
+  const jump = document.createElement("button");
+  if (code.source === "block" && code.origin){
+    jump.textContent = "Edit block";
+    jump.title = "blocks/" + code.origin;
+    jump.addEventListener("click", () => {
+      document.querySelector('[data-pane="paneBlocks"]').click();
+      state.blockFile = code.origin;
+      openBlock(code.origin);
+    });
+  } else {
+    jump.textContent = "Show in Code";
+    jump.title = "Jump to this layer in the generated file";
+    jump.addEventListener("click", () => {
+      document.querySelector('[data-pane="paneCode"]').click();
+      $("framework").value = "pytorch";
+      showCode();
+      highlightInCode(code.var);
+    });
+  }
+  head.appendChild(jump);
+  body.appendChild(head);
+
+  const box = document.createElement("div");
+  box.className = "srcbox";
+  const lines = [];
+  if (code.init) lines.push(code.init);
+  if (code.call) lines.push(code.call);
+  box.textContent = lines.join("\n") || "(no code emitted)";
+  body.appendChild(box);
+
+  const origin = document.createElement("div");
+  origin.className = "origin";
+  origin.textContent = code.source === "block"
+    ? "defined in blocks/" + code.origin
+    : "core layer, defined in layers.py";
+  body.appendChild(origin);
+
+  if (code.prelude){
+    const toggleHead = document.createElement("div");
+    toggleHead.className = "srchead";
+    toggleHead.innerHTML = `<span class="eyebrow">Class definition</span>`;
+    const t = document.createElement("button");
+    t.textContent = "Show";
+    toggleHead.appendChild(t);
+    body.appendChild(toggleHead);
+
+    const pre = document.createElement("div");
+    pre.className = "classsrc";
+    pre.textContent = code.prelude;
+    body.appendChild(pre);
+
+    t.addEventListener("click", () => {
+      pre.classList.toggle("open");
+      t.textContent = pre.classList.contains("open") ? "Hide" : "Show";
+    });
+  }
+
+  if (code.keras === false){
+    const w = document.createElement("div");
+    w.className = "origin";
+    w.textContent = "PyTorch only — no Keras equivalent";
+    body.appendChild(w);
+  }
+}
+
+function highlightInCode(varName){
+  const pre = $("code");
+  const text = pre.textContent;
+  const idx = text.indexOf("self." + varName + " =");
+  const at = idx >= 0 ? idx : text.indexOf(varName + " =");
+  if (at < 0) return;
+  const before = text.slice(0, at);
+  const line = text.slice(at, text.indexOf("\n", at) + 1 || undefined);
+  const after = text.slice(at + line.length);
+  pre.textContent = "";
+  pre.appendChild(document.createTextNode(before));
+  const mark = document.createElement("span");
+  mark.textContent = line;
+  mark.style.background = "#3A2F12";
+  mark.style.borderLeft = "2px solid var(--amber)";
+  pre.appendChild(mark);
+  pre.appendChild(document.createTextNode(after));
+  mark.scrollIntoView({ block:"center", behavior:"smooth" });
+}
+
+let paramTimer = null;
+function setParam(node, key, value){
+  // one history entry per burst of typing, not one per keystroke
+  clearTimeout(paramTimer);
+  const before = snapshot();
+  paramTimer = setTimeout(() => {
+    if (state.history[state.history.length - 1] !== before){
+      state.history.push(before);
+      if (state.history.length > 60) state.history.shift();
+      state.future.length = 0;
+      updateHistoryButtons();
+    }
+  }, 400);
+  node.params[key] = value;
+  render();
+  analyze();
+}
+
+/* ============================ analysis ============================ */
+
+let analyzeTimer = null;
+function analyze(){
+  clearTimeout(analyzeTimer);
+  analyzeTimer = setTimeout(runAnalyze, 180);
+}
+async function runAnalyze(){
+  state.graph.name = $("gname").value || "MyNet";
+  let data;
+  try{
+    const res = await fetch(API + "/api/analyze", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ graph: state.graph })
+    });
+    data = await res.json();
+  } catch(err){
+    $("code").textContent = "Cannot reach the server. Is uvicorn still running?";
+    return;
+  }
+  state.report = data.report;
+  state.code = data.code;
+  state.nodeCode = data.node_code || {};
+  render();
+  renderInspector();
+  showCode();
+  showProblems();
+  $("statParams").textContent = data.report.total_learnables
+    ? (data.report.approximate ? "\u2248 " : "") + data.report.total_learnables.toLocaleString()
+    : "\u2014";
+  $("statParams").title = data.report.approximate
+    ? "Includes a pretrained backbone, counted from a published figure"
+    : "Derived from the graph";
+  if ($("mapRows")) renderMapRows();
+}
+
+function showProblems(){
+  const rep = state.report;
+  const list = $("probList");
+  const items = [];
+  if (rep){
+    rep.errors.forEach(e => items.push(e));
+    Object.keys(rep.nodes).forEach(id => {
+      const v = rep.nodes[id];
+      if (v.error){
+        const n = nodeById(id);
+        items.push(`${n ? (n.label || n.type) : id}: ${v.error}`);
+      }
+    });
+  }
+  list.innerHTML = items.length
+    ? items.map(t => `<li>${t}</li>`).join("")
+    : `<li class="fine">No problems. The graph resolves end to end.</li>`;
+  const badge = $("probCount");
+  badge.style.display = items.length ? "inline" : "none";
+  badge.textContent = items.length;
+  $("btnTrain").disabled = !(rep && rep.ok);
+}
+
+function showCode(){
+  const fw = $("framework").value;
+  $("code").textContent = state.code[fw] || "";
+}
+$("framework").addEventListener("change", showCode);
+$("btnCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("code").textContent); toast("Code copied"); }
+  catch { toast("Copy blocked by the browser"); }
+});
+$("btnDownload").addEventListener("click", () => {
+  const fw = $("framework").value;
+  const blob = new Blob([state.code[fw] || ""], { type:"text/x-python" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(state.graph.name||"model").toLowerCase().replace(/\W+/g,"_")}_${fw}.py`;
+  a.click(); URL.revokeObjectURL(a.href);
+});
+$("gname").addEventListener("input", analyze);
+
+/* ============================ tidy ============================ */
+
+$("btnTidy").addEventListener("click", () => {
+  pushHistory();
+  const order = (state.report && state.report.order) || state.graph.nodes.map(n=>n.id);
+  const depth = {}, lanes = {};
+  order.forEach(id => {
+    const ins = state.graph.edges.filter(e => e.target === id);
+    depth[id] = ins.length ? Math.max(...ins.map(e => (depth[e.source] ?? 0) + 1)) : 0;
+  });
+
+  // wrap deep graphs into columns; one 400-layer strip is not navigable
+  const ROWS = 34;
+  const deepest = Math.max(0, ...Object.values(depth));
+  const wrap = deepest >= ROWS * 2;
+  const place = {};
+  order.forEach(id => {
+    const d = depth[id];
+    const lane = lanes[d] = (lanes[d] || 0);
+    lanes[d] = lane + 1;
+    place[id] = { col: wrap ? Math.floor(d / ROWS) : 0, row: wrap ? d % ROWS : d, lane };
+  });
+  const widest = {};
+  Object.values(place).forEach(p => {
+    widest[p.col] = Math.max(widest[p.col] || 1, p.lane + 1);
+  });
+  const offset = {}; let running = 0;
+  Object.keys(widest).map(Number).sort((a,b)=>a-b).forEach(col => {
+    offset[col] = running;
+    running += widest[col] * (NW + 62) + 90;
+  });
+  order.forEach(id => {
+    const n = nodeById(id), p = place[id];
+    if (!n) return;
+    n.x = offset[p.col] + p.lane * (NW + 62);
+    n.y = p.row * 104;
+  });
+  render(); fitView();
+  if (wrap) toast(`Wrapped ${order.length} layers into ${Object.keys(widest).length} columns`);
+});
+
+/* ============================ save / open ============================ */
+
+$("btnSave").addEventListener("click", async () => {
+  state.graph.name = $("gname").value || "MyNet";
+  const res = await fetch(API + "/api/graphs/" + encodeURIComponent(state.graph.name), {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ graph: state.graph })
+  });
+  toast(res.ok ? `Saved as ${state.graph.name}` : "Save failed");
+});
+
+$("btnLoad").addEventListener("click", async () => {
+  const res = await fetch(API + "/api/graphs");
+  const data = await res.json();
+  if (!data.graphs.length){ toast("Nothing saved yet"); return; }
+  const pick = prompt("Open which design?\n\n" +
+    data.graphs.map(g => `${g.name}  (${g.saved_at})`).join("\n"), data.graphs[0].name);
+  if (!pick) return;
+  const r2 = await fetch(API + "/api/graphs/" + encodeURIComponent(pick.trim()));
+  if (!r2.ok){ toast("No design under that name"); return; }
+  pushHistory();
+  state.graph = await r2.json();
+  state.seq = state.graph.nodes.length + state.graph.edges.length + 100;
+  $("gname").value = state.graph.name || pick;
+  clearSelection();
+  render(); fitView(); analyze();
+});
+
+/* ============================ drawer ============================ */
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("on"));
+    document.querySelectorAll(".pane").forEach(p => p.classList.remove("on"));
+    tab.classList.add("on");
+    $(tab.dataset.pane).classList.add("on");
+    $("drawer").classList.remove("min");
+    $("btnDrawer").textContent = "Hide";
+    if (tab.dataset.pane === "paneTrain") drawChart();
+    if (tab.dataset.pane === "paneBlocks") refreshBlocks();
+    if (tab.dataset.pane === "paneChat") refreshChatModels();
+  });
+});
+$("btnDrawer").addEventListener("click", () => {
+  const d = $("drawer");
+  d.classList.toggle("min");
+  $("btnDrawer").textContent = d.classList.contains("min") ? "Show" : "Hide";
+});
+
+/* ============================ chat ============================ */
+
+function chatSay(text, cls){
+  const log = $("chatLog");
+  const b = document.createElement("div");
+  b.className = "bubble " + cls;
+  b.textContent = text;
+  log.appendChild(b);
+  log.scrollTop = log.scrollHeight;
+  return b;
+}
+
+async function refreshChatModels(){
+  let d;
+  try { d = await (await fetch(API + "/api/chat/models")).json(); }
+  catch { return; }
+  const sel = $("ch_model"), keep = sel.value;
+  sel.innerHTML = d.checkpoints.length
+    ? d.checkpoints.map(c => {
+        const ppl = c.metrics && c.metrics.perplexity ? ` (ppl ${c.metrics.perplexity})` : "";
+        return `<option value="${c.file}">${c.file}${ppl}</option>`;
+      }).join("")
+    : `<option value="">no text model trained yet</option>`;
+  if (d.checkpoints.some(c => c.file === keep)) sel.value = keep;
+
+  if (!d.checkpoints.length && !$("chatLog").children.length){
+    chatSay("No text model yet. Open the MiniGPT design, train it on a .txt corpus "
+            + "in the Training tab, and its checkpoints will appear here.", "sys");
+  }
+}
+
+async function sendChat(){
+  const model = $("ch_model").value;
+  if (!model){ chatSay("Train a model on a text corpus first.", "sys"); return; }
+  const text = $("chatInput").value.trim();
+  if (!text) return;
+  $("chatInput").value = "";
+  chatSay(text, "me");
+
+  const dialogue = $("ch_format").value === "dialogue";
+  const prompt = dialogue ? `user: ${text}\nmodel:` : text;
+  const pending = chatSay("…", "it thinking");
+  $("btnChatSend").disabled = true;
+
+  let r, d;
+  try{
+    r = await fetch(API + "/api/chat", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        checkpoint: model, prompt,
+        max_new_tokens: +$("ch_max").value,
+        temperature: +$("ch_temp").value,
+        top_k: +$("ch_topk").value,
+        stop: dialogue ? "\nuser:" : ""
+      })
+    });
+    d = await r.json();
+  } catch(err){
+    pending.remove(); chatSay("The server did not respond.", "sys");
+    $("btnChatSend").disabled = false; return;
+  }
+  $("btnChatSend").disabled = false;
+  pending.remove();
+
+  if (!r.ok){
+    chatSay((d.detail && d.detail.message) || "Generation failed", "sys");
+    return;
+  }
+  chatSay(d.continuation.trim() || "(the model produced nothing)", "it");
+  if (d.unknown_characters && d.unknown_characters.length){
+    chatSay(`Not in the model's vocabulary, so dropped: ${d.unknown_characters.join(" ")}`, "sys");
+  }
+}
+
+$("btnChatSend").addEventListener("click", sendChat);
+$("chatInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); }
+});
+$("btnChatClear").addEventListener("click", () => { $("chatLog").innerHTML = ""; });
+$("ch_model").addEventListener("change", () => {
+  $("ch_note").textContent = "Loaded on the first message, then kept in memory.";
+});
+
+/* ============================ import ============================ */
+
+$("btnImport").addEventListener("click", async () => {
+  const sel = $("im_arch");
+  if (!sel.options.length){
+    try{
+      const d = await (await fetch(API + "/api/import/models")).json();
+      sel.innerHTML = d.torchvision.map(m => `<option value="${m}">${m}</option>`).join("");
+    } catch { toast("Cannot reach the server"); return; }
+  }
+  $("importNote").innerHTML = "";
+  $("modal").classList.add("on");
+});
+$("btnImportCancel").addEventListener("click", () => $("modal").classList.remove("on"));
+$("modal").addEventListener("click", e => {
+  if (e.target.id === "modal") $("modal").classList.remove("on");
+});
+$("btnPickModel").addEventListener("click", () => $("im_file").click());
+$("im_file").addEventListener("change", e => {
+  $("im_file_label").value = e.target.files[0] ? e.target.files[0].name : "";
+});
+
+$("btnImportGo").addEventListener("click", async () => {
+  const note = $("importNote");
+  note.textContent = "Tracing…";
+  const file = $("im_file").files[0];
+  let r, d;
+  try{
+    if (file){
+      const body = new FormData();
+      body.append("file", file);
+      r = await fetch(API + "/api/import/upload?shape=" +
+                      encodeURIComponent($("im_shape").value), { method:"POST", body });
+    } else {
+      r = await fetch(API + "/api/import/torchvision", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          arch: $("im_arch").value,
+          weights: $("im_weights").value,
+          input_shape: $("im_shape").value.split(/[^0-9]+/).filter(Boolean).map(Number)
+        })
+      });
+    }
+    d = await r.json();
+  } catch(err){ note.textContent = "The server did not respond."; return; }
+
+  if (!r.ok){
+    note.innerHTML = `<span class="warn">${(d.detail && d.detail.message) || "Import failed"}</span>`;
+    return;
+  }
+
+  pushHistory();
+  state.graph = d.graph;
+  state.seq = d.nodes + state.graph.edges.length + 500;
+  $("gname").value = state.graph.name || "Imported";
+  clearSelection();
+  render(); fitView(); analyze();
+
+  const bits = [`Imported <b>${d.nodes}</b> layers.`];
+  if (d.notes && d.notes.length){
+    bits.push(`<span class="warn">${d.notes.length} could not be reconstructed and came in as stubs:</span> `
+              + d.notes.slice(0,6).join("; "));
+  }
+  if (!d.ok){
+    bits.push(`<span class="warn">${d.problem_count} shape problem(s)</span> — see the Problems tab.`);
+  } else {
+    bits.push("Shapes resolve end to end.");
+  }
+  note.innerHTML = bits.join("<br>");
+  toast(`Imported ${d.nodes} layers`);
+  if (d.ok && !(d.notes || []).length) setTimeout(() => $("modal").classList.remove("on"), 900);
+});
+
+/* ============================ blocks ============================ */
+
+async function refreshBlocks(select){
+  let data;
+  try{
+    const r = await fetch(API + "/api/blocks");
+    data = await r.json();
+  } catch { return; }
+  state.blocks = data.files;
+  const list = $("blockList");
+  list.innerHTML = "";
+
+  data.files.forEach(b => {
+    const el = document.createElement("div");
+    el.className = "blockitem" + (b.file === state.blockFile ? " on" : "")
+                 + (b.error ? " broken" : "");
+    el.innerHTML = `<b>${b.file}</b><span>${
+      b.error ? "failed to load" :
+      (b.installs.length ? b.installs.join(", ") : "installs nothing")}</span>`;
+    el.addEventListener("click", () => openBlock(b.file));
+    list.appendChild(el);
+  });
+
+  if (!data.files.length){
+    list.innerHTML = `<div class="empty">No blocks yet. Press New to write one.</div>`;
+  }
+  if (select) openBlock(select);
+  showBlockErrors(data.errors);
+}
+
+function showBlockErrors(errors){
+  const box = $("blockErr");
+  const mine = (errors || []).filter(e => !state.blockFile || e.file === state.blockFile);
+  const shown = mine.length ? mine : (errors || []);
+  if (!shown.length){ box.style.display = "none"; box.textContent = ""; return; }
+  box.style.display = "block";
+  box.textContent = shown.map(e => `${e.file}\n${e.detail || e.message}`).join("\n\n");
+}
+
+async function openBlock(file){
+  const r = await fetch(API + "/api/blocks/" + encodeURIComponent(file));
+  if (!r.ok){ toast("Could not open " + file); return; }
+  const d = await r.json();
+  state.blockFile = file;
+  state.blockDraft = false;
+  $("blockPath").textContent = "blocks/" + file;
+  $("blockSrc").value = d.source;
+  document.querySelectorAll(".blockitem").forEach(el =>
+    el.classList.toggle("on", el.querySelector("b").textContent === file));
+}
+
+$("btnNewBlock").addEventListener("click", async () => {
+  const name = prompt("Name for the new block class", "MyBlock");
+  if (!name) return;
+  const r = await fetch(API + "/api/blocks/new/" + encodeURIComponent(name));
+  const d = await r.json();
+  state.blockFile = d.file;
+  state.blockDraft = true;
+  $("blockPath").textContent = "blocks/" + d.file + "  (unsaved)";
+  $("blockSrc").value = d.source;
+  $("blockErr").style.display = "none";
+  $("blockSrc").focus();
+});
+
+$("btnSaveBlock").addEventListener("click", saveBlock);
+$("btnReloadBlocks").addEventListener("click", async () => {
+  const r = await fetch(API + "/api/blocks/reload", { method:"POST" });
+  const d = await r.json();
+  adoptCatalog(d.layers);
+  showBlockErrors(d.errors);
+  await refreshBlocks();
+  toast(d.ok ? "Blocks reloaded" : `${d.errors.length} block(s) failed`);
+  analyze();
+});
+
+$("btnDeleteBlock").addEventListener("click", async () => {
+  if (!state.blockFile) return;
+  if (!confirm(`Delete blocks/${state.blockFile}? Any layer it installs disappears from the palette.`)) return;
+  const r = await fetch(API + "/api/blocks/" + encodeURIComponent(state.blockFile),
+                        { method:"DELETE" });
+  const d = await r.json();
+  adoptCatalog(d.layers);
+  state.blockFile = null;
+  $("blockSrc").value = "";
+  $("blockPath").textContent = "Pick a block to edit its source";
+  await refreshBlocks();
+  analyze();
+});
+
+async function saveBlock(){
+  if (!state.blockFile){ toast("Nothing open to save"); return; }
+  const r = await fetch(API + "/api/blocks/" + encodeURIComponent(state.blockFile), {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ source: $("blockSrc").value })
+  });
+  const d = await r.json();
+  adoptCatalog(d.layers);
+  showBlockErrors(d.mine.length ? d.mine : d.errors);
+  state.blockDraft = false;
+  $("blockPath").textContent = "blocks/" + state.blockFile;
+  await refreshBlocks();
+  toast(d.ok ? "Saved and reloaded" : "Saved, but the block did not load");
+  analyze();
+}
+
+function adoptCatalog(layers){
+  if (!layers) return;
+  state.catalog = layers;
+  state.specs = {};
+  layers.forEach(s => state.specs[s.name] = s);
+  buildPalette();
+}
+
+// tab inserts spaces instead of moving focus; cmd/ctrl+s saves
+$("blockSrc").addEventListener("keydown", e => {
+  if (e.key === "Tab"){
+    e.preventDefault();
+    const t = e.target, start = t.selectionStart, end = t.selectionEnd;
+    if (start === end && !e.shiftKey){
+      t.value = t.value.slice(0, start) + "    " + t.value.slice(end);
+      t.selectionStart = t.selectionEnd = start + 4;
+    } else {
+      const head = t.value.lastIndexOf("\n", start - 1) + 1;
+      const block = t.value.slice(head, end);
+      const shifted = e.shiftKey
+        ? block.replace(/^ {1,4}/gm, "")
+        : block.replace(/^/gm, "    ");
+      t.value = t.value.slice(0, head) + shifted + t.value.slice(end);
+      t.selectionStart = head; t.selectionEnd = head + shifted.length;
+    }
+  }
+  if (e.key === "s" && (e.metaKey || e.ctrlKey)){ e.preventDefault(); saveBlock(); }
+});
+
+/* ============================ training ============================ */
+
+function inputNodes(){
+  const order = (state.report && state.report.order) || state.graph.nodes.map(n=>n.id);
+  return order.map(nodeById).filter(n => n && n.type === "Input");
+}
+function shapeOf(id){
+  const info = state.report && state.report.nodes[id];
+  return (info && info.out_shape) || [];
+}
+function volumeOf(id){
+  return shapeOf(id).reduce((a,b)=>a*Math.max(1,b), 1);
+}
+
+function buildTrainForm(){
+  const f = $("trainForm");
+  const dsOpts = state.datasets.map(d =>
+    `<option value="${d.id}">${d.label}</option>`).join("");
+  const optOpts = state.optimizers.map(o => `<option value="${o}">${o}</option>`).join("");
+  f.innerHTML = `
+    <div class="field wide section"><label>Dataset</label>
+      <select id="t_dataset">${dsOpts}</select></div>
+
+    <div id="csvBlock" class="section" style="display:none">
+      <div class="field wide"><label>Table</label>
+        <div class="filerow">
+          <select id="t_csv"></select>
+          <button class="btn" id="btnUpload" style="background:#fff;color:var(--text);border-color:var(--paper-3)">Upload</button>
+        </div>
+        <input type="file" id="csvFile" accept=".csv" style="display:none">
+        <div class="cols" id="csvInfo"></div>
+      </div>
+      <div class="field wide"><label>Target column</label>
+        <select id="t_target"></select></div>
+      <div class="field wide"><label>Columns for each Input</label>
+        <div id="mapRows"></div>
+        <div class="help">Leave a row blank to take the next columns in order.
+          <button class="linkbtn" id="btnAutoMap">Fill automatically</button></div>
+      </div>
+      <div class="field"><label>Validation split</label>
+        <input type="number" id="t_split" value="0.2" step="0.05" min="0.05" max="0.5"></div>
+      <div class="field"><label style="margin:0">Standardize</label>
+        <div class="row" style="height:30px"><input type="checkbox" id="t_norm" checked>
+          <span style="font-size:11px;color:var(--muted)">z-score features</span></div></div>
+    </div>
+
+    <div id="textBlock" class="section" style="display:none">
+      <div class="field wide"><label>Corpus</label>
+        <div class="filerow">
+          <select id="t_corpus"></select>
+          <button class="btn" id="btnUploadText" style="background:#fff;color:var(--text);border-color:var(--paper-3)">Upload</button>
+        </div>
+        <input type="file" id="textFile" accept=".txt" style="display:none">
+        <div class="cols" id="corpusInfo"></div>
+      </div>
+      <div class="field wide"><label>Sample prompt</label>
+        <input type="text" id="t_prompt" value="user: how do I add a" spellcheck="false">
+        <div class="help">A continuation is drawn after every epoch so progress is readable as text.</div>
+      </div>
+      <div class="field wide"><label>Crops per epoch</label>
+        <input type="number" id="t_crops" value="1600" min="64">
+        <div class="help">Random windows of the corpus. This is what an epoch means for text.</div>
+      </div>
+    </div>
+
+    <div id="folderBlock" class="section" style="display:none">
+      <div class="field wide"><label>Folder of class subfolders</label>
+        <div class="filerow">
+          <input type="text" id="t_folder" spellcheck="false"
+                 placeholder="/Users/you/Pictures/dataset">
+          <button class="btn" id="btnScanFolder" style="background:#fff;color:var(--text);border-color:var(--paper-3)">Scan</button>
+        </div>
+        <div class="cols" id="folderInfo">One folder per class, each holding that class's images.</div>
+      </div>
+      <div class="field wide"><label>Augmentation</label>
+        <div id="augRows"></div>
+        <div class="help">Applied to training images only; validation stays clean.</div>
+      </div>
+    </div>
+
+    <div class="section" id="builtinBlock">
+      <div class="field wide"><label>Sample cap</label>
+        <input type="number" id="t_limit" value="6000" min="0">
+        <div class="help">0 uses the whole set. Images are resized to match your Input layer.</div></div>
+    </div>
+
+    <div class="field section" style="grid-column:1/2"><label>Epochs</label>
+      <input type="number" id="t_epochs" value="5" min="1"></div>
+    <div class="field" style="margin-top:4px;padding-top:8px"><label>Batch size</label>
+      <input type="number" id="t_batch" value="64" min="1"></div>
+    <div class="field"><label>Learning rate</label>
+      <input type="number" id="t_lr" value="0.001" step="any"></div>
+    <div class="field"><label>Optimizer</label><select id="t_opt">${optOpts}</select></div>
+    <div class="field"><label>Device</label>
+      <select id="t_device"><option value="auto">auto</option><option value="mps">mps</option>
+      <option value="cuda">cuda</option><option value="cpu">cpu</option></select></div>
+    <div class="field"><label>Extra head weight</label>
+      <input type="number" id="t_aux" value="0.3" step="0.1" min="0">
+      <div class="help">Applies to every Output after the first.</div></div>
+    <div class="field"><label>Stop after no gain for</label>
+      <input type="number" id="t_early" value="0" min="0">
+      <div class="help">Epochs. 0 never stops early.</div></div>
+    <div class="field wide"><label>Start from checkpoint</label>
+      <select id="t_init"><option value="">random initialization</option></select>
+      <div class="help">Matching tensors are copied; a resized head is reported and left fresh.</div></div>
+
+    <div class="field wide row" style="gap:8px">
+      <button class="btn go" id="btnStart" style="flex:1">Start run</button>
+      <button class="btn stop" id="btnStop" style="flex:1" disabled>Stop</button>
+    </div>
+
+    <div class="section wide"><label style="font-size:11px;color:var(--muted);font-weight:600">Saved weights</label>
+      <div id="ckptList" class="cols" style="max-height:104px"></div>
+    </div>`;
+
+  $("btnStart").addEventListener("click", startTraining);
+  $("btnStop").addEventListener("click", stopTraining);
+  $("t_dataset").addEventListener("change", onDatasetChange);
+  $("btnScanFolder").addEventListener("click", scanFolder);
+  $("t_corpus").addEventListener("change", () => describeCorpus($("t_corpus").value));
+  $("btnUploadText").addEventListener("click", () => $("textFile").click());
+  $("textFile").addEventListener("change", async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const body = new FormData(); body.append("file", f);
+    const r = await fetch(API + "/api/datasets/upload", { method:"POST", body });
+    const d = await r.json(); ev.target.value = "";
+    if (!r.ok){ toast((d.detail && d.detail.message) || "Upload failed"); return; }
+    await refreshCorpora();
+    $("t_corpus").value = d.file; describeCorpus(d.file);
+    toast(`${d.file} · ${d.vocab_size} distinct characters`);
+  });
+  const aug = $("augRows");
+  aug.innerHTML = (state.augmentations || []).map(a =>
+    `<label class="row" style="gap:6px;margin-bottom:3px;font-size:11.5px">
+       <input type="checkbox" class="augbox" value="${a.id}">${a.label}</label>`).join("");
+  refreshCheckpoints();
+  $("btnUpload").addEventListener("click", () => $("csvFile").click());
+  $("csvFile").addEventListener("change", uploadCsv);
+  $("t_csv").addEventListener("change", () => loadCsvColumns($("t_csv").value));
+  $("btnAutoMap").addEventListener("click", e => { e.preventDefault(); autoMap(); });
+  $("t_dataset").value = "mnist";
+  onDatasetChange();
+}
+
+function onDatasetChange(){
+  const kind = $("t_dataset").value;
+  $("csvBlock").style.display = kind === "csv" ? "block" : "none";
+  $("folderBlock").style.display = kind === "folder" ? "block" : "none";
+  $("textBlock").style.display = kind === "text" ? "block" : "none";
+  $("builtinBlock").style.display =
+    ["csv","folder","text"].includes(kind) ? "none" : "block";
+  if (kind === "csv") refreshCsvList();
+  if (kind === "text") refreshCorpora();
+  renderMapRows();
+}
+
+async function scanFolder(){
+  const path = $("t_folder").value.trim();
+  if (!path){ toast("Type a folder path first"); return; }
+  const r = await fetch(API + "/api/folder?path=" + encodeURIComponent(path));
+  const d = await r.json();
+  if (!r.ok){ $("folderInfo").textContent = (d.detail && d.detail.message) || "Could not read that folder"; return; }
+  $("folderInfo").textContent =
+    `${d.images.toLocaleString()} images across ${d.class_count} classes — ` +
+    d.classes.map(c => `${c.name} (${c.images})`).join(", ");
+  const head = inputNodes()[0];
+  if (head){
+    const units = state.graph.nodes.filter(n => n.type === "Linear").slice(-1)[0];
+    if (units && (units.params.units || 0) !== d.class_count){
+      $("folderInfo").textContent +=
+        `  ·  your last Linear outputs ${units.params.units || "?"} units, not ${d.class_count}`;
+    }
+  }
+}
+
+async function refreshCorpora(){
+  try{
+    const d = await (await fetch(API + "/api/corpora")).json();
+    const sel = $("t_corpus"), keep = sel.value;
+    sel.innerHTML = d.files.length
+      ? d.files.map(f => `<option value="${f}">${f}</option>`).join("")
+      : `<option value="">no corpus uploaded yet</option>`;
+    if (d.files.includes(keep)) sel.value = keep;
+    if (sel.value) describeCorpus(sel.value);
+  } catch { /* server down */ }
+}
+
+async function describeCorpus(name){
+  const r = await fetch(API + "/api/corpora/" + encodeURIComponent(name));
+  if (!r.ok) return;
+  const d = await r.json();
+  state.corpus = d;
+  const head = state.graph.nodes.filter(n => n.type === "Linear").slice(-1)[0];
+  const emb = state.graph.nodes.find(n => n.type === "Embedding");
+  let note = `${d.characters.toLocaleString()} characters · ${d.vocab_size} distinct`;
+  const wrong = [];
+  if (emb && emb.params.vocab !== d.vocab_size) wrong.push("Embedding vocab");
+  if (head && head.params.units !== d.vocab_size) wrong.push("final Linear units");
+  if (wrong.length) note += `  ·  set ${wrong.join(" and ")} to ${d.vocab_size}`;
+  $("corpusInfo").textContent = note;
+}
+
+async function refreshCheckpoints(){
+  let d;
+  try { d = await (await fetch(API + "/api/checkpoints")).json(); } catch { return; }
+  state.checkpoints = d.checkpoints;
+  const sel = $("t_init");
+  if (sel){
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">random initialization</option>` +
+      d.checkpoints.map(c => `<option value="${c.file}">${c.file}</option>`).join("");
+    if (d.checkpoints.some(c => c.file === keep)) sel.value = keep;
+  }
+  const list = $("ckptList");
+  if (!list) return;
+  list.innerHTML = d.checkpoints.length ? d.checkpoints.map(c => {
+    const acc = c.metrics && c.metrics.val_acc !== undefined
+      ? ` · val acc ${(c.metrics.val_acc*100).toFixed(1)}%` : "";
+    const loss = c.metrics && c.metrics.val_loss !== undefined
+      ? ` · val loss ${c.metrics.val_loss}` : "";
+    return `<div class="maprow" style="gap:5px">
+      <b style="min-width:0;flex:1" title="${c.file}">${c.file}</b>
+      <span class="need">epoch ${c.epoch ?? "?"}${acc}${loss}</span>
+      <button class="linkbtn" data-dl="${c.file}">get</button>
+      <button class="linkbtn" data-open="${c.file}">open</button>
+      <button class="linkbtn" data-rm="${c.file}">x</button></div>`;
+  }).join("") : `<div class="help">No saved weights yet. A run writes its best epoch here.</div>`;
+
+  list.querySelectorAll("[data-dl]").forEach(b => b.addEventListener("click", () => {
+    window.open(API + "/api/checkpoints/" + encodeURIComponent(b.dataset.dl) + "/download");
+  }));
+  list.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", async () => {
+    const r = await fetch(API + "/api/checkpoints/" + encodeURIComponent(b.dataset.open) + "/graph");
+    if (!r.ok){ toast("That checkpoint has no design stored"); return; }
+    pushHistory();
+    state.graph = await r.json();
+    state.seq = state.graph.nodes.length + state.graph.edges.length + 200;
+    $("gname").value = state.graph.name || "Restored";
+    clearSelection();
+    render(); fitView(); analyze();
+    toast("Opened the design that produced those weights");
+  }));
+  list.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", async () => {
+    await fetch(API + "/api/checkpoints/" + encodeURIComponent(b.dataset.rm), { method:"DELETE" });
+    refreshCheckpoints();
+  }));
+}
+
+async function refreshCsvList(){
+  try{
+    const r = await fetch(API + "/api/datasets");
+    const d = await r.json();
+    const sel = $("t_csv");
+    const keep = sel.value;
+    sel.innerHTML = d.files.length
+      ? d.files.map(f => `<option value="${f}">${f}</option>`).join("")
+      : `<option value="">no tables uploaded yet</option>`;
+    if (d.files.includes(keep)) sel.value = keep;
+    if (sel.value) loadCsvColumns(sel.value);
+  } catch { /* server down; the start button will say so */ }
+}
+
+async function uploadCsv(ev){
+  const file = ev.target.files[0];
+  if (!file) return;
+  const body = new FormData();
+  body.append("file", file);
+  const r = await fetch(API + "/api/datasets/upload", { method:"POST", body });
+  const d = await r.json();
+  ev.target.value = "";
+  if (!r.ok){ toast((d.detail && d.detail.message) || "Upload failed"); return; }
+  state.csv = d;
+  await refreshCsvList();
+  $("t_csv").value = d.name;
+  applyCsvInfo(d);
+  toast(`${d.name} · ${d.rows.toLocaleString()} rows`);
+}
+
+async function loadCsvColumns(name){
+  if (!name) return;
+  const r = await fetch(API + "/api/datasets/" + encodeURIComponent(name));
+  if (!r.ok) return;
+  applyCsvInfo(await r.json());
+}
+
+function applyCsvInfo(info){
+  state.csv = info;
+  const cols = info.columns;
+  $("csvInfo").textContent =
+    `${info.rows.toLocaleString()} rows · ${cols.length} columns` +
+    (cols.some(c=>!c.numeric) ? ` · text: ${cols.filter(c=>!c.numeric).map(c=>c.name).join(", ")}` : "");
+  const sel = $("t_target");
+  const keep = sel.value;
+  sel.innerHTML = cols.map(c =>
+    `<option value="${c.name}">${c.name}${c.numeric ? "" : ` (${c.unique} labels)`}</option>`).join("");
+  if (cols.some(c => c.name === keep)) sel.value = keep;
+  renderMapRows();
+}
+
+function renderMapRows(){
+  const host = $("mapRows");
+  if (!host) return;
+  const inputs = inputNodes();
+  host.innerHTML = "";
+  inputs.forEach(n => {
+    const need = volumeOf(n.id);
+    const row = document.createElement("div");
+    row.className = "maprow";
+    row.innerHTML = `<b title="${n.label || n.type}">${n.label || n.type}</b>
+      <span class="need">${shapeOf(n.id).join("×") || "?"} → ${need}</span>
+      <input type="text" data-node="${n.id}" placeholder="auto" spellcheck="false"
+             value="${(state.colmap && state.colmap[n.id] || []).join(", ")}">`;
+    const input = row.querySelector("input");
+    input.addEventListener("input", () => {
+      state.colmap = state.colmap || {};
+      const list = input.value.split(",").map(s=>s.trim()).filter(Boolean);
+      if (list.length) state.colmap[n.id] = list; else delete state.colmap[n.id];
+      row.classList.toggle("bad", list.length > 0 && list.length !== need);
+    });
+    host.appendChild(row);
+  });
+  if (!inputs.length) host.innerHTML = `<div class="help">No Input layers on the canvas yet.</div>`;
+}
+
+function autoMap(){
+  if (!state.csv){ toast("Pick a table first"); return; }
+  const target = $("t_target").value;
+  const features = state.csv.columns.map(c=>c.name).filter(c => c !== target);
+  const inputs = inputNodes();
+  let cursor = 0;
+  state.colmap = {};
+  let short = false;
+  inputs.forEach(n => {
+    const need = volumeOf(n.id);
+    if (cursor + need > features.length){ short = true; return; }
+    state.colmap[n.id] = features.slice(cursor, cursor + need);
+    cursor += need;
+  });
+  renderMapRows();
+  if (short) toast(`The table has ${features.length} feature columns; the Inputs need more.`);
+}
+
+function logLine(text, cls){
+  const l = $("log");
+  const d = document.createElement("div");
+  if (cls) d.className = cls;
+  d.innerHTML = text;
+  l.appendChild(d);
+  l.scrollTop = l.scrollHeight;
+}
+
+async function startTraining(){
+  if (state.es){ state.es.close(); state.es = null; }
+  $("log").innerHTML = "";
+  state.job = { history: [] };
+  const config = {
+    dataset: $("t_dataset").value,
+    epochs: +$("t_epochs").value,
+    batch_size: +$("t_batch").value,
+    lr: +$("t_lr").value,
+    optimizer: $("t_opt").value,
+    device: $("t_device").value,
+    aux_weight: +$("t_aux").value
+  };
+  if (config.dataset === "csv"){
+    config.csv_file = $("t_csv").value;
+    config.target_column = $("t_target").value;
+    config.val_split = +$("t_split").value;
+    config.normalize = $("t_norm").checked;
+    if (state.colmap && Object.keys(state.colmap).length) config.column_map = state.colmap;
+  } else if (config.dataset === "text"){
+    config.text_file = $("t_corpus").value;
+    config.sample_prompt = $("t_prompt").value;
+    config.train_samples = +$("t_crops").value;
+  } else if (config.dataset === "folder"){
+    config.folder = $("t_folder").value.trim();
+    config.val_split = 0.2;
+    config.augment = Array.from(document.querySelectorAll(".augbox:checked")).map(b => b.value);
+    config.workers = 0;
+  } else {
+    config.train_samples = +$("t_limit").value;
+  }
+  config.early_stop = +$("t_early").value;
+  if ($("t_init").value) config.init_from = $("t_init").value;
+  $("btnStart").disabled = true;
+  $("trainStatus").textContent = "starting";
+
+  let res, data;
+  try{
+    res = await fetch(API + "/api/train", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ graph: state.graph, config })
+    });
+    data = await res.json();
+  } catch(err){
+    logLine("Could not reach the server.", "e");
+    $("btnStart").disabled = false; return;
+  }
+  if (!res.ok){
+    const d = data.detail || {};
+    logLine((d.message || "Training could not start"), "e");
+    (d.errors || []).forEach(e => logLine("· " + e, "e"));
+    $("btnStart").disabled = false;
+    $("trainStatus").textContent = "blocked";
+    return;
+  }
+
+  state.job = data.job;
+  state.job.history = [];
+  $("btnStop").disabled = false;
+  logLine(`run <b>${data.job.id}</b> started`);
+
+  const es = new EventSource(API + `/api/train/${data.job.id}/stream`);
+  state.es = es;
+  es.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.kind === "ready"){
+      const io = `${m.inputs} input${m.inputs>1?"s":""}, ${m.outputs} output${m.outputs>1?"s":""}`;
+      logLine(`device <b>${m.device}</b> · <b>${m.learnables.toLocaleString()}</b> learnable parameters · ${io}`);
+      $("trainStatus").textContent = m.device;
+    } else if (m.kind === "dataset"){
+      let line = `<b>${m.rows.toLocaleString()}</b> rows — ${m.train.toLocaleString()} train, ${m.val.toLocaleString()} validation`;
+      if (m.classes) line += ` · ${m.classes} classes`;
+      logLine(line);
+      if (m.class_names) logLine(`labels: ${m.class_names.join(", ")}`);
+      if (m.encoded && m.encoded.length) logLine(`text columns encoded as integers: ${m.encoded.join(", ")}`);
+      if (m.mapping) Object.keys(m.mapping).forEach(id => {
+        const n = nodeById(id);
+        logLine(`${n ? (n.label || n.type) : id} ← ${m.mapping[id].join(", ")}`);
+      });
+    } else if (m.kind === "weights"){
+      let line = `loaded <b>${m.loaded}</b> tensors from ${m.file}`;
+      if (m.skipped_count) line += ` · ${m.skipped_count} left fresh (${m.skipped.join(", ")})`;
+      logLine(line);
+    } else if (m.kind === "checkpoint"){
+      if (m.tag === "last") refreshChatModels();
+      logLine(`saved <b>${m.file}</b>${m.val_loss !== undefined ? ` at val loss ${m.val_loss}` : ""}`);
+      refreshCheckpoints();
+    } else if (m.kind === "early_stop"){
+      logLine(`stopped early — no improvement for ${m.patience} epochs`);
+    } else if (m.kind === "sample"){
+      logLine(`<b>sample after epoch ${m.epoch}</b>`);
+      m.text.split("\n").slice(0, 8).forEach(l =>
+        logLine("&nbsp;&nbsp;" + l.replace(/&/g,"&amp;").replace(/</g,"&lt;")));
+    } else if (m.kind === "warning"){
+      logLine(m.message, "e");
+    } else if (m.kind === "step"){
+      $("trainStatus").textContent = `epoch ${m.epoch} · step ${m.step} · loss ${m.loss}`;
+    } else if (m.kind === "epoch"){
+      state.job.history.push(m);
+      const acc = m.val_acc !== undefined ? ` · val acc ${(m.val_acc*100).toFixed(1)}%` : "";
+      const ppl = m.perplexity !== undefined ? ` · perplexity ${m.perplexity}` : "";
+      logLine(`epoch <b>${m.epoch}</b> — train ${m.train_loss} · val ${m.val_loss}${acc}${ppl}`);
+      drawChart();
+    } else if (m.kind === "error"){
+      logLine(m.message, "e");
+      $("trainStatus").textContent = "error";
+      finishTraining();
+    } else if (m.kind === "finished"){
+      logLine(`run ${m.status}`);
+      $("trainStatus").textContent = m.status;
+      finishTraining();
+    }
+  };
+  es.onerror = () => { finishTraining(); };
+}
+
+function finishTraining(){
+  if (state.es){ state.es.close(); state.es = null; }
+  $("btnStart").disabled = false;
+  $("btnStop").disabled = true;
+}
+async function stopTraining(){
+  if (!state.job || !state.job.id) return;
+  await fetch(API + `/api/train/${state.job.id}/stop`, { method:"POST" });
+  logLine("stop requested");
+}
+
+function drawChart(){
+  const c = $("chart");
+  const rect = c.getBoundingClientRect();
+  const W = rect.width || 520, H = rect.height || 130;
+  c.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  c.innerHTML = "";
+  const hist = (state.job && state.job.history) || [];
+  if (hist.length < 1){
+    const t = el("text", { x: W/2, y: H/2, fill:"#3F5468", "font-size":"12",
+                           "text-anchor":"middle", "font-family":"var(--mono)" }, c);
+    t.textContent = "loss curve appears here once the first epoch lands";
+    return;
+  }
+  const pad = { l:44, r:12, t:12, b:20 };
+  const xs = hist.map(h => h.epoch);
+  const ys = hist.flatMap(h => [h.train_loss, h.val_loss]);
+  const y0 = 0, y1 = Math.max(...ys) * 1.12 || 1;
+  const x0 = Math.min(...xs), x1 = Math.max(Math.max(...xs), x0 + 1);
+  const px = e => pad.l + (e - x0) / (x1 - x0) * (W - pad.l - pad.r);
+  const py = v => H - pad.b - (v - y0) / (y1 - y0) * (H - pad.t - pad.b);
+
+  [0, 0.5, 1].forEach(f => {
+    const v = y0 + f * (y1 - y0);
+    el("line", { x1:pad.l, x2:W-pad.r, y1:py(v), y2:py(v), stroke:"#22303F" }, c);
+    const t = el("text", { x: pad.l - 7, y: py(v) + 3, fill:"#4E6580", "font-size":"9.5",
+                           "text-anchor":"end", "font-family":"var(--mono)" }, c);
+    t.textContent = v.toFixed(2);
+  });
+
+  const line = (key, color) => {
+    const d = hist.map((h,i) => `${i?"L":"M"}${px(h.epoch)},${py(h[key])}`).join(" ");
+    el("path", { d, fill:"none", stroke:color, "stroke-width":2,
+                 "stroke-linejoin":"round", "stroke-linecap":"round" }, c);
+    hist.forEach(h => el("circle", { cx:px(h.epoch), cy:py(h[key]), r:2.6, fill:color }, c));
+  };
+  line("train_loss", "#F0A202");
+  line("val_loss", "#6FD0E0");
+}
+window.addEventListener("resize", () => { drawChart(); drawMinimap(); });
+
+boot();
+</script>
+</body>
+</html>

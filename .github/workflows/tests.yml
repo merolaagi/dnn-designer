@@ -1,0 +1,41 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi "uvicorn[standard]" pydantic python-multipart pandas onnx httpx
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Test
+        run: python tests/test_designer.py
+
+      - name: Server starts and serves the page
+        run: |
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          import main
+          c = TestClient(main.app)
+          assert c.get("/health").json()["ok"]
+          assert c.get("/").status_code == 200
+          assert len(c.get("/api/catalog").json()["layers"]) > 40
+          print("server ok, version", c.get("/health").json()["version"])
+          PY

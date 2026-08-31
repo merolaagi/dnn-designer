@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Network Designer</title>
+<style>
+:root{
+  --ink:#141C28;          /* canvas */
+  --ink-2:#1B2635;        /* raised surfaces on canvas */
+  --grid:#253449;
+  --paper:#E9EDF2;        /* side panels */
+  --paper-2:#DDE3EB;
+  --paper-3:#CFD7E1;
+  --text:#16202E;
+  --muted:#5C6B7F;
+  --amber:#F0A202;        /* selection, active state */
+  --wire:#6FD0E0;         /* data flow */
+  --bad:#FF5F56;
+  --good:#3DA35D;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --ui:"Avenir Next","Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  font-family:var(--ui);color:var(--text);background:var(--ink);
+  display:flex;flex-direction:column;overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+.eyebrow{
+  font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;
+}
+
+/* ---------------- header ---------------- */
+header{
+  display:flex;align-items:center;gap:16px;padding:0 16px;height:52px;
+  background:var(--ink);border-bottom:1px solid #2A3A4E;color:#DCE4EE;flex:none;
+}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.brand span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5E738C}
+#gname{
+  background:transparent;border:1px solid #2E3F55;border-radius:5px;
+  padding:5px 9px;color:#DCE4EE;width:190px;font-size:13px;
+}
+#gname:focus{outline:none;border-color:var(--amber)}
+.spacer{flex:1}
+.stat{display:flex;flex-direction:column;line-height:1.15;padding-right:4px}
+.stat i{font-style:normal;font-family:var(--mono);font-size:13px;color:var(--wire)}
+.stat u{text-decoration:none;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5E738C}
+.btn{
+  background:#22303F;border:1px solid #33445A;color:#D8E1EB;
+  border-radius:6px;padding:6px 12px;font-size:12.5px;
+}
+.btn:hover{background:#2A3A4C;border-color:#455872}
+.btn.go{background:var(--amber);border-color:var(--amber);color:#1B1200;font-weight:600}
+.btn.go:hover{background:#FFB524}
+.btn.stop{background:#4A2320;border-color:#7A3B35;color:#FFC9C4}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ---------------- shell ---------------- */
+.shell{flex:1;display:flex;min-height:0}
+.panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
+#palette{width:212px;border-right:1px solid var(--paper-3);flex:none}
+#inspector{width:268px;border-left:1px solid var(--paper-3);flex:none}
+.panel h2{
+  margin:0;padding:11px 14px 8px;font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);font-weight:700;
+}
+.scroll{overflow-y:auto;flex:1;padding:0 10px 16px}
+.scroll::-webkit-scrollbar{width:9px}
+.scroll::-webkit-scrollbar-thumb{background:var(--paper-3);border-radius:5px}
+
+#search{
+  width:calc(100% - 20px);margin:0 10px 10px;padding:6px 9px;
+  border:1px solid var(--paper-3);border-radius:5px;background:#fff;font-size:12.5px;
+}
+#search:focus{outline:none;border-color:var(--amber)}
+.cat{margin:12px 0 5px;padding-left:4px}
+.chip{
+  display:flex;align-items:center;gap:8px;background:#fff;
+  border:1px solid var(--paper-3);border-left:3px solid var(--c,#888);
+  border-radius:5px;padding:7px 9px;margin-bottom:4px;font-size:12.5px;
+  cursor:grab;user-select:none;transition:transform .08s,box-shadow .08s;
+}
+.chip:hover{transform:translateX(2px);box-shadow:0 1px 5px rgba(20,28,40,.12)}
+.chip:active{cursor:grabbing}
+.chip small{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+/* ---------------- canvas ---------------- */
+#stage{flex:1;position:relative;min-width:0;background:var(--ink);overflow:hidden}
+#svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.node-card{
+  fill:#F7F9FB;stroke:#B9C4D2;stroke-width:1;
+  filter:drop-shadow(0 3px 6px rgba(0,0,0,.35));
+}
+.node.sel .node-card{stroke:var(--amber);stroke-width:2}
+.node.err .node-card{stroke:var(--bad);stroke-width:1.6}
+.node-rail{stroke-width:0}
+.node-title{font-size:12.5px;font-weight:600;fill:#16202E}
+.node-sub{font-size:10px;fill:#61708A;font-family:var(--mono)}
+.node text{pointer-events:none;user-select:none}
+.port{fill:#1B2635;stroke:#4E6580;stroke-width:1.5;cursor:crosshair}
+.port:hover,.port.hot{fill:var(--amber);stroke:var(--amber)}
+.wire{fill:none;stroke:var(--wire);stroke-linecap:round;opacity:.85}
+.wire.sel{stroke:var(--amber);opacity:1}
+.wire-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+.dim{
+  font-family:var(--mono);font-size:10px;fill:#9FD9E6;
+  paint-order:stroke;stroke:var(--ink);stroke-width:4px;stroke-linejoin:round;
+}
+.badge{font-family:var(--mono);font-size:9.5px;fill:#FFB4AE}
+#hint{
+  position:absolute;left:0;right:0;bottom:14px;text-align:center;
+  color:#4A5D75;font-size:11.5px;pointer-events:none;letter-spacing:.02em;
+}
+#ghost{
+  position:fixed;pointer-events:none;z-index:99;background:#F7F9FB;
+  border:1px solid #B9C4D2;border-left:3px solid var(--c,#888);border-radius:5px;
+  padding:7px 10px;font-size:12.5px;box-shadow:0 6px 18px rgba(0,0,0,.4);display:none;
+}
+.zoombar{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:5px}
+.zoombar button{
+  width:30px;height:28px;border-radius:6px;background:#22303F;
+  border:1px solid #33445A;color:#C6D2E0;font-size:13px;line-height:1;
+}
+.zoombar button:hover{background:#2A3A4C}
+
+/* ---------------- inspector ---------------- */
+.field{margin:0 4px 11px}
+.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600}
+.field input[type=text],.field input[type=number],.field select,.field textarea{
+  width:100%;padding:6px 8px;border:1px solid var(--paper-3);
+  border-radius:5px;background:#fff;font-size:12.5px;
+}
+.field textarea{font-family:var(--mono);font-size:11.5px;min-height:52px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--amber)}
+.field .help{font-size:10.5px;color:#7C8BA0;margin-top:3px;line-height:1.35}
+.row{display:flex;align-items:center;gap:8px}
+.row input[type=checkbox]{width:15px;height:15px;accent-color:var(--amber)}
+.shapebox{
+  font-family:var(--mono);font-size:12px;background:var(--ink);color:var(--wire);
+  padding:8px 10px;border-radius:6px;margin:0 4px 12px;
+}
+.errbox{
+  background:#FFE9E7;border-left:3px solid var(--bad);color:#8C2F27;
+  padding:8px 10px;border-radius:0 5px 5px 0;font-size:11.5px;
+  margin:0 4px 12px;line-height:1.4;
+}
+.doc{font-size:11.5px;color:var(--muted);line-height:1.45;margin:0 4px 14px}
+.empty{color:#8A97A8;font-size:12px;padding:6px 4px;line-height:1.5}
+
+/* ---------------- drawer ---------------- */
+#drawer{
+  height:236px;flex:none;background:var(--paper);
+  border-top:1px solid var(--paper-3);display:flex;flex-direction:column;min-height:0;
+}
+#drawer.min{height:38px}
+.tabs{display:flex;align-items:center;gap:2px;padding:0 8px;height:38px;flex:none;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2)}
+.tab{
+  background:none;border:none;padding:6px 12px;font-size:11px;font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+  border-bottom:2px solid transparent;
+}
+.tab.on{color:var(--text);border-bottom-color:var(--amber)}
+.tab .count{
+  font-family:var(--mono);background:var(--bad);color:#fff;border-radius:8px;
+  padding:0 5px;margin-left:5px;font-size:9.5px;letter-spacing:0;
+}
+.pane{flex:1;overflow:auto;display:none;min-height:0}
+.pane.on{display:block}
+pre#code{
+  margin:0;padding:12px 14px;font-family:var(--mono);font-size:11.5px;
+  line-height:1.55;background:var(--ink);color:#C8D6E5;min-height:100%;
+  white-space:pre;
+}
+pre#code .kw{color:#F0A202}
+.probs{padding:10px 14px;font-size:12px;line-height:1.6}
+.probs li{margin-bottom:4px;color:#8C2F27}
+.probs .fine{color:var(--good)}
+.trainwrap{display:flex;height:100%;min-height:0}
+.trainform{
+  width:300px;flex:none;padding:10px 12px;border-right:1px solid var(--paper-3);
+  overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;
+}
+.trainform .field{margin:0}
+.trainform .wide{grid-column:1/3}
+.section{grid-column:1/3;margin-top:4px;padding-top:8px;border-top:1px solid var(--paper-3)}
+.section:first-child{border-top:none;margin-top:0;padding-top:0}
+.maprow{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.maprow b{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--muted);
+  min-width:78px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maprow input{flex:1;padding:4px 7px;border:1px solid var(--paper-3);border-radius:4px;
+  font-family:var(--mono);font-size:11px;background:#fff}
+.maprow input:focus{outline:none;border-color:var(--amber)}
+.maprow .need{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.maprow.bad input{border-color:var(--bad);background:#FFF6F5}
+.filerow{display:flex;gap:6px;align-items:center}
+.filerow select{flex:1}
+.linkbtn{background:none;border:none;color:#2D7DD2;font-size:11.5px;padding:2px 4px;text-decoration:underline}
+.cols{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:4px;
+  max-height:52px;overflow-y:auto;font-family:var(--mono)}
+.trainview{flex:1;display:flex;flex-direction:column;min-width:0}
+#chart{flex:1;min-height:0;background:var(--ink)}
+#log{
+  height:78px;flex:none;overflow-y:auto;background:#101821;color:#96A9BD;
+  font-family:var(--mono);font-size:11px;padding:6px 10px;line-height:1.5;
+}
+#log b{color:var(--wire);font-weight:400}
+#log .e{color:#FF9A92}
+.legend{display:flex;gap:14px;padding:6px 12px;font-size:11px;color:var(--muted);
+  border-bottom:1px solid var(--paper-3);align-items:center}
+.legend i{width:16px;height:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+.toast{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+  background:#22303F;color:#E4EBF3;padding:9px 16px;border-radius:7px;
+  font-size:12.5px;border:1px solid #3B4E66;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.4);
+  opacity:0;transition:opacity .18s;pointer-events:none;
+}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><b>Deep Network Designer</b><span>tensor drafting</span></div>
+  <input id="gname" value="MyNet" spellcheck="false" aria-label="Design name">
+  <div class="spacer"></div>
+  <div class="stat"><i id="statParams">—</i><u>learnables</u></div>
+  <div class="stat"><i id="statLayers">0</i><u>layers</u></div>
+  <button class="btn" id="btnTidy">Tidy</button>
+  <button class="btn" id="btnSave">Save</button>
+  <button class="btn" id="btnLoad">Open</button>
+  <button class="btn" id="btnDownload">Download code</button>
+  <button class="btn go" id="btnTrain">Train</button>
+</header>
+
+<div class="shell">
+  <aside class="panel" id="palette">
+    <h2>Layers</h2>
+    <input id="search" placeholder="Filter layers" spellcheck="false">
+    <div class="scroll" id="palList"></div>
+  </aside>
+
+  <main id="stage">
+    <svg id="svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="1" fill="#253449"></circle>
+        </pattern>
+      </defs>
+      <rect id="bg" width="100%" height="100%" fill="url(#dots)"></rect>
+      <g id="world">
+        <g id="wires"></g>
+        <g id="nodes"></g>
+        <path id="draft" class="wire" stroke-dasharray="5 4" stroke-width="2" style="display:none"></path>
+      </g>
+    </svg>
+    <div class="zoombar">
+      <button id="zin" title="Zoom in">+</button>
+      <button id="zout" title="Zoom out">−</button>
+      <button id="zfit" title="Fit to view">⤢</button>
+    </div>
+    <div id="hint">Drag a layer in from the left. Drag from the bottom dot of one layer to the top dot of another to connect them.</div>
+  </main>
+
+  <aside class="panel" id="inspector">
+    <h2>Layer settings</h2>
+    <div class="scroll" id="inspBody">
+      <div class="empty">Select a layer on the canvas to edit it.</div>
+    </div>
+  </aside>
+</div>
+
+<div id="drawer">
+  <div class="tabs">
+    <button class="tab on" data-pane="paneCode">Code</button>
+    <button class="tab" data-pane="paneTrain">Training</button>
+    <button class="tab" data-pane="paneProbs">Problems<span class="count" id="probCount" style="display:none">0</span></button>
+    <div class="spacer"></div>
+    <select id="framework" style="border:1px solid var(--paper-3);border-radius:5px;padding:4px 7px;font-size:12px;background:#fff">
+      <option value="pytorch">PyTorch</option>
+      <option value="keras">Keras</option>
+    </select>
+    <button class="btn" id="btnCopy" style="margin-left:8px;background:#fff;color:var(--text);border-color:var(--paper-3)">Copy</button>
+    <button class="btn" id="btnDrawer" style="margin-left:6px;background:#fff;color:var(--text);border-color:var(--paper-3)">Hide</button>
+  </div>
+
+  <div class="pane on" id="paneCode"><pre id="code">Building…</pre></div>
+
+  <div class="pane" id="paneProbs"><ul class="probs" id="probList"></ul></div>
+
+  <div class="pane" id="paneTrain">
+    <div class="trainwrap">
+      <div class="trainform" id="trainForm"></div>
+      <div class="trainview">
+        <div class="legend">
+          <span><i style="background:#F0A202"></i>train loss</span>
+          <span><i style="background:#6FD0E0"></i>validation loss</span>
+          <span id="trainStatus" style="margin-left:auto;font-family:var(--mono)"></span>
+        </div>
+        <svg id="chart"></svg>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="ghost"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const API = "";
+const CAT_COLOR = {
+  Data:"#2D7DD2", Dense:"#7B61FF", Convolution:"#E8873A", Pooling:"#D45D79",
+  Normalization:"#3DA35D", Activation:"#E0B33C", Shape:"#6C7A89",
+  Merge:"#C2569B", Recurrent:"#2AA1A8", Sequence:"#5B7FE0", Custom:"#8D6E63"
+};
+const NW = 178, NH = 46;
+
+const state = {
+  graph:{ name:"MyNet", nodes:[], edges:[] },
+  specs:{}, catalog:[], datasets:[], optimizers:[],
+  sel:null, selEdge:null,
+  view:{x:120, y:60, k:1},
+  report:null, code:{pytorch:"", keras:""},
+  job:null, es:null, seq:1
+};
+
+const $ = (id) => document.getElementById(id);
+const svg = $("svg"), world = $("world"), gWires = $("wires"), gNodes = $("nodes");
+
+function uid(prefix){ return prefix + (state.seq++); }
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on"), 2100);
+}
+function specOf(type){ return state.specs[type]; }
+function nodeById(id){ return state.graph.nodes.find(n=>n.id===id); }
+
+/* ============================ boot ============================ */
+
+async function boot(){
+  const res = await fetch(API + "/api/catalog");
+  const data = await res.json();
+  state.catalog = data.layers;
+  state.datasets = data.datasets;
+  state.optimizers = data.optimizers;
+  data.layers.forEach(s => state.specs[s.name] = s);
+  buildPalette();
+  buildTrainForm();
+  starterGraph();
+  render();
+  analyze();
+}
+
+function starterGraph(){
+  const add = (type, params, x, y) => {
+    const n = { id: uid("n"), type, params: params||{}, label:"", x, y };
+    state.graph.nodes.push(n); return n;
+  };
+  const link = (a,b) => state.graph.edges.push({ id: uid("e"), source:a.id, target:b.id, port:0 });
+  const inp = add("Input", {shape:[1,28,28]}, 0, 0);
+  const c1  = add("Conv2d", {filters:32, kernel:3, padding:"same"}, 0, 100);
+  const b1  = add("BatchNorm2d", {}, 0, 200);
+  const a1  = add("Activation", {kind:"relu"}, 0, 300);
+  const p1  = add("MaxPool2d", {kernel:2}, 0, 400);
+  const fl  = add("Flatten", {}, 0, 500);
+  const d1  = add("Linear", {units:10}, 0, 600);
+  const out = add("Output", {task:"classification"}, 0, 700);
+  [[inp,c1],[c1,b1],[b1,a1],[a1,p1],[p1,fl],[fl,d1],[d1,out]].forEach(p=>link(p[0],p[1]));
+}
+
+/* ============================ palette ============================ */
+
+function buildPalette(){
+  const list = $("palList");
+  const term = ($("search").value || "").toLowerCase();
+  const groups = {};
+  state.catalog.forEach(s => {
+    if (term && !s.name.toLowerCase().includes(term) && !s.category.toLowerCase().includes(term)) return;
+    (groups[s.category] = groups[s.category] || []).push(s);
+  });
+  list.innerHTML = "";
+  Object.keys(groups).forEach(cat => {
+    const h = document.createElement("div");
+    h.className = "cat eyebrow"; h.textContent = cat;
+    list.appendChild(h);
+    groups[cat].forEach(s => {
+      const el = document.createElement("div");
+      el.className = "chip";
+      el.style.setProperty("--c", CAT_COLOR[cat] || "#888");
+      el.innerHTML = `<span>${s.name}</span>` +
+        (s.n_inputs < 0 ? `<small>n-in</small>` : "");
+      el.title = s.doc || "";
+      el.addEventListener("pointerdown", e => startPaletteDrag(e, s));
+      list.appendChild(el);
+    });
+  });
+}
+$("search").addEventListener("input", buildPalette);
+
+let dragNew = null;
+function startPaletteDrag(e, spec){
+  e.preventDefault();
+  const g = $("ghost");
+  g.textContent = spec.name;
+  g.style.setProperty("--c", CAT_COLOR[spec.category] || "#888");
+  g.style.display = "block";
+  dragNew = spec;
+  moveGhost(e);
+  window.addEventListener("pointermove", moveGhost);
+  window.addEventListener("pointerup", dropNew, { once:true });
+}
+function moveGhost(e){
+  const g = $("ghost");
+  g.style.left = (e.clientX + 12) + "px";
+  g.style.top  = (e.clientY - 14) + "px";
+}
+function dropNew(e){
+  window.removeEventListener("pointermove", moveGhost);
+  $("ghost").style.display = "none";
+  const spec = dragNew; dragNew = null;
+  if (!spec) return;
+  const rect = svg.getBoundingClientRect();
+  if (e.clientX < rect.left || e.clientX > rect.right ||
+      e.clientY < rect.top  || e.clientY > rect.bottom) return;
+  const pt = toWorld(e.clientX, e.clientY);
+  const node = { id: uid("n"), type: spec.name, params:{}, label:"",
+                 x: Math.round(pt.x - NW/2), y: Math.round(pt.y - NH/2) };
+  const prev = state.sel ? nodeById(state.sel) : null;
+  state.graph.nodes.push(node);
+  // dropping while a layer is selected wires them together, the usual next step
+  if (prev && prev.id !== node.id && specOf(spec.name).n_inputs !== 0 &&
+      specOf(prev.type).name !== "Output") {
+    state.graph.edges.push({ id: uid("e"), source: prev.id, target: node.id, port: 0 });
+  }
+  state.sel = node.id; state.selEdge = null;
+  render(); analyze();
+}
+
+/* ============================ view maths ============================ */
+
+function toWorld(cx, cy){
+  const r = svg.getBoundingClientRect();
+  return { x: (cx - r.left - state.view.x) / state.view.k,
+           y: (cy - r.top  - state.view.y) / state.view.k };
+}
+function applyView(){
+  world.setAttribute("transform",
+    `translate(${state.view.x},${state.view.y}) scale(${state.view.k})`);
+  const p = document.querySelector("#dots");
+  p.setAttribute("patternTransform",
+    `translate(${state.view.x},${state.view.y}) scale(${state.view.k})`);
+}
+function zoomBy(f, cx, cy){
+  const r = svg.getBoundingClientRect();
+  cx = cx ?? r.width/2; cy = cy ?? r.height/2;
+  const k2 = Math.min(2.2, Math.max(0.25, state.view.k * f));
+  const wx = (cx - state.view.x) / state.view.k;
+  const wy = (cy - state.view.y) / state.view.k;
+  state.view.k = k2;
+  state.view.x = cx - wx * k2;
+  state.view.y = cy - wy * k2;
+  applyView();
+}
+$("zin").onclick  = () => zoomBy(1.2);
+$("zout").onclick = () => zoomBy(1/1.2);
+$("zfit").onclick = fitView;
+
+function fitView(){
+  const ns = state.graph.nodes;
+  if (!ns.length) return;
+  const r = svg.getBoundingClientRect();
+  const x0 = Math.min(...ns.map(n=>n.x)) - 60, x1 = Math.max(...ns.map(n=>n.x)) + NW + 60;
+  const y0 = Math.min(...ns.map(n=>n.y)) - 50, y1 = Math.max(...ns.map(n=>n.y)) + NH + 70;
+  const k = Math.min(r.width/(x1-x0), r.height/(y1-y0), 1.4);
+  state.view.k = k;
+  state.view.x = (r.width - (x1-x0)*k)/2 - x0*k;
+  state.view.y = (r.height - (y1-y0)*k)/2 - y0*k;
+  applyView();
+}
+
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomBy(e.deltaY < 0 ? 1.08 : 1/1.08, e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+
+/* pan on empty canvas */
+svg.addEventListener("pointerdown", e => {
+  if (e.target.id !== "bg" && e.target.id !== "svg") return;
+  state.sel = null; state.selEdge = null; render(); renderInspector();
+  const sx = e.clientX, sy = e.clientY, ox = state.view.x, oy = state.view.y;
+  const move = ev => { state.view.x = ox + (ev.clientX - sx);
+                       state.view.y = oy + (ev.clientY - sy); applyView(); };
+  const up = () => { window.removeEventListener("pointermove", move);
+                     window.removeEventListener("pointerup", up); };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+/* ============================ render ============================ */
+
+function volume(shape){
+  if (!shape || !shape.length) return 1;
+  return shape.reduce((a,b)=>a*Math.max(1,b), 1);
+}
+function wireWidth(shape){
+  return Math.max(1.2, Math.min(6, 1.2 + Math.log10(volume(shape)) * 0.62));
+}
+function el(tag, attrs, parent){
+  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function subtitle(n){
+  const p = n.params || {};
+  switch(n.type){
+    case "Input": return (p.shape || []).join("×");
+    case "Conv2d": case "Conv1d": case "SeparableConv2d": case "ConvTranspose2d":
+      return `${p.filters ?? specDefault(n,"filters")} filters · k${p.kernel ?? specDefault(n,"kernel")}`;
+    case "Linear": return `${p.units ?? specDefault(n,"units")} units`;
+    case "Activation": return p.kind || "relu";
+    case "Dropout": case "Dropout2d": return `p=${p.rate ?? specDefault(n,"rate")}`;
+    case "MaxPool2d": case "AvgPool2d": case "MaxPool1d": return `k${p.kernel ?? 2}`;
+    case "LSTM": case "GRU": case "SimpleRNN": return `${p.units ?? 128} units`;
+    case "Embedding": return `${p.vocab ?? 10000} × ${p.dim ?? 256}`;
+    case "SelfAttention": return `${p.heads ?? 8} heads`;
+    case "TransformerEncoder": return `${p.depth ?? 2} × ${p.heads ?? 8} heads`;
+    case "Reshape": return (p.shape || [-1]).join("×");
+    case "Output": return p.task || "classification";
+    case "Custom": return p.label || "custom";
+    default: return "";
+  }
+}
+function specDefault(n, key){
+  const s = specOf(n.type); if (!s) return "";
+  const q = s.params.find(q=>q.name===key); return q ? q.default : "";
+}
+
+function render(){
+  gWires.innerHTML = ""; gNodes.innerHTML = "";
+  const rep = state.report;
+
+  state.graph.edges.forEach(e => {
+    const a = nodeById(e.source), b = nodeById(e.target);
+    if (!a || !b) return;
+    const x1 = a.x + NW/2, y1 = a.y + NH, x2 = b.x + NW/2, y2 = b.y;
+    const dy = Math.max(28, Math.abs(y2-y1) * 0.42);
+    const d = `M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`;
+    const shape = rep && rep.edges[e.id] ? rep.edges[e.id].shape : null;
+    const path = el("path", { d, class:"wire" + (state.selEdge===e.id?" sel":""),
+                              "stroke-width": wireWidth(shape) }, gWires);
+    const hit = el("path", { d, class:"wire-hit" }, gWires);
+    hit.addEventListener("pointerdown", ev => {
+      ev.stopPropagation(); state.selEdge = e.id; state.sel = null;
+      render(); renderInspector();
+    });
+    if (shape){
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      const t = el("text", { x: mx + 9, y: my + 3, class:"dim" }, gWires);
+      t.textContent = shape.join("×");
+    }
+  });
+
+  state.graph.nodes.forEach(n => {
+    const spec = specOf(n.type) || { category:"Custom", n_inputs:1 };
+    const info = rep && rep.nodes[n.id];
+    const bad = info && info.error;
+    const g = el("g", { class:"node" + (state.sel===n.id?" sel":"") + (bad?" err":""),
+                        transform:`translate(${n.x},${n.y})` }, gNodes);
+
+    el("rect", { class:"node-card", width:NW, height:NH, rx:7 }, g);
+    el("rect", { class:"node-rail", width:4, height:NH-2, x:1, y:1, rx:2,
+                 fill: CAT_COLOR[spec.category] || "#888" }, g);
+
+    const title = el("text", { class:"node-title", x:15, y:20 }, g);
+    title.textContent = n.label || n.type;
+    const sub = el("text", { class:"node-sub", x:15, y:34 }, g);
+    sub.textContent = subtitle(n);
+
+    if (bad){
+      const b = el("text", { class:"badge", x:NW-11, y:20, "text-anchor":"end" }, g);
+      b.textContent = "!";
+    }
+
+    if (spec.n_inputs !== 0){
+      const p = el("circle", { class:"port", cx:NW/2, cy:0, r:5.5, "data-in":n.id }, g);
+      p.addEventListener("pointerup", ev => finishLink(ev, n.id));
+    }
+    if (n.type !== "Output"){
+      const p = el("circle", { class:"port", cx:NW/2, cy:NH, r:5.5 }, g);
+      p.addEventListener("pointerdown", ev => startLink(ev, n.id));
+    }
+
+    g.addEventListener("pointerdown", ev => {
+      if (ev.target.classList.contains("port")) return;
+      ev.stopPropagation();
+      state.sel = n.id; state.selEdge = null;
+      render(); renderInspector();
+      const start = toWorld(ev.clientX, ev.clientY);
+      const ox = n.x, oy = n.y;
+      const move = e2 => {
+        const p = toWorld(e2.clientX, e2.clientY);
+        n.x = Math.round(ox + (p.x - start.x));
+        n.y = Math.round(oy + (p.y - start.y));
+        render();
+      };
+      const up = () => { window.removeEventListener("pointermove", move);
+                         window.removeEventListener("pointerup", up); };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  });
+
+  applyView();
+  $("statLayers").textContent = state.graph.nodes.length;
+  $("hint").style.display = state.graph.nodes.length ? "none" : "block";
+}
+
+/* ---------- linking ---------- */
+let linking = null;
+function startLink(e, sourceId){
+  e.stopPropagation(); e.preventDefault();
+  linking = { source: sourceId };
+  const draft = $("draft");
+  draft.style.display = "block";
+  const move = ev => {
+    const a = nodeById(sourceId);
+    const p = toWorld(ev.clientX, ev.clientY);
+    const x1 = a.x + NW/2, y1 = a.y + NH;
+    const dy = Math.max(28, Math.abs(p.y-y1) * 0.42);
+    draft.setAttribute("d", `M${x1},${y1} C${x1},${y1+dy} ${p.x},${p.y-dy} ${p.x},${p.y}`);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    setTimeout(()=>{ draft.style.display="none"; linking=null; }, 0);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+function finishLink(e, targetId){
+  if (!linking || linking.source === targetId) return;
+  e.stopPropagation();
+  const spec = specOf(nodeById(targetId).type);
+  const existing = state.graph.edges.filter(x => x.target === targetId);
+  if (spec.n_inputs === 1 && existing.length){
+    state.graph.edges = state.graph.edges.filter(x => x.target !== targetId);
+  }
+  const dupe = state.graph.edges.some(x => x.source===linking.source && x.target===targetId);
+  if (!dupe){
+    state.graph.edges.push({ id: uid("e"), source: linking.source, target: targetId,
+                             port: existing.length });
+  }
+  linking = null;
+  render(); analyze();
+}
+
+/* ---------- keyboard ---------- */
+window.addEventListener("keydown", e => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if (typing) return;
+  if (e.key === "Delete" || e.key === "Backspace"){
+    if (state.sel){
+      state.graph.nodes = state.graph.nodes.filter(n => n.id !== state.sel);
+      state.graph.edges = state.graph.edges.filter(x => x.source!==state.sel && x.target!==state.sel);
+      state.sel = null; render(); renderInspector(); analyze();
+    } else if (state.selEdge){
+      state.graph.edges = state.graph.edges.filter(x => x.id !== state.selEdge);
+      state.selEdge = null; render(); renderInspector(); analyze();
+    }
+  }
+  if (e.key === "d" && (e.metaKey || e.ctrlKey) && state.sel){
+    e.preventDefault();
+    const n = nodeById(state.sel);
+    const copy = { ...n, id: uid("n"), params: JSON.parse(JSON.stringify(n.params)),
+                   x: n.x + 26, y: n.y + 26 };
+    state.graph.nodes.push(copy); state.sel = copy.id;
+    render(); renderInspector(); analyze();
+  }
+});
+
+/* ============================ inspector ============================ */
+
+function renderInspector(){
+  const body = $("inspBody");
+  if (state.selEdge){
+    const e = state.graph.edges.find(x=>x.id===state.selEdge);
+    const shape = state.report && state.report.edges[state.selEdge];
+    body.innerHTML =
+      `<div class="doc">Connection from <b>${nodeById(e.source)?.type}</b> to <b>${nodeById(e.target)?.type}</b>.</div>` +
+      (shape ? `<div class="shapebox">carries ${shape.shape.join(" × ")}</div>` : "") +
+      `<div class="empty">Press Delete to remove it.</div>`;
+    return;
+  }
+  if (!state.sel){ body.innerHTML = `<div class="empty">Select a layer on the canvas to edit it.</div>`; return; }
+
+  const n = nodeById(state.sel);
+  if (!n){ body.innerHTML = ""; return; }
+  const spec = specOf(n.type);
+  const info = state.report && state.report.nodes[n.id];
+  body.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "field";
+  head.innerHTML = `<label>Name on canvas</label>
+    <input type="text" id="f_label" value="${(n.label||"").replace(/"/g,"&quot;")}"
+           placeholder="${n.type}">`;
+  body.appendChild(head);
+  head.querySelector("input").addEventListener("input", ev => {
+    n.label = ev.target.value; render();
+  });
+
+  if (spec && spec.doc){
+    const d = document.createElement("div");
+    d.className = "doc"; d.textContent = spec.doc;
+    body.appendChild(d);
+  }
+  if (info && info.out_shape){
+    const s = document.createElement("div");
+    s.className = "shapebox";
+    s.textContent = "out  " + info.out_shape.join(" × ") +
+      (info.learnables ? `\n${info.learnables.toLocaleString()} learnables` : "");
+    s.style.whiteSpace = "pre";
+    body.appendChild(s);
+  }
+  if (info && info.error){
+    const e = document.createElement("div");
+    e.className = "errbox"; e.textContent = info.error;
+    body.appendChild(e);
+  }
+
+  (spec ? spec.params : []).forEach(q => {
+    const val = n.params[q.name] !== undefined ? n.params[q.name] : q.default;
+    const f = document.createElement("div");
+    f.className = "field";
+    const label = `<label>${q.name.replace(/_/g," ")}</label>`;
+    let widget = "";
+
+    if (q.kind === "bool"){
+      f.innerHTML = `<div class="row"><input type="checkbox" ${val?"checked":""}>${label.replace("<label>","<label style='margin:0'>")}</div>`;
+      f.querySelector("input").addEventListener("change", ev => setParam(n, q.name, ev.target.checked));
+    } else {
+      if (q.kind === "select"){
+        widget = `<select>` + q.options.map(o =>
+          `<option value="${o}" ${String(o)===String(val)?"selected":""}>${o}</option>`).join("") + `</select>`;
+      } else if (q.kind === "padding"){
+        const opts = ["same","0","1","2","3"];
+        widget = `<select>` + opts.map(o =>
+          `<option value="${o}" ${String(o)===String(val)?"selected":""}>${o}</option>`).join("") + `</select>`;
+      } else if (q.kind === "int" || q.kind === "float"){
+        const step = q.kind === "float" ? "any" : "1";
+        widget = `<input type="number" step="${step}" value="${val}">`;
+      } else if (q.kind === "shape"){
+        widget = `<input type="text" value="${Array.isArray(val)?val.join(","):val}" placeholder="3,32,32">`;
+      } else if (q.kind === "code"){
+        widget = `<textarea spellcheck="false">${String(val||"").replace(/</g,"&lt;")}</textarea>`;
+      } else if (q.kind === "dict"){
+        widget = `<textarea spellcheck="false">${JSON.stringify(val||{}, null, 1)}</textarea>`;
+      } else {
+        widget = `<input type="text" value="${String(val||"").replace(/"/g,"&quot;")}">`;
+      }
+      f.innerHTML = label + widget + (q.help ? `<div class="help">${q.help}</div>` : "");
+      const w = f.querySelector("select,input,textarea");
+      const commit = ev => {
+        let v = ev.target.value;
+        if (q.kind === "int") v = parseInt(v || 0, 10);
+        else if (q.kind === "float") v = parseFloat(v || 0);
+        else if (q.kind === "shape") v = v.split(/[^-\d]+/).filter(Boolean).map(Number);
+        else if (q.kind === "padding") v = (v === "same") ? "same" : parseInt(v, 10);
+        else if (q.kind === "dict"){ try { v = JSON.parse(v || "{}"); } catch { return; } }
+        setParam(n, q.name, v);
+      };
+      w.addEventListener(q.kind === "select" || q.kind === "padding" ? "change" : "input", commit);
+    }
+    body.appendChild(f);
+  });
+}
+
+function setParam(node, key, value){
+  node.params[key] = value;
+  render();
+  analyze();
+}
+
+/* ============================ analysis ============================ */
+
+let analyzeTimer = null;
+function analyze(){
+  clearTimeout(analyzeTimer);
+  analyzeTimer = setTimeout(runAnalyze, 180);
+}
+async function runAnalyze(){
+  state.graph.name = $("gname").value || "MyNet";
+  let data;
+  try{
+    const res = await fetch(API + "/api/analyze", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ graph: state.graph })
+    });
+    data = await res.json();
+  } catch(err){
+    $("code").textContent = "Cannot reach the server. Is uvicorn still running?";
+    return;
+  }
+  state.report = data.report;
+  state.code = data.code;
+  render();
+  renderInspector();
+  showCode();
+  showProblems();
+  $("statParams").textContent = data.report.total_learnables
+    ? data.report.total_learnables.toLocaleString() : "—";
+  if ($("mapRows")) renderMapRows();
+}
+
+function showProblems(){
+  const rep = state.report;
+  const list = $("probList");
+  const items = [];
+  if (rep){
+    rep.errors.forEach(e => items.push(e));
+    Object.keys(rep.nodes).forEach(id => {
+      const v = rep.nodes[id];
+      if (v.error){
+        const n = nodeById(id);
+        items.push(`${n ? (n.label || n.type) : id}: ${v.error}`);
+      }
+    });
+  }
+  list.innerHTML = items.length
+    ? items.map(t => `<li>${t}</li>`).join("")
+    : `<li class="fine">No problems. The graph resolves end to end.</li>`;
+  const badge = $("probCount");
+  badge.style.display = items.length ? "inline" : "none";
+  badge.textContent = items.length;
+  $("btnTrain").disabled = !(rep && rep.ok);
+}
+
+function showCode(){
+  const fw = $("framework").value;
+  $("code").textContent = state.code[fw] || "";
+}
+$("framework").addEventListener("change", showCode);
+$("btnCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("code").textContent); toast("Code copied"); }
+  catch { toast("Copy blocked by the browser"); }
+});
+$("btnDownload").addEventListener("click", () => {
+  const fw = $("framework").value;
+  const blob = new Blob([state.code[fw] || ""], { type:"text/x-python" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(state.graph.name||"model").toLowerCase().replace(/\W+/g,"_")}_${fw}.py`;
+  a.click(); URL.revokeObjectURL(a.href);
+});
+$("gname").addEventListener("input", analyze);
+
+/* ============================ tidy ============================ */
+
+$("btnTidy").addEventListener("click", () => {
+  const order = (state.report && state.report.order) || state.graph.nodes.map(n=>n.id);
+  const depth = {}, lanes = {};
+  order.forEach(id => {
+    const ins = state.graph.edges.filter(e => e.target === id);
+    depth[id] = ins.length ? Math.max(...ins.map(e => (depth[e.source] ?? 0) + 1)) : 0;
+  });
+  order.forEach(id => {
+    const d = depth[id];
+    lanes[d] = (lanes[d] || 0);
+    const n = nodeById(id);
+    if (!n) return;
+    n.x = lanes[d] * (NW + 60);
+    n.y = d * 104;
+    lanes[d]++;
+  });
+  render(); fitView();
+});
+
+/* ============================ save / open ============================ */
+
+$("btnSave").addEventListener("click", async () => {
+  state.graph.name = $("gname").value || "MyNet";
+  const res = await fetch(API + "/api/graphs/" + encodeURIComponent(state.graph.name), {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ graph: state.graph })
+  });
+  toast(res.ok ? `Saved as ${state.graph.name}` : "Save failed");
+});
+
+$("btnLoad").addEventListener("click", async () => {
+  const res = await fetch(API + "/api/graphs");
+  const data = await res.json();
+  if (!data.graphs.length){ toast("Nothing saved yet"); return; }
+  const pick = prompt("Open which design?\n\n" +
+    data.graphs.map(g => `${g.name}  (${g.saved_at})`).join("\n"), data.graphs[0].name);
+  if (!pick) return;
+  const r2 = await fetch(API + "/api/graphs/" + encodeURIComponent(pick.trim()));
+  if (!r2.ok){ toast("No design under that name"); return; }
+  state.graph = await r2.json();
+  state.seq = state.graph.nodes.length + state.graph.edges.length + 100;
+  $("gname").value = state.graph.name || pick;
+  state.sel = null; state.selEdge = null;
+  render(); fitView(); analyze();
+});
+
+/* ============================ drawer ============================ */
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("on"));
+    document.querySelectorAll(".pane").forEach(p => p.classList.remove("on"));
+    tab.classList.add("on");
+    $(tab.dataset.pane).classList.add("on");
+    $("drawer").classList.remove("min");
+    $("btnDrawer").textContent = "Hide";
+    if (tab.dataset.pane === "paneTrain") drawChart();
+  });
+});
+$("btnDrawer").addEventListener("click", () => {
+  const d = $("drawer");
+  d.classList.toggle("min");
+  $("btnDrawer").textContent = d.classList.contains("min") ? "Show" : "Hide";
+});
+
+/* ============================ training ============================ */
+
+function inputNodes(){
+  const order = (state.report && state.report.order) || state.graph.nodes.map(n=>n.id);
+  return order.map(nodeById).filter(n => n && n.type === "Input");
+}
+function shapeOf(id){
+  const info = state.report && state.report.nodes[id];
+  return (info && info.out_shape) || [];
+}
+function volumeOf(id){
+  return shapeOf(id).reduce((a,b)=>a*Math.max(1,b), 1);
+}
+
+function buildTrainForm(){
+  const f = $("trainForm");
+  const dsOpts = state.datasets.map(d =>
+    `<option value="${d.id}">${d.label}</option>`).join("");
+  const optOpts = state.optimizers.map(o => `<option value="${o}">${o}</option>`).join("");
+  f.innerHTML = `
+    <div class="field wide section"><label>Dataset</label>
+      <select id="t_dataset">${dsOpts}</select></div>
+
+    <div id="csvBlock" class="section" style="display:none">
+      <div class="field wide"><label>Table</label>
+        <div class="filerow">
+          <select id="t_csv"></select>
+          <button class="btn" id="btnUpload" style="background:#fff;color:var(--text);border-color:var(--paper-3)">Upload</button>
+        </div>
+        <input type="file" id="csvFile" accept=".csv" style="display:none">
+        <div class="cols" id="csvInfo"></div>
+      </div>
+      <div class="field wide"><label>Target column</label>
+        <select id="t_target"></select></div>
+      <div class="field wide"><label>Columns for each Input</label>
+        <div id="mapRows"></div>
+        <div class="help">Leave a row blank to take the next columns in order.
+          <button class="linkbtn" id="btnAutoMap">Fill automatically</button></div>
+      </div>
+      <div class="field"><label>Validation split</label>
+        <input type="number" id="t_split" value="0.2" step="0.05" min="0.05" max="0.5"></div>
+      <div class="field"><label style="margin:0">Standardize</label>
+        <div class="row" style="height:30px"><input type="checkbox" id="t_norm" checked>
+          <span style="font-size:11px;color:var(--muted)">z-score features</span></div></div>
+    </div>
+
+    <div class="section" id="builtinBlock">
+      <div class="field wide"><label>Sample cap</label>
+        <input type="number" id="t_limit" value="6000" min="0">
+        <div class="help">0 uses the whole set. Images are resized to match your Input layer.</div></div>
+    </div>
+
+    <div class="field section" style="grid-column:1/2"><label>Epochs</label>
+      <input type="number" id="t_epochs" value="5" min="1"></div>
+    <div class="field" style="margin-top:4px;padding-top:8px"><label>Batch size</label>
+      <input type="number" id="t_batch" value="64" min="1"></div>
+    <div class="field"><label>Learning rate</label>
+      <input type="number" id="t_lr" value="0.001" step="any"></div>
+    <div class="field"><label>Optimizer</label><select id="t_opt">${optOpts}</select></div>
+    <div class="field"><label>Device</label>
+      <select id="t_device"><option value="auto">auto</option><option value="mps">mps</option>
+      <option value="cuda">cuda</option><option value="cpu">cpu</option></select></div>
+    <div class="field"><label>Extra head weight</label>
+      <input type="number" id="t_aux" value="0.3" step="0.1" min="0">
+      <div class="help">Applies to every Output after the first.</div></div>
+
+    <div class="field wide row" style="gap:8px">
+      <button class="btn go" id="btnStart" style="flex:1">Start run</button>
+      <button class="btn stop" id="btnStop" style="flex:1" disabled>Stop</button>
+    </div>`;
+
+  $("btnStart").addEventListener("click", startTraining);
+  $("btnStop").addEventListener("click", stopTraining);
+  $("t_dataset").addEventListener("change", onDatasetChange);
+  $("btnUpload").addEventListener("click", () => $("csvFile").click());
+  $("csvFile").addEventListener("change", uploadCsv);
+  $("t_csv").addEventListener("change", () => loadCsvColumns($("t_csv").value));
+  $("btnAutoMap").addEventListener("click", e => { e.preventDefault(); autoMap(); });
+  $("t_dataset").value = "mnist";
+  onDatasetChange();
+}
+
+function onDatasetChange(){
+  const isCsv = $("t_dataset").value === "csv";
+  $("csvBlock").style.display = isCsv ? "block" : "none";
+  $("builtinBlock").style.display = isCsv ? "none" : "block";
+  if (isCsv) refreshCsvList();
+  renderMapRows();
+}
+
+async function refreshCsvList(){
+  try{
+    const r = await fetch(API + "/api/datasets");
+    const d = await r.json();
+    const sel = $("t_csv");
+    const keep = sel.value;
+    sel.innerHTML = d.files.length
+      ? d.files.map(f => `<option value="${f}">${f}</option>`).join("")
+      : `<option value="">no tables uploaded yet</option>`;
+    if (d.files.includes(keep)) sel.value = keep;
+    if (sel.value) loadCsvColumns(sel.value);
+  } catch { /* server down; the start button will say so */ }
+}
+
+async function uploadCsv(ev){
+  const file = ev.target.files[0];
+  if (!file) return;
+  const body = new FormData();
+  body.append("file", file);
+  const r = await fetch(API + "/api/datasets/upload", { method:"POST", body });
+  const d = await r.json();
+  ev.target.value = "";
+  if (!r.ok){ toast((d.detail && d.detail.message) || "Upload failed"); return; }
+  state.csv = d;
+  await refreshCsvList();
+  $("t_csv").value = d.name;
+  applyCsvInfo(d);
+  toast(`${d.name} · ${d.rows.toLocaleString()} rows`);
+}
+
+async function loadCsvColumns(name){
+  if (!name) return;
+  const r = await fetch(API + "/api/datasets/" + encodeURIComponent(name));
+  if (!r.ok) return;
+  applyCsvInfo(await r.json());
+}
+
+function applyCsvInfo(info){
+  state.csv = info;
+  const cols = info.columns;
+  $("csvInfo").textContent =
+    `${info.rows.toLocaleString()} rows · ${cols.length} columns` +
+    (cols.some(c=>!c.numeric) ? ` · text: ${cols.filter(c=>!c.numeric).map(c=>c.name).join(", ")}` : "");
+  const sel = $("t_target");
+  const keep = sel.value;
+  sel.innerHTML = cols.map(c =>
+    `<option value="${c.name}">${c.name}${c.numeric ? "" : ` (${c.unique} labels)`}</option>`).join("");
+  if (cols.some(c => c.name === keep)) sel.value = keep;
+  renderMapRows();
+}
+
+function renderMapRows(){
+  const host = $("mapRows");
+  if (!host) return;
+  const inputs = inputNodes();
+  host.innerHTML = "";
+  inputs.forEach(n => {
+    const need = volumeOf(n.id);
+    const row = document.createElement("div");
+    row.className = "maprow";
+    row.innerHTML = `<b title="${n.label || n.type}">${n.label || n.type}</b>
+      <span class="need">${shapeOf(n.id).join("×") || "?"} → ${need}</span>
+      <input type="text" data-node="${n.id}" placeholder="auto" spellcheck="false"
+             value="${(state.colmap && state.colmap[n.id] || []).join(", ")}">`;
+    const input = row.querySelector("input");
+    input.addEventListener("input", () => {
+      state.colmap = state.colmap || {};
+      const list = input.value.split(",").map(s=>s.trim()).filter(Boolean);
+      if (list.length) state.colmap[n.id] = list; else delete state.colmap[n.id];
+      row.classList.toggle("bad", list.length > 0 && list.length !== need);
+    });
+    host.appendChild(row);
+  });
+  if (!inputs.length) host.innerHTML = `<div class="help">No Input layers on the canvas yet.</div>`;
+}
+
+function autoMap(){
+  if (!state.csv){ toast("Pick a table first"); return; }
+  const target = $("t_target").value;
+  const features = state.csv.columns.map(c=>c.name).filter(c => c !== target);
+  const inputs = inputNodes();
+  let cursor = 0;
+  state.colmap = {};
+  let short = false;
+  inputs.forEach(n => {
+    const need = volumeOf(n.id);
+    if (cursor + need > features.length){ short = true; return; }
+    state.colmap[n.id] = features.slice(cursor, cursor + need);
+    cursor += need;
+  });
+  renderMapRows();
+  if (short) toast(`The table has ${features.length} feature columns; the Inputs need more.`);
+}
+
+function logLine(text, cls){
+  const l = $("log");
+  const d = document.createElement("div");
+  if (cls) d.className = cls;
+  d.innerHTML = text;
+  l.appendChild(d);
+  l.scrollTop = l.scrollHeight;
+}
+
+async function startTraining(){
+  if (state.es){ state.es.close(); state.es = null; }
+  $("log").innerHTML = "";
+  state.job = { history: [] };
+  const config = {
+    dataset: $("t_dataset").value,
+    epochs: +$("t_epochs").value,
+    batch_size: +$("t_batch").value,
+    lr: +$("t_lr").value,
+    optimizer: $("t_opt").value,
+    device: $("t_device").value,
+    aux_weight: +$("t_aux").value
+  };
+  if (config.dataset === "csv"){
+    config.csv_file = $("t_csv").value;
+    config.target_column = $("t_target").value;
+    config.val_split = +$("t_split").value;
+    config.normalize = $("t_norm").checked;
+    if (state.colmap && Object.keys(state.colmap).length) config.column_map = state.colmap;
+  } else {
+    config.train_samples = +$("t_limit").value;
+  }
+  $("btnStart").disabled = true;
+  $("trainStatus").textContent = "starting";
+
+  let res, data;
+  try{
+    res = await fetch(API + "/api/train", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ graph: state.graph, config })
+    });
+    data = await res.json();
+  } catch(err){
+    logLine("Could not reach the server.", "e");
+    $("btnStart").disabled = false; return;
+  }
+  if (!res.ok){
+    const d = data.detail || {};
+    logLine((d.message || "Training could not start"), "e");
+    (d.errors || []).forEach(e => logLine("· " + e, "e"));
+    $("btnStart").disabled = false;
+    $("trainStatus").textContent = "blocked";
+    return;
+  }
+
+  state.job = data.job;
+  state.job.history = [];
+  $("btnStop").disabled = false;
+  logLine(`run <b>${data.job.id}</b> started`);
+
+  const es = new EventSource(API + `/api/train/${data.job.id}/stream`);
+  state.es = es;
+  es.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.kind === "ready"){
+      const io = `${m.inputs} input${m.inputs>1?"s":""}, ${m.outputs} output${m.outputs>1?"s":""}`;
+      logLine(`device <b>${m.device}</b> · <b>${m.learnables.toLocaleString()}</b> learnable parameters · ${io}`);
+      $("trainStatus").textContent = m.device;
+    } else if (m.kind === "dataset"){
+      let line = `<b>${m.rows.toLocaleString()}</b> rows — ${m.train.toLocaleString()} train, ${m.val.toLocaleString()} validation`;
+      if (m.classes) line += ` · ${m.classes} classes`;
+      logLine(line);
+      if (m.class_names) logLine(`labels: ${m.class_names.join(", ")}`);
+      if (m.encoded && m.encoded.length) logLine(`text columns encoded as integers: ${m.encoded.join(", ")}`);
+      if (m.mapping) Object.keys(m.mapping).forEach(id => {
+        const n = nodeById(id);
+        logLine(`${n ? (n.label || n.type) : id} ← ${m.mapping[id].join(", ")}`);
+      });
+    } else if (m.kind === "warning"){
+      logLine(m.message, "e");
+    } else if (m.kind === "step"){
+      $("trainStatus").textContent = `epoch ${m.epoch} · step ${m.step} · loss ${m.loss}`;
+    } else if (m.kind === "epoch"){
+      state.job.history.push(m);
+      const acc = m.val_acc !== undefined ? ` · val acc ${(m.val_acc*100).toFixed(1)}%` : "";
+      logLine(`epoch <b>${m.epoch}</b> — train ${m.train_loss} · val ${m.val_loss}${acc}`);
+      drawChart();
+    } else if (m.kind === "error"){
+      logLine(m.message, "e");
+      $("trainStatus").textContent = "error";
+      finishTraining();
+    } else if (m.kind === "finished"){
+      logLine(`run ${m.status}`);
+      $("trainStatus").textContent = m.status;
+      finishTraining();
+    }
+  };
+  es.onerror = () => { finishTraining(); };
+}
+
+function finishTraining(){
+  if (state.es){ state.es.close(); state.es = null; }
+  $("btnStart").disabled = false;
+  $("btnStop").disabled = true;
+}
+async function stopTraining(){
+  if (!state.job || !state.job.id) return;
+  await fetch(API + `/api/train/${state.job.id}/stop`, { method:"POST" });
+  logLine("stop requested");
+}
+
+function drawChart(){
+  const c = $("chart");
+  const rect = c.getBoundingClientRect();
+  const W = rect.width || 520, H = rect.height || 130;
+  c.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  c.innerHTML = "";
+  const hist = (state.job && state.job.history) || [];
+  if (hist.length < 1){
+    const t = el("text", { x: W/2, y: H/2, fill:"#3F5468", "font-size":"12",
+                           "text-anchor":"middle", "font-family":"var(--mono)" }, c);
+    t.textContent = "loss curve appears here once the first epoch lands";
+    return;
+  }
+  const pad = { l:44, r:12, t:12, b:20 };
+  const xs = hist.map(h => h.epoch);
+  const ys = hist.flatMap(h => [h.train_loss, h.val_loss]);
+  const y0 = 0, y1 = Math.max(...ys) * 1.12 || 1;
+  const x0 = Math.min(...xs), x1 = Math.max(Math.max(...xs), x0 + 1);
+  const px = e => pad.l + (e - x0) / (x1 - x0) * (W - pad.l - pad.r);
+  const py = v => H - pad.b - (v - y0) / (y1 - y0) * (H - pad.t - pad.b);
+
+  [0, 0.5, 1].forEach(f => {
+    const v = y0 + f * (y1 - y0);
+    el("line", { x1:pad.l, x2:W-pad.r, y1:py(v), y2:py(v), stroke:"#22303F" }, c);
+    const t = el("text", { x: pad.l - 7, y: py(v) + 3, fill:"#4E6580", "font-size":"9.5",
+                           "text-anchor":"end", "font-family":"var(--mono)" }, c);
+    t.textContent = v.toFixed(2);
+  });
+
+  const line = (key, color) => {
+    const d = hist.map((h,i) => `${i?"L":"M"}${px(h.epoch)},${py(h[key])}`).join(" ");
+    el("path", { d, fill:"none", stroke:color, "stroke-width":2,
+                 "stroke-linejoin":"round", "stroke-linecap":"round" }, c);
+    hist.forEach(h => el("circle", { cx:px(h.epoch), cy:py(h[key]), r:2.6, fill:color }, c));
+  };
+  line("train_loss", "#F0A202");
+  line("val_loss", "#6FD0E0");
+}
+window.addEventListener("resize", () => { drawChart(); });
+
+boot();
+</script>
+</body>
+</html>

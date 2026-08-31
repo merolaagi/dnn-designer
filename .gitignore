@@ -1,0 +1,31 @@
+# virtualenvs
+.venv/
+venv/
+env/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# trained weights: regenerate these, never commit them
+checkpoints/*.pt
+checkpoints/*.pth
+
+# datasets pulled or uploaded at runtime
+data/
+uploads/*
+!uploads/demo_corpus.txt
+!uploads/demo_corpus.txt.vocab.json
+
+# designs are yours; the worked example ships
+saved/*.json
+!saved/MiniGPT.json
+
+# imported models
+*.onnx
+
+# os
+.DS_Store
+Thumbs.db
