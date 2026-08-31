@@ -463,6 +463,124 @@ if HAVE_TORCH:
             f"return reported as {rows[-1]['train_loss']}: the metric collided again"
 
 
+# --------------------------------------------------------------------------
+# guided projects
+# --------------------------------------------------------------------------
+
+import projectloader  # noqa: E402
+import projects_sdk  # noqa: E402
+from layers import REGISTRY as LAYER_REGISTRY  # noqa: E402
+
+projectloader.load_all()
+print(f"\nprojects: {len(projects_sdk.REGISTRY)} in {len(projectloader.categories())} categories")
+
+
+def build_from_plan(plan, name):
+    """Apply a project's steps exactly as the Build tab does."""
+    nodes, edges, ids = [], [], {}
+    seq = [0]
+
+    def nid():
+        seq[0] += 1
+        return f"n{seq[0]}"
+
+    for index, step in enumerate(plan):
+        detached = step["connect_from"] == "__none__"
+        previous = None if detached else (
+            ids.get(step["connect_from"]) if step["connect_from"] else ids.get("__last"))
+        first_id = step["nodes"][0].get("id") if step["nodes"] else None
+        explicit_first = bool(first_id and any(c[1] == first_id for c in step["connect"]))
+        placed = []
+        for i, spec in enumerate(step["nodes"]):
+            node_id = nid()
+            nodes.append({"id": node_id, "type": spec["type"],
+                          "params": spec["params"] or {}, "label": spec.get("label") or ""})
+            placed.append(node_id)
+            if spec.get("id"):
+                ids[spec["id"]] = node_id
+            spec_obj = LAYER_REGISTRY.get(spec["type"])
+            if previous and not (i == 0 and explicit_first) and spec_obj \
+                    and spec_obj.n_inputs != 0:
+                edges.append({"id": f"e{len(edges)}", "source": previous,
+                              "target": node_id, "port": 0})
+            previous = node_id
+        for src, dst, port in step["connect"]:
+            a, b = ids.get(src), ids.get(dst)
+            if a and b and not any(e["source"] == a and e["target"] == b for e in edges):
+                edges.append({"id": f"x{len(edges)}", "source": a, "target": b, "port": port})
+        if not detached:
+            ids["__last"] = previous
+        ids[f"__step{index + 1}"] = placed[-1] if placed else previous
+    return {"name": name, "nodes": nodes, "edges": edges}
+
+
+@check("projects all load without error")
+def _():
+    errors = projectloader.load_all()
+    assert not errors, f"{len(errors)} project file(s) failed: {errors}"
+
+
+@check("every project has a summary, steps and reasoning")
+def _():
+    for pid, p in projects_sdk.REGISTRY.items():
+        assert p.summary, f"{pid} has no summary"
+        assert p.steps, f"{pid} has no steps"
+        for i, step in enumerate(p.steps):
+            assert step.why, f"{pid} step {i} has no explanation"
+            assert step.title, f"{pid} step {i} has no title"
+
+
+@check("every project's steps use layers that exist")
+def _():
+    for pid, p in projects_sdk.REGISTRY.items():
+        for step in p.steps:
+            for spec in step.nodes:
+                assert spec["type"] in LAYER_REGISTRY, \
+                    f"{pid} places a {spec['type']}, which is not in the registry"
+
+
+@check("every project builds into a graph that resolves and generates code")
+def _():
+    broken = []
+    for pid in projects_sdk.REGISTRY:
+        p = projectloader.get(pid)
+        slug = "".join(c for c in p["name"] if c.isalnum()) or "P"
+        payload = build_from_plan(p["plan"], slug)
+        g = G.parse(payload)
+        rep = G.analyze(g)
+        if not rep["ok"]:
+            err = (rep["errors"]
+                   or [v["error"] for v in rep["nodes"].values() if v["error"]])[:1]
+            broken.append(f"{pid}: {err[0] if err else '?'}")
+            continue
+        try:
+            codegen.to_pytorch(g, rep)
+        except Exception as exc:  # noqa: BLE001
+            broken.append(f"{pid}: codegen {exc}")
+    assert not broken, f"{len(broken)} project(s) do not build: " + "; ".join(broken[:4])
+
+
+@check("the request matcher finds the right project")
+def _():
+    expected = {
+        "classify histopathology slides": "med-mil-slide",
+        "forecast weekly sales": "seq-sales",
+        "something with molecules": "graph-molecule",
+        "balance a pole": "rl-cartpole",
+        "spoken keyword spotting": "audio-keyword",
+    }
+    for query, wanted in expected.items():
+        hits = [m["id"] for m in projectloader.suggest(query, 3)["matches"]]
+        assert hits and hits[0] == wanted, f"{query!r} gave {hits[:3]}, wanted {wanted}"
+
+
+@check("the matcher admits when it has no idea")
+def _():
+    result = projectloader.suggest("underwater basket weaving")
+    assert not result["confident"]
+    assert result["advice"], "a miss should still say something useful"
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

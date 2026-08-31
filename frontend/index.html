@@ -328,6 +328,52 @@ pre#code .kw{color:#F0A202}
 #chatInput:focus{outline:none;border-color:var(--amber)}
 .chatside .field{margin-bottom:9px}
 .chatside .field label{font-size:10.5px}
+.buildwrap{display:flex;height:100%;min-height:0}
+.buildside{width:290px;flex:none;border-right:1px solid var(--paper-3);
+  display:flex;flex-direction:column;min-height:0}
+.buildside .top{padding:9px 11px;border-bottom:1px solid var(--paper-3);flex:none}
+.buildside .list{flex:1;overflow-y:auto;padding:6px 8px}
+#askBox{width:100%;padding:7px 9px;border:1px solid var(--paper-3);border-radius:5px;
+  background:#fff;font-size:12.5px}
+#askBox:focus{outline:none;border-color:var(--amber)}
+#askNote{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.45}
+#askNote b{color:var(--text)}
+.projitem{padding:7px 9px;border-radius:5px;margin-bottom:3px;cursor:pointer;
+  border-left:3px solid var(--c,#888);background:#fff;border-top:1px solid transparent;
+  border-right:1px solid transparent;border-bottom:1px solid transparent}
+.projitem:hover{background:var(--paper-2)}
+.projitem.on{border-color:var(--amber)}
+.projitem b{display:block;font-size:12px;font-weight:600;line-height:1.3}
+.projitem span{font-size:10.5px;color:var(--muted);display:block;margin-top:2px;line-height:1.4}
+.projitem em{font-style:normal;font-family:var(--mono);font-size:9.5px;color:#8A97A8}
+.catrow{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.catrow button{font-size:10px;padding:2px 7px;border-radius:9px;border:1px solid var(--paper-3);
+  background:#fff;color:var(--muted)}
+.catrow button.on{background:var(--amber);border-color:var(--amber);color:#1B1200}
+.buildmain{flex:1;display:flex;flex-direction:column;min-width:0}
+.buildhead{padding:11px 15px;border-bottom:1px solid var(--paper-3);flex:none;
+  background:var(--paper-2)}
+.buildhead h4{margin:0 0 3px;font-size:14px}
+.buildhead p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.45}
+.buildbody{flex:1;overflow-y:auto;padding:13px 16px}
+.stepcard{border-left:3px solid var(--paper-3);padding:0 0 0 12px;margin-bottom:13px;opacity:.45}
+.stepcard.now{border-left-color:var(--amber);opacity:1}
+.stepcard.done{border-left-color:var(--good);opacity:.75}
+.stepcard h5{margin:0 0 5px;font-size:12.5px}
+.stepcard p{margin:0 0 6px;font-size:12px;line-height:1.55;color:#2C3A4C}
+.stepcard .alt{font-size:11.5px;color:var(--muted);line-height:1.5;
+  border-left:2px solid var(--paper-3);padding-left:9px;margin:6px 0}
+.stepcard .alt b{color:var(--text);font-weight:600}
+.stepcard .watch{font-size:11.5px;background:#FFF4E0;border-left:2px solid var(--amber);
+  padding:6px 9px;border-radius:0 4px 4px 0;color:#6B4A00;line-height:1.5;margin:6px 0}
+.stepcard .adds{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:4px}
+.buildbar{flex:none;display:flex;gap:8px;align-items:center;padding:9px 14px;
+  border-top:1px solid var(--paper-3);background:var(--paper-2)}
+.buildbar .grow{flex:1;font-size:11.5px;color:var(--muted)}
+.notecard{background:#fff;border:1px solid var(--paper-3);border-radius:6px;
+  padding:10px 12px;margin-bottom:10px;font-size:11.5px;line-height:1.55}
+.notecard b{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:4px}
 #modal{
   position:fixed;inset:0;background:rgba(10,16,24,.72);z-index:150;
   display:none;align-items:center;justify-content:center;
@@ -423,6 +469,7 @@ pre#code .kw{color:#F0A202}
   <div class="tabs">
     <button class="tab on" data-pane="paneCode">Code</button>
     <button class="tab" data-pane="paneTrain">Training</button>
+    <button class="tab" data-pane="paneBuild">Build</button>
     <button class="tab" data-pane="paneChat">Chat</button>
     <button class="tab" data-pane="paneBlocks">Blocks</button>
     <button class="tab" data-pane="paneProbs">Problems<span class="count" id="probCount" style="display:none">0</span></button>
@@ -436,6 +483,31 @@ pre#code .kw{color:#F0A202}
   </div>
 
   <div class="pane on" id="paneCode"><pre id="code">Building…</pre></div>
+
+  <div class="pane" id="paneBuild">
+    <div class="buildwrap">
+      <div class="buildside">
+        <div class="top">
+          <input id="askBox" placeholder="Or describe what you want to build" spellcheck="false">
+          <div id="askNote"></div>
+          <div class="catrow" id="catRow"></div>
+        </div>
+        <div class="list" id="projList"></div>
+      </div>
+      <div class="buildmain">
+        <div class="buildhead" id="buildHead">
+          <h4>Pick a project</h4>
+          <p>Each one builds a layer at a time, saying why that layer and what else could go there.</p>
+        </div>
+        <div class="buildbody" id="buildBody"></div>
+        <div class="buildbar">
+          <span class="grow" id="buildProgress"></span>
+          <button class="btn" id="btnStepBack" disabled>Back</button>
+          <button class="btn go" id="btnStepNext" disabled>Add this layer</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="pane" id="paneChat">
     <div class="chatwrap">
@@ -571,6 +643,8 @@ const state = {
   blocks:[], blockFile:null, blockDraft:false, blockKind:"blocks", colmap:null, csv:null,
   nodeCode:{}, checkpoints:[], augmentations:[], corpus:null,
   recipes:[], recipeConfig:{}, extraModels:{},
+  projects:[], projectCategories:[], projectCat:"", projectId:null,
+  project:null, stepAt:0, stepIds:{},
   selection:new Set(), history:[], future:[], clipboard:null,
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0
 };
@@ -1663,12 +1737,210 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.pane === "paneTrain") drawChart();
     if (tab.dataset.pane === "paneBlocks") refreshBlocks();
     if (tab.dataset.pane === "paneChat") refreshChatModels();
+    if (tab.dataset.pane === "paneBuild") loadProjects();
   });
 });
 $("btnDrawer").addEventListener("click", () => {
   const d = $("drawer");
   d.classList.toggle("min");
   $("btnDrawer").textContent = d.classList.contains("min") ? "Show" : "Hide";
+});
+
+/* ============================ build ============================ */
+
+async function loadProjects(){
+  if (state.projects && state.projects.length) { renderProjectList(); return; }
+  try{
+    const d = await (await fetch(API + "/api/projects")).json();
+    state.projects = d.projects;
+    state.projectCategories = d.categories;
+  } catch { return; }
+
+  const row = $("catRow");
+  row.innerHTML = `<button data-cat="" class="on">all ${state.projects.length}</button>`
+    + state.projectCategories.map(c =>
+        `<button data-cat="${c.name}">${c.name} ${c.count}</button>`).join("");
+  row.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    state.projectCat = b.dataset.cat;
+    row.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    renderProjectList();
+  }));
+  renderProjectList();
+}
+
+function renderProjectList(filtered){
+  const list = $("projList");
+  const items = filtered || (state.projects || []).filter(p =>
+    !state.projectCat || p.category === state.projectCat);
+  list.innerHTML = items.map(p => `
+    <div class="projitem${p.id === state.projectId ? " on" : ""}" data-id="${p.id}"
+         style="--c:${CAT_COLOR[p.category] || "#8D6E63"}">
+      <b>${p.name}</b>
+      <span>${p.summary}</span>
+      <em>${p.steps} steps · ${p.difficulty}${p.recipe ? " · " + p.recipe + " recipe" : ""}</em>
+    </div>`).join("") || `<div class="empty">Nothing here.</div>`;
+  list.querySelectorAll(".projitem").forEach(el =>
+    el.addEventListener("click", () => openProject(el.dataset.id)));
+}
+
+let askTimer = null;
+$("askBox").addEventListener("input", () => {
+  clearTimeout(askTimer);
+  askTimer = setTimeout(runAsk, 320);
+});
+
+async function runAsk(){
+  const q = $("askBox").value.trim();
+  const note = $("askNote");
+  if (!q){ note.textContent = ""; renderProjectList(); return; }
+  let d;
+  try { d = await (await fetch(API + "/api/projects/suggest?q=" +
+                               encodeURIComponent(q))).json(); }
+  catch { return; }
+
+  if (!d.matches.length){
+    note.innerHTML = `<b>Nothing matches that.</b> ${d.advice || ""}`;
+    renderProjectList([]);
+    return;
+  }
+  note.innerHTML = d.confident
+    ? `<b>Closest projects:</b>`
+    : `<b>No close match.</b> ${d.advice || ""}`;
+  renderProjectList(d.matches);
+}
+
+async function openProject(id){
+  let p;
+  try { p = await (await fetch(API + "/api/projects/" + encodeURIComponent(id))).json(); }
+  catch { toast("Could not load that project"); return; }
+  state.projectId = id;
+  state.project = p;
+  state.stepAt = 0;
+  state.stepIds = {};
+
+  pushHistory();
+  state.graph = { name: p.name.replace(/[^0-9A-Za-z]+/g, "") || "Project",
+                  nodes: [], edges: [] };
+  state.seq = 1;
+  clearSelection();
+  $("gname").value = state.graph.name;
+  render(); analyze();
+
+  $("buildHead").innerHTML =
+    `<h4>${p.name}</h4><p>${p.summary}</p>`;
+  renderProjectList();
+  renderPlan();
+  toast(`${p.plan.length} steps — press Add this layer`);
+}
+
+function renderPlan(){
+  const p = state.project;
+  if (!p){ return; }
+  const at = state.stepAt;
+  const body = $("buildBody");
+
+  const notes = [];
+  if (p.data) notes.push(["Data", p.data]);
+  if (p.recipe) notes.push(["Training loop", `Choose the ${p.recipe} recipe in the Training tab.`]);
+  if (p.training) notes.push(["Settings", p.training]);
+  if (p.expect) notes.push(["What a working run looks like", p.expect]);
+  if (p.caution) notes.push(["Where this goes wrong", p.caution]);
+
+  body.innerHTML = p.plan.map((s, i) => `
+    <div class="stepcard ${i === at ? "now" : (i < at ? "done" : "")}">
+      <h5>${i + 1}. ${s.title}</h5>
+      <p>${s.why}</p>
+      ${s.alternatives ? `<div class="alt"><b>Instead of this:</b> ${s.alternatives}</div>` : ""}
+      ${s.watch ? `<div class="watch">${s.watch}</div>` : ""}
+      <div class="adds">${s.nodes.map(n => n.type).join(" → ")}</div>
+    </div>`).join("")
+    + (at >= p.plan.length
+        ? `<div class="notecard" style="border-color:var(--good)">
+             <b>Built</b>The graph is complete and the Code panel has the file.
+             ${p.recipe ? `Now choose the <b>${p.recipe}</b> recipe in the Training tab.` : "Now pick a dataset in the Training tab."}
+           </div>` : "")
+    + notes.map(([k, v]) => `<div class="notecard"><b>${k}</b>${v}</div>`).join("");
+
+  $("buildProgress").textContent = at >= p.plan.length
+    ? `all ${p.plan.length} steps placed`
+    : `step ${at + 1} of ${p.plan.length}`;
+  $("btnStepNext").disabled = at >= p.plan.length;
+  $("btnStepNext").textContent = at >= p.plan.length ? "Done" : "Add this layer";
+  $("btnStepBack").disabled = at === 0;
+
+  const active = body.querySelector(".stepcard.now") || body.querySelector(".stepcard");
+  if (active) active.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function applyStep(){
+  const p = state.project;
+  if (!p || state.stepAt >= p.plan.length) return;
+  const step = p.plan[state.stepAt];
+  pushHistory();
+
+  const detached = step.connect_from === "__none__";
+  const before = state.stepIds.__last;
+  let previous = detached ? null
+               : (step.connect_from && state.stepIds[step.connect_from]) || before;
+  const placed = [];
+  // an explicit connection to the step's first node replaces the implicit chain
+  const firstId = step.nodes.length ? step.nodes[0].id : null;
+  const explicitFirst = firstId
+    && (step.connect || []).some(c => c[1] === firstId);
+
+  // lay the step out beneath what is already there
+  const baseY = state.graph.nodes.length
+    ? Math.max(...state.graph.nodes.map(n => n.y)) + NH + 46
+    : 0;
+  const column = step.connect_from === "__none__" ? (NW + 90) : 0;
+
+  step.nodes.forEach((spec, i) => {
+    const node = { id: uid("n"), type: spec.type,
+                   params: JSON.parse(JSON.stringify(spec.params || {})),
+                   label: spec.label || "",
+                   x: column, y: baseY + i * (NH + 46) };
+    state.graph.nodes.push(node);
+    placed.push(node);
+    if (spec.id) state.stepIds[spec.id] = node.id;
+    const skipChain = i === 0 && explicitFirst;
+    if (previous && !skipChain && specOf(node.type)
+        && specOf(node.type).n_inputs !== 0){
+      state.graph.edges.push({ id: uid("e"), source: previous, target: node.id, port: 0 });
+    }
+    previous = node.id;
+  });
+
+  // named connections, for branches and merges
+  (step.connect || []).forEach(([src, dst, port]) => {
+    const source = src === "step1_last" ? state.stepIds.__step1
+                 : src === "step2_last" ? state.stepIds.__step2
+                 : state.stepIds[src];
+    const target = state.stepIds[dst];
+    if (source && target && !state.graph.edges.some(e =>
+        e.source === source && e.target === target)){
+      state.graph.edges.push({ id: uid("e"), source, target, port: port || 0 });
+    }
+  });
+
+  // a detached branch must not become the parent of whatever comes next
+  if (!detached) state.stepIds.__last = previous;
+  state.stepIds[`__step${state.stepAt + 1}`] = placed.length
+    ? placed[placed.length - 1].id : previous;
+  state.stepAt += 1;
+
+  state.selection = new Set(placed.map(n => n.id));
+  state.sel = placed.length ? placed[0].id : null;
+  render(); renderInspector(); analyze();
+  fitView();
+  renderPlan();
+}
+
+$("btnStepNext").addEventListener("click", applyStep);
+$("btnStepBack").addEventListener("click", () => {
+  if (state.stepAt === 0) return;
+  state.stepAt -= 1;
+  undo();
+  renderPlan();
 });
 
 /* ============================ chat ============================ */

@@ -19,6 +19,16 @@ uvicorn main:app --reload --port 8770
 Then open http://127.0.0.1:8770 and press **Open → MiniGPT** for the worked
 example.
 
+## Start here
+
+The **Build** tab holds 101 guided projects. Pick one and it constructs the
+network a layer at a time, explaining why that layer, what you would use
+instead, and what to watch for — while the shapes resolve in front of you.
+
+Not in the list? Describe what you want in the box and the catalogue is searched
+for the closest starting points. That search is a keyword matcher over project
+tags, not a language model, and it says so when nothing fits.
+
 ## What it does
 
 **Shapes resolve live.** Every wire is annotated with the tensor it carries, and
@@ -36,9 +46,10 @@ cannot drift apart. There is a test asserting it.
 table, or a text corpus. Checkpoints save automatically with the design embedded,
 so you can reopen the network that produced a set of weights.
 
-**It is extensible in two directions.** Layers past the core set are files in
-`blocks/`. Training loops are files in `recipes/`. Both hot reload, both are
-editable from inside the app, and a broken one is the only thing that breaks.
+**It is extensible in three directions.** Layers past the core set are files in
+`blocks/`. Training loops are files in `recipes/`. Guided projects are files in
+`projects/`. All three hot reload, and a broken one is the only thing that
+breaks.
 
 ## What it is not
 
@@ -115,7 +126,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Twenty-nine checks, with the torch-dependent ones skipping themselves when it is
+Thirty-five checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -388,6 +399,9 @@ blockloader.py   scans blocks/, hot-reloads, isolates failures
 version.py       release number, read by the header and /health
 blocks/          plug-in blocks, one file each
 recipes/         plug-in training loops, one file each
+projects/        the guided project catalogue
+projects_sdk.py  the Project/Step surface the catalogue is written against
+projectloader.py loads projects and matches free-text requests against them
 recipes_sdk.py   the Recipe/Context surface training loops write against
 recipeloader.py  scans recipes/, hot-reloads, isolates failures
 checkpoints/     saved weights, each carrying the design that made it
@@ -410,4 +424,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.2.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.3.0 — see `CHANGELOG.md`.

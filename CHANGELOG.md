@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.3.0
+
+A guided project catalogue: pick something to build, and it builds a layer at a
+time with the reasoning attached.
+
+- **Build tab** with **101 projects** across 15 categories — vision, medical
+  imaging, tabular, sequences, language, generative, self-supervised, agents,
+  detection, graphs, numerical, audio, anomaly detection, similarity,
+  multi-input.
+- Each step places one or more layers and says **why that layer**, **what you
+  would use instead**, and what to watch for. The reasoning quotes real numbers:
+  "this turns [64, 8, 8] into [4,096], which is why the next Linear is wide".
+  That is why projects are generated from builders rather than written by hand.
+- **Describe what you want** and the catalogue is searched for it. A keyword
+  matcher, not a language model, and it says plainly when nothing fits rather
+  than returning the least-bad answer as though it were right.
+- Projects are a plug-in folder like blocks and recipes.
+- Each project carries its data requirements, the recipe to use, settings worth
+  starting from, what a working run looks like, and where it goes wrong. The
+  pathology project leads with site-based splitting, because that is what
+  actually ends those projects.
+- Fixed, found by sweeping all 101: a detached branch step became the implicit
+  parent of the next step, so graph networks wired the adjacency matrix in as
+  node features and the linear solver received one input instead of two. A
+  detached step no longer advances the chain, and an explicit connection to a
+  step's first node now replaces the implicit one.
+- Fixed: the request matcher scored a word by its rarest possible synonym rather
+  than the tag it actually matched, so every medical project ranked as highly
+  for "slides" as the slide-level project. It now weights by the matched tag's
+  rarity, and "molecules" no longer stems to "molecul".
+- Six more tests, 35 in total, including one that builds all 101 projects and
+  checks each resolves and generates code.
+
 ## 1.2.1
 
 - Fixed `release.sh`: it scraped the version with a regex for the first quoted

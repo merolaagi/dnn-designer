@@ -20,6 +20,7 @@ from pydantic import BaseModel
 import blockloader
 import codegen
 import importer
+import projectloader
 import recipeloader
 import recipes_sdk
 import graph as G
@@ -29,6 +30,7 @@ from version import __version__
 
 blockloader.load_all()
 recipeloader.load_all()
+projectloader.load_all()
 
 HERE = Path(__file__).resolve().parent
 
@@ -542,6 +544,30 @@ def delete_graph(name: str):
 # --------------------------------------------------------------------------
 # plug-in blocks
 # --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# guided projects
+# --------------------------------------------------------------------------
+
+@app.get("/api/projects")
+def get_projects():
+    return {"projects": projectloader.catalog(),
+            "categories": projectloader.categories(),
+            "errors": projectloader.LAST_ERRORS}
+
+
+@app.get("/api/projects/suggest")
+def suggest_project(q: str = ""):
+    return projectloader.suggest(q)
+
+
+@app.get("/api/projects/{project_id}")
+def get_project(project_id: str):
+    try:
+        return projectloader.get(project_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": f"No project named {project_id}."})
+
 
 @app.get("/api/recipes")
 def get_recipes():
