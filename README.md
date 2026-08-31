@@ -139,10 +139,17 @@ network the generated code could not build.
 
 ## Using the canvas
 
-Drag a layer from the left rail. If a layer is selected when you drop the new
-one, they connect automatically, which covers most of the work when building a
-stack top to bottom. To wire by hand, drag from the dot at the bottom of one
-layer to the dot at the top of another.
+Drag a layer from the palette. If a layer is selected when you drop the new one,
+they connect automatically, which covers most of the work when building a stack
+top to bottom. To wire by hand, drag from the dot at the bottom of one layer to
+the dot at the top of another.
+
+To put a layer *between* two that are already connected, hover the wire and
+click the `+` at its midpoint. It rewires both sides and pushes what follows out
+of the way, which is the usual way a stack actually grows.
+
+Each node shows the constructor it contributes to the generated file, so the
+canvas and the Code panel say the same thing without switching between them.
 
 Shift-click extends the selection, `Cmd/Ctrl+A` takes everything, and shift-drag
 on empty canvas sweeps a marquee. A group drags together, and copy-paste
@@ -430,4 +437,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.4.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.5.0 — see `CHANGELOG.md`.

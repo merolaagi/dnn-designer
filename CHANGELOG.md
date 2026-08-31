@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.5.0
+
+The canvas reworked, taking the parts of a workflow editor that carry their
+weight here.
+
+- **Light canvas.** The dark blueprint suited a diagram; it fights a graph you
+  read code off. Chrome stays dark, the board is white with a fine dot grid.
+- **Nodes carry their code.** Each card now shows a type badge, a reference
+  line, and the actual constructor it contributes to the generated file —
+  `nn.Conv2d(3, 32, kernel_size=3, padding='same')` on the node itself, rather
+  than only in the inspector.
+- **Insert into a connection.** Hovering a wire reveals a `+` at its midpoint;
+  clicking it opens a picker and drops the chosen layer into that connection,
+  rewiring both sides and pushing everything below out of the way. Adding a
+  normalization between an existing convolution and its activation is one click
+  instead of drop-then-rewire.
+- The picker offers only layers that can sit mid-chain — no Inputs, Outputs or
+  runtime blocks.
+- **Delete on the node.** A hover cross in the corner, rather than select-then-Delete.
+- Merge nodes report how many inputs they are actually joining.
+- Every layout calculation — fit, minimap, marquee, tidy, guided steps — now
+  measures real card height rather than assuming one size.
+
 ## 1.4.1
 
 - Fixed: the versioning test used Starlette's `TestClient`, which needs an HTTP
