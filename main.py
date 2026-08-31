@@ -20,6 +20,7 @@ from pydantic import BaseModel
 import blockloader
 import codegen
 import importer
+import needs
 import projectloader
 import recipeloader
 import recipes_sdk
@@ -118,7 +119,12 @@ def post_analyze(body: GraphPayload):
     node_code: Dict[str, Any] = {}
     code = (_codegen(g, report, node_code) if report["order"]
             else {"pytorch": "", "keras": ""})
-    return {"report": report, "code": code, "node_code": node_code}
+    try:
+        requires = needs.requirements(g, report)
+    except Exception as exc:  # noqa: BLE001 - never let this break analysis
+        requires = {"error": f"{type(exc).__name__}: {exc}"}
+    return {"report": report, "code": code, "node_code": node_code,
+            "requires": requires}
 
 
 @app.post("/api/train")

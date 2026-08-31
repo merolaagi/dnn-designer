@@ -66,6 +66,41 @@ header{
 .btn:disabled{opacity:.4;cursor:not-allowed}
 
 /* ---------------- shell ---------------- */
+/* right panel tabs, in the manner of a workflow editor's side rail */
+.ptabs{display:flex;gap:0;border-bottom:1px solid var(--paper-3);flex:none;
+  background:var(--paper-2)}
+.ptabs button{
+  flex:1;background:none;border:none;padding:9px 4px 8px;font-size:10px;
+  font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  border-bottom:2px solid transparent;
+}
+.ptabs button.on{color:var(--text);border-bottom-color:var(--amber);background:#fff}
+.acc{border-bottom:1px solid var(--paper-3)}
+.acc > .head{
+  display:flex;align-items:center;gap:7px;padding:10px 13px;cursor:pointer;
+  font-size:12px;font-weight:600;
+}
+.acc > .head:hover{background:var(--paper-2)}
+.acc > .head .n{
+  margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);
+  background:var(--paper-2);border-radius:8px;padding:1px 6px;
+}
+.acc > .head .caret{color:var(--muted);font-size:10px;transition:transform .12s}
+.acc.open > .head .caret{transform:rotate(90deg)}
+.acc > .body{display:none;padding:0 13px 12px}
+.acc.open > .body{display:block}
+.acc .row2{
+  display:flex;gap:8px;align-items:baseline;font-size:11.5px;padding:4px 0;
+  border-top:1px solid #EDF1F5;line-height:1.45;
+}
+.acc .row2:first-child{border-top:none}
+.acc .row2 b{font-weight:600}
+.acc .row2 code{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.acc .row2 .why{color:var(--muted);margin-left:auto;text-align:right;font-size:10.5px}
+.acc .none{font-size:11.5px;color:#8A97A8;padding:4px 0}
+.acc .note{font-size:11.5px;line-height:1.5;color:#6B4A00;background:#FFF4E0;
+  border-left:2px solid var(--amber);padding:7px 9px;border-radius:0 4px 4px 0;
+  margin-top:6px}
 .shell{flex:1;display:flex;min-height:0}
 
 /* navigation rail — one place to move between the parts of the app,
@@ -521,10 +556,16 @@ pre#code .kw{color:#F0A202}
   </main>
 
   <aside class="panel" id="inspector">
-    <h2>Layer settings</h2>
+    <div class="ptabs">
+      <button data-side="layer" class="on">Layer</button>
+      <button data-side="network">Network</button>
+      <button data-side="needs">Needs</button>
+    </div>
     <div class="scroll" id="inspBody">
       <div class="empty">Select a layer on the canvas to edit it.</div>
     </div>
+    <div class="scroll" id="networkBody" style="display:none"></div>
+    <div class="scroll" id="needsBody" style="display:none;padding:0"></div>
   </aside>
 </div>
 
@@ -1557,6 +1598,10 @@ $("btnRedo").addEventListener("click", redo);
 /* ============================ inspector ============================ */
 
 function renderInspector(){
+  if (state.sidePanel !== "layer" && (state.sel || state.selEdge)){
+    const tab = document.querySelector('.ptabs button[data-side="layer"]');
+    if (tab) tab.click();
+  }
   const body = $("inspBody");
   if (state.selEdge){
     const e = state.graph.edges.find(x=>x.id===state.selEdge);
@@ -1780,6 +1825,114 @@ function setParam(node, key, value){
   analyze();
 }
 
+/* ===================== the right panel's other tabs ===================== */
+
+document.querySelectorAll(".ptabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".ptabs button").forEach(b =>
+      b.classList.toggle("on", b === btn));
+    state.sidePanel = btn.dataset.side;
+    $("inspBody").style.display = state.sidePanel === "layer" ? "" : "none";
+    $("networkBody").style.display = state.sidePanel === "network" ? "" : "none";
+    $("needsBody").style.display = state.sidePanel === "needs" ? "" : "none";
+    if (state.sidePanel === "network") renderNetworkPanel();
+    if (state.sidePanel === "needs") renderNeedsPanel();
+  });
+});
+
+function accordion(title, count, rows, open){
+  const inner = Array.isArray(rows) ? rows.join("") : (rows || "");
+  const body = inner ? inner : `<div class="none">Nothing required.</div>`;
+  return `<div class="acc${open ? " open" : ""}">
+      <div class="head"><span class="caret">&#9656;</span>${title}
+        ${count !== null ? `<span class="n">${count}</span>` : ""}</div>
+      <div class="body">${body}</div>
+    </div>`;
+}
+
+function wireAccordions(host){
+  host.querySelectorAll(".acc > .head").forEach(head =>
+    head.addEventListener("click", () => head.parentElement.classList.toggle("open")));
+}
+
+function renderNetworkPanel(){
+  const host = $("networkBody");
+  const rep = state.report;
+  if (!rep){ host.innerHTML = `<div class="empty">Nothing analyzed yet.</div>`; return; }
+  const req = state.requires || {};
+  const problems = (rep.errors || []).length
+    + Object.values(rep.nodes || {}).filter(v => v.error).length;
+
+  const row = (k, v) => `<div class="row2"><b>${k}</b><span class="why">${v}</span></div>`;
+  host.innerHTML =
+    `<div style="padding:12px 13px">
+       <div class="shapebox" style="margin:0 0 10px">${
+         rep.ok ? "resolves end to end" : problems + " problem" + (problems===1?"":"s")
+       }</div>
+       ${row("Name", state.graph.name || "unsaved")}
+       ${row("Version", state.version ? "v" + state.version : "unsaved")}
+       ${row("Layers", state.graph.nodes.length)}
+       ${row("Connections", state.graph.edges.length)}
+       ${row("Learnables", (rep.approximate ? "\u2248 " : "")
+              + (rep.total_learnables || 0).toLocaleString())}
+     </div>`
+    + accordion("Inputs", (req.inputs || []).length,
+        (req.inputs || []).map(i =>
+          `<div class="row2"><b>${i.name}</b><code>${(i.shape||[]).join("×")}</code></div>`), true)
+    + accordion("Outputs", (req.outputs || []).length,
+        (req.outputs || []).map(o =>
+          `<div class="row2"><b>${o.name}</b><code>${(o.shape||[]).join("×")}</code>`
+          + `<span class="why">${o.task}</span></div>`), true);
+  wireAccordions(host);
+}
+
+function renderNeedsPanel(){
+  const host = $("needsBody");
+  const req = state.requires;
+  if (!req || req.error){
+    host.innerHTML = `<div class="empty" style="padding:12px 13px">${
+      req && req.error ? req.error : "Nothing analyzed yet."}</div>`;
+    return;
+  }
+
+  const chunks = [];
+  chunks.push(accordion("Plug-in blocks", req.blocks.length,
+    req.blocks.map(b => `<div class="row2"><b>${b.name}</b>
+      <code>blocks/${b.file}</code><span class="why">${b.category}</span></div>`),
+    req.blocks.length > 0));
+
+  chunks.push(accordion("Runtime components", req.runtime.length,
+    req.runtime.map(r => `<div class="row2"><b>${r.name}</b>
+      <span class="why">${r.note}</span></div>`), req.runtime.length > 0));
+
+  chunks.push(accordion("Pretrained weights", req.pretrained.length,
+    req.pretrained.map(w => `<div class="row2"><b>${w.arch}</b>
+      <code>${w.weights === "none" ? "random init" : "downloads"}</code>
+      <span class="why">${w.frozen ? "frozen" : "fine-tuning"}</span></div>`),
+    req.pretrained.length > 0));
+
+  chunks.push(accordion("Python packages", req.packages.length,
+    req.packages.map(p => `<div class="row2"><b>${p.name}</b>
+      <span class="why">${p.why}</span></div>`), false));
+
+  chunks.push(accordion("Datasets this accepts", req.datasets.length,
+    req.datasets.map(d => `<div class="row2"><b>${d}</b></div>`), false));
+
+  chunks.push(accordion("Training loop", null,
+    `<div class="row2"><b>${req.suggested_recipe.name || "standard"}</b>
+       <span class="why">${req.tasks.join(", ") || ""}</span></div>`
+    + (req.suggested_recipe.note
+        ? `<div class="note">${req.suggested_recipe.note}</div>` : ""), true));
+
+  if (req.notes.length){
+    chunks.push(accordion("Worth knowing", req.notes.length,
+      req.notes.map(n => `<div class="row2"><span>${n}</span></div>`), true));
+  }
+
+  host.innerHTML = chunks.join("");
+  wireAccordions(host);
+}
+
 /* ============================ analysis ============================ */
 
 let analyzeTimer = null;
@@ -1803,6 +1956,9 @@ async function runAnalyze(){
   state.report = data.report;
   state.code = data.code;
   state.nodeCode = data.node_code || {};
+  state.requires = data.requires || null;
+  if (state.sidePanel === "network") renderNetworkPanel();
+  if (state.sidePanel === "needs") renderNeedsPanel();
   render();
   renderInspector();
   showCode();

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.0
+
+- **Right panel gains tabs**: Layer, Network, Needs — with collapsible sections,
+  in the manner of a workflow editor's side rail.
+- **Needs answers "what does this design require to run?"** and derives every
+  answer from the graph rather than from a declaration, so it cannot go stale.
+  It lists the plug-in blocks pulled in and which file each came from, runtime
+  components, pretrained weights and whether they download, Python packages and
+  why each is needed, which dataset kinds the Inputs can actually accept, the
+  training loop this shape wants, and warnings — multi-input argument ordering,
+  first-run downloads, and which layers will leave the Keras export incomplete.
+- **Network** summarises the design: name, version, layer and connection counts,
+  learnables, and every Input and Output with its shape and task.
+- Selecting a layer brings the Layer tab forward, so clicking the canvas always
+  goes somewhere useful.
+- Four more tests, 40 in total.
+
 ## 1.5.0
 
 The canvas reworked, taking the parts of a workflow editor that carry their

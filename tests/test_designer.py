@@ -640,6 +640,80 @@ def _():
         cleanup()
 
 
+# --------------------------------------------------------------------------
+# what a design requires
+# --------------------------------------------------------------------------
+
+import needs  # noqa: E402
+
+
+@check("requirements name the blocks a design pulls in")
+def _():
+    payload = build(
+        [("i", "Input", {"shape": [3, 32, 32]}),
+         ("r", "ResidualBlock", {"filters": 32}),
+         ("g", "GlobalAvgPool", {}), ("l", "Linear", {"units": 4}), ("o", "Output", {})],
+        [("i", "r", 0), ("r", "g", 0), ("g", "l", 0), ("l", "o", 0)])
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+    req = needs.requirements(g, rep)
+    names = [b["name"] for b in req["blocks"]]
+    assert names == ["ResidualBlock"], names
+    assert req["blocks"][0]["file"] == "residual.py", req["blocks"][0]
+
+
+@check("requirements flag a download and a Keras gap")
+def _():
+    payload = build(
+        [("i", "Input", {"shape": [3, 224, 224]}),
+         ("b", "Backbone", {"arch": "resnet18", "weights": "DEFAULT"}),
+         ("g", "GlobalAvgPool", {}), ("l", "Linear", {"units": 5}), ("o", "Output", {})],
+        [("i", "b", 0), ("b", "g", 0), ("g", "l", 0), ("l", "o", 0)])
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+    req = needs.requirements(g, rep)
+    assert req["pretrained"] and req["pretrained"][0]["arch"] == "resnet18"
+    assert any("download" in n for n in req["notes"]), req["notes"]
+    assert "Backbone" in req["keras_gaps"], req["keras_gaps"]
+    assert any(p["name"] == "torchvision" for p in req["packages"])
+
+
+@check("requirements pick datasets that actually fit the inputs")
+def _():
+    tabular = build(
+        [("i", "Input", {"shape": [12]}), ("l", "Linear", {"units": 3}),
+         ("o", "Output", {})],
+        [("i", "l", 0), ("l", "o", 0)])
+    g, rep = analyzed(tabular)
+    req = needs.requirements(g, rep)
+    assert "csv" in req["datasets"] and "cifar10" not in req["datasets"], req["datasets"]
+
+    tokens = build(
+        [("i", "Input", {"shape": [64], "dtype": "long"}),
+         ("e", "Embedding", {"vocab": 50, "dim": 32}),
+         ("g", "GlobalAvgPool", {}), ("l", "Linear", {"units": 50}),
+         ("o", "Output", {"task": "language_modeling"})],
+        [("i", "e", 0), ("e", "g", 0), ("g", "l", 0), ("l", "o", 0)])
+    g, rep = analyzed(tokens)
+    req = needs.requirements(g, rep)
+    assert "text" in req["datasets"], req["datasets"]
+
+
+@check("requirements warn about multi-input ordering")
+def _():
+    payload = build(
+        [("a", "Input", {"shape": [6]}), ("b", "Input", {"shape": [4]}),
+         ("h1", "Linear", {"units": 8}), ("h2", "Linear", {"units": 8}),
+         ("cat", "Concat", {"axis": 0}), ("l", "Linear", {"units": 2}),
+         ("o", "Output", {})],
+        [("a", "h1", 0), ("b", "h2", 0), ("h1", "cat", 0), ("h2", "cat", 1),
+         ("cat", "l", 0), ("l", "o", 0)])
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+    req = needs.requirements(g, rep)
+    assert any("Inputs" in n and "order" in n for n in req["notes"]), req["notes"]
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
