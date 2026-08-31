@@ -16,7 +16,7 @@ if [ -z "$MESSAGE" ]; then
   exit 1
 fi
 
-VERSION=$(python3 -c 'import re,pathlib;print(re.search(r"\"([^\"]+)\"",pathlib.Path("version.py").read_text()).group(1))')
+VERSION=$(python3 -c 'import version; print(version.__version__)')
 echo "==> version $VERSION"
 
 echo "==> tests"
