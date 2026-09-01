@@ -283,7 +283,12 @@ body.resizing-v{cursor:row-resize;user-select:none}
 #svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .node-card{
   fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1;
-  filter:drop-shadow(0 1px 3px rgba(22,32,46,.12));
+  filter:drop-shadow(0 1px 1px rgba(22,32,46,.09))
+         drop-shadow(0 4px 10px rgba(22,32,46,.10));
+}
+.node:hover .node-card{
+  filter:drop-shadow(0 2px 3px rgba(22,32,46,.12))
+         drop-shadow(0 9px 20px rgba(22,32,46,.15));
 }
 .node.sel .node-card{stroke:#2D7DD2;stroke-width:2}
 .node.err .node-card{stroke:var(--bad);stroke-width:1.6}
@@ -338,6 +343,54 @@ body.resizing-v{cursor:row-resize;user-select:none}
   position:absolute;border:1px solid var(--amber);background:rgba(240,162,2,.10);
   pointer-events:none;display:none;
 }
+/* anchored to the plus that opened it, the way a task picker sits beside the
+   node it will attach to */
+#quickAdd{
+  position:fixed;z-index:170;width:320px;background:#fff;border-radius:10px;
+  border:1px solid var(--paper-3);box-shadow:0 12px 34px rgba(22,32,46,.18);
+  display:none;flex-direction:column;overflow:hidden;
+}
+#quickAdd.on{display:flex}
+.qhead{
+  display:flex;align-items:center;padding:10px 12px 8px;font-size:12px;
+  font-weight:600;color:var(--text);
+}
+.qhead button{
+  margin-left:auto;background:none;border:none;color:var(--muted);font-size:16px;
+  line-height:1;padding:0 2px;
+}
+.qhead button:hover{color:var(--text)}
+#qaSearch{
+  margin:0 12px 10px;padding:7px 10px;border:1px solid var(--paper-3);
+  border-radius:6px;font-size:12.5px;background:#fff;
+}
+#qaSearch:focus{outline:none;border-color:var(--amber)}
+.qbody{overflow-y:auto;max-height:340px;padding:0 8px 10px}
+.qsection{
+  display:flex;align-items:center;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:#98A6B8;font-weight:700;padding:8px 6px 6px;
+}
+.qmore{
+  margin-left:auto;background:none;border:none;color:#2D7DD2;font-size:10px;
+  letter-spacing:.04em;text-transform:none;font-weight:600;
+}
+.qmore:hover{text-decoration:underline}
+.qgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.qtile{
+  display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 3px 7px;
+  background:none;border:1px solid transparent;border-radius:7px;color:#3C4B5F;
+}
+.qtile svg{width:18px;height:18px;fill:none;stroke:#5C6B7F;stroke-width:1.3;
+  stroke-linecap:round;stroke-linejoin:round}
+.qtile span{
+  font-size:9.5px;line-height:1.2;text-align:center;word-break:break-word;
+  max-width:100%;
+}
+.qtile:hover{background:var(--paper-2);border-color:var(--paper-3)}
+.qtile.on{background:#E9F1FB;border-color:#BCD6EF;color:#1F6BBD}
+.qtile.on svg{stroke:#2D7DD2}
+.qempty{padding:14px 8px;font-size:11.5px;color:var(--muted)}
+
 #palette-cmd{
   position:fixed;inset:0;background:rgba(10,16,24,.6);z-index:160;
   display:none;align-items:flex-start;justify-content:center;padding-top:14vh;
@@ -604,23 +657,33 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
 /* shape carries meaning: an entry or exit is a circle, a merge is a diamond,
    a runtime component is a hexagon, an ordinary layer is a card */
 .node-terminal{fill:#FFFFFF;stroke:#5B87B5;stroke-width:2.4;
-  filter:drop-shadow(0 1px 3px rgba(22,32,46,.12))}
+  filter:drop-shadow(0 1px 1px rgba(22,32,46,.09))
+         drop-shadow(0 4px 12px rgba(22,32,46,.12))}
+.node:hover .node-terminal{
+  filter:drop-shadow(0 2px 3px rgba(22,32,46,.12))
+         drop-shadow(0 9px 22px rgba(22,32,46,.17))}
 .node.sel .node-terminal{stroke:#2D7DD2;stroke-width:3}
 .node.err .node-terminal{stroke:var(--bad)}
 .node-terminal-label{font-size:12.5px;font-weight:600;fill:#16202E;text-anchor:middle}
 .node-terminal-sub{font-family:var(--mono);font-size:9.5px;fill:#7C8BA0;text-anchor:middle}
 .node-pad{fill:#E7EBF0;stroke:none;rx:10}
 .node-diamond{fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1.2;
-  filter:drop-shadow(0 1px 3px rgba(22,32,46,.10))}
+  filter:drop-shadow(0 1px 1px rgba(22,32,46,.09))
+         drop-shadow(0 5px 13px rgba(22,32,46,.11))}
+.node:hover .node-diamond{
+  filter:drop-shadow(0 2px 3px rgba(22,32,46,.12))
+         drop-shadow(0 10px 22px rgba(22,32,46,.16))}
 .node.sel .node-diamond{stroke:#2D7DD2;stroke-width:2.2}
 .node.err .node-diamond{stroke:var(--bad);stroke-width:1.8}
 .node-hex{fill:#F4F7FA;stroke:#9DAEC2;stroke-width:1.2;stroke-dasharray:5 3}
 .node-data{fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1;
-  filter:drop-shadow(0 1px 3px rgba(22,32,46,.12))}
+  filter:drop-shadow(0 1px 1px rgba(22,32,46,.09))
+         drop-shadow(0 4px 10px rgba(22,32,46,.10))}
 .node.sel .node-data{stroke:#2D7DD2;stroke-width:2}
 .node.err .node-data{stroke:var(--bad);stroke-width:1.6}
 .node-stadium{fill:#FFFDF6;stroke:#D9C79A;stroke-width:1;
-  filter:drop-shadow(0 1px 3px rgba(22,32,46,.10))}
+  filter:drop-shadow(0 1px 1px rgba(22,32,46,.08))
+         drop-shadow(0 4px 10px rgba(22,32,46,.09))}
 .node.sel .node-stadium{stroke:#2D7DD2;stroke-width:2}
 .node-bars{stroke:#C6D0DC;stroke-width:1}
 .node.sel .node-bars{stroke:#2D7DD2}
@@ -1037,6 +1100,15 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
   </section>
 </div>
 
+<div id="quickAdd">
+  <div class="qhead">
+    <span id="qaTitle">Add a layer</span>
+    <button id="qaClose" title="Close">&times;</button>
+  </div>
+  <input id="qaSearch" placeholder="Search layers" spellcheck="false">
+  <div class="qbody" id="qaBody"></div>
+</div>
+
 <div id="palette-cmd">
   <div class="cmdbox">
     <input id="cmdInput" placeholder="Find a layer by name or type" spellcheck="false">
@@ -1109,6 +1181,7 @@ const state = {
   selection:new Set(), history:[], future:[], clipboard:null,
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
   flow:"vertical", gridLevel:2, appendAfter:null,
+  quick:{ mode:null, context:null, expanded:false, hits:[], at:0 },
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
@@ -1599,15 +1672,160 @@ $("zsnap").addEventListener("click", () => {
   toast(state.snap ? "Snapping to a 20px grid" : "Free placement");
 });
 
+/* ======================= quick add ======================= */
+
+/* Small line glyphs per category. Drawn rather than imported so the popup does
+   not depend on an icon font, and so each one says something about the layer:
+   a grid for convolution, stacked bars for dense, a step for an activation. */
+const GLYPHS = {
+  Data: "M4 9a5 5 0 1 0 10 0a5 5 0 1 0-10 0",
+  Convolution: "M3 3h5v5h-5z M10 3h5v5h-5z M3 10h5v5h-5z M10 10h5v5h-5z",
+  Dense: "M3 4h12 M3 9h12 M3 14h12",
+  Pooling: "M3 3h12v5h-12z M6 11h6v4h-6z M9 8v3",
+  Normalization: "M3 12c3 0 3-8 6-8s3 8 6 8",
+  Activation: "M3 13h5v-8h7",
+  Shape: "M6 4h10l-3 11h-10z",
+  Merge: "M4 3v5l5 5 M14 3v5l-5 5 M9 13v3",
+  Recurrent: "M5 6a5 5 0 1 0 5-3 M5 3v4h4",
+  Sequence: "M3 9h3 M8 9h3 M13 9h3 M4 6v6 M14 6v6",
+  Graphs: "M5 5a2 2 0 1 0 0-.1 M14 6a2 2 0 1 0 0-.1 M9 14a2 2 0 1 0 0-.1 M6 6l6 1 M6 7l3 6 M13 8l-3 5",
+  Numerical: "M4 4h9l-5 5 5 5h-9",
+  Language: "M4 5h11 M4 9h8 M4 13h6",
+  "Vision blocks": "M3 6l6-3 6 3l-6 3z M3 11l6 3 6-3",
+  "Game playing": "M4 7h10v5h-10z M6 9h2 M11 9h2",
+  Pretrained: "M9 3l6 3v5l-6 4-6-4v-5z",
+  Custom: "M9 5a4 4 0 1 0 0 8a4 4 0 1 0 0-8 M9 2v2 M9 14v2 M2 9h2 M14 9h2",
+};
+
+// what people reach for most often, in the order they usually reach for it
+const QUICK_ADD = ["Conv2d", "Activation", "BatchNorm2d", "MaxPool2d",
+                   "Linear", "Dropout", "Flatten", "GlobalAvgPool",
+                   "ResidualBlock", "LSTM", "SelfAttention", "Concat"];
+
+function glyphFor(category){
+  return GLYPHS[category] || GLYPHS.Custom;
+}
+
+function quickAddCandidates(){
+  return (state.catalog || []).filter(spec => {
+    if (spec.n_inputs === 0) return false;
+    if (state.quick.mode === "insert"
+        && (spec.name === "Output" || spec.kind === "runtime")) return false;
+    return true;
+  });
+}
+
+function tile(spec){
+  return `<button class="qtile" data-add="${spec.name}" title="${
+      (spec.doc || "").replace(/"/g, "&quot;")}">
+    <svg viewBox="0 0 18 18"><path d="${glyphFor(spec.category)}"></path></svg>
+    <span>${spec.name}</span></button>`;
+}
+
+function renderQuickAdd(){
+  const term = ($("qaSearch").value || "").toLowerCase();
+  const all = quickAddCandidates();
+  const body = $("qaBody");
+
+  if (term){
+    const hits = all.filter(s =>
+      s.name.toLowerCase().includes(term) || s.category.toLowerCase().includes(term));
+    body.innerHTML = hits.length
+      ? `<div class="qsection">${hits.length} match${hits.length === 1 ? "" : "es"}</div>`
+        + `<div class="qgrid">${hits.slice(0, 24).map(tile).join("")}</div>`
+      : `<div class="qempty">Nothing matches that.</div>`;
+  } else if (state.quick.expanded){
+    const groups = {};
+    all.forEach(s => (groups[s.category] = groups[s.category] || []).push(s));
+    body.innerHTML = Object.keys(groups).sort().map(cat =>
+      `<div class="qsection">${cat}</div>`
+      + `<div class="qgrid">${groups[cat].map(tile).join("")}</div>`).join("");
+  } else {
+    const quick = QUICK_ADD
+      .map(name => all.find(s => s.name === name))
+      .filter(Boolean);
+    body.innerHTML =
+      `<div class="qsection">Quick add<button class="qmore" id="qaMore">All ${all.length} layers</button></div>`
+      + `<div class="qgrid">${quick.map(tile).join("")}</div>`;
+    const more = $("qaMore");
+    if (more) more.addEventListener("click", () => {
+      state.quick.expanded = true;
+      renderQuickAdd();
+    });
+  }
+
+  body.querySelectorAll("[data-add]").forEach((el, i) => {
+    if (i === 0) el.classList.add("on");
+    el.addEventListener("click", () => chooseQuickAdd(el.dataset.add));
+  });
+  state.quick.hits = [...body.querySelectorAll("[data-add]")].map(el => el.dataset.add);
+  state.quick.at = 0;
+}
+
+function chooseQuickAdd(type){
+  const mode = state.quick.mode, context = state.quick.context;
+  closeQuickAdd();
+  if (mode === "insert") insertIntoEdge(context, type);
+  else appendAfterNode(context, type);
+}
+
+function openQuickAdd(mode, context, clientX, clientY){
+  state.quick = { mode, context, expanded: false, hits: [], at: 0 };
+  const box = $("quickAdd");
+  box.classList.add("on");
+  $("qaSearch").value = "";
+  $("qaTitle").textContent = mode === "insert" ? "Insert a layer here"
+                                               : "Add the next layer";
+  renderQuickAdd();
+
+  // anchored to the button that opened it, nudged back inside the window
+  const width = 320, height = Math.min(420, window.innerHeight - 80);
+  let x = clientX + 14, y = clientY - 20;
+  if (x + width > window.innerWidth - 12) x = clientX - width - 14;
+  if (y + height > window.innerHeight - 12) y = window.innerHeight - height - 12;
+  box.style.left = Math.max(12, x) + "px";
+  box.style.top = Math.max(12, y) + "px";
+  $("qaSearch").focus();
+}
+
+function closeQuickAdd(){
+  $("quickAdd").classList.remove("on");
+  state.quick = { mode: null, context: null, expanded: false, hits: [], at: 0 };
+}
+
+$("qaSearch").addEventListener("input", renderQuickAdd);
+$("qaClose").addEventListener("click", closeQuickAdd);
+$("qaSearch").addEventListener("keydown", e => {
+  const hits = state.quick.hits || [];
+  if (e.key === "Escape"){ closeQuickAdd(); return; }
+  if (e.key === "Enter"){ chooseQuickAdd(hits[state.quick.at || 0]); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"
+      || e.key === "ArrowRight" || e.key === "ArrowLeft"){
+    e.preventDefault();
+    const step = (e.key === "ArrowDown") ? 4
+               : (e.key === "ArrowUp") ? -4
+               : (e.key === "ArrowRight") ? 1 : -1;
+    state.quick.at = Math.max(0, Math.min(hits.length - 1, (state.quick.at || 0) + step));
+    const tiles = $("qaBody").querySelectorAll("[data-add]");
+    tiles.forEach((el, i) => el.classList.toggle("on", i === state.quick.at));
+    const active = tiles[state.quick.at];
+    if (active) active.scrollIntoView({ block: "nearest" });
+  }
+});
+
+window.addEventListener("pointerdown", e => {
+  const box = $("quickAdd");
+  if (!box.classList.contains("on")) return;
+  if (box.contains && box.contains(e.target)) return;
+  closeQuickAdd();
+}, true);
+
 /* ---------- insert a layer into a connection ---------- */
 
-function openInserter(edgeId){
-  state.insertInto = edgeId;
-  $("palette-cmd").classList.add("on");
-  $("cmdInput").value = "";
-  $("cmdInput").placeholder = "Insert which layer here?";
-  $("cmdInput").focus();
-  buildFinder();
+function openInserter(edgeId, ev){
+  openQuickAdd("insert", edgeId,
+               ev ? ev.clientX : window.innerWidth / 2,
+               ev ? ev.clientY : window.innerHeight / 3);
 }
 
 function insertIntoEdge(edgeId, type){
@@ -1647,15 +1865,12 @@ function insertIntoEdge(edgeId, type){
   toast(`${type} inserted`);
 }
 
-function openAppender(nodeId){
+function openAppender(nodeId, ev){
   const downstream = state.graph.edges.find(e => e.source === nodeId);
-  if (downstream){ openInserter(downstream.id); return; }
-  state.appendAfter = nodeId;
-  $("palette-cmd").classList.add("on");
-  $("cmdInput").value = "";
-  $("cmdInput").placeholder = "Add which layer after this?";
-  $("cmdInput").focus();
-  buildFinder();
+  if (downstream){ openInserter(downstream.id, ev); return; }
+  openQuickAdd("append", nodeId,
+               ev ? ev.clientX : window.innerWidth / 2,
+               ev ? ev.clientY : window.innerHeight / 3);
 }
 
 function appendAfterNode(sourceId, type){
@@ -1694,7 +1909,7 @@ function closeFinder(){
 
 function buildFinder(){
   const term = $("cmdInput").value.toLowerCase();
-  const inserting = !!state.insertInto || !!state.appendAfter;
+  const inserting = false;
   const rep = state.report;
 
   const hits = inserting
@@ -1951,7 +2166,7 @@ function render(){
     el("line", { x1:0, y1:-3.5, x2:0, y2:3.5 }, plus);
     plus.addEventListener("pointerdown", ev => {
       ev.stopPropagation();
-      openInserter(e.id);
+      openInserter(e.id, ev);
     });
   });
 
@@ -2099,7 +2314,7 @@ function render(){
         const done = () => {
           window.removeEventListener("pointermove", watch);
           window.removeEventListener("pointerup", done);
-          if (!moved) setTimeout(() => openAppender(n.id), 0);
+          if (!moved) setTimeout(() => openAppender(n.id, ev), 0);
         };
         window.addEventListener("pointermove", watch);
         window.addEventListener("pointerup", done);

@@ -896,6 +896,26 @@ def _():
         "a block has no PyTorch page to link to"
 
 
+@check("the plus buttons open an anchored picker, not a centred list")
+def _():
+    for token in ('id="quickAdd"', 'id="qaSearch"', 'id="qaBody"', "class=\"qgrid\"",
+                  "function openQuickAdd", "function renderQuickAdd",
+                  "function chooseQuickAdd", "const GLYPHS", "QUICK_ADD"):
+        assert token in PAGE, f"{token} is missing from the picker"
+    # it is positioned from the click, not fixed in the middle of the window
+    assert "clientX" in PAGE[PAGE.index("function openQuickAdd"):
+                             PAGE.index("function openQuickAdd") + 1200]
+    # every category the palette can show needs a glyph, or tiles come out blank
+    import re
+
+    glyphs = set(re.findall(r'\n  "?([A-Za-z ]+)"?:\s*"M',
+                            PAGE[PAGE.index("const GLYPHS"):
+                                 PAGE.index("const QUICK_ADD")]))
+    categories = {spec.category for spec in layers.REGISTRY.values()}
+    missing = sorted(c for c in categories if c not in glyphs)
+    assert not missing, f"no glyph for: {missing}"
+
+
 @check("the assistant edits the graph and finds real problems")
 def _():
     import assistant
@@ -1114,6 +1134,7 @@ def _():
         "importSteps", "placeStep", "startGuided", "renderGuide", "renderPlanOverview",
         "highlightPython", "drawCodeMap", "syncCodeMap", "escapeHtml", "testLayer",
         "sendAsk", "askSay", "loadAssistant", "askObservations",
+        "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",

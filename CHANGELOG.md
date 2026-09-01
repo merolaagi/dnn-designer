@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.16.0
+
+- **A quick-add picker anchored to the `+` you pressed**, rather than a list in
+  the middle of the window. Twelve tiles for the layers people reach for most,
+  a search box, and *All layers* to open the full set grouped by category. It
+  flips to the other side of the button when it would run off the edge.
+- **Each tile carries a drawn glyph** — a grid for convolution, stacked bars for
+  dense, a step for an activation, a parallelogram for shape surgery. Drawn as
+  inline paths rather than an icon font, and there is a test that every category
+  in the registry has one, so a new category cannot ship with blank tiles.
+- The picker only offers layers that can go where you are putting them: no
+  Outputs or runtime blocks inserted mid-chain, though both are offered when
+  appending at the end.
+- Arrow keys move through the tiles, Enter places one, Escape closes.
+- **Layered shadows** on every node shape — a tight contact shadow plus a soft
+  ambient one, and a stronger pair on hover. The single flat shadow read as
+  pasted-on.
+
 ## 1.15.1
 
 - **Fixed: the status strip was covering the bottom of the side panels.** It is
