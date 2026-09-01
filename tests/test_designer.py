@@ -873,6 +873,53 @@ def _():
             main.PREFS.write_text(backup)
 
 
+@check("every function the page calls is actually defined")
+def _():
+    """Catches a whole section being deleted.
+
+    Four releases shipped with the Build, Runs, Chat and Import sections gone:
+    the markup was still there so the pages rendered, and nothing referenced a
+    missing element, so every other check passed. Clicking those pages threw.
+    """
+    import re
+
+    script = PAGE[PAGE.index("<script>"):]
+
+    declared = set(re.findall(r"function\s+([A-Za-z_$][\w$]*)\s*\(", script))
+    declared |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+                               r"(?:async\s*)?(?:function|\()", script))
+    declared |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", script))
+
+    # the entry point of every page and panel, by name
+    entry_points = [
+        "loadProjects", "renderProjectList", "openProject", "renderPlan", "applyStep",
+        "refreshRuns", "openRun", "drawRunChart",
+        "refreshChatModels", "sendChat", "chatSay",
+        "refreshBlocks", "openBlock", "saveBlock",
+        "showPage", "showSide", "applyLayout", "loadLayout",
+        "openInserter", "insertIntoEdge", "openAppender", "appendAfterNode",
+        "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
+        "buildTrainForm", "startTraining", "refreshCheckpoints",
+        "nodeBox", "wirePath", "portIn", "portOut",
+    ]
+    missing = [name for name in entry_points if name not in declared]
+    assert not missing, f"the page calls these but nothing defines them: {missing}"
+
+
+@check("each page's loader is wired to a function that exists")
+def _():
+    import re
+
+    script = PAGE[PAGE.index("<script>"):]
+    block = re.search(r"PAGE_SETUP\s*=\s*\{(.*?)\}", script, re.S)
+    assert block, "PAGE_SETUP is gone; the rail would open empty pages"
+    called = re.findall(r"=>\s*([A-Za-z_$][\w$]*)\s*\(", block.group(1))
+    assert called, "PAGE_SETUP wires up nothing"
+    declared = set(re.findall(r"(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(", script))
+    missing = [c for c in called if c not in declared]
+    assert not missing, f"PAGE_SETUP calls undefined functions: {missing}"
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

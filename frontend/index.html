@@ -2687,6 +2687,509 @@ $("statusToggle").addEventListener("click", () => {
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
 
+/* ========================== executions ========================== */
+
+function ago(seconds){
+  if (!seconds) return "";
+  const gap = Date.now() / 1000 - seconds;
+  if (gap < 90) return "just now";
+  if (gap < 5400) return Math.round(gap / 60) + "m ago";
+  if (gap < 172800) return Math.round(gap / 3600) + "h ago";
+  return Math.round(gap / 86400) + "d ago";
+}
+
+const RUN_COLOR = { done:"#3DA35D", running:"#F0A202", error:"#FF5F56",
+                    stopped:"#8A97A8", starting:"#2D7DD2" };
+
+async function refreshRuns(select){
+  let d;
+  try { d = await (await fetch(API + "/api/runs")).json(); }
+  catch { return; }
+  state.runs = d.runs;
+  const list = $("runList");
+  list.innerHTML = d.runs.length ? d.runs.map(r => {
+    const took = r.finished && r.started
+      ? Math.max(1, Math.round(r.finished - r.started)) + "s" : "";
+    const best = r.best !== null && r.best !== undefined
+      ? ` · best ${r.objective} ${r.best}` : "";
+    return `<div class="runitem${r.id === state.runId ? " on" : ""}" data-run="${r.id}"
+              style="--c:${RUN_COLOR[r.status] || "#8A97A8"}">
+      <span class="when">${ago(r.started)}</span>
+      <b>${r.design}${r.version ? " v" + r.version : ""}</b>
+      <span><span class="status ${r.status}">${r.status}</span>${r.epoch}/${r.epochs} epochs`
+      + ` · ${r.recipe}${r.dataset ? " · " + r.dataset : ""}${best}${took ? " · " + took : ""}</span>
+    </div>`;
+  }).join("") : `<div class="empty">No runs yet. Train something and it appears here.</div>`;
+
+  list.querySelectorAll(".runitem").forEach(el =>
+    el.addEventListener("click", () => openRun(el.dataset.run)));
+  if (select) openRun(select);
+}
+
+async function openRun(id){
+  let r;
+  try { r = await (await fetch(API + "/api/runs/" + encodeURIComponent(id))).json(); }
+  catch { return; }
+  state.runId = id;
+  state.runDetail = r;
+  document.querySelectorAll(".runitem").forEach(el =>
+    el.classList.toggle("on", el.dataset.run === id));
+
+  const cfg = r.config || {};
+  const last = (r.history || []).slice(-1)[0] || {};
+  const objective = last.objective || "loss";
+  const rows = [
+    ["Design", `${r.design}${r.version ? " version " + r.version : " (unsaved)"}`],
+    ["Status", `<span class="status ${r.status}">${r.status}</span>`],
+    ["Training loop", r.recipe || "standard"],
+    ["Dataset", r.dataset || "—"],
+    ["Epochs", `${r.epoch} of ${r.epochs}`],
+    ["Device", r.device || "—"],
+    ["Learnables", (r.learnables || 0).toLocaleString()],
+    ["Batch size", cfg.batch_size || "—"],
+    ["Learning rate", cfg.lr || "—"],
+    ["Optimizer", cfg.optimizer || "—"],
+    ["Started from", cfg.init_from || "random initialization"],
+    ["Checkpoints", (r.checkpoints || []).length
+      ? (r.checkpoints || []).join("<br>") : "none"],
+  ];
+  if (r.error) rows.push(["Error", `<span style="color:#8C2F27">${r.error}</span>`]);
+
+  $("runDetail").innerHTML =
+    `<div class="head">
+       <h4>${r.design}${r.version ? " · version " + r.version : ""}</h4>
+       <p>${r.id} · ${ago(r.started)}${last[objective] !== undefined ? "" : ""}</p>
+     </div>
+     <div class="inner">
+       <svg id="runChart"></svg>
+       <div class="kv">${rows.map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join("")}</div>
+       ${(r.notes || []).length ? `<div class="notecard" style="margin-top:12px">
+          <b>Reported during the run</b>${r.notes.join("<br>")}</div>` : ""}
+       <div style="margin-top:13px;display:flex;gap:8px">
+         <button class="btn" id="btnRunOpen">Open this design</button>
+         <button class="btn" id="btnRunDelete"
+           style="color:#8C2F27">Delete record</button>
+       </div>
+     </div>`;
+
+  drawRunChart(r.history || [], objective);
+
+  $("btnRunOpen").addEventListener("click", async () => {
+    const res = await fetch(API + "/api/runs/" + encodeURIComponent(id) + "/graph");
+    if (!res.ok){ toast("That run has no design stored"); return; }
+    pushHistory();
+    state.graph = await res.json();
+    state.seq = state.graph.nodes.length + state.graph.edges.length + 400;
+    $("gname").value = state.graph.name || r.design;
+    state.version = r.version;
+    clearSelection();
+    render(); fitView(); analyze();
+    refreshVersions($("gname").value, r.version);
+    toast("Opened the design this run used");
+  });
+  $("btnRunDelete").addEventListener("click", async () => {
+    await fetch(API + "/api/runs/" + encodeURIComponent(id), { method:"DELETE" });
+    state.runId = null;
+    refreshRuns();
+  });
+}
+
+function drawRunChart(history, objective){
+  const c = $("runChart");
+  if (!c) return;
+  const W = c.getBoundingClientRect().width || 560, H = 150;
+  c.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  c.innerHTML = "";
+  if (!history.length){
+    const t = el("text", { x:W/2, y:H/2, fill:"#3F5468", "font-size":"12",
+                           "text-anchor":"middle", "font-family":"var(--mono)" }, c);
+    t.textContent = "no epochs recorded";
+    return;
+  }
+  const pad = { l:46, r:12, t:12, b:20 };
+  const xs = history.map(h => h.epoch);
+  const ys = history.flatMap(h => [h.train_loss, h.val_loss]).filter(v => v !== undefined);
+  const lo = Math.min(0, Math.min(...ys)), hi = Math.max(...ys) * 1.12 || 1;
+  const x0 = Math.min(...xs), x1 = Math.max(Math.max(...xs), x0 + 1);
+  const px = e => pad.l + (e - x0) / (x1 - x0) * (W - pad.l - pad.r);
+  const py = v => H - pad.b - (v - lo) / (hi - lo) * (H - pad.t - pad.b);
+
+  [0, 0.5, 1].forEach(f => {
+    const v = lo + f * (hi - lo);
+    el("line", { x1:pad.l, x2:W-pad.r, y1:py(v), y2:py(v), stroke:"#22303F" }, c);
+    const t = el("text", { x:pad.l-7, y:py(v)+3, fill:"#4E6580", "font-size":"9.5",
+                           "text-anchor":"end", "font-family":"var(--mono)" }, c);
+    t.textContent = v.toFixed(2);
+  });
+  [["train_loss", "#F0A202"], ["val_loss", "#6FD0E0"]].forEach(([key, colour]) => {
+    const points = history.filter(h => h[key] !== undefined);
+    if (!points.length) return;
+    const d = points.map((h, i) => `${i?"L":"M"}${px(h.epoch)},${py(h[key])}`).join(" ");
+    el("path", { d, fill:"none", stroke:colour, "stroke-width":2,
+                 "stroke-linejoin":"round" }, c);
+    points.forEach(h => el("circle", { cx:px(h.epoch), cy:py(h[key]), r:2.6,
+                                       fill:colour }, c));
+  });
+  const label = el("text", { x:W-pad.r, y:pad.t+2, fill:"#6A809A", "font-size":"9.5",
+                             "text-anchor":"end", "font-family":"var(--mono)" }, c);
+  label.textContent = objective === "loss" ? "train / validation loss"
+                                           : `train / validation ${objective}`;
+}
+
+/* ============================ build ============================ */
+
+async function loadProjects(){
+  if (state.projects && state.projects.length) { renderProjectList(); return; }
+  try{
+    const d = await (await fetch(API + "/api/projects")).json();
+    state.projects = d.projects;
+    state.projectCategories = d.categories;
+  } catch { return; }
+
+  const row = $("catRow");
+  row.innerHTML = `<button data-cat="" class="on">all ${state.projects.length}</button>`
+    + state.projectCategories.map(c =>
+        `<button data-cat="${c.name}">${c.name} ${c.count}</button>`).join("");
+  row.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    state.projectCat = b.dataset.cat;
+    row.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    renderProjectList();
+  }));
+  renderProjectList();
+}
+
+function renderProjectList(filtered){
+  const list = $("projList");
+  const items = filtered || (state.projects || []).filter(p =>
+    !state.projectCat || p.category === state.projectCat);
+  list.innerHTML = items.map(p => `
+    <div class="projitem${p.id === state.projectId ? " on" : ""}" data-id="${p.id}"
+         style="--c:${CAT_COLOR[p.category] || "#8D6E63"}">
+      <b>${p.name}</b>
+      <span>${p.summary}</span>
+      <em>${p.steps} steps · ${p.difficulty}${p.recipe ? " · " + p.recipe + " recipe" : ""}</em>
+    </div>`).join("") || `<div class="empty">Nothing here.</div>`;
+  list.querySelectorAll(".projitem").forEach(el =>
+    el.addEventListener("click", () => openProject(el.dataset.id)));
+}
+
+let askTimer = null;
+$("askBox").addEventListener("input", () => {
+  clearTimeout(askTimer);
+  askTimer = setTimeout(runAsk, 320);
+});
+
+async function runAsk(){
+  const q = $("askBox").value.trim();
+  const note = $("askNote");
+  if (!q){ note.textContent = ""; renderProjectList(); return; }
+  let d;
+  try { d = await (await fetch(API + "/api/projects/suggest?q=" +
+                               encodeURIComponent(q))).json(); }
+  catch { return; }
+
+  if (!d.matches.length){
+    note.innerHTML = `<b>Nothing matches that.</b> ${d.advice || ""}`;
+    renderProjectList([]);
+    return;
+  }
+  note.innerHTML = d.confident
+    ? `<b>Closest projects:</b>`
+    : `<b>No close match.</b> ${d.advice || ""}`;
+  renderProjectList(d.matches);
+}
+
+async function openProject(id){
+  let p;
+  try { p = await (await fetch(API + "/api/projects/" + encodeURIComponent(id))).json(); }
+  catch { toast("Could not load that project"); return; }
+  state.projectId = id;
+  state.project = p;
+  state.stepAt = 0;
+  state.stepIds = {};
+  state.buildReturn = true;
+
+  pushHistory();
+  state.graph = { name: p.name.replace(/[^0-9A-Za-z]+/g, "") || "Project",
+                  nodes: [], edges: [] };
+  state.seq = 1;
+  clearSelection();
+  $("gname").value = state.graph.name;
+  render(); analyze();
+
+  $("buildHead").innerHTML =
+    `<h4>${p.name}</h4><p>${p.summary}</p>`;
+  renderProjectList();
+  renderPlan();
+  toast(`${p.plan.length} steps — press Add this layer`);
+}
+
+function renderPlan(){
+  const p = state.project;
+  if (!p){ return; }
+  const at = state.stepAt;
+  const body = $("buildBody");
+
+  const notes = [];
+  if (p.data) notes.push(["Data", p.data]);
+  if (p.recipe) notes.push(["Training loop", `Choose the ${p.recipe} recipe in the Training tab.`]);
+  if (p.training) notes.push(["Settings", p.training]);
+  if (p.expect) notes.push(["What a working run looks like", p.expect]);
+  if (p.caution) notes.push(["Where this goes wrong", p.caution]);
+
+  body.innerHTML = p.plan.map((s, i) => `
+    <div class="stepcard ${i === at ? "now" : (i < at ? "done" : "")}">
+      <h5>${i + 1}. ${s.title}</h5>
+      <p>${s.why}</p>
+      ${s.alternatives ? `<div class="alt"><b>Instead of this:</b> ${s.alternatives}</div>` : ""}
+      ${s.watch ? `<div class="watch">${s.watch}</div>` : ""}
+      <div class="adds">${s.nodes.map(n => n.type).join(" → ")}</div>
+    </div>`).join("")
+    + (at >= p.plan.length
+        ? `<div class="notecard" style="border-color:var(--good)">
+             <b>Built</b>The graph is complete and the Code panel has the file.
+             ${p.recipe ? `Now choose the <b>${p.recipe}</b> recipe in the Training tab.` : "Now pick a dataset in the Training tab."}
+           </div>` : "")
+    + notes.map(([k, v]) => `<div class="notecard"><b>${k}</b>${v}</div>`).join("");
+
+  $("buildProgress").textContent = at >= p.plan.length
+    ? `all ${p.plan.length} steps placed`
+    : `step ${at + 1} of ${p.plan.length}`;
+  $("btnStepNext").disabled = at >= p.plan.length;
+  $("btnStepNext").textContent = at >= p.plan.length ? "Done" : "Add this layer";
+  $("btnStepBack").disabled = at === 0;
+
+  const active = body.querySelector(".stepcard.now") || body.querySelector(".stepcard");
+  if (active) active.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function applyStep(){
+  const p = state.project;
+  if (!p || state.stepAt >= p.plan.length) return;
+  const step = p.plan[state.stepAt];
+  pushHistory();
+
+  const detached = step.connect_from === "__none__";
+  const before = state.stepIds.__last;
+  let previous = detached ? null
+               : (step.connect_from && state.stepIds[step.connect_from]) || before;
+  const placed = [];
+  // an explicit connection to the step's first node replaces the implicit chain
+  const firstId = step.nodes.length ? step.nodes[0].id : null;
+  const explicitFirst = firstId
+    && (step.connect || []).some(c => c[1] === firstId);
+
+  // lay the step out beneath what is already there
+  const baseY = state.graph.nodes.length
+    ? Math.max(...state.graph.nodes.map(n => n.y + nodeHeight(n))) + 44
+    : 0;
+  const column = step.connect_from === "__none__" ? (NW + 90) : 0;
+
+  step.nodes.forEach((spec, i) => {
+    const node = { id: uid("n"), type: spec.type,
+                   params: JSON.parse(JSON.stringify(spec.params || {})),
+                   label: spec.label || "",
+                   x: column, y: baseY + i * (NH_CODE + 44) };
+    state.graph.nodes.push(node);
+    placed.push(node);
+    if (spec.id) state.stepIds[spec.id] = node.id;
+    const skipChain = i === 0 && explicitFirst;
+    if (previous && !skipChain && specOf(node.type)
+        && specOf(node.type).n_inputs !== 0){
+      state.graph.edges.push({ id: uid("e"), source: previous, target: node.id, port: 0 });
+    }
+    previous = node.id;
+  });
+
+  // named connections, for branches and merges
+  (step.connect || []).forEach(([src, dst, port]) => {
+    const source = src === "step1_last" ? state.stepIds.__step1
+                 : src === "step2_last" ? state.stepIds.__step2
+                 : state.stepIds[src];
+    const target = state.stepIds[dst];
+    if (source && target && !state.graph.edges.some(e =>
+        e.source === source && e.target === target)){
+      state.graph.edges.push({ id: uid("e"), source, target, port: port || 0 });
+    }
+  });
+
+  // a detached branch must not become the parent of whatever comes next
+  if (!detached) state.stepIds.__last = previous;
+  state.stepIds[`__step${state.stepAt + 1}`] = placed.length
+    ? placed[placed.length - 1].id : previous;
+  state.stepAt += 1;
+
+  state.selection = new Set(placed.map(n => n.id));
+  state.sel = placed.length ? placed[0].id : null;
+  render(); renderInspector(); analyze();
+  fitView();
+  renderPlan();
+}
+
+$("btnStepNext").addEventListener("click", applyStep);
+$("btnStepBack").addEventListener("click", () => {
+  if (state.stepAt === 0) return;
+  state.stepAt -= 1;
+  undo();
+  renderPlan();
+});
+
+/* ============================ chat ============================ */
+
+function chatSay(text, cls){
+  const log = $("chatLog");
+  const b = document.createElement("div");
+  b.className = "bubble " + cls;
+  b.textContent = text;
+  log.appendChild(b);
+  log.scrollTop = log.scrollHeight;
+  return b;
+}
+
+async function refreshChatModels(){
+  let d;
+  try { d = await (await fetch(API + "/api/chat/models")).json(); }
+  catch { return; }
+  const sel = $("ch_model"), keep = sel.value;
+  sel.innerHTML = d.checkpoints.length
+    ? d.checkpoints.map(c => {
+        const ppl = c.metrics && c.metrics.perplexity ? ` (ppl ${c.metrics.perplexity})` : "";
+        return `<option value="${c.file}">${c.file}${ppl}</option>`;
+      }).join("")
+    : `<option value="">no text model trained yet</option>`;
+  if (d.checkpoints.some(c => c.file === keep)) sel.value = keep;
+
+  if (!d.checkpoints.length && !$("chatLog").children.length){
+    chatSay("No text model yet. Open the MiniGPT design, train it on a .txt corpus "
+            + "in the Training tab, and its checkpoints will appear here.", "sys");
+  }
+}
+
+async function sendChat(){
+  const model = $("ch_model").value;
+  if (!model){ chatSay("Train a model on a text corpus first.", "sys"); return; }
+  const text = $("chatInput").value.trim();
+  if (!text) return;
+  $("chatInput").value = "";
+  chatSay(text, "me");
+
+  const dialogue = $("ch_format").value === "dialogue";
+  const prompt = dialogue ? `user: ${text}\nmodel:` : text;
+  const pending = chatSay("…", "it thinking");
+  $("btnChatSend").disabled = true;
+
+  let r, d;
+  try{
+    r = await fetch(API + "/api/chat", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        checkpoint: model, prompt,
+        max_new_tokens: +$("ch_max").value,
+        temperature: +$("ch_temp").value,
+        top_k: +$("ch_topk").value,
+        stop: dialogue ? "\nuser:" : ""
+      })
+    });
+    d = await r.json();
+  } catch(err){
+    pending.remove(); chatSay("The server did not respond.", "sys");
+    $("btnChatSend").disabled = false; return;
+  }
+  $("btnChatSend").disabled = false;
+  pending.remove();
+
+  if (!r.ok){
+    chatSay((d.detail && d.detail.message) || "Generation failed", "sys");
+    return;
+  }
+  chatSay(d.continuation.trim() || "(the model produced nothing)", "it");
+  if (d.unknown_characters && d.unknown_characters.length){
+    chatSay(`Not in the model's vocabulary, so dropped: ${d.unknown_characters.join(" ")}`, "sys");
+  }
+}
+
+$("btnChatSend").addEventListener("click", sendChat);
+$("chatInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); }
+});
+$("btnChatClear").addEventListener("click", () => { $("chatLog").innerHTML = ""; });
+$("ch_model").addEventListener("change", () => {
+  $("ch_note").textContent = "Loaded on the first message, then kept in memory.";
+});
+
+/* ============================ import ============================ */
+
+$("btnImport").addEventListener("click", async () => {
+  const sel = $("im_arch");
+  if (!sel.options.length){
+    try{
+      const d = await (await fetch(API + "/api/import/models")).json();
+      sel.innerHTML = d.torchvision.map(m => `<option value="${m}">${m}</option>`).join("");
+    } catch { toast("Cannot reach the server"); return; }
+  }
+  $("importNote").innerHTML = "";
+  $("modal").classList.add("on");
+});
+$("btnImportCancel").addEventListener("click", () => $("modal").classList.remove("on"));
+$("modal").addEventListener("click", e => {
+  if (e.target.id === "modal") $("modal").classList.remove("on");
+});
+$("btnPickModel").addEventListener("click", () => $("im_file").click());
+$("im_file").addEventListener("change", e => {
+  $("im_file_label").value = e.target.files[0] ? e.target.files[0].name : "";
+});
+
+$("btnImportGo").addEventListener("click", async () => {
+  const note = $("importNote");
+  note.textContent = "Tracing…";
+  const file = $("im_file").files[0];
+  let r, d;
+  try{
+    if (file){
+      const body = new FormData();
+      body.append("file", file);
+      r = await fetch(API + "/api/import/upload?shape=" +
+                      encodeURIComponent($("im_shape").value), { method:"POST", body });
+    } else {
+      r = await fetch(API + "/api/import/torchvision", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          arch: $("im_arch").value,
+          weights: $("im_weights").value,
+          input_shape: $("im_shape").value.split(/[^0-9]+/).filter(Boolean).map(Number)
+        })
+      });
+    }
+    d = await r.json();
+  } catch(err){ note.textContent = "The server did not respond."; return; }
+
+  if (!r.ok){
+    note.innerHTML = `<span class="warn">${(d.detail && d.detail.message) || "Import failed"}</span>`;
+    return;
+  }
+
+  pushHistory();
+  state.graph = d.graph;
+  state.seq = d.nodes + state.graph.edges.length + 500;
+  $("gname").value = state.graph.name || "Imported";
+  clearSelection();
+  render(); fitView(); analyze();
+
+  const bits = [`Imported <b>${d.nodes}</b> layers.`];
+  if (d.notes && d.notes.length){
+    bits.push(`<span class="warn">${d.notes.length} could not be reconstructed and came in as stubs:</span> `
+              + d.notes.slice(0,6).join("; "));
+  }
+  if (!d.ok){
+    bits.push(`<span class="warn">${d.problem_count} shape problem(s)</span> — see the Problems tab.`);
+  } else {
+    bits.push("Shapes resolve end to end.");
+  }
+  note.innerHTML = bits.join("<br>");
+  toast(`Imported ${d.nodes} layers`);
+  if (d.ok && !(d.notes || []).length) setTimeout(() => $("modal").classList.remove("on"), 900);
+});
+
 /* ============================ blocks ============================ */
 
 async function refreshBlocks(select){

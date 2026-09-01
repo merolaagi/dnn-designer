@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.10.1
+
+**Restores the Projects, Runs, Chat and Import pages, which were dead since
+1.8.0.**
+
+Removing the bottom drawer, I replaced a span of the script bounded by two
+comment markers. Four whole sections sat between them and went with it. The
+markup survived, so every page still rendered its shell and every other test
+passed — but clicking Projects, Runs or Chat called a function that no longer
+existed, and Import did nothing. That state shipped in 1.8.0, 1.8.1, 1.9.0 and
+1.10.0.
+
+- All four sections restored and brought up to the current layout: the guided
+  stepper places layers along whichever direction the canvas is flowing, and the
+  Train shortcut uses the side panel rather than the drawer that no longer
+  exists.
+- **Two new tests that would have caught it.** One asserts every page and panel
+  entry point is defined; the other reads `PAGE_SETUP` and checks each page's
+  loader points at a real function. Verified against the broken build — both
+  fail on it, naming the missing functions.
+
 ## 1.10.0
 
 - **Panels dock where you want them.** Each panel header carries three controls
