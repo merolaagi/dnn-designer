@@ -380,6 +380,47 @@ body.resizing-v{cursor:row-resize;user-select:none}
   margin:0 4px 12px;line-height:1.4;
 }
 .doc{font-size:11.5px;color:var(--muted);line-height:1.45;margin:0 4px 14px}
+
+/* the layer panel header: what this is, where to read about it, and a way to
+   run it on its own */
+.layerhead{
+  display:flex;align-items:center;gap:8px;padding:11px 13px;margin:0 0 12px;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+}
+.layerhead .kind{
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  background:#fff;border:1px solid var(--paper-3);border-radius:4px;padding:2px 7px;
+  color:var(--muted);
+}
+.layerhead .grow{flex:1}
+.layerhead a{
+  font-size:11px;color:#2D7DD2;text-decoration:none;border:1px solid #BCD6EF;
+  border-radius:5px;padding:3px 8px;background:#EAF2FB;
+}
+.layerhead a:hover{background:#DCEAF9}
+.layerhead button{
+  font-size:11px;border:1px solid var(--paper-3);background:#fff;border-radius:5px;
+  padding:3px 9px;color:#3C4B5F;
+}
+.layerhead button:hover{border-color:var(--amber)}
+.subtabs{display:flex;gap:3px;padding:0 10px 10px}
+.subtabs button{
+  background:none;border:none;font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);padding:4px 9px;border-radius:5px;
+}
+.subtabs button.on{background:#E9F1FB;color:#1F6BBD}
+.testout{
+  margin:0 4px 12px;padding:9px 11px;border-radius:6px;font-size:11.5px;
+  line-height:1.55;font-family:var(--mono);
+}
+.testout.good{background:#EAF4EC;border-left:3px solid var(--good);color:#256B39}
+.testout.bad{background:#FDECEA;border-left:3px solid var(--bad);color:#8C2F27}
+.freezerow{
+  display:flex;align-items:center;gap:9px;margin:0 4px 12px;padding:9px 11px;
+  background:var(--paper-2);border-radius:6px;font-size:11.5px;line-height:1.45;
+}
+.freezerow input{width:15px;height:15px;accent-color:var(--amber)}
+.freezerow span{color:var(--muted)}
 .empty{color:#8A97A8;font-size:12px;padding:6px 4px;line-height:1.5}
 
 /* ---------------- panes ---------------- */
@@ -2116,6 +2157,32 @@ function renderInspector(){
   const info = state.report && state.report.nodes[n.id];
   body.innerHTML = "";
 
+  // header: what this layer is, the reference for it, and a way to run it alone
+  const bar = document.createElement("div");
+  bar.className = "layerhead";
+  bar.innerHTML = `<span class="kind">${n.type}</span><span class="grow"></span>`
+    + ((spec && spec.docs)
+        ? `<a href="${spec.docs}" target="_blank" rel="noreferrer">Reference</a>` : "")
+    + ((spec && spec.source === "block")
+        ? `<button id="btnLayerSource">Source</button>` : "")
+    + `<button id="btnTestLayer">Test layer</button>`;
+  body.appendChild(bar);
+
+  bar.querySelector("#btnTestLayer").addEventListener("click", () => testLayer(n));
+  const srcBtn = bar.querySelector("#btnLayerSource");
+  if (srcBtn) srcBtn.addEventListener("click", () => {
+    const code = state.nodeCode && state.nodeCode[n.id];
+    if (!code || !code.origin){ toast("No source file recorded"); return; }
+    showPage("pageExtend");
+    document.querySelectorAll("#rail button").forEach(b =>
+      b.classList.toggle("on", b.dataset.page === "pageExtend"));
+    openBlock(code.origin, "blocks");
+  });
+
+  const testSlot = document.createElement("div");
+  testSlot.id = "testSlot";
+  body.appendChild(testSlot);
+
   const head = document.createElement("div");
   head.className = "field";
   head.innerHTML = `<label>Name on canvas</label>
@@ -2149,6 +2216,24 @@ function renderInspector(){
     const e = document.createElement("div");
     e.className = "errbox"; e.textContent = info.error;
     body.appendChild(e);
+  }
+
+  const learnable = info && (info.learnables || info.frozen_learnables);
+  if (learnable !== undefined && (learnable || info.frozen)){
+    const freeze = document.createElement("div");
+    freeze.className = "freezerow";
+    freeze.innerHTML =
+      `<input type="checkbox" id="f_frozen" ${n.params._frozen ? "checked" : ""}>
+       <div><b>Freeze this layer</b><br>
+       <span>Its weights keep their values and the optimizer leaves them alone.
+       ${info.frozen ? (info.frozen_learnables || 0).toLocaleString()
+                     : (info.learnables || 0).toLocaleString()} parameters.</span></div>`;
+    body.appendChild(freeze);
+    freeze.querySelector("input").addEventListener("change", ev => {
+      if (ev.target.checked) n.params._frozen = true;
+      else delete n.params._frozen;
+      render(); analyze();
+    });
   }
 
   (spec ? spec.params : []).forEach(q => {
@@ -2296,6 +2381,36 @@ function highlightInCode(varName){
 }
 
 let paramTimer = null;
+async function testLayer(node){
+  const slot = $("testSlot");
+  if (!slot) return;
+  slot.innerHTML = `<div class="testout">running…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/test-layer", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ graph: state.graph, node: node.id })
+    });
+    d = await r.json();
+  } catch { slot.innerHTML = `<div class="testout bad">The server did not respond.</div>`; return; }
+
+  if (!r.ok){
+    slot.innerHTML = `<div class="testout bad">${(d.detail && d.detail.message) || "Failed"}</div>`;
+    return;
+  }
+  if (!d.ok){
+    slot.innerHTML = `<div class="testout bad">${d.error}</div>`;
+    return;
+  }
+  const agree = d.matches
+    ? `shape agrees with the canvas`
+    : `CANVAS SAYS ${(d.predicted||[]).join("×")} — they disagree`;
+  slot.innerHTML = `<div class="testout ${d.matches ? "good" : "bad"}">`
+    + `${d.inputs.map(s => s.join("×")).join("  +  ")} → ${d.actual.join("×")}<br>`
+    + `${d.learnables.toLocaleString()} parameters · ${d.ms} ms · ${d.dtype}<br>`
+    + `${agree}</div>`;
+}
+
 function setParam(node, key, value){
   // one history entry per burst of typing, not one per keystroke
   clearTimeout(paramTimer);

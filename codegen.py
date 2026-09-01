@@ -166,6 +166,13 @@ def to_pytorch(g: Graph, report: Dict[str, Any],
         if ctor:
             mod = f"self.{var}"
             init_lines.append(f"        {mod} = {ctor}")
+            if n.params.get("_frozen"):
+                # frozen here means the same thing it means anywhere: this layer
+                # keeps its values and the optimizer leaves it alone
+                init_lines.append(
+                    f"        for p in {mod}.parameters():")
+                init_lines.append(
+                    f"            p.requires_grad_(False)   # {var} is frozen")
         expr = spec.torch_call(params, in_vars, mod, in_shapes)
 
         if n.type == "Output":

@@ -53,6 +53,7 @@ class LayerSpec:
     runtime_name: Optional[Callable] = None
     learnables: Optional[Callable] = None  # (p, in_shapes, out_shape) -> int
     learnables_approx: bool = False        # True when the count is a published figure
+    torch_class: Optional[str] = None      # for a link to the PyTorch reference
     source: str = "core"                   # core | block — where the spec came from
     origin: Optional[str] = None           # block filename, for the Edit button
 
@@ -1037,6 +1038,35 @@ register(LayerSpec(
 ))
 
 
+# The torch class each core layer wraps, so the inspector can link straight to
+# the reference page rather than making you search for it.
+TORCH_CLASS = {
+    "Linear": "Linear", "Conv2d": "Conv2d", "Conv1d": "Conv1d",
+    "ConvTranspose2d": "ConvTranspose2d", "MaxPool2d": "MaxPool2d",
+    "AvgPool2d": "AvgPool2d", "MaxPool1d": "MaxPool1d",
+    "AdaptiveAvgPool2d": "AdaptiveAvgPool2d", "BatchNorm2d": "BatchNorm2d",
+    "BatchNorm1d": "BatchNorm1d", "LayerNorm": "LayerNorm",
+    "GroupNorm": "GroupNorm", "Dropout": "Dropout", "Dropout2d": "Dropout2d",
+    "Flatten": "Flatten", "Embedding": "Embedding", "LSTM": "LSTM",
+    "GRU": "GRU", "SimpleRNN": "RNN", "SelfAttention": "MultiheadAttention",
+    "TransformerEncoder": "TransformerEncoder", "Upsample2d": "Upsample",
+    "SeparableConv2d": "Conv2d",
+}
+
+ACTIVATION_CLASS = {
+    "relu": "ReLU", "leaky_relu": "LeakyReLU", "gelu": "GELU", "silu": "SiLU",
+    "tanh": "Tanh", "sigmoid": "Sigmoid", "elu": "ELU", "softmax": "Softmax",
+    "identity": "Identity",
+}
+
+
+def docs_url(name: str) -> Optional[str]:
+    cls = TORCH_CLASS.get(name)
+    if not cls:
+        return None
+    return f"https://docs.pytorch.org/docs/stable/generated/torch.nn.{cls}.html"
+
+
 def catalog() -> List[Dict[str, Any]]:
     """Everything the palette and inspector need to render, in one payload."""
     return [
@@ -1050,6 +1080,7 @@ def catalog() -> List[Dict[str, Any]]:
             "source": s.source,
             "origin": s.origin,
             "keras": s.keras_call is not None or s.kind == "runtime",
+            "docs": docs_url(s.name),
         }
         for s in REGISTRY.values()
     ]

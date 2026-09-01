@@ -260,6 +260,10 @@ def analyze(g: Graph) -> Dict[str, Any]:
         shapes[nid] = out
         entry["out_shape"] = out
         entry["learnables"] = _learnables(n, in_shapes, out)
+        entry["frozen"] = bool(n.params.get("_frozen"))
+        if entry["frozen"]:
+            entry["frozen_learnables"] = entry["learnables"]
+            entry["learnables"] = 0        # frozen weights are not being trained
         entry["approx"] = bool(spec.learnables_approx and entry["learnables"])
         if entry["approx"]:
             report["approximate"] = True

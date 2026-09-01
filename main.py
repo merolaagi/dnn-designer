@@ -26,7 +26,7 @@ import recipeloader
 import recipes_sdk
 import graph as G
 import train as T
-from layers import catalog
+from layers import REGISTRY, catalog
 from version import __version__
 
 blockloader.load_all()
@@ -125,6 +125,99 @@ def post_analyze(body: GraphPayload):
         requires = {"error": f"{type(exc).__name__}: {exc}"}
     return {"report": report, "code": code, "node_code": node_code,
             "requires": requires}
+
+
+class TestLayerPayload(BaseModel):
+    graph: Dict[str, Any]
+    node: str
+
+
+@app.post("/api/test-layer")
+def test_layer(body: TestLayerPayload):
+    """Build one layer on its own and push a tensor through it.
+
+    The canvas predicts shapes arithmetically. This checks that prediction
+    against what PyTorch actually does for this layer, with these settings, on
+    this input — which is a different claim, and the one that matters.
+    """
+    import time as _time
+
+    import torch
+
+    g, report = _analyze(body.graph)
+    nodes = g.by_id()
+    node = nodes.get(body.node)
+    if node is None:
+        raise HTTPException(404, detail={"message": "No such layer."})
+
+    spec = REGISTRY.get(node.type)
+    if spec is None or spec.kind == "runtime" or node.type in ("Input", "Output"):
+        raise HTTPException(400, detail={
+            "message": f"{node.type} is not something that can be run on its own."})
+
+    inc = G.incoming_map(g)
+    in_shapes = []
+    for e in inc[node.id]:
+        shape = report["nodes"].get(e.source, {}).get("out_shape")
+        if not shape:
+            raise HTTPException(400, detail={
+                "message": "The layer feeding this one has not resolved yet."})
+        in_shapes.append(shape)
+    if not in_shapes:
+        raise HTTPException(400, detail={"message": "Nothing is connected to this layer."})
+
+    params = G.resolved_params(node)
+    predicted = report["nodes"].get(node.id, {}).get("out_shape")
+
+    try:
+        ctor = spec.torch_init(params, in_shapes)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={"message": f"Cannot build it: {exc}"})
+
+    namespace: Dict[str, Any] = {"torch": torch, "nn": torch.nn,
+                                 "F": torch.nn.functional, "math": __import__("math")}
+    if spec.torch_prelude:
+        exec(compile(spec.torch_prelude, "<layer>", "exec"), namespace)  # noqa: S102
+
+    batch = 2
+    tensors = []
+    for shape in in_shapes:
+        if node.type == "Embedding":
+            vocab = int(params.get("vocab", 1000))
+            tensors.append(torch.randint(0, vocab, (batch, *[int(d) for d in shape])))
+        else:
+            tensors.append(torch.randn(batch, *[int(d) for d in shape]))
+
+    try:
+        module = eval(ctor, namespace) if ctor else None  # noqa: S307
+        names = [f"x{i}" for i in range(len(tensors))]
+        call = spec.torch_call(params, names, "m", in_shapes)
+        scope = dict(namespace)
+        scope["m"] = module
+        for name, tensor in zip(names, tensors):
+            scope[name] = tensor
+        started = _time.perf_counter()
+        with torch.no_grad():
+            out = eval(call, scope)  # noqa: S307
+        elapsed = (_time.perf_counter() - started) * 1000
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}",
+                "constructor": ctor, "inputs": in_shapes}
+
+    actual = list(out.shape)[1:]
+    learnables = (sum(p.numel() for p in module.parameters())
+                  if hasattr(module, "parameters") else 0)
+    return {
+        "ok": True,
+        "constructor": ctor,
+        "inputs": in_shapes,
+        "predicted": predicted,
+        "actual": actual,
+        "matches": list(predicted or []) == actual,
+        "learnables": learnables,
+        "ms": round(elapsed, 2),
+        "dtype": str(out.dtype).replace("torch.", ""),
+    }
 
 
 @app.post("/api/train")

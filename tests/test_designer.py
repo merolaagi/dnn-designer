@@ -821,6 +821,8 @@ def _():
     present = set(re.findall(r'id="([^"]+)"', markup))
     created = set(re.findall(r'id="([^"]+)"', script))
     created |= set(re.findall(r'id=\\?"([^"\\]+)', script))
+    # elements built in code assign their id rather than carrying it in markup
+    created |= set(re.findall(r'\.id\s*=\s*"([^"]+)"', script))
     wanted = set(re.findall(r'\$\("([a-zA-Z0-9_]+)"\)', script))
     missing = sorted(w for w in wanted if w not in present and w not in created)
     assert not missing, f"the script looks for elements nothing creates: {missing}"
@@ -834,6 +836,64 @@ def _():
     # a circle for entry and exit, a diamond for merges, a hexagon for runtime
     assert 'shape: "circle"' in PAGE and 'shape: "diamond"' in PAGE \
         and 'shape: "hex"' in PAGE, "nodeBox does not assign all four shapes"
+
+
+@check("a layer can be run on its own and checked against the canvas")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import main
+
+    graph = {"name": "T", "nodes": [
+        {"id": "i", "type": "Input", "params": {"shape": [3, 32, 32]}},
+        {"id": "c", "type": "Conv2d",
+         "params": {"filters": 64, "kernel": 3, "stride": 2, "padding": 1}},
+        {"id": "o", "type": "Output", "params": {}}],
+        "edges": [{"id": "e1", "source": "i", "target": "c"},
+                  {"id": "e2", "source": "c", "target": "o"}]}
+    body = type("B", (), {"graph": graph, "node": "c"})()
+    result = main.test_layer(body)
+    assert result["ok"], result
+    assert result["matches"], f"canvas said {result['predicted']}, torch gave {result['actual']}"
+    assert result["actual"] == [64, 16, 16], result["actual"]
+    assert result["learnables"] == 1792, result["learnables"]
+
+
+@check("freezing a layer is honoured by the generated code and the count")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import train as T
+
+    payload = build(
+        [("i", "Input", {"shape": [3, 32, 32]}),
+         ("c", "Conv2d", {"filters": 32, "kernel": 3, "padding": "same",
+                          "_frozen": True}),
+         ("g", "GlobalAvgPool", {}), ("l", "Linear", {"units": 10}),
+         ("o", "Output", {})],
+        [("i", "c", 0), ("c", "g", 0), ("g", "l", 0), ("l", "o", 0)], "Frz")
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+    assert rep["nodes"]["c"]["frozen"], "the flag did not reach the report"
+    assert rep["nodes"]["c"]["learnables"] == 0, "frozen weights should not count as trainable"
+
+    src = codegen.to_pytorch(g, rep)
+    assert "requires_grad_(False)" in src, "codegen did not freeze it"
+    model = T.build_model(src, codegen.model_class_name(g))
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    assert trainable == rep["total_learnables"], \
+        f"canvas says {rep['total_learnables']} trainable, torch says {trainable}"
+
+
+@check("core layers link to their PyTorch reference")
+def _():
+    entries = {e["name"]: e for e in layers.catalog()}
+    assert entries["Conv2d"]["docs"].endswith("torch.nn.Conv2d.html"), entries["Conv2d"]
+    assert entries["LSTM"]["docs"], "LSTM has no reference link"
+    assert entries["ResidualBlock"]["docs"] is None, \
+        "a block has no PyTorch page to link to"
 
 
 @check("shape follows flowchart convention, not decoration")

@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.13.0
+
+The Layer tab listed parameters and little else. Three things it now does, each
+the working counterpart of something in a task editor rather than a decoration.
+
+- **Test layer.** Builds the selected layer on its own, pushes a tensor of the
+  right shape through it, and reports what came out: actual shape, parameter
+  count, time and dtype — and whether that agrees with what the canvas
+  predicted. The canvas computes shapes arithmetically; this checks the
+  arithmetic against PyTorch, per layer, with your settings.
+- **Reference.** Core layers link straight to their `torch.nn` documentation
+  page. Blocks link to their source file instead, since they have no PyTorch
+  page.
+- **Freeze this layer.** The weights keep their values and the optimizer leaves
+  them alone. The generated code emits the `requires_grad_(False)` loop, the
+  header count drops to the trainable total, and the panel says how many
+  parameters were parked. Verified against PyTorch: canvas and framework agree
+  on the trainable count.
+- The panel header carries the layer type, so what you are editing is stated
+  rather than inferred.
+
 ## 1.12.0
 
 - **Seven node shapes, mapped to flowchart convention** rather than chosen for

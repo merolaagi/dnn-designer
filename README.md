@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Fifty-four checks, with the torch-dependent ones skipping themselves when it is
+Fifty-seven checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -175,7 +175,13 @@ of the way, which is the usual way a stack actually grows.
 Each node shows the constructor it contributes to the generated file, so the
 canvas and the Code panel say the same thing without switching between them.
 
-The right panel has five tabs. **Layer** edits the selection. **Network**
+**Test layer**, in the Layer tab, builds the selected layer alone and runs a
+tensor through it, reporting the real output shape against the predicted one. The
+canvas does shape arithmetic; this checks that arithmetic against PyTorch.
+**Freeze this layer** parks its weights: the generated code stops their
+gradients and the header count drops to what is actually being trained.
+
+The right panel has six tabs. **Layer** edits the selection. **Network**
 summarises the design and its Inputs and Outputs. **Code** shows the generated
 file. **Train** runs it. **Needs** answers what this
 design requires before it will run: which plug-in blocks it pulls in and from
@@ -490,4 +496,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.12.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.13.0 — see `CHANGELOG.md`.
