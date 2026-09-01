@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.15.1
+
+- **Fixed: the status strip was covering the bottom of the side panels.** It is
+  30px tall and was pinned to the bottom of the whole page rather than to the
+  canvas, so it lay across the last 30px of anything docked beside it. That
+  buried the assistant's input box, and the end of the palette with it. It now
+  lives inside the canvas and spans only the canvas. The minimap moved up to
+  clear it.
+- Two tests: one asserts nothing pinned to the page edge sits outside the
+  canvas, the other that the assistant's log can shrink and its input bar
+  cannot. Verified against the broken layout — the first fails on it and names
+  the culprit.
+
 ## 1.15.0
 
 An **Assistant** tab, and an honest account of what it is.

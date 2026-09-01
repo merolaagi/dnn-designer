@@ -1008,6 +1008,41 @@ def _():
     assert 'id="zgrid"' in PAGE, "no control for the grid"
 
 
+@check("nothing absolutely positioned lies across the side panels")
+def _():
+    """The status strip used to span the whole page.
+
+    It is 30px tall and pinned to the bottom, so it sat on top of the last 30px
+    of every docked panel — which buried the assistant's input box and the end
+    of the palette. Anything pinned to the page edge has to live inside the
+    canvas instead.
+    """
+    import re
+
+    markup = PAGE[: PAGE.index("<script>")]
+    page = markup[markup.index('id="pageDesign"'):markup.index('id="pageBuild"')]
+    stage = page[page.index('id="stage"'):]
+    stage = stage[: stage.index("</main>")]
+    for pinned in ("statusbar", "problemPanel"):
+        assert f'id="{pinned}"' in stage, \
+            f"{pinned} is pinned to the page rather than the canvas, so it covers the panels"
+
+
+@check("the assistant's input stays reachable")
+def _():
+    import re
+
+    css = PAGE[PAGE.index("<style>") + 7: PAGE.index("</style>")]
+    rules = {m.group(1).strip(): m.group(2)
+             for m in re.finditer(r"(?:^|\n)([^\n{}]+)\{([^}]*)\}", css)}
+    log = rules.get("#askLog", "")
+    body = rules.get("#askBody", "")
+    bar = rules.get(".askbar", "")
+    assert "min-height:0" in log.replace(" ", ""), "#askLog cannot shrink, so it pushes the bar down"
+    assert "flex:1" in body.replace(" ", ""), "#askBody does not fill the panel"
+    assert "flex:none" in bar.replace(" ", ""), "the input bar is allowed to be squeezed away"
+
+
 @check("panels can be docked and resized")
 def _():
     for token in ('id="mainRow"', 'id="bottomRow"', 'class="splitter"',
