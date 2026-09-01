@@ -577,7 +577,22 @@ pre#code .kw{color:#F0A202}
 .buildhead h4{margin:0 0 3px;font-size:14px}
 .buildhead p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.45}
 .buildbody{flex:1;overflow-y:auto;padding:13px 16px}
-.stepcard{border-left:3px solid var(--paper-3);padding:0 0 0 12px;margin-bottom:13px;opacity:.45}
+.stepcard{border-left:3px solid var(--paper-3);padding:0 0 0 12px;margin-bottom:13px;
+  opacity:.45;position:relative}
+.stepcard .pick{position:absolute;left:-26px;top:1px}
+.plantools{
+  display:flex;flex-wrap:wrap;gap:7px;align-items:center;padding:11px 14px;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+  position:sticky;top:0;z-index:2;
+}
+.plantools label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted)}
+.guidebar{
+  display:flex;gap:7px;align-items:center;padding:10px 13px;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+  position:sticky;top:0;z-index:2;
+}
+.guidebar .grow{flex:1;font-size:11px;color:var(--muted)}
+.guidebody{padding:12px 14px 12px 30px}
 .stepcard.now{border-left-color:var(--amber);opacity:1}
 .stepcard.done{border-left-color:var(--good);opacity:.75}
 .stepcard h5{margin:0 0 5px;font-size:12.5px}
@@ -588,9 +603,6 @@ pre#code .kw{color:#F0A202}
 .stepcard .watch{font-size:11.5px;background:#FFF4E0;border-left:2px solid var(--amber);
   padding:6px 9px;border-radius:0 4px 4px 0;color:#6B4A00;line-height:1.5;margin:6px 0}
 .stepcard .adds{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:4px}
-.buildbar{flex:none;display:flex;gap:8px;align-items:center;padding:9px 14px;
-  border-top:1px solid var(--paper-3);background:var(--paper-2)}
-.buildbar .grow{flex:1;font-size:11.5px;color:var(--muted)}
 .notecard{background:#fff;border:1px solid var(--paper-3);border-radius:6px;
   padding:10px 12px;margin-bottom:10px;font-size:11.5px;line-height:1.55}
 .notecard b{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
@@ -743,12 +755,14 @@ pre#code .kw{color:#F0A202}
       <button data-side="network">Network</button>
       <button data-side="code">Code</button>
       <button data-side="train">Train</button>
+      <button data-side="guide">Guide</button>
       <button data-side="needs">Needs</button>
     </div>
     <div class="scroll" id="inspBody">
       <div class="empty">Select a layer on the canvas to edit it.</div>
     </div>
     <div class="scroll" id="networkBody" style="display:none"></div>
+    <div class="scroll" id="guideBody" style="display:none;padding:0"></div>
     <div class="scroll" id="needsBody" style="display:none;padding:0"></div>
     <div class="scroll" id="codeBody" style="display:none;padding:0">
       <div class="sidetools">
@@ -804,11 +818,6 @@ pre#code .kw{color:#F0A202}
           <p>Each one builds a layer at a time, saying why that layer and what else could go there.</p>
         </div>
         <div class="buildbody" id="buildBody"></div>
-        <div class="buildbar">
-          <span class="grow" id="buildProgress"></span>
-          <button class="btn" id="btnStepBack" disabled>Back</button>
-          <button class="btn go" id="btnStepNext" disabled>Add this layer</button>
-        </div>
       </div>
     </div>
   </section>
@@ -939,7 +948,8 @@ const state = {
   nodeCode:{}, checkpoints:[], augmentations:[], corpus:null,
   recipes:[], recipeConfig:{}, extraModels:{},
   projects:[], projectCategories:[], projectCat:"", projectId:null,
-  project:null, stepAt:0, stepIds:{}, version:null, insertInto:null,
+  project:null, stepAt:0, stepIds:{}, picked:new Set(),
+  version:null, insertInto:null,
   selection:new Set(), history:[], future:[], clipboard:null,
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
   flow:"vertical", gridLevel:2, appendAfter:null,
@@ -1946,8 +1956,8 @@ $("btnRedo").addEventListener("click", redo);
 /* ============================ inspector ============================ */
 
 function renderInspector(){
-  if (state.sidePanel !== "layer" && (state.sel || state.selEdge)
-      && state.page === "pageDesign"){
+  if (state.sidePanel !== "layer" && state.sidePanel !== "guide"
+      && (state.sel || state.selEdge) && state.page === "pageDesign"){
     showSide("layer");
   }
   const body = $("inspBody");
@@ -2648,7 +2658,7 @@ function showPage(pageId){
 }
 
 const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
-                      code:"Generated code", train:"Training" };
+                      code:"Generated code", train:"Training", guide:"Guided build" };
 
 function showSide(side){
   state.sidePanel = side;
@@ -2657,7 +2667,7 @@ function showSide(side){
   document.querySelectorAll(".ptabs button").forEach(b =>
     b.classList.toggle("on", b.dataset.side === side));
   const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",
-                code:"codeBody", train:"trainBody" };
+                code:"codeBody", train:"trainBody", guide:"guideBody" };
   Object.entries(map).forEach(([key, id]) => {
     const el = $(id);
     if (el) el.style.display = (key === side) ? "" : "none";
@@ -2666,6 +2676,7 @@ function showSide(side){
   if (side === "needs") renderNeedsPanel();
   if (side === "code") showCode();
   if (side === "train") drawChart();
+  if (side === "guide") renderGuide();
 }
 
 document.querySelectorAll(".ptabs button").forEach(btn =>
@@ -2887,152 +2898,254 @@ async function runAsk(){
   try { d = await (await fetch(API + "/api/projects/suggest?q=" +
                                encodeURIComponent(q))).json(); }
   catch { return; }
-
   if (!d.matches.length){
     note.innerHTML = `<b>Nothing matches that.</b> ${d.advice || ""}`;
     renderProjectList([]);
     return;
   }
-  note.innerHTML = d.confident
-    ? `<b>Closest projects:</b>`
-    : `<b>No close match.</b> ${d.advice || ""}`;
+  note.innerHTML = d.confident ? `<b>Closest projects:</b>`
+                               : `<b>No close match.</b> ${d.advice || ""}`;
   renderProjectList(d.matches);
 }
 
+/* Selecting a project shows its plan. It does not touch the canvas — that only
+   happens when you choose how to bring it in. */
 async function openProject(id){
   let p;
   try { p = await (await fetch(API + "/api/projects/" + encodeURIComponent(id))).json(); }
   catch { toast("Could not load that project"); return; }
   state.projectId = id;
   state.project = p;
-  state.stepAt = 0;
-  state.stepIds = {};
-  state.buildReturn = true;
-
-  pushHistory();
-  state.graph = { name: p.name.replace(/[^0-9A-Za-z]+/g, "") || "Project",
-                  nodes: [], edges: [] };
-  state.seq = 1;
-  clearSelection();
-  $("gname").value = state.graph.name;
-  render(); analyze();
-
-  $("buildHead").innerHTML =
-    `<h4>${p.name}</h4><p>${p.summary}</p>`;
+  state.picked = new Set(p.plan.map((_, i) => i));
   renderProjectList();
-  renderPlan();
-  toast(`${p.plan.length} steps — press Add this layer`);
+  renderPlanOverview();
 }
 
-function renderPlan(){
+function renderPlanOverview(){
   const p = state.project;
-  if (!p){ return; }
-  const at = state.stepAt;
-  const body = $("buildBody");
+  if (!p) return;
+  $("buildHead").innerHTML = `<h4>${p.name}</h4><p>${p.summary}</p>`;
 
   const notes = [];
   if (p.data) notes.push(["Data", p.data]);
-  if (p.recipe) notes.push(["Training loop", `Choose the ${p.recipe} recipe in the Training tab.`]);
+  if (p.recipe) notes.push(["Training loop", `Choose the ${p.recipe} recipe.`]);
   if (p.training) notes.push(["Settings", p.training]);
   if (p.expect) notes.push(["What a working run looks like", p.expect]);
   if (p.caution) notes.push(["Where this goes wrong", p.caution]);
 
-  body.innerHTML = p.plan.map((s, i) => `
-    <div class="stepcard ${i === at ? "now" : (i < at ? "done" : "")}">
-      <h5>${i + 1}. ${s.title}</h5>
-      <p>${s.why}</p>
-      ${s.alternatives ? `<div class="alt"><b>Instead of this:</b> ${s.alternatives}</div>` : ""}
-      ${s.watch ? `<div class="watch">${s.watch}</div>` : ""}
-      <div class="adds">${s.nodes.map(n => n.type).join(" → ")}</div>
-    </div>`).join("")
-    + (at >= p.plan.length
-        ? `<div class="notecard" style="border-color:var(--good)">
-             <b>Built</b>The graph is complete and the Code panel has the file.
-             ${p.recipe ? `Now choose the <b>${p.recipe}</b> recipe in the Training tab.` : "Now pick a dataset in the Training tab."}
-           </div>` : "")
-    + notes.map(([k, v]) => `<div class="notecard"><b>${k}</b>${v}</div>`).join("");
+  $("buildBody").innerHTML =
+    `<div class="plantools">
+       <button class="btn go" id="btnGuided">Build step by step</button>
+       <button class="btn" id="btnAddAll">Add all ${p.plan.length} layers</button>
+       <button class="btn" id="btnAddPicked">Add selected</button>
+       <label><input type="checkbox" id="keepCanvas"> keep what is already on the canvas</label>
+       <span class="grow"></span>
+       <button class="btn" id="btnPickAll">all</button>
+       <button class="btn" id="btnPickNone">none</button>
+     </div>
+     <div class="guidebody">`
+    + p.plan.map((s, i) => `
+      <div class="stepcard done">
+        <input type="checkbox" class="pick" data-step="${i}" checked>
+        <h5>${i + 1}. ${s.title}</h5>
+        <p>${s.why}</p>
+        ${s.alternatives ? `<div class="alt"><b>Instead of this:</b> ${s.alternatives}</div>` : ""}
+        ${s.watch ? `<div class="watch">${s.watch}</div>` : ""}
+        <div class="adds">${s.nodes.map(n => n.type).join(" → ")}</div>
+      </div>`).join("")
+    + notes.map(([k, v]) => `<div class="notecard"><b>${k}</b>${v}</div>`).join("")
+    + `</div>`;
 
-  $("buildProgress").textContent = at >= p.plan.length
-    ? `all ${p.plan.length} steps placed`
-    : `step ${at + 1} of ${p.plan.length}`;
-  $("btnStepNext").disabled = at >= p.plan.length;
-  $("btnStepNext").textContent = at >= p.plan.length ? "Done" : "Add this layer";
-  $("btnStepBack").disabled = at === 0;
-
-  const active = body.querySelector(".stepcard.now") || body.querySelector(".stepcard");
-  if (active) active.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  const body = $("buildBody");
+  body.querySelectorAll(".pick").forEach(box => box.addEventListener("change", () => {
+    const i = +box.dataset.step;
+    if (box.checked) state.picked.add(i); else state.picked.delete(i);
+  }));
+  $("btnPickAll").addEventListener("click", () => {
+    state.picked = new Set(p.plan.map((_, i) => i));
+    body.querySelectorAll(".pick").forEach(b => b.checked = true);
+  });
+  $("btnPickNone").addEventListener("click", () => {
+    state.picked = new Set();
+    body.querySelectorAll(".pick").forEach(b => b.checked = false);
+  });
+  $("btnGuided").addEventListener("click", () => startGuided());
+  $("btnAddAll").addEventListener("click", () =>
+    importSteps(p.plan.map((_, i) => i), !$("keepCanvas").checked));
+  $("btnAddPicked").addEventListener("click", () => {
+    const chosen = [...state.picked].sort((a, b) => a - b);
+    if (!chosen.length){ toast("Nothing selected"); return; }
+    importSteps(chosen, !$("keepCanvas").checked);
+  });
 }
 
-function applyStep(){
-  const p = state.project;
-  if (!p || state.stepAt >= p.plan.length) return;
-  const step = p.plan[state.stepAt];
-  pushHistory();
+function goToCanvas(side){
+  showPage("pageDesign");
+  document.querySelectorAll("#rail button").forEach(b =>
+    b.classList.toggle("on", b.dataset.page === "pageDesign" && !b.dataset.side));
+  if (side) showSide(side);
+}
 
+function resetCanvasFor(project){
+  state.graph = { name: project.name.replace(/[^0-9A-Za-z]+/g, "") || "Project",
+                  nodes: [], edges: [] };
+  state.seq = 1;
+  state.version = null;
+  $("gname").value = state.graph.name;
+  const crumb = $("crumbName");
+  if (crumb) crumb.textContent = state.graph.name;
+  clearSelection();
+}
+
+/* Bulk import: bring the whole plan, or just the steps you ticked, onto the
+   canvas at once. Connections between skipped steps are dropped rather than
+   left dangling. */
+function importSteps(indices, replace){
+  const p = state.project;
+  if (!p) return;
+  pushHistory();
+  if (replace) resetCanvasFor(p);
+  state.stepIds = state.stepIds || {};
+  if (replace) state.stepIds = {};
+
+  indices.forEach(i => placeStep(p.plan[i], i));
+  state.stepAt = replace ? indices.length : state.stepAt;
+
+  goToCanvas("layer");
+  render(); renderInspector(); analyze();
+  fitView();
+  toast(`${indices.length} step${indices.length === 1 ? "" : "s"} added`);
+}
+
+function startGuided(){
+  const p = state.project;
+  if (!p) return;
+  pushHistory();
+  resetCanvasFor(p);
+  state.stepIds = {};
+  state.stepAt = 0;
+  goToCanvas("guide");
+  render(); analyze();
+  renderGuide();
+  toast(`${p.plan.length} steps — press Add this layer`);
+}
+
+/* Places one step's nodes and wires them. Shared by the stepper and by bulk
+   import, so both produce exactly the same graph. */
+function placeStep(step, index){
   const detached = step.connect_from === "__none__";
   const before = state.stepIds.__last;
   let previous = detached ? null
                : (step.connect_from && state.stepIds[step.connect_from]) || before;
-  const placed = [];
-  // an explicit connection to the step's first node replaces the implicit chain
   const firstId = step.nodes.length ? step.nodes[0].id : null;
-  const explicitFirst = firstId
-    && (step.connect || []).some(c => c[1] === firstId);
+  const explicitFirst = firstId && (step.connect || []).some(c => c[1] === firstId);
+  const placed = [];
 
-  // lay the step out beneath what is already there
-  const baseY = state.graph.nodes.length
-    ? Math.max(...state.graph.nodes.map(n => n.y + nodeHeight(n))) + 44
-    : 0;
-  const column = step.connect_from === "__none__" ? (NW + 90) : 0;
+  const along = state.flow === "horizontal"
+    ? (state.graph.nodes.length
+        ? Math.max(...state.graph.nodes.map(n => n.x + nodeWidth(n))) + 60 : 0)
+    : (state.graph.nodes.length
+        ? Math.max(...state.graph.nodes.map(n => n.y + nodeHeight(n))) + 44 : 0);
+  const lane = detached ? (state.flow === "horizontal" ? 220 : NW + 90) : 0;
 
   step.nodes.forEach((spec, i) => {
     const node = { id: uid("n"), type: spec.type,
                    params: JSON.parse(JSON.stringify(spec.params || {})),
                    label: spec.label || "",
-                   x: column, y: baseY + i * (NH_CODE + 44) };
+                   x: state.flow === "horizontal" ? along + i * (NW + 60) : lane,
+                   y: state.flow === "horizontal" ? lane : along + i * (NH_CODE + 44) };
     state.graph.nodes.push(node);
     placed.push(node);
     if (spec.id) state.stepIds[spec.id] = node.id;
-    const skipChain = i === 0 && explicitFirst;
-    if (previous && !skipChain && specOf(node.type)
-        && specOf(node.type).n_inputs !== 0){
+    const skip = (i === 0 && explicitFirst);
+    if (previous && !skip && specOf(node.type) && specOf(node.type).n_inputs !== 0){
       state.graph.edges.push({ id: uid("e"), source: previous, target: node.id, port: 0 });
     }
     previous = node.id;
   });
 
-  // named connections, for branches and merges
   (step.connect || []).forEach(([src, dst, port]) => {
-    const source = src === "step1_last" ? state.stepIds.__step1
-                 : src === "step2_last" ? state.stepIds.__step2
-                 : state.stepIds[src];
-    const target = state.stepIds[dst];
+    const source = state.stepIds[src], target = state.stepIds[dst];
     if (source && target && !state.graph.edges.some(e =>
         e.source === source && e.target === target)){
       state.graph.edges.push({ id: uid("e"), source, target, port: port || 0 });
     }
   });
 
-  // a detached branch must not become the parent of whatever comes next
   if (!detached) state.stepIds.__last = previous;
-  state.stepIds[`__step${state.stepAt + 1}`] = placed.length
+  state.stepIds[`__step${index + 1}`] = placed.length
     ? placed[placed.length - 1].id : previous;
-  state.stepAt += 1;
+  return placed;
+}
 
+function renderGuide(){
+  const p = state.project;
+  const host = $("guideBody");
+  if (!p){
+    host.innerHTML = `<div class="empty" style="padding:14px">
+      Pick a project under Projects and press Build step by step.</div>`;
+    return;
+  }
+  const at = state.stepAt;
+  const done = at >= p.plan.length;
+
+  host.innerHTML =
+    `<div class="guidebar">
+       <button class="btn" id="btnStepBack" ${at === 0 ? "disabled" : ""}>Back</button>
+       <button class="btn go" id="btnStepNext" ${done ? "disabled" : ""}>
+         ${done ? "Done" : "Add this layer"}</button>
+       <span class="grow">${done ? `all ${p.plan.length} placed`
+                                 : `step ${at + 1} of ${p.plan.length}`}</span>
+       <button class="btn" id="btnStepRest">Add the rest</button>
+     </div>
+     <div class="guidebody">`
+    + p.plan.map((s, i) => `
+      <div class="stepcard ${i === at ? "now" : (i < at ? "done" : "")}">
+        <h5>${i + 1}. ${s.title}</h5>
+        <p>${s.why}</p>
+        ${s.alternatives ? `<div class="alt"><b>Instead of this:</b> ${s.alternatives}</div>` : ""}
+        ${s.watch ? `<div class="watch">${s.watch}</div>` : ""}
+        <div class="adds">${s.nodes.map(n => n.type).join(" → ")}</div>
+      </div>`).join("")
+    + (done && p.recipe
+        ? `<div class="notecard" style="border-color:var(--good)"><b>Built</b>
+             Now choose the <b>${p.recipe}</b> recipe on the Train tab.</div>` : "")
+    + `</div>`;
+
+  $("btnStepNext").addEventListener("click", applyStep);
+  $("btnStepBack").addEventListener("click", () => {
+    if (state.stepAt === 0) return;
+    state.stepAt -= 1;
+    undo();
+    renderGuide();
+  });
+  $("btnStepRest").addEventListener("click", () => {
+    const rest = [];
+    for (let i = state.stepAt; i < p.plan.length; i++) rest.push(i);
+    if (!rest.length) return;
+    pushHistory();
+    rest.forEach(i => placeStep(p.plan[i], i));
+    state.stepAt = p.plan.length;
+    render(); renderInspector(); analyze(); fitView();
+    renderGuide();
+  });
+
+  const active = host.querySelector(".stepcard.now");
+  if (active) active.scrollIntoView({ block:"nearest", behavior:"smooth" });
+}
+
+function applyStep(){
+  const p = state.project;
+  if (!p || state.stepAt >= p.plan.length) return;
+  pushHistory();
+  const placed = placeStep(p.plan[state.stepAt], state.stepAt);
+  state.stepAt += 1;
   state.selection = new Set(placed.map(n => n.id));
   state.sel = placed.length ? placed[0].id : null;
   render(); renderInspector(); analyze();
   fitView();
-  renderPlan();
+  renderGuide();
 }
-
-$("btnStepNext").addEventListener("click", applyStep);
-$("btnStepBack").addEventListener("click", () => {
-  if (state.stepAt === 0) return;
-  state.stepAt -= 1;
-  undo();
-  renderPlan();
-});
 
 /* ============================ chat ============================ */
 

@@ -21,9 +21,12 @@ example.
 
 ## Start here
 
-The **Build** tab holds 101 guided projects. Pick one and it constructs the
-network a layer at a time, explaining why that layer, what you would use
-instead, and what to watch for — while the shapes resolve in front of you.
+**Projects** holds 101 guided builds. Pick one to read its plan, then bring it in
+three ways: *Build step by step* puts the plan in a panel beside the canvas and
+places one layer per press, explaining why that layer and what you would use
+instead; *Add all layers* brings the whole thing in at once; or tick individual
+steps and *Add selected* to lift just the part you want. Any of them can append
+to what is already on the canvas instead of replacing it.
 
 Not in the list? Describe what you want in the box and the catalogue is searched
 for the closest starting points. That search is a keyword matcher over project
@@ -126,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Fifty-one checks, with the torch-dependent ones skipping themselves when it is
+Fifty-two checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -479,4 +482,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.10.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.11.0 — see `CHANGELOG.md`.

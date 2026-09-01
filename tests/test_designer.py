@@ -873,6 +873,19 @@ def _():
             main.PREFS.write_text(backup)
 
 
+@check("a project can be brought in whole, in part, or step by step")
+def _():
+    for token in ("function importSteps", "function placeStep", "function startGuided",
+                  "function renderGuide", 'id="btnAddAll"', 'id="btnAddPicked"',
+                  'id="keepCanvas"', 'data-side="guide"'):
+        assert token in PAGE, f"{token} is missing"
+    # stepping and bulk import must build through the same routine, or the two
+    # would drift and produce different graphs from the same plan
+    assert PAGE.count("function placeStep") == 1
+    guided = PAGE[PAGE.index("function applyStep"):]
+    assert "placeStep(" in guided[:600], "the stepper no longer shares placeStep"
+
+
 @check("every function the page calls is actually defined")
 def _():
     """Catches a whole section being deleted.
@@ -892,12 +905,13 @@ def _():
 
     # the entry point of every page and panel, by name
     entry_points = [
-        "loadProjects", "renderProjectList", "openProject", "renderPlan", "applyStep",
+        "loadProjects", "renderProjectList", "openProject", "applyStep",
         "refreshRuns", "openRun", "drawRunChart",
         "refreshChatModels", "sendChat", "chatSay",
         "refreshBlocks", "openBlock", "saveBlock",
         "showPage", "showSide", "applyLayout", "loadLayout",
         "openInserter", "insertIntoEdge", "openAppender", "appendAfterNode",
+        "importSteps", "placeStep", "startGuided", "renderGuide", "renderPlanOverview",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",

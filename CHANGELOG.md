@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.11.0
+
+You could not see what "Add this layer" was doing, because the Projects page
+covered the canvas. That made the guided build useless — the whole point is
+watching shapes resolve as each layer lands.
+
+- **The guided build moved to a Guide tab beside the canvas.** Press *Build step
+  by step* on a project and you are taken to the canvas with the plan in the
+  right panel. Each press places the next layer, selects it, and the canvas is
+  in front of you the whole time.
+- **Bulk import.** *Add all layers* brings the whole plan in at once. Every step
+  has a checkbox, so *Add selected* brings in just the ones you ticked — take
+  the backbone and head from a transfer-learning project and skip its dropout,
+  or lift the aggregator out of the pathology project.
+- **Keep what is already on the canvas**, so a project's layers can be appended
+  to a network you are already building rather than replacing it.
+- Selecting a project no longer clears your canvas. Nothing is touched until you
+  choose how to bring it in.
+- *Add the rest* in the Guide finishes a build you started stepping through.
+- Stepping and bulk import share one placement routine, so the same plan gives
+  the same graph either way. A selection that skips a step drops the connections
+  that would have dangled rather than leaving broken edges.
+
 ## 1.10.1
 
 **Restores the Projects, Runs, Chat and Import pages, which were dead since
