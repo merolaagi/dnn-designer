@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.10.0
+
+- **Panels dock where you want them.** Each panel header carries three controls
+  for left, bottom and right. Put the palette along the bottom and give the
+  canvas the full width, or stack both panels on one side. Two panels docked to
+  the bottom share that row.
+- **Everything is resizable.** Drag the seam between a panel and the canvas, or
+  the seam above the bottom row. Panels clamp between 150 and 760 pixels so a
+  drag cannot lose one off the edge.
+- **The arrangement is saved on the server**, not in the browser, so it belongs
+  to the project rather than to the machine that opened it. A corrupt
+  preferences file reads as empty rather than breaking the app.
+- The right panel header names the tab you are looking at.
+
 ## 1.9.0
 
 The canvas gets a vocabulary of shapes, and a direction.

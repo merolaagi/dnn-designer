@@ -137,7 +137,43 @@ header{
 /* one page at a time: Design shows the canvas, everything else takes the width */
 .page{flex:1;display:none;min-width:0;min-height:0}
 .page.on{display:flex}
-#pageDesign{position:relative}
+#pageDesign{position:relative;flex-direction:column}
+#mainRow{flex:1;display:flex;min-height:0;min-width:0}
+#bottomRow{flex:none;display:none;min-height:0;border-top:1px solid var(--paper-3)}
+#bottomRow.on{display:flex}
+#bottomRow .panel{flex:1;border-left:1px solid var(--paper-3)}
+#bottomRow .panel:first-child{border-left:none}
+
+/* drag handles between panels */
+.splitter{
+  flex:none;width:5px;cursor:col-resize;background:transparent;
+  position:relative;z-index:4;
+}
+.splitter::after{
+  content:"";position:absolute;inset:0 2px;background:var(--paper-3);opacity:0;
+  transition:opacity .12s;
+}
+.splitter:hover::after,.splitter.dragging::after{opacity:1;background:var(--amber)}
+.splitter.horiz{width:auto;height:5px;cursor:row-resize}
+.splitter.horiz::after{inset:2px 0}
+.splitter.hidden{display:none}
+body.resizing{cursor:col-resize;user-select:none}
+body.resizing-v{cursor:row-resize;user-select:none}
+
+/* the control that moves a panel between edges */
+.dockctl{
+  display:flex;gap:2px;align-items:center;margin-left:auto;padding-right:9px;
+}
+.dockctl button{
+  background:none;border:1px solid transparent;border-radius:4px;
+  color:#A6B3C4;font-size:10px;line-height:1;padding:2px 4px;
+}
+.dockctl button:hover{color:var(--text);border-color:var(--paper-3)}
+.dockctl button.on{color:#2D7DD2;border-color:#BCD6EF;background:#EAF2FB}
+.panelhead{
+  display:flex;align-items:center;flex:none;border-bottom:1px solid var(--paper-3);
+}
+.panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend{background:var(--paper)}
 
 #statusbar{
@@ -207,11 +243,13 @@ header{
 .pane.full{position:absolute;inset:0;background:var(--paper);z-index:5;overflow:auto}
 .panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
 #palette{width:212px;border-right:1px solid var(--paper-3);flex:none}
+#palette, #inspector{min-width:150px}
 #inspector{width:390px;border-left:1px solid var(--paper-3);flex:none}
 .panel h2{
-  margin:0;padding:11px 14px 8px;font-size:10px;letter-spacing:.16em;
+  margin:0;padding:10px 14px 9px;font-size:10px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--muted);font-weight:700;
 }
+.panel{overflow:hidden}
 .scroll{overflow-y:auto;flex:1;padding:0 10px 16px}
 .scroll::-webkit-scrollbar{width:9px}
 .scroll::-webkit-scrollbar-thumb{background:var(--paper-3);border-radius:5px}
@@ -650,12 +688,19 @@ pre#code .kw{color:#F0A202}
   </nav>
 
   <section class="page on" id="pageDesign">
+  <div id="mainRow">
   <aside class="panel" id="palette">
-    <h2>Layers</h2>
+    <div class="panelhead"><h2>Layers</h2>
+      <span class="dockctl" data-panel="palette">
+        <button data-dock="left" title="Dock left">&#9612;</button>
+        <button data-dock="bottom" title="Dock bottom">&#9604;</button>
+        <button data-dock="right" title="Dock right">&#9616;</button>
+      </span></div>
     <input id="search" placeholder="Filter layers" spellcheck="false">
     <div class="scroll" id="palList"></div>
   </aside>
 
+  <div class="splitter" data-panel="palette" id="splitPalette"></div>
   <main id="stage">
     <svg id="svg">
       <defs>
@@ -685,7 +730,14 @@ pre#code .kw{color:#F0A202}
     <div id="hint">Drag a layer in from the left. Drag from the bottom dot of one layer to the top dot of another to connect them.</div>
   </main>
 
+  <div class="splitter" data-panel="inspector" id="splitInspector"></div>
   <aside class="panel" id="inspector">
+    <div class="panelhead"><h2 id="inspTitle">Panel</h2>
+      <span class="dockctl" data-panel="inspector">
+        <button data-dock="left" title="Dock left">&#9612;</button>
+        <button data-dock="bottom" title="Dock bottom">&#9604;</button>
+        <button data-dock="right" title="Dock right">&#9616;</button>
+      </span></div>
     <div class="ptabs">
       <button data-side="layer" class="on">Layer</button>
       <button data-side="network">Network</button>
@@ -723,6 +775,10 @@ pre#code .kw{color:#F0A202}
     </div>
   </div>
   </aside>
+
+  </div>
+  <div class="splitter horiz hidden" id="splitBottom"></div>
+  <div id="bottomRow"></div>
 
   <div id="statusbar">
     <span class="dot" id="statusDot"></span>
@@ -886,7 +942,9 @@ const state = {
   project:null, stepAt:0, stepIds:{}, version:null, insertInto:null,
   selection:new Set(), history:[], future:[], clipboard:null,
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
-  flow:"vertical", gridLevel:2, appendAfter:null
+  flow:"vertical", gridLevel:2, appendAfter:null,
+  layout:{ dock:{palette:"left", inspector:"right"},
+           sizes:{palette:212, inspector:390, bottom:260} }
 };
 
 const $ = (id) => document.getElementById(id);
@@ -916,6 +974,7 @@ async function boot(){
   buildTrainForm();
   starterGraph();
   updateHistoryButtons();
+  await loadLayout();
   render();
   analyze();
 }
@@ -2449,6 +2508,128 @@ $("btnOpen").addEventListener("click", async () => {
   refreshVersions($("gname").value, state.version);
 });
 
+/* ==================== panel docking and resizing ==================== */
+
+const DEFAULT_LAYOUT = {
+  dock: { palette: "left", inspector: "right" },
+  sizes: { palette: 212, inspector: 390, bottom: 260 },
+};
+
+function applyLayout(){
+  const { dock, sizes } = state.layout;
+  const main = $("mainRow"), bottom = $("bottomRow"), stage = $("stage");
+
+  ["palette", "inspector"].forEach(name => {
+    const panel = $(name), where = dock[name];
+    if (where === "bottom"){
+      if (panel.parentElement !== bottom) bottom.appendChild(panel);
+      panel.style.width = "";
+      panel.style.height = "";
+    } else {
+      // left panels go before the canvas, right panels after it
+      const splitter = $(name === "palette" ? "splitPalette" : "splitInspector");
+      if (where === "left"){
+        main.insertBefore(panel, main.firstChild);
+        main.insertBefore(splitter, stage);
+      } else {
+        main.appendChild(panel);
+        main.insertBefore(splitter, panel);
+      }
+      panel.style.width = sizes[name] + "px";
+      panel.style.height = "";
+    }
+  });
+
+  const anyBottom = Object.values(dock).includes("bottom");
+  bottom.classList.toggle("on", anyBottom);
+  bottom.style.height = anyBottom ? sizes.bottom + "px" : "";
+  $("splitBottom").classList.toggle("hidden", !anyBottom);
+
+  ["palette", "inspector"].forEach(name => {
+    const splitter = $(name === "palette" ? "splitPalette" : "splitInspector");
+    splitter.classList.toggle("hidden", dock[name] === "bottom");
+  });
+
+  document.querySelectorAll(".dockctl").forEach(group => {
+    const name = group.dataset.panel;
+    group.querySelectorAll("button").forEach(b =>
+      b.classList.toggle("on", b.dataset.dock === dock[name]));
+  });
+
+  render(); drawMinimap(); drawChart();
+}
+
+let layoutSaveTimer = null;
+function saveLayout(){
+  clearTimeout(layoutSaveTimer);
+  layoutSaveTimer = setTimeout(() => {
+    fetch(API + "/api/prefs", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state.layout),
+    }).catch(() => {});
+  }, 400);
+}
+
+async function loadLayout(){
+  let saved = {};
+  try { saved = await (await fetch(API + "/api/prefs")).json(); } catch {}
+  state.layout = {
+    dock: { ...DEFAULT_LAYOUT.dock, ...(saved.dock || {}) },
+    sizes: { ...DEFAULT_LAYOUT.sizes, ...(saved.sizes || {}) },
+  };
+  applyLayout();
+}
+
+document.querySelectorAll(".dockctl button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const name = btn.parentElement.dataset.panel;
+    state.layout.dock[name] = btn.dataset.dock;
+    applyLayout();
+    saveLayout();
+  });
+});
+
+function dragSplitter(splitter, onMove){
+  splitter.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    splitter.classList.add("dragging");
+    document.body.classList.add(
+      splitter.classList.contains("horiz") ? "resizing-v" : "resizing");
+    const move = e2 => onMove(e2);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      splitter.classList.remove("dragging");
+      document.body.classList.remove("resizing", "resizing-v");
+      applyLayout();
+      saveLayout();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+["palette", "inspector"].forEach(name => {
+  const splitter = $(name === "palette" ? "splitPalette" : "splitInspector");
+  dragSplitter(splitter, ev => {
+    const panel = $(name);
+    const box = panel.getBoundingClientRect();
+    const side = state.layout.dock[name];
+    const width = side === "left" ? ev.clientX - box.left : box.right - ev.clientX;
+    state.layout.sizes[name] = Math.max(150, Math.min(760, Math.round(width)));
+    panel.style.width = state.layout.sizes[name] + "px";
+    drawMinimap();
+  });
+});
+
+dragSplitter($("splitBottom"), ev => {
+  const page = $("pageDesign").getBoundingClientRect();
+  const height = page.bottom - ev.clientY - 30;   // the status strip sits below
+  state.layout.sizes.bottom = Math.max(120, Math.min(page.height - 180,
+                                                     Math.round(height)));
+  $("bottomRow").style.height = state.layout.sizes.bottom + "px";
+});
+
 /* ======================= pages and side tabs ======================= */
 
 const PAGE_SETUP = {
@@ -2466,8 +2647,13 @@ function showPage(pageId){
   if (pageId === "pageDesign"){ render(); drawMinimap(); }
 }
 
+const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
+                      code:"Generated code", train:"Training" };
+
 function showSide(side){
   state.sidePanel = side;
+  const title = $("inspTitle");
+  if (title) title.textContent = SIDE_TITLES[side] || "Panel";
   document.querySelectorAll(".ptabs button").forEach(b =>
     b.classList.toggle("on", b.dataset.side === side));
   const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",

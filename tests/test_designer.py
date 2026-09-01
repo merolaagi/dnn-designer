@@ -843,6 +843,36 @@ def _():
     assert 'id="zgrid"' in PAGE, "no control for the grid"
 
 
+@check("panels can be docked and resized")
+def _():
+    for token in ('id="mainRow"', 'id="bottomRow"', 'class="splitter"',
+                  'data-dock="bottom"', "applyLayout", "dragSplitter"):
+        assert token in PAGE, f"{token} is missing from the page"
+
+
+@check("the workspace layout is stored on the server")
+def _():
+    import main
+
+    saved = main.PREFS.exists()
+    backup = main.PREFS.read_text() if saved else None
+    try:
+        main.PREFS.unlink(missing_ok=True)
+        assert main.get_prefs() == {}, "a missing file should read as empty"
+        main.put_prefs({"dock": {"palette": "bottom"},
+                        "sizes": {"inspector": 480}})
+        back = main.get_prefs()
+        assert back["dock"]["palette"] == "bottom", back
+        assert back["sizes"]["inspector"] == 480, back
+
+        main.PREFS.write_text("{ this is not json")
+        assert main.get_prefs() == {}, "a corrupt file should not raise"
+    finally:
+        main.PREFS.unlink(missing_ok=True)
+        if backup is not None:
+            main.PREFS.write_text(backup)
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

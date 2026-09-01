@@ -13,8 +13,9 @@ __pycache__/
 checkpoints/*.pt
 checkpoints/*.pth
 
-# run records are local history, not source
+# run records and workspace layout are local, not source
 runs/*.json
+prefs.json
 
 # datasets pulled or uploaded at runtime
 data/

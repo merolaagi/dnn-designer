@@ -775,6 +775,31 @@ def new_block(name: str):
     return {"file": f"{name.lower()}.py", "source": blockloader.scaffold(name)}
 
 
+# --------------------------------------------------------------------------
+# workspace preferences: where the panels sit and how big they are
+# --------------------------------------------------------------------------
+
+PREFS = HERE / "prefs.json"
+
+
+@app.get("/api/prefs")
+def get_prefs():
+    if not PREFS.exists():
+        return {}
+    try:
+        return json.loads(PREFS.read_text())
+    except Exception:  # noqa: BLE001 - a corrupt file should not block the app
+        return {}
+
+
+@app.put("/api/prefs")
+def put_prefs(body: Dict[str, Any]):
+    """Stored on the server rather than in the browser, so the arrangement
+    follows the project rather than the machine that opened it."""
+    PREFS.write_text(json.dumps(body, indent=1))
+    return {"ok": True}
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     if FRONTEND_FILE.exists():
