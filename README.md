@@ -126,7 +126,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Forty-five checks, with the torch-dependent ones skipping themselves when it is
+Forty-seven checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -144,8 +144,16 @@ they connect automatically, which covers most of the work when building a stack
 top to bottom. To wire by hand, drag from the dot at the bottom of one layer to
 the dot at the top of another.
 
-To put a layer *between* two that are already connected, hover the wire and
-click the `+` at its midpoint. It rewires both sides and pushes what follows out
+Shape tells you what a node is before you read it: circles are the Input and
+Output terminals, diamonds are merges where paths join, dashed hexagons are
+runtime components that sit outside `forward()`, and cards are ordinary layers.
+
+Click the `+` on a node's outgoing port to add the next layer, or drag from it to
+wire by hand. To put a layer *between* two that are already connected, hover the
+wire and click the `+` at its midpoint.
+
+The toolbar switches the flow between top-to-bottom and left-to-right, and cycles
+the grid between full, half, quarter and off. It rewires both sides and pushes what follows out
 of the way, which is the usual way a stack actually grows.
 
 Each node shows the constructor it contributes to the generated file, so the
@@ -466,4 +474,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.8.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.9.0 — see `CHANGELOG.md`.

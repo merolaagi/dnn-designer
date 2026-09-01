@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.9.0
+
+The canvas gets a vocabulary of shapes, and a direction.
+
+- **Shape carries meaning.** Input and Output are circles — entry and exit
+  terminals. Merges (Add, Concat, Multiply) are diamonds on a grey pad, because
+  they are where paths join. Runtime blocks are dashed hexagons, since they sit
+  outside `forward()`. Ordinary layers stay cards. Previously everything was the
+  same rectangle, which meant the drawing carried no information the labels did
+  not already.
+- **A `+` on every node's outgoing port.** Click it to add the next layer, drag
+  it to wire by hand. Combined with the `+` already on each wire, a stack can be
+  grown without touching the palette.
+- **Horizontal flow.** A toolbar toggle lays the graph left to right instead of
+  top to bottom: ports move to the sides, wires curve horizontally, and Tidy
+  arranges along the new axis. Deep graphs wrap into bands either way.
+- **A ruled grid** replaces the dot field, at two levels — fine every 26px,
+  heavy every 130px. A toolbar button cycles it through full, half, quarter and
+  off.
+- **Arrowheads** on every wire, so direction reads without tracing the curve.
+- Bounds, minimap, marquee selection, guided steps and insertion all measure
+  both dimensions now, since nodes are no longer one size.
+
 ## 1.8.1
 
 Fixes a stylesheet I broke in 1.8.0, and takes the chrome closer to the workflow

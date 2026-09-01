@@ -826,6 +826,23 @@ def _():
     assert not missing, f"the script looks for elements nothing creates: {missing}"
 
 
+@check("the canvas draws a shape per layer role")
+def _():
+    for token in ("node-terminal", "node-diamond", "node-hex", "node-card",
+                  "gridMinor", "port-plus"):
+        assert token in PAGE, f"{token} is not in the page"
+    # a circle for entry and exit, a diamond for merges, a hexagon for runtime
+    assert 'shape: "circle"' in PAGE and 'shape: "diamond"' in PAGE \
+        and 'shape: "hex"' in PAGE, "nodeBox does not assign all four shapes"
+
+
+@check("the canvas can flow either way")
+def _():
+    assert 'flow === "horizontal"' in PAGE, "no horizontal layout branch"
+    assert 'id="zflow"' in PAGE, "no control to switch orientation"
+    assert 'id="zgrid"' in PAGE, "no control for the grid"
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

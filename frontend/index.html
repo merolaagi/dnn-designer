@@ -433,6 +433,27 @@ pre#code .kw{color:#F0A202}
 }
 .chip.blockchip{border-style:dashed}
 .node.runtime .node-card{stroke-dasharray:5 3;fill:#F4F7FA}
+
+/* shape carries meaning: an entry or exit is a circle, a merge is a diamond,
+   a runtime component is a hexagon, an ordinary layer is a card */
+.node-terminal{fill:#FFFFFF;stroke:#5B87B5;stroke-width:2.4;
+  filter:drop-shadow(0 1px 3px rgba(22,32,46,.12))}
+.node.sel .node-terminal{stroke:#2D7DD2;stroke-width:3}
+.node.err .node-terminal{stroke:var(--bad)}
+.node-terminal-label{font-size:12.5px;font-weight:600;fill:#16202E;text-anchor:middle}
+.node-terminal-sub{font-family:var(--mono);font-size:9.5px;fill:#7C8BA0;text-anchor:middle}
+.node-pad{fill:#E7EBF0;stroke:none;rx:10}
+.node-diamond{fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1.2;
+  filter:drop-shadow(0 1px 3px rgba(22,32,46,.10))}
+.node.sel .node-diamond{stroke:#2D7DD2;stroke-width:2.2}
+.node.err .node-diamond{stroke:var(--bad);stroke-width:1.8}
+.node-hex{fill:#F4F7FA;stroke:#9DAEC2;stroke-width:1.2;stroke-dasharray:5 3}
+.node.sel .node-hex{stroke:#2D7DD2;stroke-dasharray:none;stroke-width:2.2}
+.port-plus{cursor:pointer}
+.port-plus circle{fill:#fff;stroke:#8FA3B8;stroke-width:1.4}
+.port-plus line{stroke:#5C6B7F;stroke-width:1.5;stroke-linecap:round}
+.port-plus:hover circle{stroke:var(--amber);fill:#FFF7E6}
+.port-plus:hover line{stroke:var(--amber)}
 .chatwrap{display:flex;height:100%;min-height:0;width:100%}
 .chatside{width:216px;flex:none;border-right:1px solid var(--paper-3);
   padding:10px 12px;overflow-y:auto}
@@ -598,6 +619,8 @@ pre#code .kw{color:#F0A202}
     <button id="btnTidy" title="Tidy the layout">&#9776;</button>
     <button id="zroute" title="Straight or curved wires">&#8735;</button>
     <button id="zsnap" title="Snap to grid">#</button>
+    <button id="zflow" title="Vertical or horizontal flow">&#8646;</button>
+    <button id="zgrid" title="Grid weight">&#9638;</button>
     <button id="zmap" class="on" title="Minimap">&#9635;</button>
     <span class="sep"></span>
     <button id="btnUndo" title="Undo" disabled>&#8630;</button>
@@ -636,11 +659,21 @@ pre#code .kw{color:#F0A202}
   <main id="stage">
     <svg id="svg">
       <defs>
-        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="1" fill="#D7DEE7"></circle>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="var(--board-line)"></path>
+        </marker>
+        <pattern id="gridMinor" width="26" height="26" patternUnits="userSpaceOnUse">
+          <path d="M26 0 L0 0 0 26" fill="none" stroke="var(--board-grid)"
+                stroke-width="1"></path>
+        </pattern>
+        <pattern id="dots" width="130" height="130" patternUnits="userSpaceOnUse">
+          <rect width="130" height="130" fill="url(#gridMinor)"></rect>
+          <path d="M130 0 L0 0 0 130" fill="none" stroke="var(--board-grid)"
+                stroke-width="1.6"></path>
         </pattern>
       </defs>
-      <rect id="bg" width="100%" height="100%" fill="url(#dots)"></rect>
+      <rect id="bg" width="100%" height="100%" fill="url(#dots)" opacity="0.5"></rect>
       <g id="world">
         <g id="wires"></g>
         <g id="nodes"></g>
@@ -852,7 +885,8 @@ const state = {
   projects:[], projectCategories:[], projectCat:"", projectId:null,
   project:null, stepAt:0, stepIds:{}, version:null, insertInto:null,
   selection:new Set(), history:[], future:[], clipboard:null,
-  orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0
+  orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
+  flow:"vertical", gridLevel:2, appendAfter:null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -1122,7 +1156,8 @@ function fitView(){
   const ns = state.graph.nodes;
   if (!ns.length) return;
   const r = svg.getBoundingClientRect();
-  const x0 = Math.min(...ns.map(n=>n.x)) - 60, x1 = Math.max(...ns.map(n=>n.x)) + NW + 60;
+  const x0 = Math.min(...ns.map(n=>n.x)) - 60,
+        x1 = Math.max(...ns.map(n=>n.x + nodeWidth(n))) + 60;
   const y0 = Math.min(...ns.map(n=>n.y)) - 50,
         y1 = Math.max(...ns.map(n=>n.y + nodeHeight(n))) + 70;
   const k = Math.min(r.width/(x1-x0), r.height/(y1-y0), 1.4);
@@ -1161,7 +1196,8 @@ svg.addEventListener("pointerdown", e => {
       const a = toWorld(Math.min(start.x, ev.clientX), Math.min(start.y, ev.clientY));
       const b = toWorld(Math.max(start.x, ev.clientX), Math.max(start.y, ev.clientY));
       state.selection = new Set(state.graph.nodes.filter(n =>
-        n.x + NW > a.x && n.x < b.x && n.y + nodeHeight(n) > a.y && n.y < b.y).map(n => n.id));
+        n.x + nodeWidth(n) > a.x && n.x < b.x
+        && n.y + nodeHeight(n) > a.y && n.y < b.y).map(n => n.id));
       state.sel = [...state.selection][0] || null;
       state.selEdge = null;
       render(); renderInspector();
@@ -1189,7 +1225,7 @@ function graphBounds(){
   if (!ns.length) return null;
   return {
     x0: Math.min(...ns.map(n => n.x)) - 40,
-    x1: Math.max(...ns.map(n => n.x)) + NW + 40,
+    x1: Math.max(...ns.map(n => n.x + nodeWidth(n))) + 40,
     y0: Math.min(...ns.map(n => n.y)) - 40,
     y1: Math.max(...ns.map(n => n.y + nodeHeight(n))) + 40
   };
@@ -1209,7 +1245,7 @@ function drawMinimap(){
 
   const parts = state.graph.nodes.map(n => {
     const x = ox + (n.x - b.x0) * k, y = oy + (n.y - b.y0) * k;
-    const w = Math.max(2, NW * k), h = Math.max(1.5, nodeHeight(n) * k);
+    const w = Math.max(2, nodeWidth(n) * k), h = Math.max(1.5, nodeHeight(n) * k);
     return `<rect class="mm-node${state.selection.has(n.id) ? " sel" : ""}" `
          + `x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" `
          + `height="${h.toFixed(1)}" rx="1"></rect>`;
@@ -1254,6 +1290,23 @@ $("zroute").addEventListener("click", () => {
   $("zroute").classList.toggle("on", state.orthogonal);
   render();
 });
+$("zflow").addEventListener("click", () => {
+  state.flow = state.flow === "horizontal" ? "vertical" : "horizontal";
+  $("zflow").classList.toggle("on", state.flow === "horizontal");
+  $("btnTidy").click();
+  toast(state.flow === "horizontal" ? "Flowing left to right" : "Flowing top to bottom");
+});
+
+const GRID_STEPS = [0, 0.25, 0.5, 1];
+$("zgrid").addEventListener("click", () => {
+  state.gridLevel = (state.gridLevel + 1) % GRID_STEPS.length;
+  const bg = document.getElementById("bg");
+  if (bg) bg.setAttribute("opacity", String(GRID_STEPS[state.gridLevel]));
+  $("zgrid").classList.toggle("on", state.gridLevel !== 2);
+  toast(GRID_STEPS[state.gridLevel] === 0 ? "Grid hidden"
+        : `Grid at ${Math.round(GRID_STEPS[state.gridLevel] * 100)}%`);
+});
+
 $("zsnap").addEventListener("click", () => {
   state.snap = !state.snap;
   $("zsnap").classList.toggle("on", state.snap);
@@ -1281,14 +1334,19 @@ function insertIntoEdge(edgeId, type){
   const node = {
     id: uid("n"), type, params: {}, label: "",
     // sit it on the wire and push everything below out of the way
-    x: Math.round((source.x + target.x) / 2),
-    y: Math.round(source.y + nodeHeight(source) + 40)
+    x: state.flow === "horizontal"
+        ? Math.round(source.x + nodeWidth(source) + 40)
+        : Math.round((source.x + target.x) / 2),
+    y: state.flow === "horizontal"
+        ? Math.round((source.y + target.y) / 2)
+        : Math.round(source.y + nodeHeight(source) + 40)
   };
-  const shove = node.y + NH_CODE + 40 - target.y;
-  if (shove > 0){
-    state.graph.nodes.forEach(other => {
-      if (other.y >= target.y) other.y += shove;
-    });
+  if (state.flow === "horizontal"){
+    const shove = node.x + NW + 40 - target.x;
+    if (shove > 0) state.graph.nodes.forEach(o => { if (o.x >= target.x) o.x += shove; });
+  } else {
+    const shove = node.y + NH_CODE + 40 - target.y;
+    if (shove > 0) state.graph.nodes.forEach(o => { if (o.y >= target.y) o.y += shove; });
   }
   state.graph.nodes.push(node);
 
@@ -1303,6 +1361,36 @@ function insertIntoEdge(edgeId, type){
   toast(`${type} inserted`);
 }
 
+function openAppender(nodeId){
+  const downstream = state.graph.edges.find(e => e.source === nodeId);
+  if (downstream){ openInserter(downstream.id); return; }
+  state.appendAfter = nodeId;
+  $("palette-cmd").classList.add("on");
+  $("cmdInput").value = "";
+  $("cmdInput").placeholder = "Add which layer after this?";
+  $("cmdInput").focus();
+  buildFinder();
+}
+
+function appendAfterNode(sourceId, type){
+  const source = nodeById(sourceId);
+  if (!source) return;
+  pushHistory();
+  const gap = 46;
+  const box = nodeBox(source);
+  const node = {
+    id: uid("n"), type, params: {}, label: "",
+    x: state.flow === "horizontal" ? source.x + box.w + gap * 2 : source.x,
+    y: state.flow === "horizontal" ? source.y : source.y + box.h + gap
+  };
+  state.graph.nodes.push(node);
+  state.graph.edges.push({ id: uid("e"), source: sourceId, target: node.id, port: 0 });
+  selectOnly(node.id);
+  state.appendAfter = null;
+  render(); renderInspector(); analyze();
+  toast(`${type} added`);
+}
+
 /* ---------- find a layer ---------- */
 
 function openFinder(){
@@ -1314,18 +1402,20 @@ function openFinder(){
 function closeFinder(){
   $("palette-cmd").classList.remove("on");
   state.insertInto = null;
+  state.appendAfter = null;
   $("cmdInput").placeholder = "Find a layer by name or type";
 }
 
 function buildFinder(){
   const term = $("cmdInput").value.toLowerCase();
-  const inserting = !!state.insertInto;
+  const inserting = !!state.insertInto || !!state.appendAfter;
   const rep = state.report;
 
   const hits = inserting
     ? (state.catalog || []).filter(spec => {
-        if (spec.n_inputs === 0 || spec.name === "Output" || spec.kind === "runtime")
-          return false;                    // none of these can sit mid-chain
+        if (spec.n_inputs === 0) return false;
+        if (state.insertInto && (spec.name === "Output" || spec.kind === "runtime"))
+          return false;                    // neither can sit mid-chain
         const hay = (spec.name + " " + spec.category).toLowerCase();
         return !term || hay.includes(term);
       }).slice(0, 60)
@@ -1357,6 +1447,7 @@ function buildFinder(){
 function chooseFinder(item){
   if (!item) return;
   if (state.insertInto) insertIntoEdge(state.insertInto, item.name);
+  else if (state.appendAfter) appendAfterNode(state.appendAfter, item.name);
   else jumpTo(item);
   closeFinder();
 }
@@ -1367,8 +1458,9 @@ function jumpTo(node){
   selectOnly(node.id);
   const r = svg.getBoundingClientRect();
   state.view.k = Math.max(state.view.k, 0.8);
-  state.view.x = r.width / 2 - (node.x + NW/2) * state.view.k;
-  state.view.y = r.height / 2 - (node.y + NH/2) * state.view.k;
+  const box = nodeBox(node);
+  state.view.x = r.width / 2 - (node.x + box.w/2) * state.view.k;
+  state.view.y = r.height / 2 - (node.y + box.h/2) * state.view.k;
   applyView(); render(); renderInspector();
 }
 
@@ -1454,10 +1546,53 @@ function nodeCode(n){
              .trim();
 }
 
-function nodeHeight(n){
+const TERMINAL = 104;      // diameter of the entry and exit circles
+const DIAMOND_W = 200, DIAMOND_H = 118;
+
+function nodeBox(n){
   const spec = specOf(n.type) || {};
-  if (spec.n_inputs === 0 || n.type === "Output") return NH;
-  return nodeCode(n) ? NH_CODE : NH;
+  if (n.type === "Input" || n.type === "Output")
+    return { w: TERMINAL, h: TERMINAL, shape: "circle" };
+  if (["Add", "Concat", "Multiply"].includes(n.type))
+    return { w: DIAMOND_W, h: DIAMOND_H, shape: "diamond" };
+  if (spec.kind === "runtime")
+    return { w: NW, h: 62, shape: "hex" };
+  return { w: NW, h: nodeCode(n) ? NH_CODE : NH, shape: "card" };
+}
+
+function nodeHeight(n){ return nodeBox(n).h; }
+function nodeWidth(n){ return nodeBox(n).w; }
+
+/* Where a wire leaves and arrives, which is all that changes when the flow
+   is laid out left to right instead of top to bottom. */
+function portOut(n){
+  const b = nodeBox(n);
+  return state.flow === "horizontal"
+    ? { x: n.x + b.w, y: n.y + b.h / 2 }
+    : { x: n.x + b.w / 2, y: n.y + b.h };
+}
+function portIn(n){
+  const b = nodeBox(n);
+  return state.flow === "horizontal"
+    ? { x: n.x, y: n.y + b.h / 2 }
+    : { x: n.x + b.w / 2, y: n.y };
+}
+function wirePath(a, b){
+  const p1 = portOut(a), p2 = portIn(b);
+  if (state.orthogonal){
+    if (state.flow === "horizontal"){
+      const mid = p1.x + Math.max(20, (p2.x - p1.x) / 2);
+      return `M${p1.x},${p1.y} L${mid},${p1.y} L${mid},${p2.y} L${p2.x},${p2.y}`;
+    }
+    const mid = p1.y + Math.max(20, (p2.y - p1.y) / 2);
+    return `M${p1.x},${p1.y} L${p1.x},${mid} L${p2.x},${mid} L${p2.x},${p2.y}`;
+  }
+  if (state.flow === "horizontal"){
+    const dx = Math.max(30, Math.abs(p2.x - p1.x) * 0.45);
+    return `M${p1.x},${p1.y} C${p1.x + dx},${p1.y} ${p2.x - dx},${p2.y} ${p2.x},${p2.y}`;
+  }
+  const dy = Math.max(28, Math.abs(p2.y - p1.y) * 0.42);
+  return `M${p1.x},${p1.y} C${p1.x},${p1.y + dy} ${p2.x},${p2.y - dy} ${p2.x},${p2.y}`;
 }
 
 function badgeFor(n){
@@ -1487,83 +1622,109 @@ function render(){
   state.graph.edges.forEach(e => {
     const a = nodeById(e.source), b = nodeById(e.target);
     if (!a || !b) return;
-    const x1 = a.x + NW/2, y1 = a.y + nodeHeight(a), x2 = b.x + NW/2, y2 = b.y;
-    let d;
-    if (state.orthogonal){
-      // right-angled runs read better once a graph has hundreds of nodes
-      const mid = y1 + Math.max(20, (y2 - y1) / 2);
-      const r = Math.min(10, Math.abs(x2-x1)/2, Math.abs(mid-y1), Math.abs(y2-mid) || 10);
-      d = Math.abs(x2 - x1) < 1
-        ? `M${x1},${y1} L${x2},${y2}`
-        : `M${x1},${y1} L${x1},${mid-r} Q${x1},${mid} ${x1+Math.sign(x2-x1)*r},${mid} `
-          + `L${x2-Math.sign(x2-x1)*r},${mid} Q${x2},${mid} ${x2},${mid+r} L${x2},${y2}`;
-    } else {
-      const dy = Math.max(28, Math.abs(y2-y1) * 0.42);
-      d = `M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`;
-    }
+    const d = wirePath(a, b);
     const shape = rep && rep.edges && rep.edges[e.id] ? rep.edges[e.id].shape : null;
-    const path = el("path", { d, class:"wire" + (state.selEdge===e.id?" sel":""),
-                              "stroke-width": wireWidth(shape) }, gWires);
-    const hit = el("path", { d, class:"wire-hit" }, gWires);
+
+    const group = el("g", { class:"wire-group" }, gWires);
+    el("path", { d, class:"wire" + (state.selEdge===e.id?" sel":""),
+                 "stroke-width": wireWidth(shape), "marker-end":"url(#arrow)" }, group);
+    const hit = el("path", { d, class:"wire-hit" }, group);
     hit.addEventListener("pointerdown", ev => {
       ev.stopPropagation();
       state.selection.clear(); state.sel = null; state.selEdge = e.id;
       render(); renderInspector();
     });
+
+    const p1 = portOut(a), p2 = portIn(b);
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
     if (shape && state.graph.nodes.length <= 60){
-      const mx = (x1+x2)/2, my = (y1+y2)/2;
-      const t = el("text", { x: mx + 9, y: my + 3, class:"dim" }, gWires);
+      const t = el("text", { x: mx + 11, y: my - 5, class:"dim" }, group);
       t.textContent = shape.join("×");
     }
+
+    const plus = el("g", { class:"insert", transform:`translate(${mx},${my})` }, group);
+    el("circle", { cx:0, cy:0, r:8 }, plus);
+    el("line", { x1:-3.5, y1:0, x2:3.5, y2:0 }, plus);
+    el("line", { x1:0, y1:-3.5, x2:0, y2:3.5 }, plus);
+    plus.addEventListener("pointerdown", ev => {
+      ev.stopPropagation();
+      openInserter(e.id);
+    });
   });
 
   state.graph.nodes.forEach(n => {
     const spec = specOf(n.type) || { category:"Custom", n_inputs:1 };
     const info = rep && rep.nodes[n.id];
     const bad = info && info.error;
+    const box = nodeBox(n);
     const isRuntime = spec.kind === "runtime";
-    const g = el("g", { class:"node" + (state.selection.has(n.id)?" sel":"") + (bad?" err":"")
-                        + (isRuntime?" runtime":""),
+
+    const g = el("g", { class:"node" + (state.selection.has(n.id)?" sel":"")
+                        + (bad?" err":"") + (isRuntime?" runtime":""),
                         transform:`translate(${n.x},${n.y})` }, gNodes);
 
-    const H = nodeHeight(n);
-    const preview = H > NH ? nodeCode(n) : null;
+    if (box.shape === "circle"){
+      // entry and exit read as terminals, the way a start node does
+      el("circle", { class:"node-terminal", cx:box.w/2, cy:box.h/2, r:box.w/2 - 4 }, g);
+      const title = el("text", { class:"node-terminal-label", x:box.w/2, y:box.h/2 - 3 }, g);
+      title.textContent = n.type === "Input" ? (n.label || "Input") : "Output";
+      const sub = el("text", { class:"node-terminal-sub", x:box.w/2, y:box.h/2 + 13 }, g);
+      sub.textContent = subtitle(n) || "";
+    } else if (box.shape === "diamond"){
+      el("rect", { class:"node-pad", width:box.w, height:box.h, rx:10 }, g);
+      el("path", { class:"node-diamond",
+        d:`M${box.w/2},6 L${box.w-10},${box.h/2} L${box.w/2},${box.h-6} L10,${box.h/2} Z` }, g);
+      const title = el("text", { class:"node-terminal-label", x:box.w/2, y:box.h/2 - 2 }, g);
+      title.textContent = n.label || n.type;
+      const sub = el("text", { class:"node-terminal-sub", x:box.w/2, y:box.h/2 + 14 }, g);
+      sub.textContent = subtitle(n) || "";
+    } else if (box.shape === "hex"){
+      const k = 16;
+      el("path", { class:"node-hex",
+        d:`M${k},1 L${box.w-k},1 L${box.w-1},${box.h/2} L${box.w-k},${box.h-1} `
+          + `L${k},${box.h-1} L1,${box.h/2} Z` }, g);
+      const title = el("text", { class:"node-title", x:box.w/2, y:box.h/2 - 2,
+                                 "text-anchor":"middle" }, g);
+      title.textContent = n.label || n.type;
+      const sub = el("text", { class:"node-sub", x:box.w/2, y:box.h/2 + 13,
+                               "text-anchor":"middle" }, g);
+      sub.textContent = "runtime · outside forward()";
+    } else {
+      const H = box.h;
+      const preview = H > NH ? nodeCode(n) : null;
+      el("rect", { class:"node-card", width:box.w, height:H, rx:7 }, g);
+      el("rect", { class:"node-rail", width:4, height:H-2, x:1, y:1, rx:2,
+                   fill: CAT_COLOR[spec.category] || "#8D6E63" }, g);
 
-    el("rect", { class:"node-card", width:NW, height:H, rx:7 }, g);
-    el("rect", { class:"node-rail", width:4, height:H-2, x:1, y:1, rx:2,
-                 fill: CAT_COLOR[spec.category] || "#8D6E63" }, g);
+      const title = el("text", { class:"node-title", x:15, y:20 }, g);
+      title.textContent = n.label || n.type;
+      const sub = el("text", { class:"node-sub", x:15, y:33 }, g);
+      sub.textContent = subtitle(n) || n.type.toLowerCase();
 
-    const title = el("text", { class:"node-title", x:15, y:20 }, g);
-    title.textContent = n.label || n.type;
-    const sub = el("text", { class:"node-sub", x:15, y:33 }, g);
-    sub.textContent = subtitle(n) || n.type.toLowerCase();
-
-    // type badge, top right, the way a workflow node shows its task type
-    const label = badgeFor(n);
-    if (label){
-      const w = label.length * 5.6 + 10;
-      el("rect", { class:"node-chip", x:NW-w-9, y:9, width:w, height:14, rx:3.5 }, g);
-      const t = el("text", { class:"node-chip-text", x:NW-9-w/2, y:19,
-                             "text-anchor":"middle" }, g);
-      t.textContent = label;
-    }
-
-    // the line this layer contributes to the generated file
-    if (preview){
-      el("rect", { class:"node-preview-bg", x:9, y:H-27, width:NW-18, height:19, rx:4 }, g);
-      const code = el("text", { class:"node-preview", x:15, y:H-14 }, g);
-      const room = Math.floor((NW - 30) / 5.05);
-      code.textContent = preview.length > room
-        ? preview.slice(0, room - 1) + "\u2026" : preview;
+      const label = badgeFor(n);
+      if (label){
+        const w = label.length * 5.6 + 10;
+        el("rect", { class:"node-chip", x:box.w-w-9, y:9, width:w, height:14, rx:3.5 }, g);
+        const t = el("text", { class:"node-chip-text", x:box.w-9-w/2, y:19,
+                               "text-anchor":"middle" }, g);
+        t.textContent = label;
+      }
+      if (preview){
+        el("rect", { class:"node-preview-bg", x:9, y:H-27, width:box.w-18, height:19, rx:4 }, g);
+        const code = el("text", { class:"node-preview", x:15, y:H-14 }, g);
+        const room = Math.floor((box.w - 30) / 5.05);
+        code.textContent = preview.length > room
+          ? preview.slice(0, room - 1) + "\u2026" : preview;
+      }
     }
 
     if (bad){
-      const b = el("text", { class:"badge", x:NW-11, y:H-8, "text-anchor":"end" }, g);
+      const b = el("text", { class:"badge", x:box.w-11, y:box.h-8, "text-anchor":"end" }, g);
       b.textContent = "!";
     }
 
-    // hover delete, top-right corner
-    const kill = el("g", { class:"node-kill", transform:`translate(${NW-4},4)` }, g);
+    const kill = el("g", { class:"node-kill",
+                           transform:`translate(${box.w-4},4)` }, g);
     el("circle", { cx:0, cy:0, r:7.5 }, kill);
     el("line", { x1:-3, y1:-3, x2:3, y2:3 }, kill);
     el("line", { x1:3, y1:-3, x2:-3, y2:3 }, kill);
@@ -1573,16 +1734,45 @@ function render(){
       deleteSelection();
     });
 
+    // incoming anchor
     if (spec.n_inputs !== 0){
-      const p = el("circle", { class:"port", cx:NW/2, cy:0, r:5.5, "data-in":n.id }, g);
-      p.addEventListener("pointerup", ev => finishLink(ev, n.id));
+      const a = portIn(n);
+      const port = el("circle", { class:"port", cx:a.x-n.x, cy:a.y-n.y, r:5.5,
+                                  "data-in":n.id }, g);
+      port.addEventListener("pointerup", ev => finishLink(ev, n.id));
     }
+
+    // outgoing anchor: drag to wire by hand, click to append a layer
     if (!isRuntime){
-      const p = el("circle", { class:"port", cx:NW/2, cy:H, r:5.5 }, g);
-      p.addEventListener("pointerdown", ev => startLink(ev, n.id));
+      const o = portOut(n);
+      const plus = el("g", { class:"port-plus",
+                             transform:`translate(${o.x-n.x},${o.y-n.y})` }, g);
+      el("circle", { cx:0, cy:0, r:8.5 }, plus);
+      el("line", { x1:-3.5, y1:0, x2:3.5, y2:0 }, plus);
+      el("line", { x1:0, y1:-3.5, x2:0, y2:3.5 }, plus);
+      let moved = false, from = null;
+      plus.addEventListener("pointerdown", ev => {
+        ev.stopPropagation();
+        moved = false;
+        from = { x: ev.clientX, y: ev.clientY };
+        startLink(ev, n.id);
+        const watch = e2 => {
+          if (Math.abs(e2.clientX - from.x) > 4 || Math.abs(e2.clientY - from.y) > 4)
+            moved = true;
+        };
+        const done = () => {
+          window.removeEventListener("pointermove", watch);
+          window.removeEventListener("pointerup", done);
+          if (!moved) setTimeout(() => openAppender(n.id), 0);
+        };
+        window.addEventListener("pointermove", watch);
+        window.addEventListener("pointerup", done);
+      });
     }
 
     g.addEventListener("pointerdown", ev => {
+      if (ev.target.closest && (ev.target.closest(".port-plus")
+          || ev.target.closest(".node-kill"))) return;
       if (ev.target.classList.contains("port")) return;
       ev.stopPropagation();
 
@@ -1602,14 +1792,9 @@ function render(){
       const move = e2 => {
         const p = toWorld(e2.clientX, e2.clientY);
         const dx = p.x - start.x, dy = p.y - start.y;
-        if (!dirty && (Math.abs(dx) > 1 || Math.abs(dy) > 1)){
-          pushHistory(); dirty = true;
-        }
+        if (!dirty && (Math.abs(dx) > 1 || Math.abs(dy) > 1)){ pushHistory(); dirty = true; }
         const q = v => state.snap ? Math.round(v / 20) * 20 : Math.round(v);
-        moving.forEach(m => {
-          m.node.x = q(m.ox + dx);
-          m.node.y = q(m.oy + dy);
-        });
+        moving.forEach(m => { m.node.x = q(m.ox + dx); m.node.y = q(m.oy + dy); });
         render();
       };
       const up = () => { window.removeEventListener("pointermove", move);
@@ -2154,34 +2339,43 @@ $("btnTidy").addEventListener("click", () => {
     depth[id] = ins.length ? Math.max(...ins.map(e => (depth[e.source] ?? 0) + 1)) : 0;
   });
 
-  // wrap deep graphs into columns; one 400-layer strip is not navigable
-  const ROWS = 34;
+  // a long graph wraps rather than running off in one line
+  const STEPS = state.flow === "horizontal" ? 22 : 34;
   const deepest = Math.max(0, ...Object.values(depth));
-  const wrap = deepest >= ROWS * 2;
+  const wrap = deepest >= STEPS * 2;
   const place = {};
   order.forEach(id => {
     const d = depth[id];
     const lane = lanes[d] = (lanes[d] || 0);
     lanes[d] = lane + 1;
-    place[id] = { col: wrap ? Math.floor(d / ROWS) : 0, row: wrap ? d % ROWS : d, lane };
+    place[id] = { band: wrap ? Math.floor(d / STEPS) : 0,
+                  step: wrap ? d % STEPS : d, lane };
   });
   const widest = {};
   Object.values(place).forEach(p => {
-    widest[p.col] = Math.max(widest[p.col] || 1, p.lane + 1);
+    widest[p.band] = Math.max(widest[p.band] || 1, p.lane + 1);
   });
   const offset = {}; let running = 0;
-  Object.keys(widest).map(Number).sort((a,b)=>a-b).forEach(col => {
-    offset[col] = running;
-    running += widest[col] * (NW + 62) + 100;
+  Object.keys(widest).map(Number).sort((a,b)=>a-b).forEach(band => {
+    offset[band] = running;
+    running += widest[band] * (state.flow === "horizontal" ? 210 : NW + 62) + 110;
   });
+
+  const STEP_ALONG = state.flow === "horizontal" ? NW + 118 : 132;
   order.forEach(id => {
     const n = nodeById(id), p = place[id];
     if (!n) return;
-    n.x = offset[p.col] + p.lane * (NW + 62);
-    n.y = p.row * 128;
+    const box = nodeBox(n);
+    if (state.flow === "horizontal"){
+      n.x = p.step * STEP_ALONG;
+      n.y = offset[p.band] + p.lane * 190 + (DIAMOND_H - box.h) / 2;
+    } else {
+      n.x = offset[p.band] + p.lane * (NW + 62) + (NW - box.w) / 2;
+      n.y = p.step * STEP_ALONG;
+    }
   });
   render(); fitView();
-  if (wrap) toast(`Wrapped ${order.length} layers into ${Object.keys(widest).length} columns`);
+  if (wrap) toast(`Wrapped ${order.length} layers into ${Object.keys(widest).length} bands`);
 });
 
 /* ============================ save / open ============================ */
