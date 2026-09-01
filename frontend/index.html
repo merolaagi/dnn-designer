@@ -70,7 +70,7 @@ header{
 .ptabs{display:flex;gap:0;border-bottom:1px solid var(--paper-3);flex:none;
   background:var(--paper-2)}
 .ptabs button{
-  flex:1;background:none;border:none;padding:9px 4px 8px;font-size:10px;
+  flex:1;background:none;border:none;padding:9px 2px 8px;font-size:9.5px;
   font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
   border-bottom:2px solid transparent;
 }
@@ -101,7 +101,40 @@ header{
 .acc .note{font-size:11.5px;line-height:1.5;color:#6B4A00;background:#FFF4E0;
   border-left:2px solid var(--amber);padding:7px 9px;border-radius:0 4px 4px 0;
   margin-top:6px}
-.shell{flex:1;display:flex;min-height:0}
+.shell{flex:1;display:flex;min-height:0;position:relative}
+
+/* one page at a time: Design shows the canvas, everything else takes the width */
+.page{flex:1;display:none;min-width:0;min-height:0}
+.page.on{display:flex}
+#pageDesign{position:relative}
+#pageBuild, #pageRuns, #pageChat, #pageExtend{background:var(--paper)}
+
+#statusbar{
+  position:absolute;left:0;right:0;bottom:0;height:30px;display:flex;
+  align-items:center;gap:8px;padding:0 14px;font-size:11.5px;
+  background:#EAF4EC;border-top:1px solid #C8E0CE;color:#256B39;z-index:6;
+}
+#statusbar.bad{background:#FDECEA;border-top-color:#F2C6C1;color:#8C2F27}
+#statusbar .dot{width:7px;height:7px;border-radius:50%;background:var(--good)}
+#statusbar.bad .dot{background:var(--bad)}
+#statusbar button{
+  margin-left:auto;background:none;border:1px solid currentColor;color:inherit;
+  border-radius:5px;font-size:10.5px;padding:2px 9px;opacity:.75;
+}
+#statusbar button:hover{opacity:1}
+#problemPanel{
+  position:absolute;left:0;right:0;bottom:30px;max-height:210px;overflow-y:auto;
+  background:#fff;border-top:1px solid var(--paper-3);display:none;z-index:6;
+  box-shadow:0 -4px 14px rgba(22,32,46,.08);
+}
+#problemPanel.on{display:block}
+
+.sidetools{
+  display:flex;gap:7px;padding:8px 11px;border-bottom:1px solid var(--paper-3);
+  background:var(--paper-2);position:sticky;top:0;z-index:2;
+}
+.sidetools select{flex:1;border:1px solid var(--paper-3);border-radius:5px;
+  padding:4px 7px;font-size:12px;background:#fff}
 
 /* navigation rail — one place to move between the parts of the app,
    instead of six tabs competing for width in the drawer */
@@ -136,7 +169,7 @@ header{
 .pane.full{position:absolute;inset:0;background:var(--paper);z-index:5;overflow:auto}
 .panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
 #palette{width:212px;border-right:1px solid var(--paper-3);flex:none}
-#inspector{width:268px;border-left:1px solid var(--paper-3);flex:none}
+#inspector{width:390px;border-left:1px solid var(--paper-3);flex:none}
 .panel h2{
   margin:0;padding:11px 14px 8px;font-size:10px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--muted);font-weight:700;
@@ -162,7 +195,8 @@ header{
 .chip small{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
 
 /* ---------------- canvas ---------------- */
-#stage{flex:1;position:relative;min-width:0;background:var(--board);overflow:hidden}
+#stage{flex:1;position:relative;min-width:0;background:var(--board);
+  overflow:hidden;padding-bottom:30px}
 #svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .node-card{
   fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1;
@@ -274,39 +308,18 @@ header{
 .doc{font-size:11.5px;color:var(--muted);line-height:1.45;margin:0 4px 14px}
 .empty{color:#8A97A8;font-size:12px;padding:6px 4px;line-height:1.5}
 
-/* ---------------- drawer ---------------- */
-#drawer{
-  height:236px;flex:none;background:var(--paper);
-  border-top:1px solid var(--paper-3);display:flex;flex-direction:column;min-height:0;
-}
-#drawer.min{height:38px}
-.tabs{display:flex;align-items:center;gap:2px;padding:0 8px;height:38px;flex:none;
-  border-bottom:1px solid var(--paper-3);background:var(--paper-2)}
-.tab{
-  background:none;border:none;padding:6px 12px;font-size:11px;font-weight:700;
-  letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
-  border-bottom:2px solid transparent;
-}
-.tab.on{color:var(--text);border-bottom-color:var(--amber)}
-.tab .count{
-  font-family:var(--mono);background:var(--bad);color:#fff;border-radius:8px;
-  padding:0 5px;margin-left:5px;font-size:9.5px;letter-spacing:0;
-}
+/* ---------------- panes ---------------- */
 .pane{flex:1;overflow:auto;display:none;min-height:0}
 .pane.on{display:block}
 pre#code{
-  margin:0;padding:12px 14px;font-family:var(--mono);font-size:11.5px;
-  line-height:1.55;background:var(--ink);color:#C8D6E5;min-height:100%;
-  white-space:pre;
-}
 pre#code .kw{color:#F0A202}
-.probs{padding:10px 14px;font-size:12px;line-height:1.6}
+.probs{padding:10px 14px;font-size:12px;line-height:1.6;margin:0}
 .probs li{margin-bottom:4px;color:#8C2F27}
 .probs .fine{color:var(--good)}
-.trainwrap{display:flex;height:100%;min-height:0}
+.trainwrap{display:flex;flex-direction:column;min-height:0}
 .trainform{
-  width:300px;flex:none;padding:10px 12px;border-right:1px solid var(--paper-3);
-  overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;
+  flex:none;padding:10px 12px;border-bottom:1px solid var(--paper-3);
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;
 }
 .trainform .field{margin:0}
 .trainform .wide{grid-column:1/3}
@@ -325,10 +338,10 @@ pre#code .kw{color:#F0A202}
 .linkbtn{background:none;border:none;color:#2D7DD2;font-size:11.5px;padding:2px 4px;text-decoration:underline}
 .cols{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:4px;
   max-height:52px;overflow-y:auto;font-family:var(--mono)}
-.trainview{flex:1;display:flex;flex-direction:column;min-width:0}
-#chart{flex:1;min-height:0;background:var(--ink)}
+.trainview{flex:none;display:flex;flex-direction:column;min-width:0}
+#chart{height:150px;flex:none;background:var(--ink)}
 #log{
-  height:78px;flex:none;overflow-y:auto;background:#101821;color:#96A9BD;
+  height:190px;flex:none;overflow-y:auto;background:#101821;color:#96A9BD;
   font-family:var(--mono);font-size:11px;padding:6px 10px;line-height:1.5;
 }
 #log b{color:var(--wire);font-weight:400}
@@ -358,7 +371,7 @@ pre#code .kw{color:#F0A202}
 }
 .classsrc.open{display:block}
 .origin{font-size:10.5px;color:var(--muted);margin:0 4px 10px;font-family:var(--mono)}
-.blockwrap{display:flex;height:100%;min-height:0}
+.blockwrap{display:flex;height:100%;min-height:0;width:100%}
 .blocklist{width:196px;flex:none;border-right:1px solid var(--paper-3);
   overflow-y:auto;padding:8px}
 .blockitem{padding:6px 8px;border-radius:5px;font-size:12px;cursor:pointer;
@@ -386,7 +399,7 @@ pre#code .kw{color:#F0A202}
 }
 .chip.blockchip{border-style:dashed}
 .node.runtime .node-card{stroke-dasharray:5 3;fill:#F4F7FA}
-.chatwrap{display:flex;height:100%;min-height:0}
+.chatwrap{display:flex;height:100%;min-height:0;width:100%}
 .chatside{width:216px;flex:none;border-right:1px solid var(--paper-3);
   padding:10px 12px;overflow-y:auto}
 .chatmain{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -413,7 +426,7 @@ pre#code .kw{color:#F0A202}
 #chatInput:focus{outline:none;border-color:var(--amber)}
 .chatside .field{margin-bottom:9px}
 .chatside .field label{font-size:10.5px}
-.runwrap{display:flex;height:100%;min-height:0}
+.runwrap{display:flex;height:100%;min-height:0;width:100%}
 .runlist{width:320px;flex:none;border-right:1px solid var(--paper-3);
   overflow-y:auto;padding:7px 8px}
 .runitem{padding:8px 9px;border-radius:5px;margin-bottom:3px;cursor:pointer;
@@ -443,8 +456,8 @@ pre#code .kw{color:#F0A202}
   line-height:1.6}
 .kv b{color:var(--muted);font-weight:600}
 .kv code{font-family:var(--mono);font-size:10.5px}
-.buildwrap{display:flex;height:100%;min-height:0}
-.buildside{width:290px;flex:none;border-right:1px solid var(--paper-3);
+.buildwrap{display:flex;height:100%;min-height:0;width:100%}
+.buildside{width:330px;flex:none;border-right:1px solid var(--paper-3);
   display:flex;flex-direction:column;min-height:0}
 .buildside .top{padding:9px 11px;border-bottom:1px solid var(--paper-3);flex:none}
 .buildside .list{flex:1;overflow-y:auto;padding:6px 8px}
@@ -540,18 +553,19 @@ pre#code .kw{color:#F0A202}
 
 <div class="shell">
   <nav id="rail">
-    <button data-view="design" class="on" title="Canvas"><i>&#9634;</i>Design</button>
-    <button data-view="paneBuild" title="Guided projects"><i>&#9776;</i>Build</button>
-    <button data-view="paneCode" title="Generated code"><i>&#60;&#62;</i>Code</button>
-    <button data-view="paneTrain" title="Training"><i>&#9654;</i>Train</button>
-    <button data-view="paneRuns" title="Past runs"><i>&#8635;</i>Runs</button>
-    <button data-view="paneChat" title="Talk to a trained model"><i>&#9998;</i>Chat</button>
-    <button data-view="paneBlocks" title="Blocks and recipes"><i>&#9881;</i>Extend</button>
+    <button data-page="pageDesign" class="on" title="Canvas"><i>&#9634;</i>Design</button>
+    <button data-page="pageBuild" title="Guided projects"><i>&#9776;</i>Build</button>
+    <button data-page="pageRuns" title="Past runs"><i>&#8635;</i>Runs</button>
+    <button data-page="pageChat" title="Talk to a trained model"><i>&#9998;</i>Chat</button>
+    <button data-page="pageExtend" title="Blocks and recipes"><i>&#9881;</i>Extend</button>
     <span class="spacer"></span>
-    <button data-view="paneProbs" title="Problems"><i>&#9888;</i>Checks
+    <button data-page="pageDesign" data-side="code" title="Generated code"><i>&#60;&#62;</i>Code</button>
+    <button data-page="pageDesign" data-side="train" title="Training"><i>&#9654;</i>Train</button>
+    <button data-page="pageDesign" data-side="needs" title="Checks"><i>&#9888;</i>Checks
       <span class="count clean" id="railCount">0</span></button>
   </nav>
 
+  <section class="page on" id="pageDesign">
   <aside class="panel" id="palette">
     <h2>Layers</h2>
     <input id="search" placeholder="Filter layers" spellcheck="false">
@@ -590,6 +604,8 @@ pre#code .kw{color:#F0A202}
     <div class="ptabs">
       <button data-side="layer" class="on">Layer</button>
       <button data-side="network">Network</button>
+      <button data-side="code">Code</button>
+      <button data-side="train">Train</button>
       <button data-side="needs">Needs</button>
     </div>
     <div class="scroll" id="inspBody">
@@ -597,40 +613,41 @@ pre#code .kw{color:#F0A202}
     </div>
     <div class="scroll" id="networkBody" style="display:none"></div>
     <div class="scroll" id="needsBody" style="display:none;padding:0"></div>
-  </aside>
-</div>
-
-<div id="drawer">
-  <div class="tabs">
-    <button class="tab on" data-pane="paneCode">Code</button>
-    <button class="tab" data-pane="paneTrain">Training</button>
-    <button class="tab" data-pane="paneBuild">Build</button>
-    <button class="tab" data-pane="paneChat">Chat</button>
-    <button class="tab" data-pane="paneBlocks">Blocks</button>
-    <button class="tab" data-pane="paneProbs">Problems<span class="count" id="probCount" style="display:none">0</span></button>
-    <div class="spacer"></div>
-    <select id="framework" style="border:1px solid var(--paper-3);border-radius:5px;padding:4px 7px;font-size:12px;background:#fff">
-      <option value="pytorch">PyTorch</option>
-      <option value="keras">Keras</option>
-    </select>
-    <button class="btn" id="btnCopy" style="margin-left:8px;background:#fff;color:var(--text);border-color:var(--paper-3)">Copy</button>
-    <button class="btn" id="btnDrawer" style="margin-left:6px;background:#fff;color:var(--text);border-color:var(--paper-3)">Hide</button>
-  </div>
-
-  <div class="pane on" id="paneCode"><pre id="code">Building…</pre></div>
-
-  <div class="pane" id="paneRuns">
-    <div class="runwrap">
-      <div class="runlist" id="runList"></div>
-      <div class="rundetail" id="runDetail">
-        <div class="head"><h4>Executions</h4>
-          <p>Every training run, kept with the design version that produced it.</p></div>
-        <div class="inner"><div class="empty">Pick a run on the left.</div></div>
+    <div class="scroll" id="codeBody" style="display:none;padding:0">
+      <div class="sidetools">
+        <select id="framework">
+          <option value="pytorch">PyTorch</option>
+          <option value="keras">Keras</option>
+        </select>
+        <button class="btn" id="btnCopy">Copy</button>
+      </div>
+      <pre id="code">Building…</pre>
+    </div>
+    <div class="scroll" id="trainBody" style="display:none;padding:0">
+    <div class="trainwrap">
+      <div class="trainform" id="trainForm"></div>
+      <div class="trainview">
+        <div class="legend">
+          <span><i style="background:#F0A202"></i>train loss</span>
+          <span><i style="background:#6FD0E0"></i>validation loss</span>
+          <span id="trainStatus" style="margin-left:auto;font-family:var(--mono)"></span>
+        </div>
+        <svg id="chart"></svg>
+        <div id="log"></div>
       </div>
     </div>
   </div>
+  </aside>
 
-  <div class="pane" id="paneBuild">
+  <div id="statusbar">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">no problems</span>
+    <button id="statusToggle">details</button>
+  </div>
+  <div id="problemPanel"><ul class="probs" id="probList"></ul></div>
+  </section>
+
+  <section class="page" id="pageBuild">
     <div class="buildwrap">
       <div class="buildside">
         <div class="top">
@@ -653,9 +670,18 @@ pre#code .kw{color:#F0A202}
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="pane" id="paneChat">
+  </section>
+  <section class="page" id="pageRuns">
+    <div class="runwrap">
+      <div class="runlist" id="runList"></div>
+      <div class="rundetail" id="runDetail">
+        <div class="head"><h4>Executions</h4>
+          <p>Every training run, kept with the design version that produced it.</p></div>
+        <div class="inner"><div class="empty">Pick a run on the left.</div></div>
+      </div>
+    </div>
+  </section>
+  <section class="page" id="pageChat">
     <div class="chatwrap">
       <div class="chatside">
         <div class="field"><label>Trained model</label>
@@ -685,9 +711,8 @@ pre#code .kw{color:#F0A202}
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="pane" id="paneBlocks">
+  </section>
+  <section class="page" id="pageExtend">
     <div class="blockwrap">
       <div class="blocklist" id="blockList"></div>
       <div class="blockedit">
@@ -703,24 +728,7 @@ pre#code .kw{color:#F0A202}
         <div id="blockErr"></div>
       </div>
     </div>
-  </div>
-
-  <div class="pane" id="paneProbs"><ul class="probs" id="probList"></ul></div>
-
-  <div class="pane" id="paneTrain">
-    <div class="trainwrap">
-      <div class="trainform" id="trainForm"></div>
-      <div class="trainview">
-        <div class="legend">
-          <span><i style="background:#F0A202"></i>train loss</span>
-          <span><i style="background:#6FD0E0"></i>validation loss</span>
-          <span id="trainStatus" style="margin-left:auto;font-family:var(--mono)"></span>
-        </div>
-        <svg id="chart"></svg>
-        <div id="log"></div>
-      </div>
-    </div>
-  </div>
+  </section>
 </div>
 
 <div id="palette-cmd">
@@ -1640,9 +1648,9 @@ $("btnRedo").addEventListener("click", redo);
 /* ============================ inspector ============================ */
 
 function renderInspector(){
-  if (state.sidePanel !== "layer" && (state.sel || state.selEdge)){
-    const tab = document.querySelector('.ptabs button[data-side="layer"]');
-    if (tab) tab.click();
+  if (state.sidePanel !== "layer" && (state.sel || state.selEdge)
+      && state.page === "pageDesign"){
+    showSide("layer");
   }
   const body = $("inspBody");
   if (state.selEdge){
@@ -1769,15 +1777,17 @@ function renderNodeSource(body, node){
     jump.textContent = "Edit block";
     jump.title = "blocks/" + code.origin;
     jump.addEventListener("click", () => {
-      document.querySelector('[data-pane="paneBlocks"]').click();
+      showPage("pageExtend");
+      document.querySelectorAll("#rail button").forEach(b =>
+        b.classList.toggle("on", b.dataset.page === "pageExtend"));
       state.blockFile = code.origin;
-      openBlock(code.origin);
+      openBlock(code.origin, "blocks");
     });
   } else {
     jump.textContent = "Show in Code";
     jump.title = "Jump to this layer in the generated file";
     jump.addEventListener("click", () => {
-      document.querySelector('[data-pane="paneCode"]').click();
+      showSide("code");
       $("framework").value = "pytorch";
       showCode();
       highlightInCode(code.var);
@@ -2031,13 +2041,18 @@ function showProblems(){
   list.innerHTML = items.length
     ? items.map(t => `<li>${t}</li>`).join("")
     : `<li class="fine">No problems. The graph resolves end to end.</li>`;
-  const badge = $("probCount");
-  badge.style.display = items.length ? "inline" : "none";
-  badge.textContent = items.length;
   const rail = $("railCount");
   if (rail){
     rail.textContent = items.length;
     rail.classList.toggle("clean", items.length === 0);
+  }
+  const bar = $("statusbar"), text = $("statusText");
+  if (bar && text){
+    bar.classList.toggle("bad", items.length > 0);
+    text.textContent = items.length
+      ? `${items.length} problem${items.length === 1 ? "" : "s"} — ${items[0].slice(0, 90)}`
+      : "no problems · shapes resolve end to end";
+    if (!items.length) $("problemPanel").classList.remove("on");
   }
   $("btnTrain").disabled = !(rep && rep.ok);
 }
@@ -2173,555 +2188,56 @@ $("btnLoad").addEventListener("click", async () => {
   refreshVersions($("gname").value, state.version);
 });
 
-/* ======================= navigation and drawer ======================= */
+/* ======================= pages and side tabs ======================= */
 
-function showPane(pane){
-  document.querySelectorAll(".tab").forEach(t =>
-    t.classList.toggle("on", t.dataset.pane === pane));
-  document.querySelectorAll(".pane").forEach(p =>
-    p.classList.toggle("on", p.id === pane));
-  $("drawer").classList.remove("min");
-  $("btnDrawer").textContent = "Hide";
-  if (pane === "paneTrain") drawChart();
-  if (pane === "paneBlocks") refreshBlocks();
-  if (pane === "paneChat") refreshChatModels();
-  if (pane === "paneBuild") loadProjects();
-  if (pane === "paneRuns") refreshRuns();
+const PAGE_SETUP = {
+  pageBuild: () => loadProjects(),
+  pageRuns: () => refreshRuns(),
+  pageChat: () => refreshChatModels(),
+  pageExtend: () => refreshBlocks(),
+};
+
+function showPage(pageId){
+  document.querySelectorAll(".page").forEach(p =>
+    p.classList.toggle("on", p.id === pageId));
+  state.page = pageId;
+  if (PAGE_SETUP[pageId]) PAGE_SETUP[pageId]();
+  if (pageId === "pageDesign"){ render(); drawMinimap(); }
 }
 
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    showPane(tab.dataset.pane);
-    document.querySelectorAll("#rail button").forEach(b =>
-      b.classList.toggle("on", b.dataset.view === tab.dataset.pane));
+function showSide(side){
+  state.sidePanel = side;
+  document.querySelectorAll(".ptabs button").forEach(b =>
+    b.classList.toggle("on", b.dataset.side === side));
+  const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",
+                code:"codeBody", train:"trainBody" };
+  Object.entries(map).forEach(([key, id]) => {
+    const el = $(id);
+    if (el) el.style.display = (key === side) ? "" : "none";
   });
-});
+  if (side === "network") renderNetworkPanel();
+  if (side === "needs") renderNeedsPanel();
+  if (side === "code") showCode();
+  if (side === "train") drawChart();
+}
 
-// The rail decides how much room the drawer gets: Design keeps it small so the
-// canvas dominates, everything else opens it to full height.
+document.querySelectorAll(".ptabs button").forEach(btn =>
+  btn.addEventListener("click", () => showSide(btn.dataset.side)));
+
 document.querySelectorAll("#rail button").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("#rail button").forEach(b =>
       b.classList.toggle("on", b === btn));
-    const view = btn.dataset.view;
-    const drawer = $("drawer");
-    if (view === "design"){
-      drawer.style.height = "";
-      drawer.classList.add("min");
-      $("btnDrawer").textContent = "Show";
-      return;
-    }
-    showPane(view);
-    drawer.style.height = "min(64vh, 560px)";
-    drawMinimap();
+    showPage(btn.dataset.page);
+    if (btn.dataset.side) showSide(btn.dataset.side);
   });
 });
-$("btnDrawer").addEventListener("click", () => {
-  const d = $("drawer");
-  d.classList.toggle("min");
-  $("btnDrawer").textContent = d.classList.contains("min") ? "Show" : "Hide";
-});
 
-/* ========================== executions ========================== */
-
-function ago(seconds){
-  if (!seconds) return "";
-  const gap = Date.now() / 1000 - seconds;
-  if (gap < 90) return "just now";
-  if (gap < 5400) return Math.round(gap / 60) + "m ago";
-  if (gap < 172800) return Math.round(gap / 3600) + "h ago";
-  return Math.round(gap / 86400) + "d ago";
-}
-
-const RUN_COLOR = { done:"#3DA35D", running:"#F0A202", error:"#FF5F56",
-                    stopped:"#8A97A8", starting:"#2D7DD2" };
-
-async function refreshRuns(select){
-  let d;
-  try { d = await (await fetch(API + "/api/runs")).json(); }
-  catch { return; }
-  state.runs = d.runs;
-  const list = $("runList");
-  list.innerHTML = d.runs.length ? d.runs.map(r => {
-    const took = r.finished && r.started
-      ? Math.max(1, Math.round(r.finished - r.started)) + "s" : "";
-    const best = r.best !== null && r.best !== undefined
-      ? ` · best ${r.objective} ${r.best}` : "";
-    return `<div class="runitem${r.id === state.runId ? " on" : ""}" data-run="${r.id}"
-              style="--c:${RUN_COLOR[r.status] || "#8A97A8"}">
-      <span class="when">${ago(r.started)}</span>
-      <b>${r.design}${r.version ? " v" + r.version : ""}</b>
-      <span><span class="status ${r.status}">${r.status}</span>${r.epoch}/${r.epochs} epochs`
-      + ` · ${r.recipe}${r.dataset ? " · " + r.dataset : ""}${best}${took ? " · " + took : ""}</span>
-    </div>`;
-  }).join("") : `<div class="empty">No runs yet. Train something and it appears here.</div>`;
-
-  list.querySelectorAll(".runitem").forEach(el =>
-    el.addEventListener("click", () => openRun(el.dataset.run)));
-  if (select) openRun(select);
-}
-
-async function openRun(id){
-  let r;
-  try { r = await (await fetch(API + "/api/runs/" + encodeURIComponent(id))).json(); }
-  catch { return; }
-  state.runId = id;
-  state.runDetail = r;
-  document.querySelectorAll(".runitem").forEach(el =>
-    el.classList.toggle("on", el.dataset.run === id));
-
-  const cfg = r.config || {};
-  const last = (r.history || []).slice(-1)[0] || {};
-  const objective = last.objective || "loss";
-  const rows = [
-    ["Design", `${r.design}${r.version ? " version " + r.version : " (unsaved)"}`],
-    ["Status", `<span class="status ${r.status}">${r.status}</span>`],
-    ["Training loop", r.recipe || "standard"],
-    ["Dataset", r.dataset || "—"],
-    ["Epochs", `${r.epoch} of ${r.epochs}`],
-    ["Device", r.device || "—"],
-    ["Learnables", (r.learnables || 0).toLocaleString()],
-    ["Batch size", cfg.batch_size || "—"],
-    ["Learning rate", cfg.lr || "—"],
-    ["Optimizer", cfg.optimizer || "—"],
-    ["Started from", cfg.init_from || "random initialization"],
-    ["Checkpoints", (r.checkpoints || []).length
-      ? (r.checkpoints || []).join("<br>") : "none"],
-  ];
-  if (r.error) rows.push(["Error", `<span style="color:#8C2F27">${r.error}</span>`]);
-
-  $("runDetail").innerHTML =
-    `<div class="head">
-       <h4>${r.design}${r.version ? " · version " + r.version : ""}</h4>
-       <p>${r.id} · ${ago(r.started)}${last[objective] !== undefined ? "" : ""}</p>
-     </div>
-     <div class="inner">
-       <svg id="runChart"></svg>
-       <div class="kv">${rows.map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join("")}</div>
-       ${(r.notes || []).length ? `<div class="notecard" style="margin-top:12px">
-          <b>Reported during the run</b>${r.notes.join("<br>")}</div>` : ""}
-       <div style="margin-top:13px;display:flex;gap:8px">
-         <button class="btn" id="btnRunOpen">Open this design</button>
-         <button class="btn" id="btnRunDelete"
-           style="color:#8C2F27">Delete record</button>
-       </div>
-     </div>`;
-
-  drawRunChart(r.history || [], objective);
-
-  $("btnRunOpen").addEventListener("click", async () => {
-    const res = await fetch(API + "/api/runs/" + encodeURIComponent(id) + "/graph");
-    if (!res.ok){ toast("That run has no design stored"); return; }
-    pushHistory();
-    state.graph = await res.json();
-    state.seq = state.graph.nodes.length + state.graph.edges.length + 400;
-    $("gname").value = state.graph.name || r.design;
-    state.version = r.version;
-    clearSelection();
-    render(); fitView(); analyze();
-    refreshVersions($("gname").value, r.version);
-    toast("Opened the design this run used");
-  });
-  $("btnRunDelete").addEventListener("click", async () => {
-    await fetch(API + "/api/runs/" + encodeURIComponent(id), { method:"DELETE" });
-    state.runId = null;
-    refreshRuns();
-  });
-}
-
-function drawRunChart(history, objective){
-  const c = $("runChart");
-  if (!c) return;
-  const W = c.getBoundingClientRect().width || 560, H = 150;
-  c.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  c.innerHTML = "";
-  if (!history.length){
-    const t = el("text", { x:W/2, y:H/2, fill:"#3F5468", "font-size":"12",
-                           "text-anchor":"middle", "font-family":"var(--mono)" }, c);
-    t.textContent = "no epochs recorded";
-    return;
-  }
-  const pad = { l:46, r:12, t:12, b:20 };
-  const xs = history.map(h => h.epoch);
-  const ys = history.flatMap(h => [h.train_loss, h.val_loss]).filter(v => v !== undefined);
-  const lo = Math.min(0, Math.min(...ys)), hi = Math.max(...ys) * 1.12 || 1;
-  const x0 = Math.min(...xs), x1 = Math.max(Math.max(...xs), x0 + 1);
-  const px = e => pad.l + (e - x0) / (x1 - x0) * (W - pad.l - pad.r);
-  const py = v => H - pad.b - (v - lo) / (hi - lo) * (H - pad.t - pad.b);
-
-  [0, 0.5, 1].forEach(f => {
-    const v = lo + f * (hi - lo);
-    el("line", { x1:pad.l, x2:W-pad.r, y1:py(v), y2:py(v), stroke:"#22303F" }, c);
-    const t = el("text", { x:pad.l-7, y:py(v)+3, fill:"#4E6580", "font-size":"9.5",
-                           "text-anchor":"end", "font-family":"var(--mono)" }, c);
-    t.textContent = v.toFixed(2);
-  });
-  [["train_loss", "#F0A202"], ["val_loss", "#6FD0E0"]].forEach(([key, colour]) => {
-    const points = history.filter(h => h[key] !== undefined);
-    if (!points.length) return;
-    const d = points.map((h, i) => `${i?"L":"M"}${px(h.epoch)},${py(h[key])}`).join(" ");
-    el("path", { d, fill:"none", stroke:colour, "stroke-width":2,
-                 "stroke-linejoin":"round" }, c);
-    points.forEach(h => el("circle", { cx:px(h.epoch), cy:py(h[key]), r:2.6,
-                                       fill:colour }, c));
-  });
-  const label = el("text", { x:W-pad.r, y:pad.t+2, fill:"#6A809A", "font-size":"9.5",
-                             "text-anchor":"end", "font-family":"var(--mono)" }, c);
-  label.textContent = objective === "loss" ? "train / validation loss"
-                                           : `train / validation ${objective}`;
-}
-
-/* ============================ build ============================ */
-
-async function loadProjects(){
-  if (state.projects && state.projects.length) { renderProjectList(); return; }
-  try{
-    const d = await (await fetch(API + "/api/projects")).json();
-    state.projects = d.projects;
-    state.projectCategories = d.categories;
-  } catch { return; }
-
-  const row = $("catRow");
-  row.innerHTML = `<button data-cat="" class="on">all ${state.projects.length}</button>`
-    + state.projectCategories.map(c =>
-        `<button data-cat="${c.name}">${c.name} ${c.count}</button>`).join("");
-  row.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
-    state.projectCat = b.dataset.cat;
-    row.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
-    renderProjectList();
-  }));
-  renderProjectList();
-}
-
-function renderProjectList(filtered){
-  const list = $("projList");
-  const items = filtered || (state.projects || []).filter(p =>
-    !state.projectCat || p.category === state.projectCat);
-  list.innerHTML = items.map(p => `
-    <div class="projitem${p.id === state.projectId ? " on" : ""}" data-id="${p.id}"
-         style="--c:${CAT_COLOR[p.category] || "#8D6E63"}">
-      <b>${p.name}</b>
-      <span>${p.summary}</span>
-      <em>${p.steps} steps · ${p.difficulty}${p.recipe ? " · " + p.recipe + " recipe" : ""}</em>
-    </div>`).join("") || `<div class="empty">Nothing here.</div>`;
-  list.querySelectorAll(".projitem").forEach(el =>
-    el.addEventListener("click", () => openProject(el.dataset.id)));
-}
-
-let askTimer = null;
-$("askBox").addEventListener("input", () => {
-  clearTimeout(askTimer);
-  askTimer = setTimeout(runAsk, 320);
-});
-
-async function runAsk(){
-  const q = $("askBox").value.trim();
-  const note = $("askNote");
-  if (!q){ note.textContent = ""; renderProjectList(); return; }
-  let d;
-  try { d = await (await fetch(API + "/api/projects/suggest?q=" +
-                               encodeURIComponent(q))).json(); }
-  catch { return; }
-
-  if (!d.matches.length){
-    note.innerHTML = `<b>Nothing matches that.</b> ${d.advice || ""}`;
-    renderProjectList([]);
-    return;
-  }
-  note.innerHTML = d.confident
-    ? `<b>Closest projects:</b>`
-    : `<b>No close match.</b> ${d.advice || ""}`;
-  renderProjectList(d.matches);
-}
-
-async function openProject(id){
-  let p;
-  try { p = await (await fetch(API + "/api/projects/" + encodeURIComponent(id))).json(); }
-  catch { toast("Could not load that project"); return; }
-  state.projectId = id;
-  state.project = p;
-  state.stepAt = 0;
-  state.stepIds = {};
-
-  pushHistory();
-  state.graph = { name: p.name.replace(/[^0-9A-Za-z]+/g, "") || "Project",
-                  nodes: [], edges: [] };
-  state.seq = 1;
-  clearSelection();
-  $("gname").value = state.graph.name;
-  render(); analyze();
-
-  $("buildHead").innerHTML =
-    `<h4>${p.name}</h4><p>${p.summary}</p>`;
-  renderProjectList();
-  renderPlan();
-  toast(`${p.plan.length} steps — press Add this layer`);
-}
-
-function renderPlan(){
-  const p = state.project;
-  if (!p){ return; }
-  const at = state.stepAt;
-  const body = $("buildBody");
-
-  const notes = [];
-  if (p.data) notes.push(["Data", p.data]);
-  if (p.recipe) notes.push(["Training loop", `Choose the ${p.recipe} recipe in the Training tab.`]);
-  if (p.training) notes.push(["Settings", p.training]);
-  if (p.expect) notes.push(["What a working run looks like", p.expect]);
-  if (p.caution) notes.push(["Where this goes wrong", p.caution]);
-
-  body.innerHTML = p.plan.map((s, i) => `
-    <div class="stepcard ${i === at ? "now" : (i < at ? "done" : "")}">
-      <h5>${i + 1}. ${s.title}</h5>
-      <p>${s.why}</p>
-      ${s.alternatives ? `<div class="alt"><b>Instead of this:</b> ${s.alternatives}</div>` : ""}
-      ${s.watch ? `<div class="watch">${s.watch}</div>` : ""}
-      <div class="adds">${s.nodes.map(n => n.type).join(" → ")}</div>
-    </div>`).join("")
-    + (at >= p.plan.length
-        ? `<div class="notecard" style="border-color:var(--good)">
-             <b>Built</b>The graph is complete and the Code panel has the file.
-             ${p.recipe ? `Now choose the <b>${p.recipe}</b> recipe in the Training tab.` : "Now pick a dataset in the Training tab."}
-           </div>` : "")
-    + notes.map(([k, v]) => `<div class="notecard"><b>${k}</b>${v}</div>`).join("");
-
-  $("buildProgress").textContent = at >= p.plan.length
-    ? `all ${p.plan.length} steps placed`
-    : `step ${at + 1} of ${p.plan.length}`;
-  $("btnStepNext").disabled = at >= p.plan.length;
-  $("btnStepNext").textContent = at >= p.plan.length ? "Done" : "Add this layer";
-  $("btnStepBack").disabled = at === 0;
-
-  const active = body.querySelector(".stepcard.now") || body.querySelector(".stepcard");
-  if (active) active.scrollIntoView({ block: "nearest", behavior: "smooth" });
-}
-
-function applyStep(){
-  const p = state.project;
-  if (!p || state.stepAt >= p.plan.length) return;
-  const step = p.plan[state.stepAt];
-  pushHistory();
-
-  const detached = step.connect_from === "__none__";
-  const before = state.stepIds.__last;
-  let previous = detached ? null
-               : (step.connect_from && state.stepIds[step.connect_from]) || before;
-  const placed = [];
-  // an explicit connection to the step's first node replaces the implicit chain
-  const firstId = step.nodes.length ? step.nodes[0].id : null;
-  const explicitFirst = firstId
-    && (step.connect || []).some(c => c[1] === firstId);
-
-  // lay the step out beneath what is already there
-  const baseY = state.graph.nodes.length
-    ? Math.max(...state.graph.nodes.map(n => n.y + nodeHeight(n))) + 44
-    : 0;
-  const column = step.connect_from === "__none__" ? (NW + 90) : 0;
-
-  step.nodes.forEach((spec, i) => {
-    const node = { id: uid("n"), type: spec.type,
-                   params: JSON.parse(JSON.stringify(spec.params || {})),
-                   label: spec.label || "",
-                   x: column, y: baseY + i * (NH_CODE + 44) };
-    state.graph.nodes.push(node);
-    placed.push(node);
-    if (spec.id) state.stepIds[spec.id] = node.id;
-    const skipChain = i === 0 && explicitFirst;
-    if (previous && !skipChain && specOf(node.type)
-        && specOf(node.type).n_inputs !== 0){
-      state.graph.edges.push({ id: uid("e"), source: previous, target: node.id, port: 0 });
-    }
-    previous = node.id;
-  });
-
-  // named connections, for branches and merges
-  (step.connect || []).forEach(([src, dst, port]) => {
-    const source = src === "step1_last" ? state.stepIds.__step1
-                 : src === "step2_last" ? state.stepIds.__step2
-                 : state.stepIds[src];
-    const target = state.stepIds[dst];
-    if (source && target && !state.graph.edges.some(e =>
-        e.source === source && e.target === target)){
-      state.graph.edges.push({ id: uid("e"), source, target, port: port || 0 });
-    }
-  });
-
-  // a detached branch must not become the parent of whatever comes next
-  if (!detached) state.stepIds.__last = previous;
-  state.stepIds[`__step${state.stepAt + 1}`] = placed.length
-    ? placed[placed.length - 1].id : previous;
-  state.stepAt += 1;
-
-  state.selection = new Set(placed.map(n => n.id));
-  state.sel = placed.length ? placed[0].id : null;
-  render(); renderInspector(); analyze();
-  fitView();
-  renderPlan();
-}
-
-$("btnStepNext").addEventListener("click", applyStep);
-$("btnStepBack").addEventListener("click", () => {
-  if (state.stepAt === 0) return;
-  state.stepAt -= 1;
-  undo();
-  renderPlan();
-});
-
-/* ============================ chat ============================ */
-
-function chatSay(text, cls){
-  const log = $("chatLog");
-  const b = document.createElement("div");
-  b.className = "bubble " + cls;
-  b.textContent = text;
-  log.appendChild(b);
-  log.scrollTop = log.scrollHeight;
-  return b;
-}
-
-async function refreshChatModels(){
-  let d;
-  try { d = await (await fetch(API + "/api/chat/models")).json(); }
-  catch { return; }
-  const sel = $("ch_model"), keep = sel.value;
-  sel.innerHTML = d.checkpoints.length
-    ? d.checkpoints.map(c => {
-        const ppl = c.metrics && c.metrics.perplexity ? ` (ppl ${c.metrics.perplexity})` : "";
-        return `<option value="${c.file}">${c.file}${ppl}</option>`;
-      }).join("")
-    : `<option value="">no text model trained yet</option>`;
-  if (d.checkpoints.some(c => c.file === keep)) sel.value = keep;
-
-  if (!d.checkpoints.length && !$("chatLog").children.length){
-    chatSay("No text model yet. Open the MiniGPT design, train it on a .txt corpus "
-            + "in the Training tab, and its checkpoints will appear here.", "sys");
-  }
-}
-
-async function sendChat(){
-  const model = $("ch_model").value;
-  if (!model){ chatSay("Train a model on a text corpus first.", "sys"); return; }
-  const text = $("chatInput").value.trim();
-  if (!text) return;
-  $("chatInput").value = "";
-  chatSay(text, "me");
-
-  const dialogue = $("ch_format").value === "dialogue";
-  const prompt = dialogue ? `user: ${text}\nmodel:` : text;
-  const pending = chatSay("…", "it thinking");
-  $("btnChatSend").disabled = true;
-
-  let r, d;
-  try{
-    r = await fetch(API + "/api/chat", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        checkpoint: model, prompt,
-        max_new_tokens: +$("ch_max").value,
-        temperature: +$("ch_temp").value,
-        top_k: +$("ch_topk").value,
-        stop: dialogue ? "\nuser:" : ""
-      })
-    });
-    d = await r.json();
-  } catch(err){
-    pending.remove(); chatSay("The server did not respond.", "sys");
-    $("btnChatSend").disabled = false; return;
-  }
-  $("btnChatSend").disabled = false;
-  pending.remove();
-
-  if (!r.ok){
-    chatSay((d.detail && d.detail.message) || "Generation failed", "sys");
-    return;
-  }
-  chatSay(d.continuation.trim() || "(the model produced nothing)", "it");
-  if (d.unknown_characters && d.unknown_characters.length){
-    chatSay(`Not in the model's vocabulary, so dropped: ${d.unknown_characters.join(" ")}`, "sys");
-  }
-}
-
-$("btnChatSend").addEventListener("click", sendChat);
-$("chatInput").addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); }
-});
-$("btnChatClear").addEventListener("click", () => { $("chatLog").innerHTML = ""; });
-$("ch_model").addEventListener("change", () => {
-  $("ch_note").textContent = "Loaded on the first message, then kept in memory.";
-});
-
-/* ============================ import ============================ */
-
-$("btnImport").addEventListener("click", async () => {
-  const sel = $("im_arch");
-  if (!sel.options.length){
-    try{
-      const d = await (await fetch(API + "/api/import/models")).json();
-      sel.innerHTML = d.torchvision.map(m => `<option value="${m}">${m}</option>`).join("");
-    } catch { toast("Cannot reach the server"); return; }
-  }
-  $("importNote").innerHTML = "";
-  $("modal").classList.add("on");
-});
-$("btnImportCancel").addEventListener("click", () => $("modal").classList.remove("on"));
-$("modal").addEventListener("click", e => {
-  if (e.target.id === "modal") $("modal").classList.remove("on");
-});
-$("btnPickModel").addEventListener("click", () => $("im_file").click());
-$("im_file").addEventListener("change", e => {
-  $("im_file_label").value = e.target.files[0] ? e.target.files[0].name : "";
-});
-
-$("btnImportGo").addEventListener("click", async () => {
-  const note = $("importNote");
-  note.textContent = "Tracing…";
-  const file = $("im_file").files[0];
-  let r, d;
-  try{
-    if (file){
-      const body = new FormData();
-      body.append("file", file);
-      r = await fetch(API + "/api/import/upload?shape=" +
-                      encodeURIComponent($("im_shape").value), { method:"POST", body });
-    } else {
-      r = await fetch(API + "/api/import/torchvision", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          arch: $("im_arch").value,
-          weights: $("im_weights").value,
-          input_shape: $("im_shape").value.split(/[^0-9]+/).filter(Boolean).map(Number)
-        })
-      });
-    }
-    d = await r.json();
-  } catch(err){ note.textContent = "The server did not respond."; return; }
-
-  if (!r.ok){
-    note.innerHTML = `<span class="warn">${(d.detail && d.detail.message) || "Import failed"}</span>`;
-    return;
-  }
-
-  pushHistory();
-  state.graph = d.graph;
-  state.seq = d.nodes + state.graph.edges.length + 500;
-  $("gname").value = state.graph.name || "Imported";
-  clearSelection();
-  render(); fitView(); analyze();
-
-  const bits = [`Imported <b>${d.nodes}</b> layers.`];
-  if (d.notes && d.notes.length){
-    bits.push(`<span class="warn">${d.notes.length} could not be reconstructed and came in as stubs:</span> `
-              + d.notes.slice(0,6).join("; "));
-  }
-  if (!d.ok){
-    bits.push(`<span class="warn">${d.problem_count} shape problem(s)</span> — see the Problems tab.`);
-  } else {
-    bits.push("Shapes resolve end to end.");
-  }
-  note.innerHTML = bits.join("<br>");
-  toast(`Imported ${d.nodes} layers`);
-  if (d.ok && !(d.notes || []).length) setTimeout(() => $("modal").classList.remove("on"), 900);
+/* the status strip along the bottom of the canvas */
+$("statusToggle").addEventListener("click", () => {
+  $("problemPanel").classList.toggle("on");
+  $("statusToggle").textContent =
+    $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
 
 /* ============================ blocks ============================ */

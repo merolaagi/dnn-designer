@@ -151,8 +151,9 @@ of the way, which is the usual way a stack actually grows.
 Each node shows the constructor it contributes to the generated file, so the
 canvas and the Code panel say the same thing without switching between them.
 
-The right panel has three tabs. **Layer** edits the selection. **Network**
-summarises the design and its Inputs and Outputs. **Needs** answers what this
+The right panel has five tabs. **Layer** edits the selection. **Network**
+summarises the design and its Inputs and Outputs. **Code** shows the generated
+file. **Train** runs it. **Needs** answers what this
 design requires before it will run: which plug-in blocks it pulls in and from
 which file, whether it will download pretrained weights, which Python packages
 it needs and why, which dataset kinds its Inputs can accept, and what will go
@@ -162,6 +163,11 @@ All of it is derived from the graph, so it cannot disagree with what you built.
 Shift-click extends the selection, `Cmd/Ctrl+A` takes everything, and shift-drag
 on empty canvas sweeps a marquee. A group drags together, and copy-paste
 preserves connections between the copied layers. `Cmd/Ctrl+Z` undoes.
+
+The rail on the far left switches pages: Design is the canvas, and Build, Runs,
+Chat and Extend take the full window. A status strip along the bottom of the
+canvas is green when the graph resolves and red with the first problem when it
+does not.
 
 Large graphs get a minimap, `Cmd/Ctrl+K` to find a layer by name and centre on
 it, a toggle between curved and right-angled wires, and snap-to-grid. Anything
@@ -460,4 +466,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.7.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.8.0 — see `CHANGELOG.md`.

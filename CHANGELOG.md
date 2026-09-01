@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.8.0
+
+The layout had two competing panel systems — a bottom drawer *and* a right
+panel. The drawer opened over the canvas, and on a laptop the Build project list
+was clipped off the bottom of the window with its button half out of view. That
+was a layout bug, not a matter of taste.
+
+- **The bottom drawer is gone.** One full-height right panel does the work, the
+  way a workflow editor arranges it.
+- **Right panel widened to 390px** and gained tabs: Layer, Network, Code, Train,
+  Needs. Code and training now live beside the canvas instead of underneath it,
+  so you can watch shapes resolve while reading the file they generate.
+- **The rail switches pages, not drawers.** Design shows the canvas; Build,
+  Runs, Chat and Extend take the full width, which is what the project browser
+  and the run history actually needed.
+- **Status strip** along the bottom of the canvas: green when the graph
+  resolves, red with the first problem when it does not, and a details toggle
+  for the rest. Always visible, never covering anything.
+- The training panel stacks vertically to suit a column rather than a wide
+  drawer.
+
 ## 1.7.0
 
 Definitions and executions, separated the way a workflow tool separates them.
