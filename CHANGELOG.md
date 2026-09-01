@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.14.0
+
+The Code tab was a dark block of unstyled text. It is a viewer now.
+
+- **Light background**, matching the canvas beside it. Reading code against one
+  background and a diagram against another is tiring.
+- **Line numbers** in a gutter.
+- **Python syntax highlighting** — keywords, strings, comments, numbers,
+  decorators, `self`, and the names in `def` and `class` lines. The file is
+  tokenised in one pass before being cut into lines, so a docstring stays a
+  single string token across all eleven of its lines rather than falling apart
+  at the first newline.
+- **A map of the whole file** down the right edge: one bar per line, its width
+  the line's length, its indent the code's indent, its colour what the line
+  mostly is. The current viewport is marked, and clicking jumps there.
+- Jumping from a layer's *Show in Code* highlights the line and scrolls to it.
+- Everything is HTML-escaped, so a `<` in the generated code stays a `<`.
+
 ## 1.13.0
 
 The Layer tab listed parameters and little else. Three things it now does, each

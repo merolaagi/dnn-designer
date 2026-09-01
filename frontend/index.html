@@ -426,12 +426,51 @@ body.resizing-v{cursor:row-resize;user-select:none}
 /* ---------------- panes ---------------- */
 .pane{flex:1;overflow:auto;display:none;min-height:0}
 .pane.on{display:block}
-pre#code{
-  margin:0;padding:12px 14px;font-family:var(--mono);font-size:10.5px;
-  line-height:1.5;background:var(--ink);color:#C8D6E5;
-  min-height:calc(100% - 40px);white-space:pre;overflow-x:auto;
+/* A code viewer rather than a dump: gutter, highlighting, and a map of the
+   whole file down the right edge. Light, because it sits beside a light canvas
+   and reading code against two different backgrounds is tiring. */
+.codeview{
+  display:flex;position:relative;background:#FCFCFD;
+  min-height:calc(100% - 41px);font-family:var(--mono);font-size:11px;
+  line-height:1.65;
 }
-pre#code .kw{color:#F0A202}
+.gutter{
+  flex:none;padding:12px 8px 12px 12px;text-align:right;color:#B4BDC8;
+  background:#F6F8FA;border-right:1px solid var(--paper-3);user-select:none;
+  min-width:38px;
+}
+.gutter div{height:1.65em}
+pre#code{
+  margin:0;padding:12px 14px;flex:1;min-width:0;color:#3C4453;
+  white-space:pre;overflow-x:auto;background:none;font-size:11px;line-height:1.65;
+}
+pre#code .ln{display:block;min-height:1.65em}
+pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
+.tok-kw{color:#A626A4}
+.tok-str{color:#3E9A4E}
+.tok-com{color:#A0A6B0;font-style:italic}
+.tok-num{color:#B26B00}
+.tok-dec{color:#4078F2}
+.tok-self{color:#D9544D}
+.tok-def{color:#4078F2;font-weight:600}
+.codemap{
+  flex:none;width:64px;border-left:1px solid var(--paper-3);background:#F6F8FA;
+  position:relative;overflow:hidden;cursor:pointer;
+}
+.codemap i{position:absolute;left:3px;display:block;border-radius:1px}
+.codemap .view{
+  position:absolute;left:0;right:0;background:rgba(45,125,210,.12);
+  border-top:1px solid rgba(45,125,210,.35);
+  border-bottom:1px solid rgba(45,125,210,.35);pointer-events:none;
+}
+.codehead{
+  display:flex;align-items:center;gap:7px;padding:8px 11px;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+  position:sticky;top:0;z-index:2;
+}
+.codehead select{flex:1;border:1px solid var(--paper-3);border-radius:5px;
+  padding:4px 7px;font-size:12px;background:#fff}
+.codehead .count{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
 .probs{padding:10px 14px;font-size:12px;line-height:1.6;margin:0}
 .probs li{margin-bottom:4px;color:#8C2F27}
 .probs .fine{color:var(--good)}
@@ -823,14 +862,19 @@ pre#code .kw{color:#F0A202}
     <div class="scroll" id="guideBody" style="display:none;padding:0"></div>
     <div class="scroll" id="needsBody" style="display:none;padding:0"></div>
     <div class="scroll" id="codeBody" style="display:none;padding:0">
-      <div class="sidetools">
+      <div class="codehead">
         <select id="framework">
           <option value="pytorch">PyTorch</option>
           <option value="keras">Keras</option>
         </select>
+        <span class="count" id="codeCount"></span>
         <button class="btn" id="btnCopy">Copy</button>
       </div>
-      <pre id="code">Building…</pre>
+      <div class="codeview">
+        <div class="gutter" id="codeGutter"></div>
+        <pre id="code">Building…</pre>
+        <div class="codemap" id="codeMap"><div class="view" id="codeMapView"></div></div>
+      </div>
     </div>
     <div class="scroll" id="trainBody" style="display:none;padding:0">
     <div class="trainwrap">
@@ -2360,25 +2404,7 @@ function renderNodeSource(body, node){
   }
 }
 
-function highlightInCode(varName){
-  const pre = $("code");
-  const text = pre.textContent;
-  const idx = text.indexOf("self." + varName + " =");
-  const at = idx >= 0 ? idx : text.indexOf(varName + " =");
-  if (at < 0) return;
-  const before = text.slice(0, at);
-  const line = text.slice(at, text.indexOf("\n", at) + 1 || undefined);
-  const after = text.slice(at + line.length);
-  pre.textContent = "";
-  pre.appendChild(document.createTextNode(before));
-  const mark = document.createElement("span");
-  mark.textContent = line;
-  mark.style.background = "#3A2F12";
-  mark.style.borderLeft = "2px solid var(--amber)";
-  pre.appendChild(mark);
-  pre.appendChild(document.createTextNode(after));
-  mark.scrollIntoView({ block:"center", behavior:"smooth" });
-}
+
 
 let paramTimer = null;
 async function testLayer(node){
@@ -2608,15 +2634,168 @@ function showProblems(){
   $("btnTrain").disabled = !(rep && rep.ok);
 }
 
-function showCode(){
-  const fw = $("framework").value;
-  $("code").textContent = state.code[fw] || "";
+/* ---------- syntax highlighting ---------- */
+
+const PY_KEYWORDS = new Set(("def class return if else elif for while import from as with "
+  + "try except finally raise pass lambda yield in not and or is None True False "
+  + "global nonlocal assert del break continue async await").split(" "));
+
+const TRIPLE_D = String.fromCharCode(34, 34, 34);
+const TRIPLE_S = String.fromCharCode(39, 39, 39);
+
+// One pass over the whole file, so a docstring spanning lines stays one token.
+const PY_TOKEN = new RegExp([
+  TRIPLE_D + "[\\s\\S]*?" + TRIPLE_D,
+  TRIPLE_S + "[\\s\\S]*?" + TRIPLE_S,
+  "#[^\\n]*",
+  '[rbfRBF]?"(?:\\\\.|[^"\\\\])*"',
+  "[rbfRBF]?'(?:\\\\.|[^'\\\\])*'",
+  "@[\\w.]+",
+  "\\b\\d+\\.?\\d*(?:[eE][-+]?\\d+)?\\b",
+  "\\b[A-Za-z_]\\w*\\b",
+].join("|"), "g");
+
+function escapeHtml(text){
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+function classify(token, previous){
+  if (token.charAt(0) === "#") return "tok-com";
+  if (/^[rbfRBF]?["']/.test(token)) return "tok-str";
+  if (token.charAt(0) === "@") return "tok-dec";
+  if (/^\d/.test(token)) return "tok-num";
+  if (PY_KEYWORDS.has(token)) return "tok-kw";
+  if (token === "self" || token === "super" || token === "cls") return "tok-self";
+  if (previous === "def" || previous === "class") return "tok-def";
+  return null;
+}
+
+/* Tokenise first, then cut the stream into lines. Cutting first would split any
+   token that spans lines, which is exactly what a docstring does. */
+function highlightPython(source){
+  const pieces = [];
+  let at = 0, match, previous = null;
+  PY_TOKEN.lastIndex = 0;
+  while ((match = PY_TOKEN.exec(source)) !== null){
+    if (match.index > at) pieces.push([source.slice(at, match.index), null]);
+    pieces.push([match[0], classify(match[0], previous)]);
+    if (/^[A-Za-z_]/.test(match[0])) previous = match[0];
+    at = match.index + match[0].length;
+  }
+  if (at < source.length) pieces.push([source.slice(at), null]);
+
+  const lines = [[]];
+  pieces.forEach(pair => {
+    const parts = pair[0].split("\n");
+    parts.forEach((part, i) => {
+      if (i > 0) lines.push([]);
+      if (part) lines[lines.length - 1].push([part, pair[1]]);
+    });
+  });
+  return lines;
+}
+
+function showCode(){
+  const fw = $("framework").value || "pytorch";
+  const source = state.code[fw] || "";
+  const lines = highlightPython(source);
+  state.codeLines = lines;
+
+  $("code").innerHTML = lines.map(parts => {
+    const inner = parts.map(pair =>
+      pair[1] ? '<span class="' + pair[1] + '">' + escapeHtml(pair[0]) + "</span>"
+              : escapeHtml(pair[0])).join("");
+    return '<span class="ln">' + (inner || " ") + "</span>";
+  }).join("");
+
+  $("codeGutter").innerHTML = lines.map((_, i) => "<div>" + (i + 1) + "</div>").join("");
+  $("codeCount").textContent = lines.length + " lines";
+  drawCodeMap();
+}
+
+/* The map is the shape of the file: one bar per line, its width the line's
+   length, its indent the code's indent, its colour what the line mostly is. */
+function drawCodeMap(){
+  const map = $("codeMap");
+  if (!map) return;
+  const lines = state.codeLines || [];
+  const height = map.getBoundingClientRect().height || 420;
+  if (!lines.length){
+    map.innerHTML = '<div class="view" id="codeMapView"></div>';
+    return;
+  }
+  const step = Math.max(0.7, Math.min(3, height / lines.length));
+  const colourOf = parts => {
+    const first = parts.find(pair => pair[0].trim());
+    if (!first) return "transparent";
+    if (first[1] === "tok-com") return "#CBD2DA";
+    if (first[1] === "tok-kw") return "#C79BD0";
+    if (first[1] === "tok-str") return "#9CCFA4";
+    return "#9AA6B4";
+  };
+  const bars = lines.map((parts, i) => {
+    const text = parts.map(pair => pair[0]).join("");
+    const indent = (text.match(/^\s*/) || [""])[0].length;
+    const len = Math.min(text.trim().length, 56);
+    if (!len) return "";
+    return '<i style="top:' + (i * step).toFixed(2)
+      + "px;height:" + Math.max(1, step - 0.4).toFixed(2)
+      + "px;left:" + (3 + indent * 0.7)
+      + "px;width:" + (len * 0.9).toFixed(1)
+      + "px;background:" + colourOf(parts) + '"></i>';
+  }).join("");
+  map.innerHTML = bars + '<div class="view" id="codeMapView"></div>';
+  syncCodeMap();
+}
+
+function codeLineHeight(){ return 11 * 1.65; }
+
+function syncCodeMap(){
+  const view = $("codeMapView"), holder = $("codeBody"), map = $("codeMap");
+  if (!view || !holder || !map) return;
+  const lines = (state.codeLines || []).length || 1;
+  const height = map.getBoundingClientRect().height || 420;
+  const step = Math.max(0.7, Math.min(3, height / lines));
+  const first = holder.scrollTop / codeLineHeight();
+  const visible = holder.clientHeight / codeLineHeight();
+  view.style.top = (first * step) + "px";
+  view.style.height = Math.max(10, visible * step) + "px";
+}
+
+$("codeBody").addEventListener("scroll", syncCodeMap);
+$("codeMap").addEventListener("pointerdown", ev => {
+  const map = $("codeMap"), holder = $("codeBody");
+  const lines = (state.codeLines || []).length || 1;
+  const box = map.getBoundingClientRect();
+  const step = Math.max(0.7, Math.min(3, (box.height || 420) / lines));
+  const line = (ev.clientY - box.top) / step;
+  holder.scrollTop = Math.max(0, (line - 6) * codeLineHeight());
+});
+
+function highlightInCode(varName){
+  const lines = state.codeLines || [];
+  const index = lines.findIndex(parts => {
+    const text = parts.map(pair => pair[0]).join("");
+    return text.indexOf("self." + varName + " =") >= 0
+        || text.indexOf(varName + " = ") >= 0;
+  });
+  if (index < 0) return;
+  const spans = $("code").querySelectorAll(".ln");
+  spans.forEach(el => el.classList.remove("hit"));
+  const target = spans[index];
+  if (target) target.classList.add("hit");
+  $("codeBody").scrollTop = Math.max(0, (index - 5) * codeLineHeight());
+  syncCodeMap();
+}
+
 $("framework").addEventListener("change", showCode);
 $("btnCopy").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText($("code").textContent); toast("Code copied"); }
-  catch { toast("Copy blocked by the browser"); }
+  try {
+    await navigator.clipboard.writeText(state.code[$("framework").value] || "");
+    toast("Code copied");
+  } catch { toast("Copy blocked by the browser"); }
 });
+
 $("btnDownload").addEventListener("click", () => {
   const fw = $("framework").value;
   const blob = new Blob([state.code[fw] || ""], { type:"text/x-python" });

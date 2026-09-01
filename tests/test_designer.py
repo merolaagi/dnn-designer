@@ -896,6 +896,17 @@ def _():
         "a block has no PyTorch page to link to"
 
 
+@check("the code panel renders a real viewer, not a dump")
+def _():
+    for token in ("function highlightPython", "function drawCodeMap",
+                  "tok-kw", "tok-str", "tok-com", "tok-def",
+                  'id="codeGutter"', 'id="codeMap"', 'id="codeCount"'):
+        assert token in PAGE, f"{token} is missing from the code panel"
+    # tokenising before splitting lines is what keeps a docstring in one piece
+    assert "Tokenise first" in PAGE or "PY_TOKEN.exec" in PAGE
+    assert "escapeHtml" in PAGE, "code is rendered without escaping"
+
+
 @check("shape follows flowchart convention, not decoration")
 def _():
     for shape in ("circle", "diamond", "hex", "data", "stadium",
@@ -994,6 +1005,7 @@ def _():
         "showPage", "showSide", "applyLayout", "loadLayout",
         "openInserter", "insertIntoEdge", "openAppender", "appendAfterNode",
         "importSteps", "placeStep", "startGuided", "renderGuide", "renderPlanOverview",
+        "highlightPython", "drawCodeMap", "syncCodeMap", "escapeHtml", "testLayer",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",
