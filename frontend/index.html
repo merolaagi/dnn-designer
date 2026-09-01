@@ -273,6 +273,12 @@ body.resizing-v{cursor:row-resize;user-select:none}
 /* ---------------- canvas ---------------- */
 #stage{flex:1;position:relative;min-width:0;background:var(--board);
   overflow:hidden;padding-bottom:30px}
+#stage.panning{cursor:grab}
+#stage.panning.dragging{cursor:grabbing}
+#stage.panning .node, #stage.panning .port, #stage.panning .port-plus,
+#stage.panning .insert, #stage.panning .node-kill, #stage.panning .wire-hit{
+  cursor:grab;
+}
 #svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .node-card{
   fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1;
@@ -486,6 +492,15 @@ pre#code .kw{color:#F0A202}
 .node.sel .node-diamond{stroke:#2D7DD2;stroke-width:2.2}
 .node.err .node-diamond{stroke:var(--bad);stroke-width:1.8}
 .node-hex{fill:#F4F7FA;stroke:#9DAEC2;stroke-width:1.2;stroke-dasharray:5 3}
+.node-data{fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1;
+  filter:drop-shadow(0 1px 3px rgba(22,32,46,.12))}
+.node.sel .node-data{stroke:#2D7DD2;stroke-width:2}
+.node.err .node-data{stroke:var(--bad);stroke-width:1.6}
+.node-stadium{fill:#FFFDF6;stroke:#D9C79A;stroke-width:1;
+  filter:drop-shadow(0 1px 3px rgba(22,32,46,.10))}
+.node.sel .node-stadium{stroke:#2D7DD2;stroke-width:2}
+.node-bars{stroke:#C6D0DC;stroke-width:1}
+.node.sel .node-bars{stroke:#2D7DD2}
 .node.sel .node-hex{stroke:#2D7DD2;stroke-dasharray:none;stroke-width:2.2}
 .port-plus{cursor:pointer}
 .port-plus circle{fill:#fff;stroke:#8FA3B8;stroke-width:1.4}
@@ -677,6 +692,8 @@ pre#code .kw{color:#F0A202}
     <button id="btnRedo" title="Redo" disabled>&#8631;</button>
     <span class="sep"></span>
     <button id="zfind" title="Find a layer">&#9906;</button>
+    <span class="sep"></span>
+    <button id="zpan" title="Drag the whole graph (or hold space)">&#9995;</button>
   </div>
 </header>
 
@@ -953,6 +970,7 @@ const state = {
   selection:new Set(), history:[], future:[], clipboard:null,
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
   flow:"vertical", gridLevel:2, appendAfter:null,
+  panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
 };
@@ -1242,8 +1260,68 @@ svg.addEventListener("wheel", e => {
   zoomBy(e.deltaY < 0 ? 1.08 : 1/1.08, e.clientX - r.left, e.clientY - r.top);
 }, { passive:false });
 
+/* Dragging the whole graph.
+
+   Nodes here are individually draggable, unlike a workflow editor where the
+   layout is automatic — so grabbing the canvas from anywhere is a mode rather
+   than the default. The hand tool turns it on, holding space turns it on while
+   held, and the middle button always pans. */
+function beginPan(ev){
+  const sx = ev.clientX, sy = ev.clientY;
+  const ox = state.view.x, oy = state.view.y;
+  $("stage").classList.add("dragging");
+  const move = e2 => {
+    state.view.x = ox + (e2.clientX - sx);
+    state.view.y = oy + (e2.clientY - sy);
+    applyView(); drawMinimap();
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    $("stage").classList.remove("dragging");
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+function panActive(ev){
+  return state.panMode || state.spaceHeld || (ev && ev.button === 1);
+}
+
+function setPanMode(on){
+  state.panMode = on;
+  $("zpan").classList.toggle("on", on);
+  $("stage").classList.toggle("panning", on || state.spaceHeld);
+}
+
+$("zpan").addEventListener("click", () => setPanMode(!state.panMode));
+
+window.addEventListener("keydown", e => {
+  if (e.code === "Space" && !state.spaceHeld
+      && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){
+    e.preventDefault();
+    state.spaceHeld = true;
+    $("stage").classList.add("panning");
+  }
+});
+window.addEventListener("keyup", e => {
+  if (e.code === "Space"){
+    state.spaceHeld = false;
+    $("stage").classList.toggle("panning", state.panMode);
+  }
+});
+
+// captured before anything else, so a node never starts moving in pan mode
+svg.addEventListener("pointerdown", e => {
+  if (!panActive(e)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  beginPan(e);
+}, true);
+
 /* pan on empty canvas */
 svg.addEventListener("pointerdown", e => {
+  if (panActive(e)) return;
   if (e.target.id !== "bg" && e.target.id !== "svg") return;
 
   if (e.shiftKey){
@@ -1618,15 +1696,32 @@ function nodeCode(n){
 const TERMINAL = 104;      // diameter of the entry and exit circles
 const DIAMOND_W = 200, DIAMOND_H = 118;
 
+const RESHAPERS = ["Flatten", "Reshape", "Permute"];
+
+/* Shape follows the flowchart conventions the roles actually match:
+     circle          terminator      — where data enters and leaves
+     diamond         decision        — where paths join
+     parallelogram   data            — reinterpreting the same values
+     barred rect     predefined      — a plug-in block, defined elsewhere
+     stadium         simple step     — an elementwise activation
+     hexagon         preparation     — a runtime component, outside forward()
+     rectangle       process         — an ordinary layer                       */
 function nodeBox(n){
   const spec = specOf(n.type) || {};
+  const tall = nodeCode(n) ? NH_CODE : NH;
   if (n.type === "Input" || n.type === "Output")
     return { w: TERMINAL, h: TERMINAL, shape: "circle" };
   if (["Add", "Concat", "Multiply"].includes(n.type))
     return { w: DIAMOND_W, h: DIAMOND_H, shape: "diamond" };
   if (spec.kind === "runtime")
     return { w: NW, h: 62, shape: "hex" };
-  return { w: NW, h: nodeCode(n) ? NH_CODE : NH, shape: "card" };
+  if (RESHAPERS.includes(n.type))
+    return { w: NW, h: tall, shape: "data" };
+  if (n.type === "Activation")
+    return { w: NW, h: NH, shape: "stadium" };
+  if (spec.source === "block")
+    return { w: NW, h: tall, shape: "predefined" };
+  return { w: NW, h: tall, shape: "card" };
 }
 
 function nodeHeight(n){ return nodeBox(n).h; }
@@ -1759,29 +1854,62 @@ function render(){
                                "text-anchor":"middle" }, g);
       sub.textContent = "runtime · outside forward()";
     } else {
-      const H = box.h;
+      const H = box.h, W = box.w;
       const preview = H > NH ? nodeCode(n) : null;
-      el("rect", { class:"node-card", width:box.w, height:H, rx:7 }, g);
-      el("rect", { class:"node-rail", width:4, height:H-2, x:1, y:1, rx:2,
-                   fill: CAT_COLOR[spec.category] || "#8D6E63" }, g);
+      const skew = 18;
 
-      const title = el("text", { class:"node-title", x:15, y:20 }, g);
+      if (box.shape === "data"){
+        // a parallelogram: the flowchart symbol for data, which is exactly what
+        // Flatten and Reshape do — the same values, read differently
+        el("path", { class:"node-data",
+          d:`M${skew},1 L${W-1},1 L${W-skew},${H-1} L1,${H-1} Z` }, g);
+      } else if (box.shape === "stadium"){
+        el("rect", { class:"node-stadium", width:W, height:H, rx:H/2 }, g);
+      } else if (box.shape === "predefined"){
+        el("rect", { class:"node-card", width:W, height:H, rx:7 }, g);
+        el("line", { class:"node-bars", x1:11, y1:1, x2:11, y2:H-1 }, g);
+        el("line", { class:"node-bars", x1:W-11, y1:1, x2:W-11, y2:H-1 }, g);
+      } else {
+        el("rect", { class:"node-card", width:W, height:H, rx:7 }, g);
+      }
+
+      if (box.shape === "card" || box.shape === "predefined"){
+        el("rect", { class:"node-rail", width:4, height:H-2,
+                     x: box.shape === "predefined" ? 3 : 1, y:1, rx:2,
+                     fill: CAT_COLOR[spec.category] || "#8D6E63" }, g);
+      }
+      const inset = box.shape === "data" ? skew + 6
+                  : box.shape === "stadium" ? 20
+                  : box.shape === "predefined" ? 20 : 15;
+
+      const single = (box.shape === "stadium");
+      const title = el("text", { class:"node-title", x:inset,
+                                 y: single ? H/2 + 4 : 20 }, g);
       title.textContent = n.label || n.type;
-      const sub = el("text", { class:"node-sub", x:15, y:33 }, g);
-      sub.textContent = subtitle(n) || n.type.toLowerCase();
+      if (!single){
+        const sub = el("text", { class:"node-sub", x:inset, y:33 }, g);
+        sub.textContent = subtitle(n) || n.type.toLowerCase();
+      } else {
+        const sub = el("text", { class:"node-sub", x:inset + 84, y:H/2 + 4 }, g);
+        sub.textContent = subtitle(n) || "";
+      }
 
       const label = badgeFor(n);
       if (label){
         const w = label.length * 5.6 + 10;
-        el("rect", { class:"node-chip", x:box.w-w-9, y:9, width:w, height:14, rx:3.5 }, g);
-        const t = el("text", { class:"node-chip-text", x:box.w-9-w/2, y:19,
-                               "text-anchor":"middle" }, g);
+        const bx = W - w - (box.shape === "data" ? skew + 4 : 9);
+        el("rect", { class:"node-chip", x:bx, y: single ? H/2 - 7 : 9,
+                     width:w, height:14, rx:3.5 }, g);
+        const t = el("text", { class:"node-chip-text", x:bx + w/2,
+                               y: single ? H/2 + 3 : 19, "text-anchor":"middle" }, g);
         t.textContent = label;
       }
       if (preview){
-        el("rect", { class:"node-preview-bg", x:9, y:H-27, width:box.w-18, height:19, rx:4 }, g);
-        const code = el("text", { class:"node-preview", x:15, y:H-14 }, g);
-        const room = Math.floor((box.w - 30) / 5.05);
+        const px = box.shape === "data" ? skew : 9;
+        el("rect", { class:"node-preview-bg", x:px, y:H-27,
+                     width:W - px*2, height:19, rx:4 }, g);
+        const code = el("text", { class:"node-preview", x:px + 6, y:H-14 }, g);
+        const room = Math.floor((W - px*2 - 12) / 5.05);
         code.textContent = preview.length > room
           ? preview.slice(0, room - 1) + "\u2026" : preview;
       }

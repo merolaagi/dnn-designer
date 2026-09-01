@@ -836,6 +836,28 @@ def _():
         and 'shape: "hex"' in PAGE, "nodeBox does not assign all four shapes"
 
 
+@check("shape follows flowchart convention, not decoration")
+def _():
+    for shape in ("circle", "diamond", "hex", "data", "stadium",
+                  "predefined", "card"):
+        assert f'shape: "{shape}"' in PAGE, f"nodeBox never returns {shape}"
+    for cls in ("node-data", "node-stadium", "node-bars"):
+        assert cls in PAGE, f"{cls} has no styling"
+    # the reshaping layers are the ones that get the data symbol
+    assert "RESHAPERS" in PAGE and "Flatten" in PAGE and "Permute" in PAGE
+
+
+@check("the whole graph can be dragged, three ways")
+def _():
+    assert "function beginPan" in PAGE, "no pan implementation"
+    assert "function panActive" in PAGE, "no pan predicate"
+    assert 'id="zpan"' in PAGE, "no hand tool"
+    assert "spaceHeld" in PAGE, "space does not pan"
+    assert "button === 1" in PAGE, "the middle button does not pan"
+    # the capturing listener is what stops a node moving instead of the canvas
+    assert "}, true);" in PAGE, "the pan handler does not capture"
+
+
 @check("the canvas can flow either way")
 def _():
     assert 'flow === "horizontal"' in PAGE, "no horizontal layout branch"

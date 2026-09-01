@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.12.0
+
+- **Seven node shapes, mapped to flowchart convention** rather than chosen for
+  variety. A circle is a terminator, so Input and Output are circles. A diamond
+  is a decision, so merges are diamonds. A parallelogram is the data symbol, so
+  Flatten, Reshape and Permute — which reinterpret the same values — are
+  parallelograms. A rectangle with side bars is a predefined process, so every
+  plug-in block gets one. A stadium is a simple step, so activations are pills.
+  A hexagon is preparation, which suits a runtime component. Everything else is
+  an ordinary process rectangle.
+- **Drag the whole graph from anywhere.** The hand tool in the toolbar turns it
+  on, holding space turns it on while held, and the middle mouse button always
+  pans. Because layers here are individually draggable — unlike a workflow
+  editor, where the layout is automatic — this had to be a mode rather than the
+  default, or you could never move a single layer again.
+- The pan handler captures, so a node never starts moving when you meant to move
+  the canvas.
+
 ## 1.11.0
 
 You could not see what "Add this layer" was doing, because the Projects page

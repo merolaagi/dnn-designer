@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Fifty-two checks, with the torch-dependent ones skipping themselves when it is
+Fifty-four checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -147,9 +147,17 @@ they connect automatically, which covers most of the work when building a stack
 top to bottom. To wire by hand, drag from the dot at the bottom of one layer to
 the dot at the top of another.
 
-Shape tells you what a node is before you read it: circles are the Input and
-Output terminals, diamonds are merges where paths join, dashed hexagons are
-runtime components that sit outside `forward()`, and cards are ordinary layers.
+Shape tells you what a node is before you read it, following the flowchart
+conventions the roles actually match: circles are terminators (Input, Output),
+diamonds are decisions (merges, where paths join), parallelograms are the data
+symbol (Flatten, Reshape, Permute — the same values read differently),
+rectangles with side bars are predefined processes (any plug-in block), pills
+are simple steps (activations), dashed hexagons are preparation (runtime
+components outside `forward()`), and plain rectangles are ordinary layers.
+
+To move the whole graph, use the hand tool, hold space, or drag with the middle
+mouse button. It is a mode rather than the default because layers here can be
+dragged individually.
 
 Click the `+` on a node's outgoing port to add the next layer, or drag from it to
 wire by hand. To put a layer *between* two that are already connected, hover the
@@ -482,4 +490,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.11.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.12.0 — see `CHANGELOG.md`.
