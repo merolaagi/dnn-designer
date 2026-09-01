@@ -126,7 +126,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Forty checks, with the torch-dependent ones skipping themselves when it is
+Forty-two checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -219,6 +219,20 @@ the pretrained stem's kernels across the colour axis.
 Save writes a new version each time rather than overwriting. The selector beside
 the design name lists every version with its timestamp, and switching loads that
 one onto the canvas. Deleting takes either one version or the whole history.
+
+## Runs
+
+Every training run is recorded to `runs/` as it happens, pinned to the design
+name and version that produced it. The Runs tab lists them newest first with
+status, epochs, training loop, dataset, best objective and duration; opening one
+shows its curve, its full configuration and its checkpoints.
+
+**Open this design** on any run restores the exact graph that run used. A result
+from last week can be reproduced rather than reconstructed from memory, which is
+the whole reason the record keeps a copy of the design rather than a reference
+to it — the design can change, the record should not.
+
+Failed runs are recorded too, with the reason.
 
 ## Saved weights
 
@@ -426,6 +440,7 @@ projectloader.py loads projects and matches free-text requests against them
 recipes_sdk.py   the Recipe/Context surface training loops write against
 recipeloader.py  scans recipes/, hot-reloads, isolates failures
 checkpoints/     saved weights, each carrying the design that made it
+runs/            one record per training run, with its design and metrics
 saved/           designs saved from the Open/Save buttons
 uploads/         tables and corpora
 tests/           the test suite
@@ -445,4 +460,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.6.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.7.0 — see `CHANGELOG.md`.

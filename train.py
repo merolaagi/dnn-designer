@@ -36,6 +36,9 @@ UPLOADS.mkdir(exist_ok=True)
 CHECKPOINTS = Path(__file__).resolve().parent / "checkpoints"
 CHECKPOINTS.mkdir(exist_ok=True)
 
+RUNS = Path(__file__).resolve().parent / "runs"
+RUNS.mkdir(exist_ok=True)
+
 BUILTIN_DATASETS = {
     "synthetic": {"label": "Synthetic noise (sanity check)", "shape": None, "classes": 10},
     "mnist": {"label": "MNIST digits", "shape": [1, 28, 28], "classes": 10},
@@ -80,7 +83,29 @@ class Job:
     events: "queue.Queue" = field(default_factory=queue.Queue)
     stop: threading.Event = field(default_factory=threading.Event)
 
+    # what this run came from, so a record can be traced back to its design
+    design: str = ""
+    version: Optional[int] = None
+    recipe: str = ""
+    dataset: str = ""
+    started: float = field(default_factory=time.time)
+    finished: Optional[float] = None
+    config: Dict[str, Any] = field(default_factory=dict)
+    graph: Dict[str, Any] = field(default_factory=dict)
+    checkpoints: List[str] = field(default_factory=list)
+    notes: List[str] = field(default_factory=list)
+
     def emit(self, kind: str, **payload) -> None:
+        if kind == "checkpoint" and payload.get("file"):
+            self.checkpoints.append(payload["file"])
+        if kind in ("warning", "early_stop"):
+            self.notes.append(
+                payload.get("message") or f"stopped early at epoch {payload.get('epoch')}")
+        # The record is written before the event is announced. Otherwise a
+        # listener can be told the run finished and read a file that still says
+        # it is running.
+        if kind in ("epoch", "finished", "error", "ready", "checkpoint"):
+            self.persist()
         self.events.put({"kind": kind, "t": time.time(), **payload})
 
     def snapshot(self) -> Dict[str, Any]:
@@ -88,7 +113,30 @@ class Job:
             "id": self.id, "status": self.status, "epoch": self.epoch,
             "epochs": self.epochs, "history": self.history, "error": self.error,
             "device": self.device, "learnables": self.learnables,
+            "design": self.design, "version": self.version,
+            "recipe": self.recipe, "dataset": self.dataset,
+            "started": self.started, "finished": self.finished,
+            "checkpoints": self.checkpoints, "notes": self.notes[-6:],
         }
+
+    def record(self) -> Dict[str, Any]:
+        out = self.snapshot()
+        out["config"] = {k: v for k, v in self.config.items()
+                         if k not in ("graph",) and not isinstance(v, (bytes,))}
+        out["graph"] = self.graph
+        return out
+
+    def persist(self) -> None:
+        """Write the run to disk so it survives a restart.
+
+        Executions outliving the process is the whole point: a training run you
+        did yesterday should still be there, with the design version that
+        produced it.
+        """
+        try:
+            (RUNS / f"{self.id}.json").write_text(json.dumps(self.record(), indent=1))
+        except Exception:  # noqa: BLE001 - a failed record must not stop training
+            pass
 
 
 def pick_device(preference: str = "auto") -> str:
@@ -936,6 +984,7 @@ def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
         job.emit("checkpoint", file=last.name, tag="last", epoch=job.epoch)
 
     job.status = "stopped" if job.stop.is_set() else "done"
+    job.finished = time.time()
     job.emit("finished", status=job.status)
 
 
@@ -1103,21 +1152,77 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
             job.emit("checkpoint", file=last.name, tag="last", epoch=job.epoch)
 
         job.status = "stopped" if job.stop.is_set() else "done"
+        job.finished = time.time()
         job.emit("finished", status=job.status)
 
     except DataError as exc:
         job.status = "error"
         job.error = str(exc)
+        job.finished = time.time()
         job.emit("error", message=job.error)
     except Exception as exc:  # noqa: BLE001
         job.status = "error"
         job.error = f"{type(exc).__name__}: {exc}"
+        job.finished = time.time()
         job.emit("error", message=job.error, detail=traceback.format_exc()[-1600:])
+
+
+def list_runs(design: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
+    """Every run on disk, newest first, without their full histories."""
+    out = []
+    for path in sorted(RUNS.glob("*.json"), key=lambda p: -p.stat().st_mtime)[:limit]:
+        try:
+            blob = json.loads(path.read_text())
+        except Exception:  # noqa: BLE001
+            continue
+        if design and blob.get("design") != design:
+            continue
+        history = blob.get("history") or []
+        best = None
+        if history:
+            key = "val_loss"
+            values = [h[key] for h in history if key in h]
+            if values:
+                best = min(values) if blob.get("recipe") != "Reinforce" else max(values)
+        out.append({
+            "id": blob.get("id"), "design": blob.get("design") or "unsaved",
+            "version": blob.get("version"), "status": blob.get("status"),
+            "recipe": blob.get("recipe") or "standard",
+            "dataset": blob.get("dataset") or "",
+            "epochs": blob.get("epochs"), "epoch": blob.get("epoch"),
+            "device": blob.get("device"), "learnables": blob.get("learnables"),
+            "started": blob.get("started"), "finished": blob.get("finished"),
+            "best": best, "checkpoints": len(blob.get("checkpoints") or []),
+            "objective": (history[-1].get("objective") if history else None) or "loss",
+        })
+    return out
+
+
+def read_run(run_id: str) -> Dict[str, Any]:
+    path = RUNS / f"{Path(run_id).name}.json"
+    if not path.exists():
+        raise DataError(f"No run recorded under {run_id}.")
+    return json.loads(path.read_text())
+
+
+def delete_run(run_id: str) -> None:
+    (RUNS / f"{Path(run_id).name}.json").unlink(missing_ok=True)
 
 
 def start(source: str, cfg: Dict[str, Any], in_shapes, in_ids, out_shape,
           tasks: List[str], class_name: Optional[str] = None) -> Job:
-    job = Job(id=uuid.uuid4().hex[:12])
+    graph_blob = cfg.get("graph") or {}
+    job = Job(
+        id=uuid.uuid4().hex[:12],
+        design=graph_blob.get("name") or cfg.get("design_name") or "unsaved",
+        version=cfg.get("design_version"),
+        recipe=cfg.get("recipe") or "",
+        dataset=cfg.get("dataset") or "",
+        epochs=int(cfg.get("epochs", 5)),
+        config=dict(cfg),
+        graph=graph_blob,
+    )
+    job.persist()
     with _LOCK:
         JOBS[job.id] = job
         for old_id, old in list(JOBS.items()):

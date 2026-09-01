@@ -714,6 +714,78 @@ def _():
     assert any("Inputs" in n and "order" in n for n in req["notes"]), req["notes"]
 
 
+# --------------------------------------------------------------------------
+# executions are recorded, not just streamed
+# --------------------------------------------------------------------------
+
+if HAVE_TORCH:
+    @check("a training run is recorded to disk with its design and version")
+    def _():
+        import train as T
+
+        payload = build(
+            [("i", "Input", {"shape": [10]}), ("h", "Linear", {"units": 8}),
+             ("a", "Activation", {"kind": "relu"}), ("l", "Linear", {"units": 3}),
+             ("o", "Output", {"task": "classification"})],
+            [("i", "h", 0), ("h", "a", 0), ("a", "l", 0), ("l", "o", 0)],
+            "__run_test__")
+        g, rep = analyzed(payload)
+        assert rep["ok"], rep["errors"]
+        job = T.start(codegen.to_pytorch(g, rep),
+                      {"dataset": "synthetic", "epochs": 2, "device": "cpu",
+                       "train_samples": 96, "graph": payload, "design_version": 7,
+                       "save_checkpoints": False, "batch_size": 16},
+                      [[10]], ["i"], [3], ["classification"],
+                      codegen.model_class_name(g))
+        try:
+            while True:
+                event = job.events.get(timeout=180)
+                if event["kind"] == "error":
+                    raise AssertionError(event["message"])
+                if event["kind"] == "finished":
+                    break
+
+            stored = T.read_run(job.id)
+            assert stored["design"] == "__run_test__", stored["design"]
+            assert stored["version"] == 7, stored["version"]
+            assert stored["status"] == "done", stored["status"]
+            assert len(stored["history"]) == 2, stored["history"]
+            assert stored["graph"]["nodes"], "the run should keep the design it used"
+
+            listed = [r for r in T.list_runs() if r["id"] == job.id]
+            assert listed, "the run should appear in the listing"
+            assert listed[0]["best"] is not None
+
+            filtered = T.list_runs(design="__run_test__")
+            assert all(r["design"] == "__run_test__" for r in filtered), filtered
+        finally:
+            T.delete_run(job.id)
+
+
+@check("a run that cannot start is still recorded, with its reason")
+def _():
+    import train as T
+
+    payload = build(
+        [("i", "Input", {"shape": [10]}), ("l", "Linear", {"units": 3}),
+         ("o", "Output", {})],
+        [("i", "l", 0), ("l", "o", 0)], "__fail_test__")
+    g, rep = analyzed(payload)
+    job = T.start("this is not python", {"dataset": "synthetic", "epochs": 1,
+                                         "device": "cpu", "graph": payload},
+                  [[10]], ["i"], [3], ["classification"], "Nope")
+    try:
+        while True:
+            event = job.events.get(timeout=60)
+            if event["kind"] in ("error", "finished"):
+                break
+        stored = T.read_run(job.id)
+        assert stored["status"] == "error", stored["status"]
+        assert stored["error"], "a failed run should record why"
+    finally:
+        T.delete_run(job.id)
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

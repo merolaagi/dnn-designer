@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.7.0
+
+Definitions and executions, separated the way a workflow tool separates them.
+
+Designs were already versioned, but training runs were in-memory only: lost on
+restart, tied to nothing, with no history. A run is now a record.
+
+- **Every training run is written to `runs/`** as it happens, pinned to the
+  design name and version that produced it, and carrying a full copy of that
+  design.
+- **Runs tab** on the rail: every execution, newest first, with status, epochs,
+  training loop, dataset, best objective and duration. Click one for its loss
+  curve, its full configuration, its checkpoints, and anything reported during
+  the run.
+- **Open this design** on any run restores the exact graph it used, so a result
+  from last week can be reproduced rather than reconstructed from memory.
+- Runs that fail are recorded too, with the reason. A run that could not start
+  because the dataset was not configured is more useful in the history than
+  absent from it.
+- Records survive a restart, which is the point.
+- Fixed while testing: the record was written *after* the event announcing it,
+  so a listener could be told a run had finished and then read a file still
+  saying it was running. The write now happens first.
+- Two more tests, 42 in total.
+
 ## 1.6.0
 
 - **Right panel gains tabs**: Layer, Network, Needs — with collapsible sections,

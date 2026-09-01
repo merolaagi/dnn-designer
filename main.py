@@ -451,6 +451,48 @@ def delete_dataset(name: str):
     return {"ok": True}
 
 
+# --------------------------------------------------------------------------
+# executions: every run recorded, browsable, tied to the design that made it
+# --------------------------------------------------------------------------
+
+@app.get("/api/runs")
+def get_runs(design: Optional[str] = None):
+    return {"runs": T.list_runs(design)}
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str):
+    try:
+        blob = T.read_run(run_id)
+    except T.DataError as exc:
+        raise HTTPException(404, detail={"message": str(exc)})
+    # a live run's in-memory state is fresher than the last file write
+    live = T.JOBS.get(run_id)
+    if live:
+        blob.update(live.snapshot())
+    return blob
+
+
+@app.get("/api/runs/{run_id}/graph")
+def run_graph(run_id: str):
+    """The exact design a run used, so a result can be reproduced."""
+    try:
+        blob = T.read_run(run_id)
+    except T.DataError as exc:
+        raise HTTPException(404, detail={"message": str(exc)})
+    graph = blob.get("graph") or {}
+    if not graph.get("nodes"):
+        raise HTTPException(404, detail={
+            "message": "That run was recorded without its design."})
+    return graph
+
+
+@app.delete("/api/runs/{run_id}")
+def remove_run(run_id: str):
+    T.delete_run(run_id)
+    return {"ok": True}
+
+
 @app.get("/api/train/{job_id}")
 def get_job(job_id: str):
     job = T.JOBS.get(job_id)
