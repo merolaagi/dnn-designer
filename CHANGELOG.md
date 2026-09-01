@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.15.0
+
+An **Assistant** tab, and an honest account of what it is.
+
+Theirs is backed by a language model. This one is not — the MiniGPT in this app
+is an 805,000-parameter character model and could only produce fluent nonsense
+about a network. So the assistant is rule-based: it matches a small set of
+phrasings exactly, and says so when it does not recognise something rather than
+guessing.
+
+- **It edits the graph.** `add dropout after the activation`, `remove the
+  flatten`, `set units to 64 on linear_1`, `freeze conv2d_2`, `rename linear_1
+  to head`, `note on conv2d: widened for the tiles`. Edits come back as a whole
+  graph, so the change appears on the canvas and Cmd+Z undoes it like any other.
+- Layers resolve by label, by type, or by the name in the generated file — which
+  is what you actually read off a node.
+- **`review` finds real problems**, by inspection rather than opinion. Two Linear
+  layers with no activation between them compose to a single linear layer. A
+  Flatten of a 32×32×32 map hands the next Linear 8,388,608 weights, and the
+  message says what GlobalAvgPool would cost instead. A convolution going
+  straight to its activation with no normalization. A spatial map already at 1×1
+  with convolutions still below it. Everything frozen, so training would change
+  nothing. A single value arriving at a classification Output.
+- It refuses settings a layer does not have, and lists the ones it does.
+- **Optional model.** Set `ASSISTANT_API_KEY` and anything it does not recognise
+  is forwarded to an Anthropic-compatible endpoint with a summary of the graph.
+  Without it, no pretending.
+- Two more tests, 60 in total.
+
 ## 1.14.0
 
 The Code tab was a dark block of unstyled text. It is a viewer now.

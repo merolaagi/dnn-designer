@@ -896,6 +896,78 @@ def _():
         "a block has no PyTorch page to link to"
 
 
+@check("the assistant edits the graph and finds real problems")
+def _():
+    import assistant
+
+    graph = {"name": "T", "nodes": [
+        {"id": "i", "type": "Input", "params": {"shape": [3, 32, 32]}},
+        {"id": "c", "type": "Conv2d",
+         "params": {"filters": 32, "kernel": 3, "padding": "same"}},
+        {"id": "a", "type": "Activation", "params": {"kind": "relu"}},
+        {"id": "f", "type": "Flatten", "params": {}},
+        {"id": "l1", "type": "Linear", "params": {"units": 256}},
+        {"id": "l2", "type": "Linear", "params": {"units": 10}},
+        {"id": "o", "type": "Output", "params": {"task": "classification"}}],
+        "edges": [{"id": "e1", "source": "i", "target": "c"},
+                  {"id": "e2", "source": "c", "target": "a"},
+                  {"id": "e3", "source": "a", "target": "f"},
+                  {"id": "e4", "source": "f", "target": "l1"},
+                  {"id": "e5", "source": "l1", "target": "l2"},
+                  {"id": "e6", "source": "l2", "target": "o"}]}
+
+    def fresh():
+        return json.loads(json.dumps(graph))
+
+    # two Linear layers with nothing between them are one Linear layer
+    found = assistant.handle(fresh(), "review")["reply"]
+    assert "compose to a single linear layer" in found, found
+    assert "8,388,608 weights" in found, found
+
+    # an edit comes back as a graph, with the gap stitched where needed
+    added = assistant.handle(fresh(), "add dropout after the activation")
+    assert added["changed"], added
+    assert [n["type"] for n in added["graph"]["nodes"]].count("Dropout") == 1
+
+    removed = assistant.handle(fresh(), "remove the flatten")
+    kinds = [n["type"] for n in removed["graph"]["nodes"]]
+    assert "Flatten" not in kinds, kinds
+    sources = {e["source"] for e in removed["graph"]["edges"]}
+    targets = {e["target"] for e in removed["graph"]["edges"]}
+    assert "a" in sources and "l1" in targets, "the chain was not rejoined"
+
+    # generated names, which is what people read off the canvas
+    frozen = assistant.handle(fresh(), "freeze conv2d_1")
+    assert frozen["changed"] and frozen["reply"].startswith("Froze"), frozen
+    conv = [n for n in frozen["graph"]["nodes"] if n["id"] == "c"][0]
+    assert conv["params"].get("_frozen") is True
+
+    settings = assistant.handle(fresh(), "set units to 64 on linear_1")
+    target = [n for n in settings["graph"]["nodes"] if n["id"] == "l1"][0]
+    assert target["params"]["units"] == 64, target
+
+    # and it says so when it does not understand, rather than inventing
+    puzzled = assistant.handle(fresh(), "make it better somehow")
+    assert not puzzled.get("changed")
+    assert "did not recognise" in puzzled["reply"]
+
+
+@check("the assistant refuses settings a layer does not have")
+def _():
+    import assistant
+
+    graph = {"name": "T", "nodes": [
+        {"id": "i", "type": "Input", "params": {"shape": [8]}},
+        {"id": "l", "type": "Linear", "params": {"units": 4}},
+        {"id": "o", "type": "Output", "params": {}}],
+        "edges": [{"id": "e1", "source": "i", "target": "l"},
+                  {"id": "e2", "source": "l", "target": "o"}]}
+    reply = assistant.handle(json.loads(json.dumps(graph)),
+                             "set kernel to 3 on linear")
+    assert not reply.get("changed"), "it should not invent a setting"
+    assert "no setting called kernel" in reply["reply"], reply
+
+
 @check("the code panel renders a real viewer, not a dump")
 def _():
     for token in ("function highlightPython", "function drawCodeMap",
@@ -1006,6 +1078,7 @@ def _():
         "openInserter", "insertIntoEdge", "openAppender", "appendAfterNode",
         "importSteps", "placeStep", "startGuided", "renderGuide", "renderPlanOverview",
         "highlightPython", "drawCodeMap", "syncCodeMap", "escapeHtml", "testLayer",
+        "sendAsk", "askSay", "loadAssistant", "askObservations",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",

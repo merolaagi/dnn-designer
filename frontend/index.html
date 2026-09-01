@@ -421,6 +421,48 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 .freezerow input{width:15px;height:15px;accent-color:var(--amber)}
 .freezerow span{color:var(--muted)}
+
+/* the assistant panel */
+#askBody{display:flex;flex-direction:column;min-height:0;flex:1}
+#askLog{
+  flex:1;min-height:0;overflow-y:auto;padding:12px 13px;display:flex;
+  flex-direction:column;gap:8px;background:#FCFCFD;
+}
+.askmsg{
+  max-width:88%;padding:8px 11px;border-radius:10px;font-size:12px;
+  line-height:1.55;white-space:pre-wrap;word-break:break-word;
+}
+.askmsg.me{align-self:flex-end;background:#2D7DD2;color:#fff}
+.askmsg.it{align-self:flex-start;background:var(--paper-2);color:var(--text);
+  border:1px solid var(--paper-3)}
+.askmsg.model{align-self:flex-start;background:#F3EEFB;border:1px solid #DCCEF3}
+.askmsg.sys{align-self:center;background:none;color:var(--muted);font-size:11px;
+  font-style:italic;text-align:center;max-width:100%}
+.askreview{display:flex;flex-direction:column;gap:5px;align-self:stretch}
+.askreview .obs{
+  font-size:11.5px;line-height:1.5;padding:7px 10px;border-radius:0 5px 5px 0;
+  border-left:3px solid var(--paper-3);background:#fff;
+}
+.askreview .obs.warn{border-left-color:var(--bad);background:#FDF1EF}
+.askreview .obs.note{border-left-color:var(--amber);background:#FFF8E9}
+.askreview .obs.good{border-left-color:var(--good);background:#EFF7F1}
+#askChips{
+  flex:none;display:flex;flex-wrap:wrap;gap:5px;padding:0 12px 8px;background:#FCFCFD;
+}
+#askChips button{
+  font-size:10.5px;border:1px solid var(--paper-3);background:#fff;border-radius:11px;
+  padding:3px 9px;color:var(--muted);
+}
+#askChips button:hover{border-color:var(--amber);color:var(--text)}
+.askbar{
+  flex:none;display:flex;gap:6px;padding:9px 11px;border-top:1px solid var(--paper-3);
+  background:var(--paper-2);
+}
+.askbar input{
+  flex:1;padding:7px 10px;border:1px solid var(--paper-3);border-radius:6px;
+  background:#fff;font-size:12px;
+}
+.askbar input:focus{outline:none;border-color:var(--amber)}
 .empty{color:#8A97A8;font-size:12px;padding:6px 4px;line-height:1.5}
 
 /* ---------------- panes ---------------- */
@@ -791,6 +833,7 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
     <button data-page="pageChat"><i>&#9998;</i>Chat</button>
 
     <div class="group">Status</div>
+    <button data-page="pageDesign" data-side="ask"><i>&#10022;</i>Assistant</button>
     <button data-page="pageDesign" data-side="needs"><i>&#9888;</i>Checks
       <span class="count" id="railCount">0</span></button>
     <span class="spacer"></span>
@@ -853,6 +896,7 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
       <button data-side="code">Code</button>
       <button data-side="train">Train</button>
       <button data-side="guide">Guide</button>
+      <button data-side="ask">Assist</button>
       <button data-side="needs">Needs</button>
     </div>
     <div class="scroll" id="inspBody">
@@ -860,6 +904,15 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
     </div>
     <div class="scroll" id="networkBody" style="display:none"></div>
     <div class="scroll" id="guideBody" style="display:none;padding:0"></div>
+    <div id="askBody" style="display:none">
+      <div id="askLog"></div>
+      <div id="askChips"></div>
+      <div class="askbar">
+        <input id="askInput" placeholder="Edit or ask about this network" spellcheck="false">
+        <button class="btn go" id="btnAskSend">Send</button>
+        <button class="btn" id="btnAskClear" title="Clear">&#10227;</button>
+      </div>
+    </div>
     <div class="scroll" id="needsBody" style="display:none;padding:0"></div>
     <div class="scroll" id="codeBody" style="display:none;padding:0">
       <div class="codehead">
@@ -2170,6 +2223,7 @@ $("btnRedo").addEventListener("click", redo);
 
 function renderInspector(){
   if (state.sidePanel !== "layer" && state.sidePanel !== "guide"
+      && state.sidePanel !== "ask"
       && (state.sel || state.selEdge) && state.page === "pageDesign"){
     showSide("layer");
   }
@@ -3080,7 +3134,8 @@ function showPage(pageId){
 }
 
 const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
-                      code:"Generated code", train:"Training", guide:"Guided build" };
+                      code:"Generated code", train:"Training", guide:"Guided build",
+                      ask:"Assistant" };
 
 function showSide(side){
   state.sidePanel = side;
@@ -3089,7 +3144,8 @@ function showSide(side){
   document.querySelectorAll(".ptabs button").forEach(b =>
     b.classList.toggle("on", b.dataset.side === side));
   const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",
-                code:"codeBody", train:"trainBody", guide:"guideBody" };
+                code:"codeBody", train:"trainBody", guide:"guideBody",
+                ask:"askBody" };
   Object.entries(map).forEach(([key, id]) => {
     const el = $(id);
     if (el) el.style.display = (key === side) ? "" : "none";
@@ -3099,6 +3155,7 @@ function showSide(side){
   if (side === "code") showCode();
   if (side === "train") drawChart();
   if (side === "guide") renderGuide();
+  if (side === "ask") loadAssistant();
 }
 
 document.querySelectorAll(".ptabs button").forEach(btn =>
@@ -3567,6 +3624,102 @@ function applyStep(){
   render(); renderInspector(); analyze();
   fitView();
   renderGuide();
+}
+
+/* ============================ assistant ============================ */
+
+function askSay(text, who){
+  const log = $("askLog");
+  const bubble = document.createElement("div");
+  bubble.className = "askmsg " + who;
+  bubble.textContent = text;
+  log.appendChild(bubble);
+  log.scrollTop = log.scrollHeight;
+  return bubble;
+}
+
+function askObservations(items){
+  const log = $("askLog");
+  const box = document.createElement("div");
+  box.className = "askreview";
+  box.innerHTML = items.map(o =>
+    `<div class="obs ${o.level}">${o.layer ? `<b>${o.layer}</b> ` : ""}${o.text}</div>`
+  ).join("");
+  log.appendChild(box);
+  log.scrollTop = log.scrollHeight;
+}
+
+function askChips(list){
+  const host = $("askChips");
+  if (!host) return;
+  host.innerHTML = (list || []).map(s =>
+    `<button data-say="${s.replace(/"/g, "&quot;")}">${s}</button>`).join("");
+  host.querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => { $("askInput").value = b.dataset.say; sendAsk(); }));
+}
+
+async function sendAsk(){
+  const input = $("askInput");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  askSay(text, "me");
+
+  let r, d;
+  try{
+    r = await fetch(API + "/api/assistant", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ graph: state.graph, message: text }),
+    });
+    d = await r.json();
+  } catch {
+    askSay("The server did not respond.", "sys");
+    return;
+  }
+
+  // an edit comes back as a whole graph, so the canvas shows the change and
+  // Cmd+Z undoes it like any other edit
+  if (d.changed && d.graph){
+    pushHistory();
+    const version = state.version;
+    state.graph = d.graph;
+    state.version = version;
+    state.seq = state.graph.nodes.length + state.graph.edges.length + 500;
+    clearSelection();
+    render(); renderInspector(); analyze();
+  }
+
+  askSay(d.reply || "(nothing came back)", d.source === "model" ? "model" : "it");
+  if (d.observations) askObservations(d.observations);
+  if (d.suggestions) askChips(d.suggestions);
+}
+
+$("btnAskSend").addEventListener("click", sendAsk);
+$("askInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendAsk(); }
+});
+$("btnAskClear").addEventListener("click", () => {
+  $("askLog").innerHTML = "";
+  askIntro();
+});
+
+function askIntro(){
+  askSay("I edit this graph and check it over. Try `review`, or an edit like "
+       + "`add dropout after the last layer`. Say `help` for the phrasings I know.",
+         "sys");
+  askChips(state.askSuggestions || ["review", "how many parameters", "help"]);
+}
+
+async function loadAssistant(){
+  if (state.askReady) return;
+  state.askReady = true;
+  try{
+    const d = await (await fetch(API + "/api/assistant/review")).json();
+    state.askSuggestions = d.suggestions;
+    if (d.model) askSay("A language model is configured, so questions I do not "
+                      + "recognise are passed to it.", "sys");
+  } catch {}
+  askIntro();
 }
 
 /* ============================ chat ============================ */

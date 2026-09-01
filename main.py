@@ -7,6 +7,7 @@ Then open http://127.0.0.1:8770
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
+import assistant
 import blockloader
 import codegen
 import importer
@@ -125,6 +127,25 @@ def post_analyze(body: GraphPayload):
         requires = {"error": f"{type(exc).__name__}: {exc}"}
     return {"report": report, "code": code, "node_code": node_code,
             "requires": requires}
+
+
+class AssistantPayload(BaseModel):
+    graph: Dict[str, Any]
+    message: str = ""
+
+
+@app.post("/api/assistant")
+def ask_assistant(body: AssistantPayload):
+    try:
+        return assistant.handle(json.loads(json.dumps(body.graph)), body.message)
+    except Exception as exc:  # noqa: BLE001 - never let a phrasing crash the panel
+        return {"reply": f"That went wrong on my side: {type(exc).__name__}: {exc}"}
+
+
+@app.get("/api/assistant/review")
+def assistant_review(name: str = ""):
+    return {"suggestions": assistant.SUGGESTIONS, "help": assistant.HELP,
+            "model": bool(os.environ.get("ASSISTANT_API_KEY"))}
 
 
 class TestLayerPayload(BaseModel):

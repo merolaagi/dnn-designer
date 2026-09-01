@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Fifty-eight checks, with the torch-dependent ones skipping themselves when it is
+Sixty checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -181,7 +181,17 @@ canvas does shape arithmetic; this checks that arithmetic against PyTorch.
 **Freeze this layer** parks its weights: the generated code stops their
 gradients and the header count drops to what is actually being trained.
 
-The right panel has six tabs. **Layer** edits the selection. **Network**
+The **Assistant** tab edits the graph and checks it over. It is rule-based, not
+a language model: `add dropout after the activation`, `remove the flatten`, `set
+units to 64 on linear_1`, `freeze conv2d_2`. Edits arrive as a graph, so they
+appear on the canvas and undo normally. `review` reports what is actually wrong
+— two Linear layers with nothing between them, a Flatten handing the next layer
+eight million weights, a convolution with no normalization before its
+activation. It says when it does not understand rather than guessing. Setting
+`ASSISTANT_API_KEY` forwards unrecognised questions to a real model along with a
+summary of the graph.
+
+The right panel has seven tabs. **Layer** edits the selection. **Network**
 summarises the design and its Inputs and Outputs. **Code** shows the generated
 file. **Train** runs it. **Needs** answers what this
 design requires before it will run: which plug-in blocks it pulls in and from
@@ -496,4 +506,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.14.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.15.0 — see `CHANGELOG.md`.
