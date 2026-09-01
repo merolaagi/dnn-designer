@@ -786,6 +786,46 @@ def _():
         T.delete_run(job.id)
 
 
+# --------------------------------------------------------------------------
+# the page itself
+# --------------------------------------------------------------------------
+
+PAGE = (ROOT / "frontend" / "index.html").read_text()
+
+
+@check("the stylesheet has balanced braces")
+def _():
+    # An unclosed rule makes the browser discard every rule after it, which
+    # looks like "the design broke" rather than "the CSS is malformed". This
+    # exact fault shipped once.
+    css = PAGE[PAGE.index("<style>") + 7: PAGE.index("</style>")]
+    opened, closed = css.count("{"), css.count("}")
+    assert opened == closed, f"{opened} open braces against {closed} close"
+
+
+@check("no rule is left with an empty body")
+def _():
+    import re
+
+    css = PAGE[PAGE.index("<style>") + 7: PAGE.index("</style>")]
+    empty = re.findall(r"([^{}\n]+)\{\s*\}", css)
+    assert not empty, f"empty rules: {[e.strip() for e in empty][:4]}"
+
+
+@check("every element the script reaches for exists or is built at runtime")
+def _():
+    import re
+
+    markup = PAGE[: PAGE.index("<script>")]
+    script = PAGE[PAGE.index("<script>"):]
+    present = set(re.findall(r'id="([^"]+)"', markup))
+    created = set(re.findall(r'id="([^"]+)"', script))
+    created |= set(re.findall(r'id=\\?"([^"\\]+)', script))
+    wanted = set(re.findall(r'\$\("([a-zA-Z0-9_]+)"\)', script))
+    missing = sorted(w for w in wanted if w not in present and w not in created)
+    assert not missing, f"the script looks for elements nothing creates: {missing}"
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

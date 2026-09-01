@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.8.1
+
+Fixes a stylesheet I broke in 1.8.0, and takes the chrome closer to the workflow
+editor it is modelled on.
+
+- **Fixed: the page was unstyled below a point.** Tidying dead CSS in 1.8.0, I
+  filtered by "lines starting with X", which kept the opening line of multi-line
+  rules and threw away their bodies and closing braces. One unbalanced brace
+  makes a browser discard every rule after it, so the Import dialog rendered
+  inline as a dark slab and the canvas disappeared. Three tests now guard this:
+  balanced braces, no empty rules, and no script reference to an element nothing
+  creates.
+- **Header is two rows**: breadcrumb, name and actions on top; a canvas toolbar
+  beneath with zoom readout, fit, tidy, routing, snap, minimap, undo and find.
+  The floating zoom buttons over the canvas are gone.
+- **The design name is the page title**, editable in place, with the version
+  selector beside it.
+- **Sidebar is named rather than iconic**, grouped into Definitions, Executions
+  and Status — the sections are what the app does, so they should be readable.
+- Header chrome is light to match the canvas, with the primary action in blue.
+
 ## 1.8.0
 
 The layout had two competing panel systems — a bottom drawer *and* a right
