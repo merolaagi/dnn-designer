@@ -977,6 +977,55 @@ def _():
             assert expected in str(exc), f"got {exc}, wanted {expected!r}"
 
 
+@check("signing out locks the page instead of emptying it")
+def _():
+    """Signing out used to look exactly like losing everything.
+
+    The page loaded, every API call answered 401, and the result was an app
+    with no layers, no designs and no projects. Nothing was lost — but nothing
+    said so.
+    """
+    assert "function lockOut" in PAGE, "there is no locked state"
+    assert "window.fetch = async" in PAGE, \
+        "401s are not intercepted, so a lost session empties the screen silently"
+    boot = PAGE[PAGE.index("async function boot("):]
+    boot = boot[: boot.index("\n}\n")]
+    assert "lockOut()" in boot and "return" in boot, \
+        "boot carries on loading with no session"
+    assert "still on disk" in PAGE, \
+        "the locked screen does not say the work is safe"
+
+
+@check("accounts can be managed and turned off again")
+def _():
+    import shutil
+
+    import accounts
+    import auth
+
+    backup = None
+    if auth.DATA.exists():
+        backup = auth.DATA.with_suffix(".backup")
+        shutil.move(auth.DATA, backup)
+    try:
+        auth.register("one", "longenough1")
+        auth.register("two", "longenough2")
+
+        accounts.cmd_remove("two", purge=False)
+        assert "two" not in auth.users()
+        assert auth.workspace_for("two").exists(), \
+            "removing an account should not delete its work"
+        assert auth.workspace_for("one") == auth.HERE
+
+        accounts.cmd_off()
+        assert not auth.enabled(), "turning accounts off should leave none"
+        assert auth.workspace_for(None) == auth.HERE, "the shared workspace comes back"
+    finally:
+        shutil.rmtree(auth.DATA, ignore_errors=True)
+        if backup:
+            shutil.move(backup, auth.DATA)
+
+
 @check("accounts keep one person's work out of another's")
 def _():
     import shutil

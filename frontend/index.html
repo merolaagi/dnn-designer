@@ -1385,7 +1385,7 @@ const state = {
   flow:"vertical", gridLevel:2, appendAfter:null,
   quick:{ mode:null, context:null, expanded:false, hits:[], at:0 },
   book:null, sheet:"main", bookReports:null, scan:null, tree:null,
-  account:null, signInMode:"login", viewingFile:null,
+  account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
@@ -1419,6 +1419,10 @@ async function boot(){
   starterGraph();
   updateHistoryButtons();
   await loadAccount();
+  if (state.account && state.account.enabled && !state.account.user){
+    lockOut();
+    return;               // nothing else can load without a session
+  }
   await loadLayout();
   renderSheetTabs();
   render();
@@ -4406,6 +4410,25 @@ async function importFromTree(file, cls, needsArgs){
 
 /* ============================ sign in ============================ */
 
+/* One interception point for the whole app. Without it a signed-out page still
+   loads, every request answers 401, and the result looks exactly like losing
+   all your work — which is what it looked like. */
+const rawFetch = window.fetch.bind(window);
+window.fetch = async (url, options) => {
+  const reply = await rawFetch(url, options);
+  if (reply.status === 401 && String(url).includes("/api/")
+      && !String(url).includes("/api/auth/")){
+    lockOut();
+  }
+  return reply;
+};
+
+function lockOut(){
+  if (state.lockedOut) return;
+  state.lockedOut = true;
+  showSignIn("login", true);
+}
+
 async function loadAccount(){
   let d;
   try { d = await (await fetch(API + "/api/auth/me")).json(); }
@@ -4425,10 +4448,12 @@ async function loadAccount(){
   }
 }
 
-function showSignIn(mode){
+function showSignIn(mode, locked){
   state.signInMode = mode || "login";
   const box = $("signin");
   box.classList.add("on");
+  // with no session there is nothing behind the dialog to go back to
+  $("siClose").style.display = locked ? "none" : "";
   const registering = state.signInMode === "register";
   $("siTitle").textContent = registering ? "Set up an account" : "Sign in";
   $("siSwitch").textContent = registering
@@ -4439,7 +4464,11 @@ function showSignIn(mode){
        <b>They do not make this safe to expose publicly</b> — importing code and
        the blocks folder run Python by design, so keep it on a network you
        trust.`
-    : "";
+    : (state.lockedOut
+        ? `Your designs, runs and studies are still on disk in
+           <span class="mono">saved/</span>, <span class="mono">runs/</span> and
+           <span class="mono">studies/</span>. Signing in opens them again.`
+        : "");
   $("siError").textContent = "";
   $("siName").focus();
 }
@@ -4462,8 +4491,9 @@ async function submitSignIn(){
   }
   $("signin").classList.remove("on");
   $("siPass").value = "";
-  await loadAccount();
   if (d.first){
+    state.lockedOut = false;
+    await loadAccount();
     toast("Account created — this workspace is yours");
   } else {
     // a different account means different designs, runs and layout

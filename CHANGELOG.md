@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.20.1
+
+**Fixed: signing out looked exactly like losing everything.**
+
+Nothing was ever deleted. The page still loaded, but every API call answered
+401, so the app drew itself with no layers, no designs and no projects — and
+said nothing about why. That is an alarming thing to show someone about their
+own work.
+
+- A missing or expired session now shows the sign-in box over a locked page
+  instead of an empty one, and says plainly that the designs, runs and studies
+  are still on disk.
+- Every API call goes through one interception point, so a session that expires
+  mid-session raises the sign-in box rather than quietly blanking the screen.
+- Startup stops before loading anything when there is no session, rather than
+  firing a dozen requests that cannot succeed.
+- The sign-in box has no close button when there is nothing behind it to return
+  to.
+
+**`accounts.py`, for managing accounts from the command line** — including the
+case this release exists for, being unable to get back in:
+
+    python accounts.py list
+    python accounts.py passwd <name>     forgotten password
+    python accounts.py remove <name>     keeps their workspace
+    python accounts.py off               removes every account
+
+Turning accounts off leaves every workspace on disk and reopens the shared one.
+Whoever runs the server can already read everything it stores, so a reset here
+costs nothing and being locked out of your own designs costs a lot.
+
 ## 1.20.0
 
 **A scanned folder stays browsable**, and **accounts keep one person's work
