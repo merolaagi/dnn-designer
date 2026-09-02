@@ -977,6 +977,42 @@ def _():
             assert expected in str(exc), f"got {exc}, wanted {expected!r}"
 
 
+@check("every module parses under Python 3.11")
+def _():
+    """Guards a difference between 3.11 and 3.12 that a 3.12 machine cannot see.
+
+    Backslashes inside an f-string expression only became legal in 3.12
+    (PEP 701). Written on 3.12 they look fine and import fine; on 3.11 the
+    module will not even parse, which takes the whole server down at startup.
+    Since this is checked with the syntax tree rather than by running another
+    interpreter, it catches the mistake whichever version is running the tests.
+    """
+    import ast
+
+    offenders = []
+    for path in sorted(ROOT.rglob("*.py")):
+        if "__pycache__" in str(path):
+            continue
+        source = path.read_text()
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as exc:
+            offenders.append(f"{path.name}:{exc.lineno} does not parse: {exc.msg}")
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.JoinedStr):
+                continue
+            for part in node.values:
+                if not isinstance(part, ast.FormattedValue):
+                    continue
+                segment = ast.get_source_segment(source, part.value) or ""
+                if "\\" in segment:
+                    offenders.append(
+                        f"{path.name}:{part.lineno} f-string expression contains a "
+                        f"backslash, which Python 3.11 rejects: {segment[:60]}")
+    assert not offenders, "\n        " + "\n        ".join(offenders)
+
+
 @check("the mathematics is instantiated with the node's own numbers")
 def _():
     import mathbook

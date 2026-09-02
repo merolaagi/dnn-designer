@@ -27,6 +27,19 @@ from typing import Any, Callable, Dict, List, Optional
 import layers
 
 
+TIMES = "\u00d7"          # ×
+TIMES_SP = " \u00d7 "
+DASH = "\u2014"           # —
+
+
+def _shape_str(shape, sep=TIMES) -> str:
+    """Join a shape for display. A helper rather than an inline expression
+    because an f-string cannot contain a backslash before Python 3.12."""
+    if not shape:
+        return DASH
+    return sep.join(str(int(v)) for v in shape)
+
+
 def _fmt(n) -> str:
     if isinstance(n, float) and not n.is_integer():
         return f"{n:g}"
@@ -443,6 +456,9 @@ def embedding(p, ins, out):
     }
 
 
+DIRECTIONS_NOTE = " \u00d72 directions"
+
+
 def lstm(p, ins, out):
     shape = ins[0] if ins and ins[0] else [0, 0]
     d_in = shape[-1] if shape else 0
@@ -471,7 +487,7 @@ def lstm(p, ins, out):
              f"4\u00b7(h\u00b7in + h\u00b2 + 2h) = 4\u00d7({_fmt(hidden)}\u00d7{_fmt(d_in)} "
              f"+ {_fmt(hidden)}\u00b2 + 2\u00d7{_fmt(hidden)}) = {_fmt(per)}"),
             ("total", f"\u00d7{layers_n} layer{'' if layers_n == 1 else 's'}"
-                      f"{' \u00d72 directions' if bidir else ''} \u2248 "
+                      f"{DIRECTIONS_NOTE if bidir else ''} \u2248 "
                       f"{_fmt(per * layers_n * directions)}"),
         ],
         "freedom": [
@@ -496,10 +512,10 @@ def flatten(p, ins, out):
         "family": "reshape",
         "title": "Reinterpretation",
         "equation": "y[n] = x[i,j,k]   with n = (i\u00b7H + j)\u00b7W + k",
-        "shape": f"{'\u00d7'.join(str(int(v)) for v in shape)} \u2192 {_fmt(total)}",
+        "shape": f"{_shape_str(shape)} \u2192 {_fmt(total)}",
         "symbols": [("n", "a single index walking the same memory in order")],
         "arithmetic": [
-            ("output size", f"the product: {' \u00d7 '.join(str(int(v)) for v in shape)}"
+            ("output size", f"the product: {_shape_str(shape, TIMES_SP)}"
                             f" = {_fmt(total)}"),
             ("parameters", "none — not one number changes"),
         ],
@@ -538,11 +554,10 @@ def merge(kind):
             "family": "merge",
             "title": f"{kind}",
             "equation": equation,
-            "shape": " , ".join("\u00d7".join(str(int(v)) for v in s) for s in shapes)
-                     or "\u2014",
+            "shape": " , ".join(_shape_str(s) for s in shapes) or DASH,
             "symbols": [("x\u2081, x\u2082", "the incoming branches, in port order")],
             "arithmetic": [
-                ("output size", "\u00d7".join(str(int(v)) for v in out) if out else "\u2014"),
+                ("output size", _shape_str(out)),
                 ("parameters", "none"),
             ],
             "freedom": [note],
@@ -555,8 +570,7 @@ def subgraph(p, ins, out):
         "family": "reshape",
         "title": "Another sheet",
         "equation": "y = f(x)   where f is the sheet named below",
-        "shape": f"defined by that sheet: \u2192 "
-                 f"{'\u00d7'.join(str(int(v)) for v in out) if out else '\u2014'}",
+        "shape": f"defined by that sheet: \u2192 {_shape_str(out)}",
         "symbols": [("f", f"the sheet \u201c{p.get('sheet', '')}\u201d, generated as "
                           f"its own module class")],
         "arithmetic": [("parameters", "whatever that sheet holds — open it to see "

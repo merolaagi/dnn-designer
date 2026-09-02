@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.22.1
+
+**Fixed: `mathbook.py` would not parse on Python 3.11, so the server would not
+start at all.**
+
+Backslashes inside an f-string expression — `f"{'\u00d7'.join(parts)}"` — only
+became legal in Python 3.12 (PEP 701). I wrote the maths panel on 3.12, where it
+imports fine. On 3.11 it is a `SyntaxError` at import, which takes the whole
+application down before it serves anything.
+
+- Four of them, all in `mathbook.py`. The escapes are named constants now and
+  the shape formatting went into a helper. The panel's output is unchanged.
+- **A test that catches this whichever version runs it.** It walks the syntax
+  tree of every module looking for backslashes inside f-string expressions, so a
+  3.12 machine can still find a mistake that only breaks 3.11. Verified against
+  the broken file: it fails and names the file, line and expression.
+- Also swept for other 3.12-only syntax — PEP 695 generics, `itertools.batched`,
+  same-quote nesting in f-strings. None present.
+
+`README` now states the minimum as Python 3.11.
+
 ## 1.22.0
 
 **A Maths tab.** Select any layer and see what it actually computes — with this
