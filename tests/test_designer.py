@@ -977,6 +977,171 @@ def _():
             assert expected in str(exc), f"got {exc}, wanted {expected!r}"
 
 
+@check("a folder is scanned without running any of it")
+def _():
+    import shutil
+    import tempfile
+
+    import importer
+
+    root = Path(tempfile.mkdtemp())
+    try:
+        (root / "models").mkdir()
+        (root / "models" / "__init__.py").write_text("")
+        (root / "models" / "net.py").write_text(
+            "import torch.nn as nn\n"
+            "BOOBY_TRAP = exec  # a scan must never execute anything\n"
+            "class Good(nn.Module):\n"
+            "    def __init__(self):\n"
+            "        super().__init__()\n"
+            "        self.fc = nn.Linear(4, 2)\n"
+            "    def forward(self, x): return self.fc(x)\n"
+            "class Picky(nn.Module):\n"
+            "    def __init__(self, width, depth):\n"
+            "        super().__init__()\n"
+            "    def forward(self, x): return x\n")
+        (root / "broken.py").write_text("class Oops(nn.Module)\n    pass\n")
+        (root / "evil.py").write_text(
+            "raise RuntimeError('scanning must not import this file')\n")
+
+        result = importer.scan_folder(str(root))
+        names = {m["cls"]: m for m in result["models"]}
+        assert set(names) == {"Good", "Picky"}, names
+        assert names["Good"]["arguments"] == 0
+        assert names["Picky"]["arguments"] == 2
+        assert any("broken.py" in item["file"] for item in result["skipped"])
+        # evil.py raising at import time proves nothing ran: scanning survived it
+    finally:
+        shutil.rmtree(root)
+
+
+@check("a class imports from a folder with its relative imports intact")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import shutil
+    import tempfile
+
+    import importer
+
+    root = Path(tempfile.mkdtemp())
+    try:
+        (root / "models").mkdir()
+        (root / "models" / "__init__.py").write_text("")
+        (root / "models" / "blocks.py").write_text(
+            "import torch.nn as nn\n"
+            "class Piece(nn.Module):\n"
+            "    def __init__(self, cin=3, cout=8):\n"
+            "        super().__init__()\n"
+            "        self.conv = nn.Conv2d(cin, cout, 3, padding=1)\n"
+            "    def forward(self, x): return self.conv(x)\n")
+        (root / "models" / "whole.py").write_text(
+            "import torch.nn as nn\n"
+            "from models.blocks import Piece\n"
+            "class Whole(nn.Module):\n"
+            "    def __init__(self):\n"
+            "        super().__init__()\n"
+            "        self.stem = Piece()\n"
+            "        self.head = nn.Linear(8 * 32 * 32, 2)\n"
+            "    def forward(self, x):\n"
+            "        return self.head(self.stem(x).flatten(1))\n")
+        graph = importer.from_folder(str(root), "models/whole.py", "Whole",
+                                     [3, 32, 32])
+        graph.pop("_entry", None)
+        graph.pop("_notes", None)
+        g, rep = analyzed(graph)
+        assert rep["ok"], rep["errors"]
+        kinds = [n["type"] for n in graph["nodes"]]
+        assert "Conv2d" in kinds and "Linear" in kinds, kinds
+    finally:
+        shutil.rmtree(root)
+
+
+@check("a workbook resolves shapes across sheets and counts once")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import train as T
+    import workbook
+
+    book = {"name": "Split", "main": "main", "sheets": [
+        {"name": "stem", "nodes": [
+            {"id": "i", "type": "Input", "params": {"shape": [3, 32, 32]}},
+            {"id": "c", "type": "Conv2d",
+             "params": {"filters": 32, "kernel": 3, "padding": "same"}},
+            {"id": "o", "type": "Output", "params": {}}],
+         "edges": [{"id": "e1", "source": "i", "target": "c"},
+                   {"id": "e2", "source": "c", "target": "o"}]},
+        {"name": "orphan", "nodes": [
+            {"id": "i", "type": "Input", "params": {"shape": [4]}},
+            {"id": "l", "type": "Linear", "params": {"units": 999}},
+            {"id": "o", "type": "Output", "params": {}}],
+         "edges": [{"id": "e1", "source": "i", "target": "l"},
+                   {"id": "e2", "source": "l", "target": "o"}]},
+        {"name": "main", "nodes": [
+            {"id": "i", "type": "Input", "params": {"shape": [3, 32, 32]}},
+            {"id": "s", "type": "Subgraph", "params": {"sheet": "stem"}},
+            {"id": "g", "type": "GlobalAvgPool", "params": {}},
+            {"id": "l", "type": "Linear", "params": {"units": 10}},
+            {"id": "o", "type": "Output", "params": {"task": "classification"}}],
+         "edges": [{"id": "e1", "source": "i", "target": "s"},
+                   {"id": "e2", "source": "s", "target": "g"},
+                   {"id": "e3", "source": "g", "target": "l"},
+                   {"id": "e4", "source": "l", "target": "o"}]}]}
+
+    analysis = workbook.analyze(book)
+    assert analysis["ok"], analysis
+    assert analysis["sheets"]["main"]["nodes"]["s"]["out_shape"] == [32, 32, 32]
+
+    source = workbook.to_pytorch(book, analysis)
+    assert "class Stem(nn.Module):" in source
+    assert "Stem()" in source
+    assert "999" not in source, "the orphan sheet is not part of the model"
+
+    import torch
+    model = T.build_model(source, "Main")
+    real = sum(p.numel() for p in model.parameters())
+    assert real == analysis["total_learnables"], \
+        f"canvas {analysis['total_learnables']}, torch {real}"
+    assert tuple(model(torch.randn(2, 3, 32, 32)).shape) == (2, 10)
+
+
+@check("sheets referencing each other in a circle are refused")
+def _():
+    import workbook
+
+    book = {"name": "Loop", "main": "a", "sheets": [
+        {"name": "a", "nodes": [
+            {"id": "i", "type": "Input", "params": {"shape": [4]}},
+            {"id": "s", "type": "Subgraph", "params": {"sheet": "b"}},
+            {"id": "o", "type": "Output", "params": {}}],
+         "edges": [{"id": "e1", "source": "i", "target": "s"},
+                   {"id": "e2", "source": "s", "target": "o"}]},
+        {"name": "b", "nodes": [
+            {"id": "i", "type": "Input", "params": {"shape": [4]}},
+            {"id": "s", "type": "Subgraph", "params": {"sheet": "a"}},
+            {"id": "o", "type": "Output", "params": {}}],
+         "edges": [{"id": "e1", "source": "i", "target": "s"},
+                   {"id": "e2", "source": "s", "target": "o"}]}]}
+    analysis = workbook.analyze(book)
+    assert not analysis["ok"]
+    assert analysis["cycle"], "the cycle was not named"
+    assert "circle" in analysis["sheets"]["a"]["errors"][0]
+    code = workbook.to_pytorch(book, analysis)
+    assert code.startswith("#"), "no code should be generated for a cycle"
+
+
+@check("the canvas carries sheet tabs and cross-sheet continuation")
+def _():
+    for token in ('id="sheetTabs"', "function switchSheet", "function addSheet",
+                  "function renameSheet", "function deleteSheet",
+                  "function openReferencedSheet", "continues on",
+                  "analyze-book", "function scanFolder", 'id="im_folder"'):
+        assert token in PAGE, f"{token} is missing"
+
+
 @check("agents propose variants that actually build")
 def _():
     import agents
@@ -1274,6 +1439,9 @@ def _():
         "sendAsk", "askSay", "loadAssistant", "askObservations",
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
+        "switchSheet", "addSheet", "renameSheet", "deleteSheet", "renderSheetTabs",
+        "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",
+        "importFolderPicks",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",

@@ -28,6 +28,7 @@ import projectloader
 import recipeloader
 import recipes_sdk
 import graph as G
+import workbook
 import train as T
 from layers import REGISTRY, catalog
 from version import __version__
@@ -113,6 +114,45 @@ def get_catalog():
         "augmentations": T.AUGMENTATIONS,
         "recipes": recipes_sdk.catalog(),
         "version": __version__,
+    }
+
+
+class BookPayload(BaseModel):
+    book: Dict[str, Any]
+    sheet: str = ""
+
+
+@app.post("/api/analyze-book")
+def analyze_book(body: BookPayload):
+    """The whole workbook at once: every sheet's report, cross-sheet shapes
+    resolved, code for the combined model, and per-node code for one sheet."""
+    book = workbook.wrap(body.book)
+    analysis = workbook.analyze(book)
+    source = workbook.to_pytorch(book, analysis)
+
+    active = body.sheet or analysis.get("main") or "main"
+    node_code: Dict[str, Any] = {}
+    active_report = analysis["sheets"].get(active)
+    if active_report and active_report.get("order"):
+        try:
+            # generated only to collect the per-node constructor lines the
+            # canvas shows; the combined source above is what the user sees
+            g = G.parse(workbook.sheet_graph(book, active))
+            codegen.to_pytorch(g, active_report, node_code)
+        except Exception:  # noqa: BLE001
+            node_code = {}
+
+    return {
+        "sheets": {name: report for name, report in analysis["sheets"].items()},
+        "order": workbook.order_sheets(book)[0],
+        "cycle": analysis.get("cycle"),
+        "main": analysis.get("main"),
+        "ok": analysis["ok"],
+        "total_learnables": analysis["total_learnables"],
+        "approximate": analysis.get("approximate", False),
+        "code": {"pytorch": source, "keras": ""},
+        "node_code": node_code,
+        "signatures": analysis.get("signatures", {}),
     }
 
 
@@ -381,6 +421,16 @@ class CodePayload(BaseModel):
     entry: str = ""
 
 
+class ScanPayload(BaseModel):
+    root: str
+
+
+class FolderImportPayload(BaseModel):
+    root: str
+    picks: List[Dict[str, Any]]        # [{file, cls, arguments, input_shape}]
+    as_sheets: bool = True
+
+
 def _finish_import(graph: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze what came in so the response can say what needs attention."""
     notes = graph.pop("_notes", [])
@@ -414,6 +464,66 @@ def import_torchvision(body: ImportPayload):
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(400, detail={"message": f"{type(exc).__name__}: {exc}"})
     return _finish_import(graph)
+
+
+@app.post("/api/scan-folder")
+def scan_folder(body: ScanPayload):
+    """List every nn.Module in a folder. Reads syntax trees only — nothing runs
+    until a class is actually picked for import."""
+    try:
+        return importer.scan_folder(body.root)
+    except importer.ImportError_ as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/import/folder")
+def import_folder(body: FolderImportPayload):
+    """Import chosen classes from a scanned folder.
+
+    With as_sheets, each class becomes its own sheet in a workbook — a project
+    that spans several files arrives as several sheets, not one tangle.
+    """
+    if not body.picks:
+        raise HTTPException(400, detail={"message": "Nothing was picked."})
+    sheets, notes, failures = [], [], []
+    for pick in body.picks:
+        try:
+            graph = importer.from_folder(
+                body.root, pick.get("file", ""), pick.get("cls", ""),
+                pick.get("input_shape") or [3, 224, 224],
+                str(pick.get("arguments") or ""))
+        except importer.ImportError_ as exc:
+            failures.append({"cls": pick.get("cls"), "why": str(exc)})
+            continue
+        graph.pop("_entry", None)
+        notes.extend(f"{pick.get('cls')}: {n}" for n in graph.pop("_notes", []))
+        sheets.append({"name": pick.get("cls") or f"sheet{len(sheets)+1}",
+                       "nodes": graph["nodes"], "edges": graph["edges"]})
+    if not sheets:
+        raise HTTPException(400, detail={
+            "message": "None of the picks imported. "
+                       + "; ".join(f["why"] for f in failures[:2])})
+
+    if not body.as_sheets and len(sheets) == 1:
+        payload = {"name": sheets[0]["name"], "nodes": sheets[0]["nodes"],
+                   "edges": sheets[0]["edges"]}
+        result = _finish_import(payload)
+        result["failures"] = failures
+        return result
+
+    book = {"name": Path(body.root).name or "Imported",
+            "main": sheets[-1]["name"],
+            "sheets": sheets}
+    analysis = workbook.analyze(book)
+    return {"book": book, "analysis": _book_summary(analysis),
+            "notes": notes[:12], "failures": failures,
+            "ok": analysis["ok"], "learnables": analysis["total_learnables"]}
+
+
+def _book_summary(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    return {name: {"ok": r.get("ok"), "errors": r.get("errors", [])[:2],
+                   "learnables": r.get("total_learnables", 0)}
+            for name, r in analysis.get("sheets", {}).items()}
 
 
 @app.post("/api/import/code")

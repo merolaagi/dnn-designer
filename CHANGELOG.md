@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.19.0
+
+Multi-file projects arrive as multi-sheet workbooks.
+
+- **Scan a folder.** Import → *Scan a folder of Python files* lists every
+  `nn.Module` in a project — class, file, line, and how many constructor
+  arguments it needs. Discovery reads syntax trees only; nothing runs until a
+  class is actually picked, and a file whose import would explode cannot hurt
+  the scan. Classes needing arguments take them as they would in code
+  (`width=64`). Modules import with their package on the path, so the relative
+  imports between a project's files resolve the way they do when the project
+  runs.
+- **Sheets, tabbed like a spreadsheet**, in a strip at the bottom of the canvas.
+  Click to switch, double-click to rename, right-click to make a sheet the
+  model, `+` for a new one. Each picked class from a folder scan becomes its own
+  sheet.
+- **One sheet can stand on another.** A `Subgraph` node references a sheet by
+  name; the node carries *↪ continues on "stem"* and double-clicking it opens
+  that sheet. Shapes flow through the reference, so the parent sheet knows what
+  comes back out.
+- **The reference is real, not decorative.** A referenced sheet is generated as
+  its own `nn.Module` class and the parent instantiates it — a class per sheet,
+  the way the code would be written by hand. Verified: the generated two-sheet
+  model runs, and its parameter count matches the canvas exactly. Renaming a
+  sheet renames every reference to it; deleting a sheet something references is
+  refused and says which sheets those are.
+- Sheets nothing references are kept in the workbook but stay out of the
+  generated code and the parameter total — a class nothing constructs is dead
+  code.
+- Sheets referencing each other in a circle are refused, with the circle named:
+  the generated code would not terminate.
+- Old flat saves still open; a one-sheet workbook saves flat, so nothing about
+  existing designs changes shape.
+- Five tests, including one that plants a booby-trapped file to prove scanning
+  executes nothing.
+
 ## 1.18.0
 
 - **Paste PyTorch source and get a diagram.** The Import dialog takes code now,

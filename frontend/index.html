@@ -176,6 +176,41 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend{background:var(--paper)}
 
+/* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
+#sheetTabs{
+  position:absolute;left:0;right:0;bottom:30px;height:29px;display:flex;
+  align-items:flex-end;gap:1px;padding:0 8px;z-index:6;
+  background:linear-gradient(to top, rgba(244,246,249,.97), rgba(244,246,249,.85));
+  border-top:1px solid var(--paper-3);
+}
+.sheettab{
+  display:flex;align-items:center;gap:5px;padding:5px 11px 6px;font-size:11px;
+  background:#EDF0F4;border:1px solid var(--paper-3);border-bottom:none;
+  border-radius:7px 7px 0 0;color:var(--muted);cursor:pointer;max-width:170px;
+  position:relative;top:1px;
+}
+.sheettab:hover{background:#F4F6F9}
+.sheettab.on{background:var(--board);color:var(--text);font-weight:600;
+  border-color:var(--paper-3);box-shadow:0 -2px 5px rgba(22,32,46,.05)}
+.sheettab.bad .tabname{color:var(--bad)}
+.sheettab .mainmark{font-style:normal;color:var(--amber);font-size:10px}
+.sheettab .tabkill{
+  font-weight:400;color:#B3BdC9;font-size:13px;line-height:1;padding:0 1px;
+  border-radius:3px;visibility:hidden;
+}
+.sheettab:hover .tabkill{visibility:visible}
+.sheettab .tabkill:hover{color:var(--bad)}
+.tabedit{
+  width:90px;font-size:11px;border:1px solid var(--amber);border-radius:3px;
+  padding:1px 4px;background:#fff;
+}
+#sheetAdd{
+  width:24px;height:23px;margin-left:3px;margin-bottom:2px;border-radius:6px;
+  border:1px solid var(--paper-3);background:#fff;color:var(--muted);
+  font-size:14px;line-height:1;
+}
+#sheetAdd:hover{border-color:var(--amber);color:var(--text)}
+
 /* inside the canvas, not across the page — otherwise it lies on top of the
    bottom of whatever panels are docked beside it */
 #statusbar{
@@ -331,7 +366,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 
 #minimap{
-  position:absolute;right:12px;bottom:42px;width:172px;height:120px;
+  position:absolute;right:12px;bottom:72px;width:172px;height:120px;
   background:rgba(255,255,255,.94);border:1px solid #C6D0DC;border-radius:7px;
   cursor:crosshair;display:none;box-shadow:0 2px 8px rgba(22,32,46,.12);
 }
@@ -862,6 +897,16 @@ table.trials td.st.error{color:#8C2F27}
   border-radius:6px;background:#FCFCFD;color:#3C4453;
 }
 #im_code:focus{outline:none;border-color:var(--amber)}
+#scanResult{margin-top:8px}
+#scanResult table{width:100%;border-collapse:collapse;font-size:11px}
+#scanResult th{text-align:left;font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+  color:#98A6B8;padding:4px 6px;border-bottom:1px solid var(--paper-3)}
+#scanResult td{padding:5px 6px;border-bottom:1px solid #EDF1F5;vertical-align:middle}
+#scanResult td.mono{font-family:var(--mono);font-size:10px;color:var(--muted)}
+#scanResult input[type=text]{width:88px;font-family:var(--mono);font-size:10px;
+  padding:2px 5px;border:1px solid var(--paper-3);border-radius:4px}
+#scanResult .scannote{font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.5}
+#scanResult .scanskip{color:#8C2F27}
 #importNote{
   font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:10px;
   max-height:120px;overflow-y:auto;
@@ -983,6 +1028,7 @@ table.trials td.st.error{color:#8C2F27}
     </svg>
     <svg id="minimap" class="on" viewBox="0 0 172 120" preserveAspectRatio="none"></svg>
     <div id="marquee"></div>
+    <div id="sheetTabs"></div>
     <div id="statusbar">
       <span class="dot" id="statusDot"></span>
       <span id="statusText">no problems</span>
@@ -1192,6 +1238,16 @@ or  model = nn.Sequential(...)"></textarea>
           A class is built with no arguments; assign a variable if yours needs some.</div>
       </div>
 
+      <div class="field"><label>Or scan a folder of Python files</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="im_folder" placeholder="/path/to/project" spellcheck="false" style="flex:1">
+          <button class="btn" id="btnScan">Scan</button>
+        </div>
+        <div class="help">Discovery only reads the files. Nothing runs until you
+          pick classes to import — each picked class becomes its own sheet.</div>
+        <div id="scanResult"></div>
+      </div>
+
       <div class="field"><label>Or upload a file</label>
         <div class="filerow">
           <input type="text" id="im_file_label" placeholder="no file chosen" readonly>
@@ -1243,6 +1299,7 @@ const state = {
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
   flow:"vertical", gridLevel:2, appendAfter:null,
   quick:{ mode:null, context:null, expanded:false, hits:[], at:0 },
+  book:null, sheet:"main", bookReports:null, scan:null,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
@@ -1276,11 +1333,15 @@ async function boot(){
   starterGraph();
   updateHistoryButtons();
   await loadLayout();
+  renderSheetTabs();
   render();
   analyze();
 }
 
+function resetBook(){ state.book = null; state.sheet = "main"; state.bookReports = null; }
+
 function starterGraph(){
+  resetBook();
   const add = (type, params, x, y) => {
     const n = { id: uid("n"), type, params: params||{}, label:"", x, y };
     state.graph.nodes.push(n); return n;
@@ -1755,6 +1816,7 @@ const GLYPHS = {
   "Vision blocks": "M3 6l6-3 6 3l-6 3z M3 11l6 3 6-3",
   "Game playing": "M4 7h10v5h-10z M6 9h2 M11 9h2",
   Pretrained: "M9 3l6 3v5l-6 4-6-4v-5z",
+  Structure: "M4 3h7l4 4v8h-11z M11 3v4h4",
   Custom: "M9 5a4 4 0 1 0 0 8a4 4 0 1 0 0-8 M9 2v2 M9 14v2 M2 9h2 M14 9h2",
 };
 
@@ -2134,6 +2196,8 @@ function nodeBox(n){
     return { w: NW, h: tall, shape: "data" };
   if (n.type === "Activation")
     return { w: NW, h: NH, shape: "stadium" };
+  if (n.type === "Subgraph")
+    return { w: NW, h: NH_CODE, shape: "predefined" };
   if (spec.source === "block")
     return { w: NW, h: tall, shape: "predefined" };
   return { w: NW, h: tall, shape: "card" };
@@ -2288,6 +2352,11 @@ function render(){
         el("rect", { class:"node-card", width:W, height:H, rx:7 }, g);
       }
 
+      if (n.type === "Subgraph"){
+        const target = n.params.sheet || "";
+        const badge = el("text", { class:"node-sub", x:inset, y:H-12 }, g);
+        badge.textContent = target ? `↪ continues on “${target}”` : "↪ pick a sheet";
+      }
       if (box.shape === "card" || box.shape === "predefined"){
         el("rect", { class:"node-rail", width:4, height:H-2,
                      x: box.shape === "predefined" ? 3 : 1, y:1, rx:2,
@@ -2902,34 +2971,50 @@ function analyze(){
 }
 async function runAnalyze(){
   state.graph.name = $("gname").value || "MyNet";
+  commitSheet();
+  const book = ensureBook();
+  book.name = state.graph.name;
+  const single = book.sheets.length === 1;
   let data;
   try{
-    const res = await fetch(API + "/api/analyze", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ graph: state.graph })
+    const r = await fetch(API + (single ? "/api/analyze" : "/api/analyze-book"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(single ? { graph: state.graph }
+                                  : { book, sheet: state.sheet }),
     });
-    data = await res.json();
-  } catch(err){
-    $("code").textContent = "Cannot reach the server. Is uvicorn still running?";
-    return;
+    data = await r.json();
+  } catch { setStatus("off", "The server is not answering"); return; }
+
+  if (single){
+    state.report = data.report;
+    state.bookReports = null;
+  } else {
+    state.bookReports = data.sheets;
+    state.report = data.sheets[state.sheet]
+      || { ok:false, nodes:{}, edges:{}, order:[], errors:[], total_learnables:0 };
+    renderSheetTabs();     // trouble on another sheet shows in the strip
   }
-  state.report = data.report;
-  state.code = data.code;
+  state.code = data.code || { pytorch:"", keras:"" };
   state.nodeCode = data.node_code || {};
   state.requires = data.requires || null;
+
+  const ok = single ? state.report.ok : data.ok;
+  const total = single ? state.report.total_learnables : data.total_learnables;
+  const approx = single ? state.report.approximate : data.approximate;
+  if (ok){
+    const scope = single ? "" : ` across ${book.sheets.length} sheets`;
+    setStatus("ok", `${(total || 0).toLocaleString()}${approx ? "≈" : ""} trainable parameters${scope}`);
+  } else {
+    const cycle = (!single && data.cycle)
+      ? [`Sheets reference each other in a circle: ${data.cycle}`] : [];
+    const errors = cycle.concat(state.report.errors || []);
+    setStatus("bad", errors[0] || "Something does not resolve");
+  }
+  renderProblems();
+  render();
+  if (state.sidePanel === "code") showCode();
   if (state.sidePanel === "network") renderNetworkPanel();
   if (state.sidePanel === "needs") renderNeedsPanel();
-  render();
-  renderInspector();
-  showCode();
-  showProblems();
-  $("statParams").textContent = data.report.total_learnables
-    ? (data.report.approximate ? "\u2248 " : "") + data.report.total_learnables.toLocaleString()
-    : "\u2014";
-  $("statParams").title = data.report.approximate
-    ? "Includes a pretrained backbone, counted from a published figure"
-    : "Derived from the graph";
-  if ($("mapRows")) renderMapRows();
 }
 
 function showProblems(){
@@ -4100,6 +4185,175 @@ function applyStep(){
   renderGuide();
 }
 
+/* ============================ sheets ============================ */
+
+/* The design is a workbook. state.graph stays what everything else edits — it
+   is simply the active sheet's graph, swapped in place when tabs change, so
+   the whole canvas machinery keeps working on one graph at a time. */
+
+function ensureBook(){
+  if (!state.book){
+    state.book = { name: state.graph.name || "Design", main: "main",
+                   sheets: [{ name: "main",
+                              nodes: state.graph.nodes,
+                              edges: state.graph.edges }] };
+    state.sheet = "main";
+  }
+  return state.book;
+}
+
+function sheetNames(){ return ensureBook().sheets.map(s => s.name); }
+
+function activeSheet(){
+  const book = ensureBook();
+  return book.sheets.find(s => s.name === state.sheet) || book.sheets[0];
+}
+
+/* keep the book's record of the active sheet pointing at the live arrays */
+function commitSheet(){
+  const sheet = activeSheet();
+  sheet.nodes = state.graph.nodes;
+  sheet.edges = state.graph.edges;
+}
+
+function switchSheet(name){
+  const book = ensureBook();
+  const target = book.sheets.find(s => s.name === name);
+  if (!target || name === state.sheet) return;
+  commitSheet();
+  state.sheet = name;
+  state.graph = { name: book.name, nodes: target.nodes, edges: target.edges };
+  state.history = [];
+  state.future = [];
+  updateHistoryButtons();
+  clearSelection();
+  renderSheetTabs();
+  render(); renderInspector(); analyze();
+  fitView();
+}
+
+function addSheet(){
+  const book = ensureBook();
+  let i = book.sheets.length + 1;
+  while (book.sheets.some(s => s.name === `sheet${i}`)) i++;
+  const name = `sheet${i}`;
+  book.sheets.push({ name, nodes: [], edges: [] });
+  switchSheet(name);
+  toast("New sheet — give it an Input and an Output");
+}
+
+function renameSheet(oldName, newName){
+  const book = ensureBook();
+  newName = (newName || "").trim().replace(/[^\w \-]/g, "").slice(0, 24);
+  if (!newName || newName === oldName) { renderSheetTabs(); return; }
+  if (book.sheets.some(s => s.name === newName)){
+    toast("There is already a sheet with that name");
+    renderSheetTabs();
+    return;
+  }
+  const sheet = book.sheets.find(s => s.name === oldName);
+  if (!sheet) return;
+  sheet.name = newName;
+  if (book.main === oldName) book.main = newName;
+  if (state.sheet === oldName) state.sheet = newName;
+  // every reference to the old name follows the rename
+  book.sheets.forEach(sh => sh.nodes.forEach(n => {
+    if (n.type === "Subgraph" && n.params.sheet === oldName)
+      n.params.sheet = newName;
+  }));
+  renderSheetTabs();
+  analyze();
+}
+
+function deleteSheet(name){
+  const book = ensureBook();
+  if (book.sheets.length === 1){ toast("A workbook keeps at least one sheet"); return; }
+  const used = [];
+  book.sheets.forEach(sh => sh.nodes.forEach(n => {
+    if (n.type === "Subgraph" && n.params.sheet === name) used.push(sh.name);
+  }));
+  if (used.length){
+    toast(`${used.join(", ")} still reference${used.length === 1 ? "s" : ""} this sheet`);
+    return;
+  }
+  const index = book.sheets.findIndex(s => s.name === name);
+  book.sheets.splice(index, 1);
+  if (book.main === name) book.main = book.sheets[0].name;
+  if (state.sheet === name) switchSheet(book.sheets[Math.max(0, index - 1)].name);
+  else renderSheetTabs();
+  analyze();
+}
+
+function setMainSheet(name){
+  ensureBook().main = name;
+  renderSheetTabs();
+  analyze();
+}
+
+function renderSheetTabs(){
+  const book = ensureBook();
+  const host = $("sheetTabs");
+  if (!host) return;
+  host.innerHTML = book.sheets.map(sheet => {
+    const on = sheet.name === state.sheet;
+    const main = sheet.name === book.main;
+    const report = state.bookReports && state.bookReports[sheet.name];
+    const bad = report && report.ok === false;
+    return `<div class="sheettab${on ? " on" : ""}${bad ? " bad" : ""}"
+                 data-sheet="${sheet.name}" title="${
+                   main ? "The model. Other sheets are generated as classes it can use."
+                        : "Generated as its own class"}">
+      ${main ? '<i class="mainmark">▸</i>' : ""}
+      <span class="tabname">${sheet.name}</span>
+      ${book.sheets.length > 1 ? `<b class="tabkill" data-kill="${sheet.name}">×</b>` : ""}
+    </div>`;
+  }).join("") + `<button id="sheetAdd" title="New sheet">+</button>`;
+
+  host.querySelectorAll(".sheettab").forEach(el => {
+    el.addEventListener("click", ev => {
+      if (ev.target.dataset.kill) return;
+      switchSheet(el.dataset.sheet);
+    });
+    el.addEventListener("dblclick", ev => {
+      if (ev.target.dataset.kill) return;
+      const name = el.dataset.sheet;
+      const span = el.querySelector(".tabname");
+      const input = document.createElement("input");
+      input.value = name;
+      input.className = "tabedit";
+      span.replaceWith(input);
+      input.focus();
+      input.select();
+      const done = () => renameSheet(name, input.value);
+      input.addEventListener("blur", done);
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter") input.blur();
+        if (e.key === "Escape"){ input.value = name; input.blur(); }
+      });
+    });
+    el.addEventListener("contextmenu", ev => {
+      ev.preventDefault();
+      setMainSheet(el.dataset.sheet);
+      toast(`${el.dataset.sheet} is the model now`);
+    });
+  });
+  host.querySelectorAll("[data-kill]").forEach(el =>
+    el.addEventListener("click", ev => {
+      ev.stopPropagation();
+      deleteSheet(el.dataset.kill);
+    }));
+  const add = $("sheetAdd");
+  if (add) add.addEventListener("click", addSheet);
+}
+
+/* jump to the sheet a Subgraph node stands for */
+function openReferencedSheet(node){
+  const target = node.params && node.params.sheet;
+  if (!target){ toast("Point it at a sheet first, in the Layer tab"); return; }
+  if (!sheetNames().includes(target)){ toast(`There is no sheet called ${target}`); return; }
+  switchSheet(target);
+}
+
 /* ============================ assistant ============================ */
 
 function askSay(text, who){
@@ -4304,6 +4558,11 @@ $("im_file").addEventListener("change", e => {
 $("btnImportGo").addEventListener("click", async () => {
   const note = $("importNote");
   note.textContent = "Tracing…";
+  if (state.scan && scanPicks().length){
+    const done = await importFolderPicks();
+    if (done) setTimeout(() => $("modal").classList.remove("on"), 1600);
+    return;
+  }
   const file = $("im_file").files[0];
   const pasted = ($("im_code").value || "").trim();
   let r, d;
@@ -4359,6 +4618,114 @@ $("btnImportGo").addEventListener("click", async () => {
   note.innerHTML = bits.join("<br>");
   toast(`Imported ${d.nodes} layers`);
   if (d.ok && !(d.notes || []).length) setTimeout(() => $("modal").classList.remove("on"), 900);
+});
+
+/* ---------- scanning a folder ---------- */
+
+async function scanFolder(){
+  const root = ($("im_folder").value || "").trim();
+  const host = $("scanResult");
+  if (!root){ host.innerHTML = `<div class="scannote">Give it a folder path.</div>`; return; }
+  host.innerHTML = `<div class="scannote">reading…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/scan-folder", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root }),
+    });
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="scannote">The server did not respond.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="scannote">${(d.detail && d.detail.message) || "Could not scan"}</div>`;
+    return;
+  }
+  state.scan = { root: d.root, models: d.models };
+  if (!d.models.length){
+    host.innerHTML = `<div class="scannote">Read ${d.files} files and found no
+      nn.Module classes.</div>`;
+    return;
+  }
+  host.innerHTML = `<table><thead><tr><th></th><th>class</th><th>file</th>
+      <th>arguments</th></tr></thead><tbody>`
+    + d.models.map((m, i) => `<tr>
+        <td><input type="checkbox" data-pick="${i}" ${m.arguments === 0 ? "checked" : ""}></td>
+        <td><b>${m.cls}</b>${m.forward ? "" : " <i title='no forward'>?</i>"}</td>
+        <td class="mono">${m.file}:${m.line}</td>
+        <td>${m.arguments > 0
+              ? `<input type="text" data-args="${i}" placeholder="${m.arguments} needed">`
+              : `<span class="mono">none</span>`}</td>
+      </tr>`).join("")
+    + `</tbody></table>`
+    + `<div class="scannote">Read ${d.files} files.
+       ${d.skipped.length ? `<span class="scanskip">Skipped ${d.skipped.length}
+         with syntax errors (${d.skipped[0].file}).</span>` : ""}
+       Each picked class becomes its own sheet; the last pick becomes the model.
+       Classes needing constructor arguments take them as they would in code,
+       e.g. <span class="mono">width=64</span>.</div>`;
+}
+
+function scanPicks(){
+  const host = $("scanResult");
+  const shape = $("im_shape").value.split(/[^0-9]+/).filter(Boolean).map(Number);
+  return [...host.querySelectorAll("[data-pick]")]
+    .filter(el => el.checked)
+    .map(el => {
+      const i = +el.dataset.pick;
+      const model = state.scan.models[i];
+      const args = host.querySelector(`[data-args="${i}"]`);
+      return { file: model.file, cls: model.cls,
+               arguments: args ? args.value.trim() : "",
+               input_shape: shape };
+    });
+}
+
+async function importFolderPicks(){
+  const picks = scanPicks();
+  const note = $("importNote");
+  if (!picks.length){ note.innerHTML = "Tick at least one class."; return false; }
+  note.innerHTML = `importing ${picks.length}…`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/import/folder", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root: state.scan.root, picks, as_sheets: true }),
+    });
+    d = await r.json();
+  } catch { note.innerHTML = "The server did not respond."; return false; }
+  if (!r.ok){
+    note.innerHTML = (d.detail && d.detail.message) || "Import failed";
+    return false;
+  }
+
+  pushHistory();
+  state.book = d.book;
+  state.sheet = d.book.main;
+  const active = d.book.sheets.find(sh => sh.name === state.sheet) || d.book.sheets[0];
+  state.graph = { name: d.book.name, nodes: active.nodes, edges: active.edges };
+  state.seq = active.nodes.length + active.edges.length + 700;
+  state.version = null;
+  $("gname").value = d.book.name;
+
+  const bits = [`Imported <b>${d.book.sheets.length}</b> sheet${
+      d.book.sheets.length === 1 ? "" : "s"}: ${
+      d.book.sheets.map(sh => sh.name).join(", ")}.`];
+  if (d.failures && d.failures.length){
+    bits.push(`<span class="scanskip">Could not import ${
+      d.failures.map(f => f.cls).join(", ")}.</span>`);
+  }
+  if (d.notes && d.notes.length) bits.push(d.notes[0]);
+  note.innerHTML = bits.join(" ");
+
+  clearSelection();
+  renderSheetTabs();
+  render(); renderInspector(); analyze();
+  fitView();
+  return true;
+}
+
+$("btnScan").addEventListener("click", scanFolder);
+$("im_folder").addEventListener("keydown", e => {
+  if (e.key === "Enter") scanFolder();
 });
 
 /* ============================ blocks ============================ */

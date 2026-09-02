@@ -396,6 +396,118 @@ def from_torchvision(arch: str, weights: str = "none",
     return from_pytorch(model, name=arch, input_shape=input_shape or [3, 224, 224])
 
 
+def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
+    """Find every nn.Module in a folder without running any of it.
+
+    Discovery reads the syntax tree rather than importing, so pointing this at
+    an unfamiliar repository is safe. Only the class you then choose to import
+    gets executed.
+    """
+    import ast
+
+    base = Path(root).expanduser()
+    if not base.is_dir():
+        raise ImportError_(f"{base} is not a folder.")
+
+    found, scanned, skipped = [], 0, []
+    for path in sorted(base.rglob("*.py")):
+        parts = set(path.parts)
+        if parts & {".venv", "venv", "site-packages", "__pycache__", "build",
+                    "node_modules", ".git"}:
+            continue
+        if scanned >= limit:
+            break
+        scanned += 1
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError as exc:
+            skipped.append({"file": str(path.relative_to(base)), "why": f"syntax: {exc.msg}"})
+            continue
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            bases = []
+            for b in node.bases:
+                if isinstance(b, ast.Attribute):
+                    bases.append(b.attr)
+                elif isinstance(b, ast.Name):
+                    bases.append(b.id)
+            if not any(b in ("Module", "Sequential") for b in bases):
+                continue
+            init = next((f for f in node.body
+                         if isinstance(f, ast.FunctionDef) and f.name == "__init__"), None)
+            required = 0
+            if init:
+                args = init.args
+                positional = [a.arg for a in args.args][1:]   # drop self
+                required = max(0, len(positional) - len(args.defaults))
+            found.append({
+                "file": str(path.relative_to(base)),
+                "cls": node.name,
+                "line": node.lineno,
+                "bases": bases,
+                "arguments": required,
+                "forward": any(isinstance(f, ast.FunctionDef) and f.name == "forward"
+                               for f in node.body),
+            })
+    return {"root": str(base), "files": scanned, "models": found,
+            "skipped": skipped[:10]}
+
+
+def from_folder(root: str, file: str, cls: str,
+                input_shape: Optional[List[int]] = None,
+                arguments: str = "") -> Dict[str, Any]:
+    """Import one class out of a folder, with its own package on the path.
+
+    Importing the module properly rather than exec'ing the file in isolation is
+    what makes multi-file projects work: the relative imports inside it resolve
+    the way they do when the project runs.
+    """
+    import importlib.util
+    import sys
+
+    base = Path(root).expanduser().resolve()
+    target = (base / file).resolve()
+    if not target.exists():
+        raise ImportError_(f"{file} is not in {base}.")
+
+    added = [str(base)]
+    package_root = target.parent
+    while (package_root / "__init__.py").exists() and package_root != base:
+        package_root = package_root.parent
+    added.append(str(package_root))
+    for entry in added:
+        if entry not in sys.path:
+            sys.path.insert(0, entry)
+
+    spec = importlib.util.spec_from_file_location(
+        f"scanned_{target.stem}", target)
+    if spec is None or spec.loader is None:
+        raise ImportError_(f"Could not load {file}.")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    except Exception as exc:  # noqa: BLE001
+        raise ImportError_(
+            f"{file} did not import: {type(exc).__name__}: {exc}. "
+            f"If it needs the project installed, install it first.") from exc
+
+    candidate = getattr(module, cls, None)
+    if candidate is None:
+        raise ImportError_(f"{file} has no class called {cls}.")
+    try:
+        model = eval(f"candidate({arguments})", {"candidate": candidate,  # noqa: S307
+                                                 "module": module})
+    except Exception as exc:  # noqa: BLE001
+        raise ImportError_(
+            f"{cls} could not be built with ({arguments}): {type(exc).__name__}: {exc}")
+    graph = from_pytorch(model, name=cls, input_shape=input_shape)
+    graph["_entry"] = cls
+    return graph
+
+
 def from_source(source: str, input_shape: Optional[List[int]] = None,
                 entry: str = "") -> Dict[str, Any]:
     """Trace a module defined in pasted PyTorch source.

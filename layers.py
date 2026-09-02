@@ -15,6 +15,7 @@ Keras codegen converts to channels-last at the boundaries.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
@@ -947,6 +948,46 @@ def _stack_blocks(x, depth, heads, ff_dim, rate):
     return x
 ''',
 ))
+
+
+# --------------------------------------------------------------------------
+# a reference to another sheet
+# --------------------------------------------------------------------------
+
+def _subgraph_infer(p, ins):
+    target = p.get("sheet")
+    if not target:
+        raise ShapeError("Point this at a sheet.")
+    resolved = p.get("_out")
+    if resolved is None:
+        raise ShapeError(
+            f"Sheet '{target}' does not resolve yet, so this cannot know what "
+            f"comes back out of it. Fix that sheet first."
+        )
+    return [int(d) for d in resolved]
+
+
+register(LayerSpec(
+    name="Subgraph",
+    category="Structure",
+    doc="Stands for another sheet. That sheet is generated as its own module "
+        "class and this instantiates it, which is how you would write it by "
+        "hand — a class per file.",
+    params=[
+        P("sheet", "sheet", "", help="Which sheet this stands for"),
+    ],
+    infer=_subgraph_infer,
+    torch_init=lambda p, ins: f"{_class_name_of(p.get('sheet'))}()",
+    torch_call=lambda p, ins, mod, s: f"{mod}({ins[0]})",
+    keras_call=None,
+    learnables=lambda p, ins, out: int(p.get("_learnables") or 0),
+))
+
+
+def _class_name_of(sheet: str) -> str:
+    parts = re.split(r"[^0-9a-zA-Z]+", sheet or "Sheet")
+    name = "".join(part[:1].upper() + part[1:] for part in parts if part)
+    return name or "Sheet"
 
 
 # --------------------------------------------------------------------------

@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Sixty-eight checks, with the torch-dependent ones skipping themselves when it is
+Seventy-three checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -315,7 +315,17 @@ when keeping a trunk and resizing the head for a different class count.
 The Import button takes pasted PyTorch source, a torchvision architecture by
 name, an `.onnx` export, or a `.pt` holding the module itself.
 
-Pasting code is the quickest route: a class subclassing `nn.Module`, or a
+For a whole project, *Scan a folder of Python files* lists every `nn.Module` it
+finds — without running any of it — and each class you pick becomes its own
+sheet. Sheets are tabbed at the bottom of the canvas like a spreadsheet: click
+to switch, double-click to rename, right-click to choose which sheet is the
+model. A `Subgraph` node lets one sheet stand on another — it reads *↪ continues
+on "stem"*, double-click follows it — and the referenced sheet is generated as
+its own class that the parent instantiates, exactly as the code would be written
+by hand. Shapes flow through the reference; circular references are refused with
+the circle named.
+
+Pasting code is the quickest route for a single model: a class subclassing `nn.Module`, or a
 variable holding one such as `model = nn.Sequential(...)`. It is traced by
 running it, which is the only way to learn what `forward` does, so it has to be
 code you trust — the same assumption the blocks and recipes folders already
@@ -534,4 +544,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.18.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.19.0 — see `CHANGELOG.md`.
