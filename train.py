@@ -36,8 +36,15 @@ UPLOADS.mkdir(exist_ok=True)
 CHECKPOINTS = Path(__file__).resolve().parent / "checkpoints"
 CHECKPOINTS.mkdir(exist_ok=True)
 
-RUNS = Path(__file__).resolve().parent / "runs"
-RUNS.mkdir(exist_ok=True)
+def runs_dir() -> Path:
+    """The current account's run history.
+
+    Resolved when a job starts and carried on the job, because the training
+    thread has no request behind it to ask.
+    """
+    import auth
+
+    return auth.sub("runs")
 
 BUILTIN_DATASETS = {
     "synthetic": {"label": "Synthetic noise (sanity check)", "shape": None, "classes": 10},
@@ -82,6 +89,10 @@ class Job:
     learnables: int = 0
     events: "queue.Queue" = field(default_factory=queue.Queue)
     stop: threading.Event = field(default_factory=threading.Event)
+
+    # captured when the job is created, because the training thread runs
+    # outside the request that started it and cannot ask who is signed in
+    home: Optional[Path] = None
 
     # what this run came from, so a record can be traced back to its design
     design: str = ""
@@ -134,7 +145,9 @@ class Job:
         produced it.
         """
         try:
-            (RUNS / f"{self.id}.json").write_text(json.dumps(self.record(), indent=1))
+            target = self.home or runs_dir()
+            target.mkdir(parents=True, exist_ok=True)
+            (target / f"{self.id}.json").write_text(json.dumps(self.record(), indent=1))
         except Exception:  # noqa: BLE001 - a failed record must not stop training
             pass
 
@@ -1170,7 +1183,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
 def list_runs(design: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
     """Every run on disk, newest first, without their full histories."""
     out = []
-    for path in sorted(RUNS.glob("*.json"), key=lambda p: -p.stat().st_mtime)[:limit]:
+    for path in sorted(runs_dir().glob("*.json"), key=lambda p: -p.stat().st_mtime)[:limit]:
         try:
             blob = json.loads(path.read_text())
         except Exception:  # noqa: BLE001
@@ -1199,20 +1212,21 @@ def list_runs(design: Optional[str] = None, limit: int = 200) -> List[Dict[str, 
 
 
 def read_run(run_id: str) -> Dict[str, Any]:
-    path = RUNS / f"{Path(run_id).name}.json"
+    path = runs_dir() / f"{Path(run_id).name}.json"
     if not path.exists():
         raise DataError(f"No run recorded under {run_id}.")
     return json.loads(path.read_text())
 
 
 def delete_run(run_id: str) -> None:
-    (RUNS / f"{Path(run_id).name}.json").unlink(missing_ok=True)
+    (runs_dir() / f"{Path(run_id).name}.json").unlink(missing_ok=True)
 
 
 def start(source: str, cfg: Dict[str, Any], in_shapes, in_ids, out_shape,
           tasks: List[str], class_name: Optional[str] = None) -> Job:
     graph_blob = cfg.get("graph") or {}
     job = Job(
+        home=runs_dir(),          # resolved here, while the request is still around
         id=uuid.uuid4().hex[:12],
         design=graph_blob.get("name") or cfg.get("design_name") or "unsaved",
         version=cfg.get("design_version"),

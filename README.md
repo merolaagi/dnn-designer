@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Seventy-three checks, with the torch-dependent ones skipping themselves when it is
+Seventy-seven checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -268,6 +268,19 @@ Save writes a new version each time rather than overwriting. The selector beside
 the design name lists every version with its timestamp, and switching loads that
 one onto the canvas. Deleting takes either one version or the whole history.
 
+## Accounts
+
+Accounts are optional. With none registered the app runs exactly as it always
+has. *Set up an account*, in the header, turns authentication on; the first
+account inherits the work already there, and every account after it gets its own
+designs, runs, studies and panel layout. Passwords are hashed with scrypt and a
+per-account salt, and changing one signs out every other session.
+
+Accounts separate people from each other, **not from the machine**. Importing
+code, importing a folder, and the blocks and recipes folders all execute Python
+by design, so anyone who can sign in can run code as this process. Run it on a
+network you trust.
+
 ## Studies
 
 **Studies** run experiments so you do not have to. A hyperparameter sweep trains
@@ -314,6 +327,11 @@ when keeping a trunk and resizing the head for a different class count.
 
 The Import button takes pasted PyTorch source, a torchvision architecture by
 name, an `.onnx` export, or a `.pt` holding the module itself.
+
+After a scan the folder stays browsable under **Files** in the left panel:
+directories, files, and a chip for every model found in each. Clicking a
+filename reads its source into the code panel — reading never runs anything —
+and clicking a model chip imports that class onto a new sheet.
 
 For a whole project, *Scan a folder of Python files* lists every `nn.Module` it
 finds — without running any of it — and each class you pick becomes its own
@@ -544,4 +562,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.19.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.20.0 — see `CHANGELOG.md`.

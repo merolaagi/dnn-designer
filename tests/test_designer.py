@@ -977,6 +977,104 @@ def _():
             assert expected in str(exc), f"got {exc}, wanted {expected!r}"
 
 
+@check("accounts keep one person's work out of another's")
+def _():
+    import shutil
+
+    import auth
+
+    backup = None
+    if auth.DATA.exists():
+        backup = auth.DATA.with_suffix(".backup")
+        shutil.move(auth.DATA, backup)
+    try:
+        assert not auth.enabled(), "a fresh install has no accounts"
+        assert auth.workspace_for(None) == auth.HERE, \
+            "with no accounts the app keeps its original layout"
+
+        auth.register("first", "longenough1")
+        assert auth.enabled()
+        # the first account adopts the existing work rather than hiding it
+        assert auth.workspace_for("first") == auth.HERE
+
+        auth.register("second", "longenough2")
+        assert auth.workspace_for("second") != auth.HERE
+        assert auth.workspace_for("second") != auth.workspace_for("first")
+
+        assert auth.check("first", "longenough1")
+        assert not auth.check("first", "longenough2"), "passwords are not interchangeable"
+        assert not auth.check("nobody", "longenough1")
+
+        stored = auth.users()["first"]
+        assert "longenough1" not in json.dumps(stored), "the password was stored"
+        assert stored["salt"] != auth.users()["second"]["salt"], "salts must differ"
+
+        token = auth.open_session("first")
+        assert auth.user_for(token) == "first"
+        auth.change_password("first", "longenough1", "brandnewpass")
+        assert auth.user_for(token) is None, \
+            "changing a password must end the other sessions"
+        assert auth.check("first", "brandnewpass")
+
+        for name in ("", "a", "has space", "UPPER!"):
+            try:
+                auth.register(name, "longenough1")
+                raise AssertionError(f"{name!r} should be refused")
+            except ValueError:
+                pass
+        try:
+            auth.register("fine", "short")
+            raise AssertionError("a short password should be refused")
+        except ValueError:
+            pass
+    finally:
+        shutil.rmtree(auth.DATA, ignore_errors=True)
+        if backup:
+            shutil.move(backup, auth.DATA)
+
+
+@check("the account is bound where the endpoint can see it")
+def _():
+    """The binding must be an async dependency.
+
+    Middleware runs call_next in another task and a sync dependency runs in a
+    worker thread; a context variable set in either is invisible to the
+    endpoint. Both wrong versions failed silently, giving every account the
+    same workspace.
+    """
+    import inspect
+
+    import main
+
+    assert inspect.iscoroutinefunction(main.bind_user), \
+        "bind_user must be async, or every account shares one workspace"
+    assert any(getattr(d, "dependency", None) is main.bind_user
+               for d in main.app.router.dependencies), \
+        "bind_user is not applied to the app"
+
+
+@check("a job keeps hold of the workspace it started in")
+def _():
+    import agents
+    import train as T
+
+    assert "home" in T.Job.__dataclass_fields__, \
+        "a training thread cannot ask who is signed in, so it must be told"
+    assert "home" in agents.Agent.__dataclass_fields__
+
+
+@check("browsing a scanned folder cannot leave it")
+def _():
+    import main
+
+    for attempt in ("../../etc/passwd", "/etc/passwd", "models/../../../etc/passwd"):
+        try:
+            main.scan_file({"root": "/tmp", "path": attempt})
+            raise AssertionError(f"{attempt} should have been refused")
+        except Exception as exc:  # noqa: BLE001
+            assert "outside" in str(exc) or "No such file" in str(exc), exc
+
+
 @check("a folder is scanned without running any of it")
 def _():
     import shutil
@@ -1377,10 +1475,11 @@ def _():
 def _():
     import main
 
-    saved = main.PREFS.exists()
-    backup = main.PREFS.read_text() if saved else None
+    prefs = main.prefs_file()
+    saved = prefs.exists()
+    backup = prefs.read_text() if saved else None
     try:
-        main.PREFS.unlink(missing_ok=True)
+        prefs.unlink(missing_ok=True)
         assert main.get_prefs() == {}, "a missing file should read as empty"
         main.put_prefs({"dock": {"palette": "bottom"},
                         "sizes": {"inspector": 480}})
@@ -1388,12 +1487,12 @@ def _():
         assert back["dock"]["palette"] == "bottom", back
         assert back["sizes"]["inspector"] == 480, back
 
-        main.PREFS.write_text("{ this is not json")
+        prefs.write_text("{ this is not json")
         assert main.get_prefs() == {}, "a corrupt file should not raise"
     finally:
-        main.PREFS.unlink(missing_ok=True)
+        prefs.unlink(missing_ok=True)
         if backup is not None:
-            main.PREFS.write_text(backup)
+            prefs.write_text(backup)
 
 
 @check("a project can be brought in whole, in part, or step by step")
@@ -1441,7 +1540,9 @@ def _():
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
         "switchSheet", "addSheet", "renameSheet", "deleteSheet", "renderSheetTabs",
         "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",
-        "importFolderPicks",
+        "importFolderPicks", "loadProjectTree", "renderProjectTree",
+        "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
+        "submitSignIn", "signOut",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",

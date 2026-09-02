@@ -41,8 +41,10 @@ import train as T
 AGENTS: Dict[str, "Agent"] = {}
 _LOCK = threading.Lock()
 
-STUDIES = Path(__file__).resolve().parent / "studies"
-STUDIES.mkdir(exist_ok=True)
+def studies_dir() -> Path:
+    import auth
+
+    return auth.sub("studies")
 
 
 # --------------------------------------------------------------------------
@@ -267,6 +269,7 @@ class Agent:
     finished: Optional[float] = None
     objective: str = "val_loss"
     lower_is_better: bool = True
+    home: Optional[Path] = None      # captured at start, as for a training job
     stop: threading.Event = field(default_factory=threading.Event)
 
     def snapshot(self) -> Dict[str, Any]:
@@ -283,7 +286,9 @@ class Agent:
 
     def persist(self) -> None:
         try:
-            (STUDIES / f"{self.id}.json").write_text(
+            target = self.home or studies_dir()
+            target.mkdir(parents=True, exist_ok=True)
+            (target / f"{self.id}.json").write_text(
                 json.dumps(self.snapshot(), indent=1))
         except Exception:  # noqa: BLE001
             pass
@@ -370,7 +375,7 @@ def start(kind: str, graph: Dict[str, Any], config: Dict[str, Any]) -> Agent:
     trials = BUILDERS[kind](copy.deepcopy(graph), config)
     for trial in trials:
         trial.setdefault("status", "waiting")
-    agent = Agent(id=uuid.uuid4().hex[:10], kind=kind,
+    agent = Agent(home=studies_dir(), id=uuid.uuid4().hex[:10], kind=kind,
                   design=graph.get("name") or "unsaved", trials=trials)
 
     base = {k: v for k, v in config.items()
@@ -385,7 +390,7 @@ def start(kind: str, graph: Dict[str, Any], config: Dict[str, Any]) -> Agent:
 
 def listing() -> List[Dict[str, Any]]:
     out = []
-    for path in sorted(STUDIES.glob("*.json"), key=lambda p: -p.stat().st_mtime)[:60]:
+    for path in sorted(studies_dir().glob("*.json"), key=lambda p: -p.stat().st_mtime)[:60]:
         try:
             blob = json.loads(path.read_text())
         except Exception:  # noqa: BLE001
@@ -404,7 +409,7 @@ def read(agent_id: str) -> Dict[str, Any]:
     live = AGENTS.get(agent_id)
     if live:
         return live.snapshot()
-    path = STUDIES / f"{Path(agent_id).name}.json"
+    path = studies_dir() / f"{Path(agent_id).name}.json"
     if not path.exists():
         raise KeyError(agent_id)
     return json.loads(path.read_text())

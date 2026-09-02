@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.20.0
+
+**A scanned folder stays browsable**, and **accounts keep one person's work
+separate from another's**.
+
+### Project files
+
+- The left panel has a **Files** tab beside Layers. After scanning a folder, its
+  tree stays there: directories, files, and a chip for every `nn.Module` found
+  in each one. Files that would not parse are marked rather than hidden.
+- Click a filename to read its source in the code panel, with highlighting.
+  Reading never runs anything — only importing a class does.
+- Click a model chip to import that class straight onto a new sheet. Classes
+  needing constructor arguments ask for them.
+- Reading is confined to the scanned folder: a path that climbs out of it is
+  refused.
+
+### Accounts
+
+- **Optional.** With none registered the app behaves exactly as before, on the
+  workspace it always used. Registering the first account turns authentication
+  on, and that first account inherits the existing designs, runs and studies
+  rather than hiding them.
+- Each further account gets its own designs, runs, studies and panel layout.
+- Passwords are hashed with scrypt and a per-account salt. Changing a password
+  signs out every other session.
+- **What this is not.** Accounts separate users from each other, not from the
+  machine. Importing code, importing a folder, and the blocks and recipes
+  folders all execute Python by design — that is what they are for — so any
+  account that can reach them can run code as this process. This belongs on a
+  network you trust, and the sign-up screen says so rather than leaving it to be
+  assumed.
+
+Two bugs found while building this, both the same shape and both silent: the
+account was first bound in middleware, then in a synchronous dependency, and in
+each case every account resolved to the same workspace. Starlette runs
+middleware's `call_next` in a separate task and FastAPI runs sync dependencies
+in a worker thread, so a context variable set in either is invisible to the
+endpoint. It is an async dependency now, and a test asserts that, because the
+failure produced no error — just quietly shared data.
+
 ## 1.19.0
 
 Multi-file projects arrive as multi-sheet workbooks.

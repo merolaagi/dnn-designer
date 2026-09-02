@@ -13,13 +13,15 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import (Depends, FastAPI, File, HTTPException, Request,
+                     Response, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 import agents
 import assistant
+import auth
 import blockloader
 import codegen
 import importer
@@ -59,10 +61,32 @@ def _find_frontend() -> Path:
 
 
 FRONTEND_FILE = _find_frontend()
-SAVED = HERE / "saved"
-SAVED.mkdir(exist_ok=True)
+def saved_dir() -> Path:
+    """Designs live in the signed-in account's workspace.
 
-app = FastAPI(title="Deep Network Designer", version=__version__)
+    A function rather than a constant because which directory that is depends
+    on who is asking, and that is only known per request.
+    """
+    return auth.sub("saved")
+
+async def bind_user(request: Request) -> None:
+    """Put the signed-in account where the storage helpers can find it.
+
+    An async dependency, and both of those words are load-bearing. Middleware
+    will not do: Starlette runs its call_next in a separate task, so a context
+    variable set there is invisible to the endpoint. A *synchronous* dependency
+    will not do either: FastAPI runs those in a worker thread, which is a
+    different context again. An async dependency runs in the request's own
+    context, and the endpoint inherits it.
+
+    Both wrong versions failed the same silent way — every account resolved to
+    the same workspace — which is exactly the bug worth not having.
+    """
+    auth.set_current(auth.user_for(request.cookies.get(auth.SESSION_COOKIE)))
+
+
+
+app = FastAPI(title="Deep Network Designer", version=__version__, dependencies=[Depends(bind_user)])
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
@@ -476,6 +500,63 @@ def scan_folder(body: ScanPayload):
         raise HTTPException(400, detail={"message": str(exc)})
 
 
+@app.post("/api/scan-folder/tree")
+def scan_tree(body: ScanPayload):
+    """The scanned folder as a tree, so it can be browsed rather than re-scanned.
+
+    Python files carry the classes found in them, so the sidebar can show which
+    files actually hold models.
+    """
+    base = Path(body.root).expanduser()
+    if not base.is_dir():
+        raise HTTPException(400, detail={"message": f"{base} is not a folder."})
+    try:
+        found = importer.scan_folder(body.root)
+    except importer.ImportError_ as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+    by_file: Dict[str, List[Dict[str, Any]]] = {}
+    for model in found["models"]:
+        by_file.setdefault(model["file"], []).append(model)
+    broken = {item["file"]: item["why"] for item in found["skipped"]}
+
+    entries = []
+    for path in sorted(base.rglob("*")):
+        parts = set(path.parts)
+        if parts & {".venv", "venv", "site-packages", "__pycache__", "build",
+                    "node_modules", ".git", ".mypy_cache"}:
+            continue
+        rel = str(path.relative_to(base))
+        if path.is_dir():
+            entries.append({"path": rel, "dir": True})
+        elif path.suffix in (".py", ".json", ".yaml", ".yml", ".toml", ".txt",
+                             ".md", ".cfg", ".ini"):
+            entries.append({"path": rel, "dir": False,
+                            "size": path.stat().st_size,
+                            "models": by_file.get(rel, []),
+                            "broken": broken.get(rel)})
+        if len(entries) > 1200:
+            break
+    return {"root": str(base), "entries": entries,
+            "models": len(found["models"])}
+
+
+@app.post("/api/scan-folder/file")
+def scan_file(body: Dict[str, Any]):
+    """One file's text, for reading in the panel. Never executes anything."""
+    base = Path(str(body.get("root", ""))).expanduser().resolve()
+    target = (base / str(body.get("path", ""))).resolve()
+    # a path that climbs out of the scanned folder is not a file of this project
+    if not str(target).startswith(str(base)):
+        raise HTTPException(400, detail={"message": "That is outside the folder."})
+    if not target.is_file():
+        raise HTTPException(404, detail={"message": "No such file."})
+    if target.stat().st_size > 400_000:
+        raise HTTPException(400, detail={"message": "That file is too large to show."})
+    return {"path": str(target.relative_to(base)),
+            "text": target.read_text(encoding="utf-8", errors="replace")}
+
+
 @app.post("/api/import/folder")
 def import_folder(body: FolderImportPayload):
     """Import chosen classes from a scanned folder.
@@ -861,12 +942,12 @@ def _safe(name: str) -> str:
 # before versioning is treated as version 1 and left where it is.
 
 def _folder(name: str) -> Path:
-    return SAVED / _safe(name)
+    return saved_dir() / _safe(name)
 
 
 def _versions(name: str) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
-    legacy = SAVED / f"{_safe(name)}.json"
+    legacy = saved_dir() / f"{_safe(name)}.json"
     if legacy.exists():
         out.append({"version": 1, "path": legacy,
                     "saved_at": legacy.stat().st_mtime, "legacy": True})
@@ -892,8 +973,8 @@ def _describe(entry: Dict[str, Any]) -> Dict[str, Any]:
 
 @app.get("/api/graphs")
 def list_graphs():
-    names = {p.stem for p in SAVED.glob("*.json")}
-    names |= {p.name for p in SAVED.iterdir() if p.is_dir()}
+    names = {p.stem for p in saved_dir().glob("*.json")}
+    names |= {p.name for p in saved_dir().iterdir() if p.is_dir()}
     items = []
     for name in sorted(names):
         versions = _versions(name)
@@ -953,7 +1034,7 @@ def save_graph(name: str, body: GraphPayload):
 def delete_graph(name: str, version: Optional[int] = None):
     """Without a version this removes the whole design and its history."""
     if version is None:
-        (SAVED / f"{_safe(name)}.json").unlink(missing_ok=True)
+        (saved_dir() / f"{_safe(name)}.json").unlink(missing_ok=True)
         folder = _folder(name)
         if folder.is_dir():
             for path in folder.glob("*.json"):
@@ -1084,15 +1165,16 @@ def new_block(name: str):
 # workspace preferences: where the panels sit and how big they are
 # --------------------------------------------------------------------------
 
-PREFS = HERE / "prefs.json"
+def prefs_file() -> Path:
+    return auth.workspace() / "prefs.json"
 
 
 @app.get("/api/prefs")
 def get_prefs():
-    if not PREFS.exists():
+    if not prefs_file().exists():
         return {}
     try:
-        return json.loads(PREFS.read_text())
+        return json.loads(prefs_file().read_text())
     except Exception:  # noqa: BLE001 - a corrupt file should not block the app
         return {}
 
@@ -1101,7 +1183,7 @@ def get_prefs():
 def put_prefs(body: Dict[str, Any]):
     """Stored on the server rather than in the browser, so the arrangement
     follows the project rather than the machine that opened it."""
-    PREFS.write_text(json.dumps(body, indent=1))
+    prefs_file().write_text(json.dumps(body, indent=1))
     return {"ok": True}
 
 
@@ -1126,6 +1208,90 @@ def index():
         "up — /health and /api/catalog work.</pre>",
         status_code=503,
     )
+
+
+# --------------------------------------------------------------------------
+# accounts
+# --------------------------------------------------------------------------
+
+OPEN_PATHS = ("/api/auth/", "/health", "/favicon")
+
+
+@app.middleware("http")
+async def gate(request: Request, call_next):
+    """Refuse API calls without a session, once accounts exist.
+
+    With no accounts registered this does nothing, so an install that never
+    wanted accounts is unaffected.
+    """
+    path = request.url.path
+    if (auth.enabled() and path.startswith("/api/")
+            and not path.startswith(OPEN_PATHS)
+            and not auth.user_for(request.cookies.get(auth.SESSION_COOKIE))):
+        return JSONResponse({"detail": {"message": "Sign in first.",
+                                        "auth": True}}, status_code=401)
+    return await call_next(request)
+
+
+class Credentials(BaseModel):
+    name: str
+    password: str
+
+
+class PasswordChange(BaseModel):
+    old: str
+    new: str
+
+
+@app.get("/api/auth/me")
+def auth_me():
+    return auth.whoami()
+
+
+@app.post("/api/auth/register")
+def auth_register(body: Credentials, response: Response):
+    first = not auth.enabled()
+    try:
+        auth.register(body.name, body.password)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    token = auth.open_session(body.name.strip().lower())
+    response.set_cookie(auth.SESSION_COOKIE, token, httponly=True,
+                        samesite="lax", max_age=auth.SESSION_DAYS * 86400)
+    auth.set_current(body.name.strip().lower())
+    return {"ok": True, "user": body.name.strip().lower(), "first": first,
+            "workspace": str(auth.workspace())}
+
+
+@app.post("/api/auth/login")
+def auth_login(body: Credentials, response: Response):
+    name = (body.name or "").strip().lower()
+    if not auth.check(name, body.password):
+        raise HTTPException(401, detail={"message": "That name and password do "
+                                                    "not match an account."})
+    token = auth.open_session(name)
+    response.set_cookie(auth.SESSION_COOKIE, token, httponly=True,
+                        samesite="lax", max_age=auth.SESSION_DAYS * 86400)
+    return {"ok": True, "user": name}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request, response: Response):
+    auth.close_session(request.cookies.get(auth.SESSION_COOKIE) or "")
+    response.delete_cookie(auth.SESSION_COOKIE)
+    return {"ok": True}
+
+
+@app.post("/api/auth/password")
+def auth_password(body: PasswordChange):
+    name = auth.current()
+    if not name:
+        raise HTTPException(401, detail={"message": "Sign in first."})
+    try:
+        auth.change_password(name, body.old, body.new)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    return {"ok": True, "message": "Password changed. Other sessions were signed out."}
 
 
 @app.get("/health")

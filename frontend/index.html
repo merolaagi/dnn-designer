@@ -380,6 +380,69 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 /* anchored to the plus that opened it, the way a task picker sits beside the
    node it will attach to */
+.paltabs{display:flex;gap:2px;padding:7px 8px 6px;flex:1}
+.paltabs button{
+  background:none;border:none;font-size:9.5px;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);padding:3px 8px;border-radius:5px;
+}
+.paltabs button.on{background:#E9F1FB;color:#1F6BBD}
+#filesBody{flex:1;min-height:0;overflow-y:auto;padding-bottom:14px}
+.treehead{
+  padding:8px 10px;font-size:10.5px;color:var(--muted);border-bottom:1px solid var(--paper-3);
+  font-family:var(--mono);position:sticky;top:0;background:var(--paper);z-index:2;
+  display:flex;align-items:center;gap:6px;
+}
+.treehead span{margin-left:auto;font-family:var(--sans);font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase}
+.treerow{
+  display:flex;align-items:center;gap:5px;padding:3px 8px;font-size:11px;
+  color:var(--text);line-height:1.6;
+}
+.treerow.dir{color:var(--muted);font-weight:600}
+.treerow.dir i{font-style:normal;font-size:8px;color:#B4BDC8}
+.treerow .fname{cursor:pointer;border-radius:3px;padding:1px 3px}
+.treerow .fname:hover{background:#E9F1FB;color:#1F6BBD}
+.treerow.broken .fname{color:#8C2F27}
+.treerow em{font-size:9px;color:#8C2F27;font-style:normal}
+.modelchip{
+  font-size:9.5px;border:1px solid #CBDCEC;background:#EAF2FB;color:#1F6BBD;
+  border-radius:9px;padding:1px 7px;
+}
+.modelchip:hover{background:#DCEAF9;border-color:#2D7DD2}
+#whoami{display:flex;align-items:center;gap:6px;margin-right:4px;font-size:11.5px;
+  color:var(--muted)}
+#whoami b{color:var(--text);font-weight:600}
+#whoami button{
+  background:none;border:1px solid var(--paper-3);border-radius:5px;font-size:10.5px;
+  padding:2px 7px;color:var(--muted);
+}
+#whoami button:hover{border-color:var(--amber);color:var(--text)}
+
+#signin{
+  position:fixed;inset:0;background:rgba(22,32,46,.34);z-index:220;
+  display:none;align-items:center;justify-content:center;
+}
+#signin.on{display:flex}
+.sibox{
+  width:352px;background:#fff;border-radius:12px;padding:22px 22px 18px;
+  box-shadow:0 22px 60px rgba(22,32,46,.3);position:relative;
+  display:flex;flex-direction:column;gap:9px;
+}
+.sibox h3{margin:0;font-size:16px;font-weight:600}
+.sibox input{
+  padding:9px 11px;border:1px solid var(--paper-3);border-radius:7px;font-size:13px;
+}
+.sibox input:focus{outline:none;border-color:var(--amber)}
+#siNote{font-size:11px;color:var(--muted);line-height:1.55}
+#siError{font-size:11.5px;color:var(--bad);min-height:14px}
+.sirow{display:flex;align-items:center;gap:10px;margin-top:2px}
+.sirow .linkbtn{margin-left:auto}
+#siClose{
+  position:absolute;top:10px;right:12px;background:none;border:none;
+  font-size:18px;color:var(--muted);line-height:1;
+}
+#siClose:hover{color:var(--text)}
+
 #quickAdd{
   position:fixed;z-index:170;width:320px;background:#fff;border-radius:10px;
   border:1px solid var(--paper-3);box-shadow:0 12px 34px rgba(22,32,46,.18);
@@ -938,6 +1001,7 @@ table.trials td.st.error{color:#8C2F27}
     <select id="versionPick" title="Saved versions"><option value="">unsaved</option></select>
     <div class="spacer"></div>
     <button class="btn danger" id="btnDelete">Delete</button>
+    <span id="whoami" style="display:none"></span>
     <button class="btn" id="btnImport">Import</button>
     <button class="btn" id="btnDownload">Download</button>
     <button class="btn" id="btnOpen">Open</button>
@@ -991,7 +1055,11 @@ table.trials td.st.error{color:#8C2F27}
   <section class="page on" id="pageDesign">
   <div id="mainRow">
   <aside class="panel" id="palette">
-    <div class="panelhead"><h2>Layers</h2>
+    <div class="panelhead">
+      <div class="paltabs">
+        <button data-pal="layers" class="on">Layers</button>
+        <button data-pal="files">Files</button>
+      </div>
       <span class="dockctl" data-panel="palette">
         <button data-dock="left" title="Dock left">&#9612;</button>
         <button data-dock="bottom" title="Dock bottom">&#9604;</button>
@@ -999,6 +1067,7 @@ table.trials td.st.error{color:#8C2F27}
       </span></div>
     <input id="search" placeholder="Filter layers" spellcheck="false">
     <div class="scroll" id="palList"></div>
+    <div id="filesBody" style="display:none"></div>
   </aside>
 
   <div class="splitter" data-panel="palette" id="splitPalette"></div>
@@ -1208,6 +1277,22 @@ table.trials td.st.error{color:#8C2F27}
     <div class="cmdlist" id="cmdList"></div>
   </div>
 </div>
+<div id="signin">
+  <div class="sibox">
+    <button id="siClose" title="Close">&times;</button>
+    <h3 id="siTitle">Sign in</h3>
+    <div id="siNote"></div>
+    <input id="siName" placeholder="name" autocomplete="username" spellcheck="false">
+    <input id="siPass" type="password" placeholder="password"
+           autocomplete="current-password">
+    <div id="siError"></div>
+    <div class="sirow">
+      <button class="btn go" id="siGo">Sign in</button>
+      <button class="linkbtn" id="siSwitch">Create an account</button>
+    </div>
+  </div>
+</div>
+
 
 <div id="modal">
   <div class="sheet">
@@ -1299,7 +1384,8 @@ const state = {
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
   flow:"vertical", gridLevel:2, appendAfter:null,
   quick:{ mode:null, context:null, expanded:false, hits:[], at:0 },
-  book:null, sheet:"main", bookReports:null, scan:null,
+  book:null, sheet:"main", bookReports:null, scan:null, tree:null,
+  account:null, signInMode:"login", viewingFile:null,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
@@ -1332,6 +1418,7 @@ async function boot(){
   buildTrainForm();
   starterGraph();
   updateHistoryButtons();
+  await loadAccount();
   await loadLayout();
   renderSheetTabs();
   render();
@@ -3428,6 +3515,17 @@ async function loadLayout(){
   applyLayout();
 }
 
+document.querySelectorAll(".paltabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".paltabs button").forEach(b =>
+      b.classList.toggle("on", b === btn));
+    const files = btn.dataset.pal === "files";
+    $("palList").style.display = files ? "none" : "";
+    $("filesBody").style.display = files ? "" : "none";
+    if (files) renderProjectTree();
+  });
+});
+
 document.querySelectorAll(".dockctl button").forEach(btn => {
   btn.addEventListener("click", () => {
     const name = btn.parentElement.dataset.panel;
@@ -4185,6 +4283,206 @@ function applyStep(){
   renderGuide();
 }
 
+/* ========================== project files ========================== */
+
+/* After a scan, the folder stays browsable in the side panel: the files, which
+   of them hold models, and the source of any of them. Reading a file never
+   runs it — only importing a class does. */
+
+async function loadProjectTree(root){
+  const host = $("filesBody");
+  host.innerHTML = `<div class="empty" style="padding:12px">reading…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/scan-folder/tree", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ root }),
+    });
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="empty" style="padding:12px">No answer.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="empty" style="padding:12px">${
+      (d.detail && d.detail.message) || "Could not read that folder"}</div>`;
+    return;
+  }
+  state.tree = d;
+  renderProjectTree();
+}
+
+function renderProjectTree(){
+  const d = state.tree;
+  const host = $("filesBody");
+  if (!d){
+    host.innerHTML = `<div class="empty" style="padding:12px">
+      Scan a folder from Import and its files appear here.</div>`;
+    return;
+  }
+  const short = d.root.split("/").slice(-2).join("/");
+  host.innerHTML =
+    `<div class="treehead" title="${d.root}">${short}
+       <span>${d.models} model${d.models === 1 ? "" : "s"}</span></div>`
+    + d.entries.map(e => {
+        const depth = (e.path.match(/\//g) || []).length;
+        const name = e.path.split("/").pop();
+        if (e.dir){
+          return `<div class="treerow dir" style="padding-left:${8 + depth * 12}px">
+            <i>▸</i>${name}</div>`;
+        }
+        const models = (e.models || []).map(m =>
+          `<button class="modelchip" data-file="${e.path}" data-cls="${m.cls}"
+             data-args="${m.arguments}" title="line ${m.line}">${m.cls}</button>`).join("");
+        return `<div class="treerow${e.broken ? " broken" : ""}"
+                     style="padding-left:${8 + depth * 12}px">
+            <span class="fname" data-open="${e.path}">${name}</span>
+            ${models}
+            ${e.broken ? `<em title="${e.broken}">syntax</em>` : ""}
+          </div>`;
+      }).join("");
+
+  host.querySelectorAll("[data-open]").forEach(el =>
+    el.addEventListener("click", () => openProjectFile(el.dataset.open)));
+  host.querySelectorAll("[data-cls]").forEach(el =>
+    el.addEventListener("click", () => importFromTree(el.dataset.file, el.dataset.cls,
+                                                      +el.dataset.args)));
+}
+
+async function openProjectFile(path){
+  if (!state.tree) return;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/scan-folder/file", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ root: state.tree.root, path }),
+    });
+    d = await r.json();
+  } catch { return; }
+  if (!r.ok){ toast((d.detail && d.detail.message) || "Could not read it"); return; }
+  state.code = { ...(state.code || {}), file: d.text };
+  state.viewingFile = path;
+  showSide("code");
+  const picker = $("framework");
+  if (![...picker.options].some(o => o.value === "file")){
+    const option = document.createElement("option");
+    option.value = "file";
+    picker.appendChild(option);
+  }
+  [...picker.options].forEach(o => { if (o.value === "file") o.textContent = path; });
+  picker.value = "file";
+  showCode();
+}
+
+async function importFromTree(file, cls, needsArgs){
+  let args = "";
+  if (needsArgs > 0){
+    args = window.prompt(
+      `${cls} takes ${needsArgs} constructor argument${needsArgs === 1 ? "" : "s"}.\n`
+      + `Give them as you would in code, for example width=64`, "") || "";
+    if (!args.trim()) return;
+  }
+  const shape = (state.graph.nodes.find(n => n.type === "Input")
+                 || { params:{ shape:[3,224,224] } }).params.shape;
+  toast(`importing ${cls}…`);
+  let r, d;
+  try{
+    r = await fetch(API + "/api/import/folder", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ root: state.tree.root, as_sheets: true,
+        picks: [{ file, cls, arguments: args, input_shape: shape }] }),
+    });
+    d = await r.json();
+  } catch { toast("No answer from the server"); return; }
+  if (!r.ok){ toast((d.detail && d.detail.message) || "Import failed"); return; }
+
+  pushHistory();
+  const book = ensureBook();
+  const sheet = d.book.sheets[0];
+  let name = sheet.name;
+  let n = 2;
+  while (book.sheets.some(s => s.name === name)) name = `${sheet.name}${n++}`;
+  book.sheets.push({ name, nodes: sheet.nodes, edges: sheet.edges });
+  switchSheet(name);
+  toast(`${cls} added as sheet “${name}”`);
+}
+
+/* ============================ sign in ============================ */
+
+async function loadAccount(){
+  let d;
+  try { d = await (await fetch(API + "/api/auth/me")).json(); }
+  catch { return; }
+  state.account = d;
+  const chip = $("whoami");
+  if (d.enabled && d.user){
+    chip.style.display = "";
+    chip.innerHTML = `<b>${d.user}</b><button id="btnSignOut">sign out</button>`;
+    $("btnSignOut").addEventListener("click", signOut);
+  } else if (!d.enabled){
+    chip.style.display = "";
+    chip.innerHTML = `<button id="btnMakeAccount">Set up an account</button>`;
+    $("btnMakeAccount").addEventListener("click", () => showSignIn("register"));
+  } else {
+    chip.style.display = "none";
+  }
+}
+
+function showSignIn(mode){
+  state.signInMode = mode || "login";
+  const box = $("signin");
+  box.classList.add("on");
+  const registering = state.signInMode === "register";
+  $("siTitle").textContent = registering ? "Set up an account" : "Sign in";
+  $("siSwitch").textContent = registering
+    ? "I already have one" : "Create an account";
+  $("siGo").textContent = registering ? "Create" : "Sign in";
+  $("siNote").innerHTML = registering
+    ? `Accounts keep each person's designs, runs and studies separate.
+       <b>They do not make this safe to expose publicly</b> — importing code and
+       the blocks folder run Python by design, so keep it on a network you
+       trust.`
+    : "";
+  $("siError").textContent = "";
+  $("siName").focus();
+}
+
+async function submitSignIn(){
+  const name = $("siName").value.trim();
+  const password = $("siPass").value;
+  const where = state.signInMode === "register" ? "register" : "login";
+  let r, d;
+  try{
+    r = await fetch(API + "/api/auth/" + where, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ name, password }),
+    });
+    d = await r.json();
+  } catch { $("siError").textContent = "The server did not respond."; return; }
+  if (!r.ok){
+    $("siError").textContent = (d.detail && d.detail.message) || "That did not work.";
+    return;
+  }
+  $("signin").classList.remove("on");
+  $("siPass").value = "";
+  await loadAccount();
+  if (d.first){
+    toast("Account created — this workspace is yours");
+  } else {
+    // a different account means different designs, runs and layout
+    location.reload();
+  }
+}
+
+async function signOut(){
+  await fetch(API + "/api/auth/logout", { method:"POST" });
+  location.reload();
+}
+
+$("siGo").addEventListener("click", submitSignIn);
+$("siSwitch").addEventListener("click", () =>
+  showSignIn(state.signInMode === "register" ? "login" : "register"));
+$("siPass").addEventListener("keydown", e => { if (e.key === "Enter") submitSignIn(); });
+$("siName").addEventListener("keydown", e => { if (e.key === "Enter") $("siPass").focus(); });
+$("siClose").addEventListener("click", () => $("signin").classList.remove("on"));
+
 /* ============================ sheets ============================ */
 
 /* The design is a workbook. state.graph stays what everything else edits — it
@@ -4640,6 +4938,7 @@ async function scanFolder(){
     return;
   }
   state.scan = { root: d.root, models: d.models };
+  loadProjectTree(d.root);       // the folder stays browsable in the side panel
   if (!d.models.length){
     host.innerHTML = `<div class="scannote">Read ${d.files} files and found no
       nn.Module classes.</div>`;
