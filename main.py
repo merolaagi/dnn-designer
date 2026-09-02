@@ -375,6 +375,12 @@ class ImportPayload(BaseModel):
     input_shape: List[int] = [3, 224, 224]
 
 
+class CodePayload(BaseModel):
+    source: str
+    input_shape: List[int] = [3, 224, 224]
+    entry: str = ""
+
+
 def _finish_import(graph: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze what came in so the response can say what needs attention."""
     notes = graph.pop("_notes", [])
@@ -408,6 +414,26 @@ def import_torchvision(body: ImportPayload):
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(400, detail={"message": f"{type(exc).__name__}: {exc}"})
     return _finish_import(graph)
+
+
+@app.post("/api/import/code")
+def import_code(body: CodePayload):
+    """Trace a module from pasted source.
+
+    This executes the code, which is the only way to obtain a module to trace:
+    no static reader can tell you what forward() does. Same trust assumption as
+    the blocks and recipes folders — fine locally, not something to expose.
+    """
+    try:
+        graph = importer.from_source(body.source, body.input_shape, body.entry)
+    except importer.ImportError_ as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={"message": f"{type(exc).__name__}: {exc}"})
+    entry = graph.pop("_entry", "")
+    result = _finish_import(graph)
+    result["entry"] = entry
+    return result
 
 
 @app.post("/api/import/upload")

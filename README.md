@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Sixty-six checks, with the torch-dependent ones skipping themselves when it is
+Sixty-eight checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -312,8 +312,14 @@ when keeping a trunk and resizing the head for a different class count.
 
 ## Importing an existing model
 
-The Import button takes a torchvision architecture by name, an `.onnx` export, or
-a `.pt` holding the module itself.
+The Import button takes pasted PyTorch source, a torchvision architecture by
+name, an `.onnx` export, or a `.pt` holding the module itself.
+
+Pasting code is the quickest route: a class subclassing `nn.Module`, or a
+variable holding one such as `model = nn.Sequential(...)`. It is traced by
+running it, which is the only way to learn what `forward` does, so it has to be
+code you trust — the same assumption the blocks and recipes folders already
+make.
 
 PyTorch import traces with `torch.fx`, which keeps layers whole — a traced
 `Conv2d` arrives with its real arguments. Eleven of sixteen torchvision
@@ -528,4 +534,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.17.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.18.0 — see `CHANGELOG.md`.

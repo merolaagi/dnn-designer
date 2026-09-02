@@ -856,6 +856,12 @@ table.trials td.st.error{color:#8C2F27}
 .sheet .foot{display:flex;gap:8px;padding:11px 16px;border-top:1px solid var(--paper-3);
   background:var(--paper-2)}
 .sheet .foot .grow{flex:1}
+#im_code{
+  width:100%;min-height:132px;resize:vertical;font-family:var(--mono);
+  font-size:11px;line-height:1.5;padding:8px 10px;border:1px solid var(--paper-3);
+  border-radius:6px;background:#FCFCFD;color:#3C4453;
+}
+#im_code:focus{outline:none;border-color:var(--amber)}
 #importNote{
   font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:10px;
   max-height:120px;overflow-y:auto;
@@ -1174,6 +1180,18 @@ table.trials td.st.error{color:#8C2F27}
         <input type="text" id="im_shape" value="3,224,224" spellcheck="false">
         <div class="help">Channels first, no batch dimension. Tracing carries no shapes, so this seeds the analysis.</div>
       </div>
+      <div class="field"><label>Or paste PyTorch code</label>
+        <textarea id="im_code" spellcheck="false" placeholder="class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        ...
+
+or  model = nn.Sequential(...)"></textarea>
+        <div class="help">Traced by running it, so it must be code you trust.
+          <code>torch</code>, <code>nn</code> and <code>F</code> are already imported.
+          A class is built with no arguments; assign a variable if yours needs some.</div>
+      </div>
+
       <div class="field"><label>Or upload a file</label>
         <div class="filerow">
           <input type="text" id="im_file_label" placeholder="no file chosen" readonly>
@@ -4287,9 +4305,18 @@ $("btnImportGo").addEventListener("click", async () => {
   const note = $("importNote");
   note.textContent = "Tracing…";
   const file = $("im_file").files[0];
+  const pasted = ($("im_code").value || "").trim();
   let r, d;
   try{
-    if (file){
+    if (pasted && !file){
+      r = await fetch(API + "/api/import/code", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          source: pasted,
+          input_shape: $("im_shape").value.split(/[^0-9]+/).filter(Boolean).map(Number),
+        })
+      });
+    } else if (file){
       const body = new FormData();
       body.append("file", file);
       r = await fetch(API + "/api/import/upload?shape=" +
@@ -4319,7 +4346,7 @@ $("btnImportGo").addEventListener("click", async () => {
   clearSelection();
   render(); fitView(); analyze();
 
-  const bits = [`Imported <b>${d.nodes}</b> layers.`];
+  const bits = [`Imported <b>${d.nodes}</b> layers${d.entry ? ` from <b>${d.entry}</b>` : ""}.`];
   if (d.notes && d.notes.length){
     bits.push(`<span class="warn">${d.notes.length} could not be reconstructed and came in as stubs:</span> `
               + d.notes.slice(0,6).join("; "));

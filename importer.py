@@ -336,6 +336,20 @@ def from_pytorch(model, name: str = "Imported",
             elif fname in ("view", "reshape"):
                 dims = [int(a) for a in node.args[1:] if isinstance(a, int)]
                 nid = b.add("Reshape", {"shape": dims[1:] or [-1]})
+            elif fname in ("max_pool2d", "avg_pool2d", "max_pool1d"):
+                # the functional forms are as common as the modules in real code
+                size = node.args[1] if len(node.args) > 1 else 2
+                size = size[0] if isinstance(size, (tuple, list)) else size
+                stride = node.args[2] if len(node.args) > 2 else None
+                if isinstance(stride, (tuple, list)):
+                    stride = stride[0]
+                kind = {"max_pool2d": "MaxPool2d", "avg_pool2d": "AvgPool2d",
+                        "max_pool1d": "MaxPool1d"}[fname]
+                params = {"kernel": int(size or 2),
+                          "stride": int(stride) if stride else 0}
+                if kind != "MaxPool1d":
+                    params["padding"] = 0
+                nid = b.add(kind, params)
             elif fname == "adaptive_avg_pool2d":
                 size = node.args[1] if len(node.args) > 1 else 1
                 size = size[0] if isinstance(size, (tuple, list)) else size
@@ -380,6 +394,77 @@ def from_torchvision(arch: str, weights: str = "none",
         raise ImportError_(f"torchvision has no model called {arch}.")
     model = factory(weights="DEFAULT" if weights not in ("none", "", None) else None)
     return from_pytorch(model, name=arch, input_shape=input_shape or [3, 224, 224])
+
+
+def from_source(source: str, input_shape: Optional[List[int]] = None,
+                entry: str = "") -> Dict[str, Any]:
+    """Trace a module defined in pasted PyTorch source.
+
+    The code is executed, which is the only way to get a module object to trace —
+    a static reader could not tell you what `forward` does. That is the same
+    trust assumption as the blocks and recipes folders, and fine for a tool you
+    run on your own machine, but it is worth saying out loud.
+
+    Accepts either a class definition or a variable holding a module, and picks
+    the last thing defined when there is more than one.
+    """
+    import torch
+    import torch.nn as nn
+
+    namespace: Dict[str, Any] = {
+        "__name__": "pasted_model",
+        "torch": torch, "nn": nn, "F": torch.nn.functional,
+    }
+    try:
+        exec(compile(source, "<pasted>", "exec"), namespace)  # noqa: S102
+    except Exception as exc:  # noqa: BLE001
+        raise ImportError_(f"The code did not run: {type(exc).__name__}: {exc}") from exc
+
+    if entry:
+        if entry not in namespace:
+            raise ImportError_(f"There is nothing called {entry} in that code.")
+        candidate = namespace[entry]
+        model = candidate() if isinstance(candidate, type) else candidate
+        if not isinstance(model, nn.Module):
+            raise ImportError_(f"{entry} is not an nn.Module.")
+        return _traced(model, entry, input_shape)
+
+    # a module already built and assigned to a name
+    instances = [(key, value) for key, value in namespace.items()
+                 if isinstance(value, nn.Module) and not key.startswith("_")]
+    if instances:
+        key, model = instances[-1]
+        return _traced(model, key, input_shape)
+
+    # otherwise a class we can construct with no arguments
+    classes = [(key, value) for key, value in namespace.items()
+               if isinstance(value, type) and issubclass(value, nn.Module)
+               and value is not nn.Module
+               and getattr(value, "__module__", "") == "pasted_model"]
+    if not classes:
+        raise ImportError_(
+            "That code defines no nn.Module. Paste a class that subclasses "
+            "nn.Module, or assign a model to a variable such as "
+            "`model = nn.Sequential(...)`.")
+
+    problems = []
+    for key, cls in reversed(classes):
+        try:
+            return _traced(cls(), key, input_shape)
+        except TypeError as exc:
+            problems.append(f"{key} needs constructor arguments ({exc})")
+        except ImportError_ as exc:
+            problems.append(f"{key}: {exc}")
+    raise ImportError_(
+        "None of the classes could be built with no arguments. "
+        + "; ".join(problems[:3])
+        + ". Add a line that builds one, like `model = MyNet(3, 10)`.")
+
+
+def _traced(model, name: str, input_shape: Optional[List[int]]) -> Dict[str, Any]:
+    graph = from_pytorch(model, name=name, input_shape=input_shape)
+    graph["_entry"] = name
+    return graph
 
 
 def from_torch_file(path: str, input_shape: Optional[List[int]] = None) -> Dict[str, Any]:

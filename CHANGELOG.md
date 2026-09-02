@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.18.0
+
+- **Paste PyTorch source and get a diagram.** The Import dialog takes code now,
+  alongside a torchvision name, an `.onnx` file or a `.pt`. Paste a class that
+  subclasses `nn.Module`, or a variable holding one — `model = nn.Sequential(...)`
+  works. `torch`, `nn` and `F` are already in scope.
+- It runs the code to trace it, which is the only way: no static reader can tell
+  you what `forward` does. Same trust assumption as the blocks and recipes
+  folders, and the dialog says so.
+- Refusals explain themselves: code that does not run reports the syntax error,
+  code with no `nn.Module` says what to paste instead, and a class needing
+  constructor arguments says to assign one to a variable.
+- Fixed while testing this: `F.max_pool2d` and `F.avg_pool2d` were coming in as
+  opaque stubs, because the tracer only recognised pooling as a module. The
+  functional forms are at least as common in real code. A two-convolution network
+  written with them now imports with no stubs at all.
+
 ## 1.17.0
 
 A **Studies** page: agents that run experiments for you.

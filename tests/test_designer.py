@@ -916,6 +916,67 @@ def _():
     assert not missing, f"no glyph for: {missing}"
 
 
+@check("pasted code becomes a diagram")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import importer
+
+    source = """
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.c1 = nn.Conv2d(3, 16, 3, padding=1)
+        self.c2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.h = nn.Linear(32 * 8 * 8, 10)
+
+    def forward(self, x):
+        x = F.max_pool2d(F.relu(self.c1(x)), 2)
+        x = F.avg_pool2d(F.relu(self.c2(x)), 2)
+        return self.h(x.flatten(1))
+"""
+    payload = importer.from_source(source, [3, 32, 32])
+    notes = payload.pop("_notes", [])
+    assert payload.pop("_entry") == "Net"
+    assert not notes, f"nothing should have come in as a stub: {notes}"
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+    kinds = [n["type"] for n in payload["nodes"]]
+    assert kinds == ["Input", "Conv2d", "Activation", "MaxPool2d", "Conv2d",
+                     "Activation", "AvgPool2d", "Flatten", "Linear", "Output"], kinds
+
+    # a module assigned to a name works as well as a class
+    seq = importer.from_source(
+        "model = nn.Sequential(nn.Linear(8, 4), nn.ReLU(), nn.Linear(4, 2))", [8])
+    seq.pop("_notes", None)
+    assert seq.pop("_entry") == "model"
+    assert analyzed(seq)[1]["ok"]
+
+
+@check("pasted code that cannot be traced says why")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import importer
+
+    for source, expected in [
+        ("x = 1", "defines no nn.Module"),
+        ("class Oops(nn.Module)\n    pass", "did not run"),
+        ("class Cfg(nn.Module):\n"
+         "    def __init__(self, w):\n"
+         "        super().__init__()\n"
+         "        self.fc = nn.Linear(8, w)\n"
+         "    def forward(self, x): return self.fc(x)", "no arguments"),
+    ]:
+        try:
+            importer.from_source(source, [8])
+            raise AssertionError(f"{source[:24]!r} should have been refused")
+        except importer.ImportError_ as exc:
+            assert expected in str(exc), f"got {exc}, wanted {expected!r}"
+
+
 @check("agents propose variants that actually build")
 def _():
     import agents
