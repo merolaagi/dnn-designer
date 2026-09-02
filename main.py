@@ -25,6 +25,7 @@ import auth
 import blockloader
 import codegen
 import importer
+import mathbook
 import needs
 import projectloader
 import recipeloader
@@ -270,6 +271,34 @@ def assistant_review(name: str = ""):
 class TestLayerPayload(BaseModel):
     graph: Dict[str, Any]
     node: str
+
+
+class MathPayload(BaseModel):
+    graph: Dict[str, Any]
+    node: str
+
+
+@app.post("/api/math")
+def layer_math(body: MathPayload):
+    """The mathematics of one layer, with its own numbers in it."""
+    g, report = _analyze(body.graph)
+    nodes = g.by_id()
+    node = nodes.get(body.node)
+    if node is None:
+        raise HTTPException(404, detail={"message": "No such layer."})
+
+    inc = G.incoming_map(g)
+    in_shapes = [report["nodes"].get(e.source, {}).get("out_shape")
+                 for e in inc[node.id]]
+    out_shape = report["nodes"].get(node.id, {}).get("out_shape")
+    entry = mathbook.explain(node.type, G.resolved_params(node),
+                             in_shapes, out_shape)
+    entry["type"] = node.type
+    entry["label"] = node.label or node.type
+    entry["in_shapes"] = in_shapes
+    entry["out_shape"] = out_shape
+    entry["learnables"] = report["nodes"].get(node.id, {}).get("learnables", 0)
+    return entry
 
 
 @app.post("/api/test-layer")

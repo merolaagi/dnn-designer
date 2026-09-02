@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.22.0
+
+**A Maths tab.** Select any layer and see what it actually computes — with this
+network's numbers in it, not a textbook's.
+
+Four parts, for every layer:
+
+- **The equation**, in the notation the literature uses.
+- **What each symbol is**, bound to this node: not "W is the weight matrix" but
+  "W is 64 learned filters, each 3×3×3".
+- **The arithmetic worked through.** Not `1,792 parameters` but
+  `(C_in/g)·k²·C_out + C_out = 3×9×64 + 64 = 1,792`, and
+  `⌊(32 + 2 − 2 − 1)/2⌋ + 1 = 16` for the output size. You can see where every
+  number came from, which is the difference between reading a result and being
+  able to change it.
+- **Where the freedom is** — what can be varied and what varying it does to the
+  mathematics. Dilation widens the receptive field at no parameter cost; groups
+  divide the parameters and at g=C_in become a depthwise convolution;
+  factorising W ≈ UV is cheaper below a rank this panel computes for you.
+
+**An animated diagram per operation family**, drawn rather than illustrated: a
+convolution window walking the input while output cells fill behind it, a batch
+of activations sliding to zero mean, the actual curve of whichever activation
+you picked with a point travelling along it, an attention score matrix filling
+in, a lookup table returning one row.
+
+Covers convolution, pooling, dense, normalization, activation, attention,
+recurrent, embedding, dropout, merges and reshapes. **A layer whose mathematics
+is not written up says so** rather than producing something plausible — that
+seemed the only honest option for a panel meant to be trusted while you tweak.
+
 ## 1.21.0
 
 - **Every account starts with the example designs.** They used to live only in

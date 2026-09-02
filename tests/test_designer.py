@@ -977,6 +977,79 @@ def _():
             assert expected in str(exc), f"got {exc}, wanted {expected!r}"
 
 
+@check("the mathematics is instantiated with the node's own numbers")
+def _():
+    import mathbook
+
+    conv = mathbook.explain(
+        "Conv2d",
+        {"filters": 64, "kernel": 3, "stride": 2, "padding": 1,
+         "dilation": 1, "groups": 1, "bias": True},
+        [[3, 32, 32]], [64, 16, 16])
+    text = json.dumps(conv)
+    # the derivation must show the substitution, not just the answer
+    assert "3\u00d79\u00d764 + 64 = 1,792" in text.replace("\\u00d7", "\u00d7") \
+        or "3×9×64 + 64 = 1,792" in text, conv["arithmetic"]
+    assert any("16" in v for _, v in conv["arithmetic"]), "no output size worked through"
+    assert conv["family"] == "conv"
+    assert conv["freedom"], "no discussion of what can be varied"
+
+    # the same layer with different settings must give different arithmetic
+    wider = mathbook.explain(
+        "Conv2d",
+        {"filters": 128, "kernel": 5, "stride": 1, "padding": 2,
+         "dilation": 1, "groups": 1, "bias": True},
+        [[3, 32, 32]], [128, 32, 32])
+    assert wider["arithmetic"] != conv["arithmetic"], \
+        "the explanation is generic, not this node's"
+
+    # a grouped convolution divides the parameters
+    grouped = mathbook.explain(
+        "Conv2d",
+        {"filters": 64, "kernel": 3, "stride": 1, "padding": 1,
+         "dilation": 1, "groups": 4, "bias": False},
+        [[64, 32, 32]], [64, 32, 32])
+    assert "16" in json.dumps(grouped["arithmetic"]), \
+        "groups should reduce the channels each filter sees"
+
+    linear = mathbook.explain("Linear", {"units": 10, "bias": True},
+                              [[64]], [10])
+    assert "64\u00d710 + 10 = 650" in json.dumps(linear).replace("\\u00d7", "\u00d7") \
+        or "64×10 + 10 = 650" in json.dumps(linear), linear["arithmetic"]
+
+
+@check("a layer with no write-up says so rather than inventing one")
+def _():
+    import mathbook
+
+    entry = mathbook.explain("SomethingUnwritten", {}, [[4]], [4])
+    assert entry.get("missing"), "it should admit the gap"
+    assert not entry["equation"], "it invented an equation"
+    assert not entry["arithmetic"], "it invented a derivation"
+
+
+@check("the maths panel draws every family it can return")
+def _():
+    import mathbook
+
+    families = set()
+    for name in mathbook.covered():
+        try:
+            entry = mathbook.explain(name, {"units": 4, "filters": 4, "kernel": 3,
+                                            "hidden": 8, "vocab": 10, "dim": 4,
+                                            "heads": 2, "rate": 0.5, "sheet": "s"},
+                                     [[8, 8, 8]], [8])
+        except Exception:  # noqa: BLE001
+            continue
+        if not entry.get("missing"):
+            families.add(entry["family"])
+    for family in sorted(families):
+        assert f'kind === "{family}"' in PAGE, \
+            f"the panel has no diagram for the {family} family"
+    assert 'data-side="math"' in PAGE and 'id="mathBody"' in PAGE
+    assert "function renderMathPanel" in PAGE
+
+
 @check("every account starts with the example designs")
 def _():
     import shutil
@@ -1633,7 +1706,8 @@ def _():
         "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",
         "importFolderPicks", "loadProjectTree", "renderProjectTree",
         "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
-        "submitSignIn", "signOut",
+        "submitSignIn", "signOut", "renderMathPanel", "mathDiagram", "paintMath",
+        "diagramConv", "diagramActivation", "diagramAttention",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",

@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Eighty checks, with the torch-dependent ones skipping themselves when it is
+Eighty-three checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -182,6 +182,14 @@ tensor through it, reporting the real output shape against the predicted one. Th
 canvas does shape arithmetic; this checks that arithmetic against PyTorch.
 **Freeze this layer** parks its weights: the generated code stops their
 gradients and the header count drops to what is actually being trained.
+
+The **Maths** tab explains the selected layer: its equation, what each symbol is
+in terms of this node, the shape and parameter arithmetic worked through with
+the numbers substituted, and what can be varied along with what varying it does.
+Each operation family has an animated diagram — a convolution window walking its
+input, a distribution recentring, the actual curve of the activation you chose.
+A layer whose mathematics is not written up says so rather than inventing
+something.
 
 The **Assistant** tab edits the graph and checks it over. It is rule-based, not
 a language model: `add dropout after the activation`, `remove the flatten`, `set
@@ -575,4 +583,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.21.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.22.0 — see `CHANGELOG.md`.

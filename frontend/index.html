@@ -574,6 +574,56 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .freezerow input{width:15px;height:15px;accent-color:var(--amber)}
 .freezerow span{color:var(--muted)}
 
+/* the maths panel */
+.mathhead{
+  padding:11px 14px 9px;border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+}
+.mathhead b{font-size:13px;font-weight:600;display:block}
+.mathhead span{font-size:11px;color:var(--muted)}
+.mathfig{padding:10px 12px 4px;background:#FCFCFD;border-bottom:1px solid var(--paper-3)}
+.mathsvg{width:100%;height:auto;display:block}
+.m-in{fill:#E4EAF1;stroke:#C6D0DC;stroke-width:.7}
+.m-out{fill:#D9EAF8;stroke:#8FBCE4;stroke-width:.7}
+.m-win{fill:rgba(240,162,2,.16);stroke:var(--amber);stroke-width:1.6}
+.m-arrow{stroke:#9AA6B4;stroke-width:1.4;fill:none}
+.m-wire{stroke:#7FA8CE;stroke-width:.9}
+.m-node{fill:#EDF2F7;stroke:#9DB2C8;stroke-width:1.1}
+.m-node.out{fill:#D9EAF8;stroke:#5B87B5}
+.m-cap{font-size:7.5px;fill:#8B97A6;font-family:var(--sans)}
+.m-tiny{font-size:8px;fill:#4A5768;font-family:var(--mono)}
+.m-bar{fill:#CFE0EF;stroke:#9DBBD6;stroke-width:.6}
+.m-axis{stroke:#D3DAE2;stroke-width:1}
+.m-mean{stroke:var(--amber);stroke-width:1.2;stroke-dasharray:3 2}
+.m-curve{fill:none;stroke:#2D7DD2;stroke-width:2;stroke-linecap:round}
+.m-dot{fill:var(--amber)}
+.m-score{fill:#2D7DD2}
+.m-cell{fill:#EEF3F8;stroke:#9DB2C8;stroke-width:1}
+.m-feed{stroke:#C6D0DC;stroke-width:1;stroke-dasharray:2 2;fill:none}
+.matheq{
+  padding:13px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.7;
+  color:#2C3A4C;background:#FFFDF6;border-bottom:1px solid var(--paper-3);
+  word-break:break-word;
+}
+.mathwhere{
+  padding:8px 14px;font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  border-bottom:1px solid var(--paper-3);
+}
+.mathsec{
+  padding:12px 14px 5px;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:#98A6B8;font-weight:700;
+}
+.mathtab{width:100%;border-collapse:collapse;font-size:11.5px}
+.mathtab td{padding:4px 14px 4px 0;vertical-align:top;line-height:1.55}
+.mathtab td:first-child{padding-left:14px}
+.mathtab .sym{font-family:var(--mono);color:#2D7DD2;width:74px;white-space:nowrap}
+.mathtab .key{color:var(--muted);width:110px}
+.mathtab .val{font-family:var(--mono);font-size:10.5px;color:#2C3A4C;word-break:break-word}
+.mathnote{
+  margin:0 14px 9px;font-size:11.5px;line-height:1.6;color:#3C4B5F;
+  padding-left:9px;border-left:2px solid var(--paper-3);
+}
+.mathmissing{padding:14px;font-size:11.5px;color:var(--muted);line-height:1.6}
+
 /* the assistant panel */
 #askBody{display:flex;flex-direction:column;min-height:0;flex:1}
 #askLog{
@@ -1072,7 +1122,12 @@ table.trials td.st.error{color:#8C2F27}
 
   <div class="splitter" data-panel="palette" id="splitPalette"></div>
   <main id="stage">
-    <svg id="svg">
+    <svg id="mdefs" width="0" height="0" style="position:absolute">
+  <defs><marker id="mtip" viewBox="0 0 8 8" refX="7" refY="4"
+    markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0 0 L8 4 L0 8 z" fill="#9AA6B4"></path></marker></defs>
+</svg>
+<svg id="svg">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
                 markerWidth="5" markerHeight="5" orient="auto-start-reverse">
@@ -1120,6 +1175,7 @@ table.trials td.st.error{color:#8C2F27}
       <button data-side="network">Network</button>
       <button data-side="code">Code</button>
       <button data-side="train">Train</button>
+      <button data-side="math">Maths</button>
       <button data-side="guide">Guide</button>
       <button data-side="ask">Assist</button>
       <button data-side="needs">Needs</button>
@@ -1128,6 +1184,7 @@ table.trials td.st.error{color:#8C2F27}
       <div class="empty">Select a layer on the canvas to edit it.</div>
     </div>
     <div class="scroll" id="networkBody" style="display:none"></div>
+    <div class="scroll" id="mathBody" style="display:none;padding:0"></div>
     <div class="scroll" id="guideBody" style="display:none;padding:0"></div>
     <div id="askBody" style="display:none">
       <div id="askLog"></div>
@@ -1386,6 +1443,7 @@ const state = {
   quick:{ mode:null, context:null, expanded:false, hits:[], at:0 },
   book:null, sheet:"main", bookReports:null, scan:null, tree:null,
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
+  mathFor:null, mathEntry:null,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
@@ -2659,8 +2717,9 @@ $("btnRedo").addEventListener("click", redo);
 /* ============================ inspector ============================ */
 
 function renderInspector(){
+  if (state.sidePanel === "math" && state.mathFor !== state.sel) renderMathPanel();
   if (state.sidePanel !== "layer" && state.sidePanel !== "guide"
-      && state.sidePanel !== "ask"
+      && state.sidePanel !== "ask" && state.sidePanel !== "math"
       && (state.sel || state.selEdge) && state.page === "pageDesign"){
     showSide("layer");
   }
@@ -3106,6 +3165,7 @@ async function runAnalyze(){
   if (state.sidePanel === "code") showCode();
   if (state.sidePanel === "network") renderNetworkPanel();
   if (state.sidePanel === "needs") renderNeedsPanel();
+  if (state.sidePanel === "math"){ state.mathFor = null; renderMathPanel(); }
 }
 
 function showProblems(){
@@ -3610,7 +3670,7 @@ function showPage(pageId){
 
 const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
                       code:"Generated code", train:"Training", guide:"Guided build",
-                      ask:"Assistant" };
+                      ask:"Assistant", math:"The mathematics" };
 
 function showSide(side){
   state.sidePanel = side;
@@ -3620,7 +3680,7 @@ function showSide(side){
     b.classList.toggle("on", b.dataset.side === side));
   const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",
                 code:"codeBody", train:"trainBody", guide:"guideBody",
-                ask:"askBody" };
+                ask:"askBody", math:"mathBody" };
   Object.entries(map).forEach(([key, id]) => {
     const el = $(id);
     if (el) el.style.display = (key === side) ? "" : "none";
@@ -3631,6 +3691,7 @@ function showSide(side){
   if (side === "train") drawChart();
   if (side === "guide") renderGuide();
   if (side === "ask") loadAssistant();
+  if (side === "math") renderMathPanel();
 }
 
 document.querySelectorAll(".ptabs button").forEach(btn =>
@@ -4522,6 +4583,319 @@ $("siSwitch").addEventListener("click", () =>
 $("siPass").addEventListener("keydown", e => { if (e.key === "Enter") submitSignIn(); });
 $("siName").addEventListener("keydown", e => { if (e.key === "Enter") $("siPass").focus(); });
 $("siClose").addEventListener("click", () => $("signin").classList.remove("on"));
+
+/* ============================= maths ============================= */
+
+/* An animated diagram per operation family. Drawn rather than illustrated, so
+   each one shows the thing the equation above it describes: a window actually
+   sliding, a distribution actually centring, a score matrix actually filling. */
+
+function mathDiagram(entry){
+  const kind = entry.family;
+  if (kind === "conv") return diagramConv(entry);
+  if (kind === "pool") return diagramPool(entry);
+  if (kind === "linear") return diagramLinear(entry);
+  if (kind === "norm") return diagramNorm();
+  if (kind === "activation") return diagramActivation(entry.kind);
+  if (kind === "attention") return diagramAttention();
+  if (kind === "recurrent") return diagramRecurrent();
+  if (kind === "embedding") return diagramEmbedding();
+  if (kind === "dropout") return diagramDropout(entry);
+  if (kind === "merge") return diagramMerge();
+  if (kind === "reshape") return diagramReshape();
+  return "";
+}
+
+function grid(x, y, n, cell, cls){
+  let out = "";
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++)
+      out += `<rect class="${cls}" x="${x + j * cell}" y="${y + i * cell}"
+               width="${cell - 1.5}" height="${cell - 1.5}" rx="1"></rect>`;
+  return out;
+}
+
+function diagramConv(entry){
+  // the window walks the input; one output cell lights as each position finishes
+  const cell = 15, n = 6, k = 3;
+  const steps = [];
+  for (let i = 0; i < 4; i++)
+    for (let j = 0; j < 4; j++) steps.push([j, i]);
+  const dwell = 0.32;
+  const total = steps.length * dwell;
+  const xs = steps.map(s => 10 + s[0] * cell).join(";") + ";10";
+  const ys = steps.map(s => 8 + s[1] * cell).join(";") + ";8";
+  const outCells = steps.map((s, idx) =>
+    `<rect class="m-out" x="${140 + s[0] * cell}" y="${8 + s[1] * cell}"
+       width="${cell - 1.5}" height="${cell - 1.5}" rx="1" opacity="0">
+       <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;${
+         (idx * dwell / total).toFixed(4)};${
+         ((idx * dwell + 0.12) / total).toFixed(4)};1"
+         dur="${total}s" repeatCount="indefinite"></animate></rect>`).join("");
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    ${grid(10, 8, n, cell, "m-in")}
+    ${outCells}
+    <rect class="m-win" x="10" y="8" width="${k * cell - 1.5}" height="${k * cell - 1.5}" rx="1">
+      <animate attributeName="x" values="${xs}" dur="${total}s"
+               calcMode="discrete" repeatCount="indefinite"></animate>
+      <animate attributeName="y" values="${ys}" dur="${total}s"
+               calcMode="discrete" repeatCount="indefinite"></animate>
+    </rect>
+    <path class="m-arrow" d="M104 50 L134 50" marker-end="url(#mtip)"></path>
+    <text class="m-cap" x="10" y="102">input</text>
+    <text class="m-cap" x="140" y="102">output</text>
+  </svg>`;
+}
+
+function diagramPool(entry){
+  const cell = 15;
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    ${grid(10, 12, 4, cell, "m-in")}
+    <rect class="m-win" x="10" y="12" width="${2 * cell - 1.5}" height="${2 * cell - 1.5}" rx="1">
+      <animate attributeName="x" values="10;40;10;40;10" dur="2.4s"
+        calcMode="discrete" repeatCount="indefinite"></animate>
+      <animate attributeName="y" values="12;12;42;42;12" dur="2.4s"
+        calcMode="discrete" repeatCount="indefinite"></animate>
+    </rect>
+    ${grid(150, 12, 2, cell, "m-out")}
+    <path class="m-arrow" d="M104 42 L144 42" marker-end="url(#mtip)"></path>
+    <text class="m-cap" x="10" y="94">4\u00d74</text>
+    <text class="m-cap" x="150" y="94">2\u00d72</text>
+  </svg>`;
+}
+
+function diagramLinear(entry){
+  // every input reaching every output: the fan-out is the parameter count
+  const ins = 5, outs = 3;
+  let wires = "";
+  for (let i = 0; i < ins; i++)
+    for (let o = 0; o < outs; o++)
+      wires += `<line class="m-wire" x1="42" y1="${16 + i * 17}"
+                  x2="150" y2="${28 + o * 17}">
+        <animate attributeName="opacity" values="0.15;0.7;0.15"
+          dur="2.6s" begin="${((i * outs + o) * 0.06).toFixed(2)}s"
+          repeatCount="indefinite"></animate></line>`;
+  let dots = "";
+  for (let i = 0; i < ins; i++)
+    dots += `<circle class="m-node" cx="42" cy="${16 + i * 17}" r="5"></circle>`;
+  for (let o = 0; o < outs; o++)
+    dots += `<circle class="m-node out" cx="150" cy="${28 + o * 17}" r="5"></circle>`;
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    ${wires}${dots}
+    <text class="m-cap" x="26" y="102">x</text>
+    <text class="m-cap" x="146" y="102">y = Wx + b</text>
+  </svg>`;
+}
+
+function diagramNorm(){
+  // a spread-out distribution sliding to zero mean and unit width
+  let bars = "";
+  const heights = [8, 16, 30, 44, 34, 20, 10];
+  heights.forEach((h, i) => {
+    bars += `<rect class="m-bar" x="${18 + i * 12}" y="${72 - h}" width="9" height="${h}" rx="1">
+      <animate attributeName="x" values="${18 + i * 12};${96 + (i - 3) * 9}"
+        dur="2.4s" repeatCount="indefinite" keyTimes="0;1"></animate>
+      <animate attributeName="width" values="9;7" dur="2.4s" repeatCount="indefinite"></animate>
+    </rect>`;
+  });
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    ${bars}
+    <line class="m-axis" x1="8" y1="74" x2="200" y2="74"></line>
+    <line class="m-mean" x1="120" y1="18" x2="120" y2="80"></line>
+    <text class="m-cap" x="112" y="94">\u03bc = 0</text>
+    <text class="m-cap" x="8" y="16">the batch, recentred and rescaled</text>
+  </svg>`;
+}
+
+function diagramActivation(kind){
+  const f = {
+    relu: x => Math.max(0, x),
+    leaky_relu: x => (x > 0 ? x : 0.1 * x),
+    gelu: x => x * 0.5 * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (x + 0.044715 * x ** 3))),
+    silu: x => x / (1 + Math.exp(-x)),
+    tanh: x => Math.tanh(x),
+    sigmoid: x => 1 / (1 + Math.exp(-x)),
+    elu: x => (x > 0 ? x : Math.exp(x) - 1),
+    softmax: x => 1 / (1 + Math.exp(-x)),
+    identity: x => x,
+  }[kind] || (x => Math.max(0, x));
+
+  const pts = [];
+  for (let i = 0; i <= 80; i++){
+    const x = -3 + (6 * i) / 80;
+    const y = Math.max(-2.2, Math.min(2.6, f(x)));
+    pts.push(`${(105 + x * 30).toFixed(1)},${(56 - y * 18).toFixed(1)}`);
+  }
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    <line class="m-axis" x1="15" y1="56" x2="195" y2="56"></line>
+    <line class="m-axis" x1="105" y1="8" x2="105" y2="96"></line>
+    <polyline class="m-curve" points="${pts.join(" ")}"></polyline>
+    <circle class="m-dot" r="3.5">
+      <animateMotion dur="3.2s" repeatCount="indefinite"
+        path="M${pts[0].replace(",", " ")} ${pts.filter((_, i) => i % 4 === 0)
+          .map(p => "L" + p.replace(",", " ")).join(" ")}"></animateMotion>
+    </circle>
+    <text class="m-cap" x="15" y="100">\u22123</text>
+    <text class="m-cap" x="180" y="100">+3</text>
+  </svg>`;
+}
+
+function diagramAttention(){
+  // the score matrix filling in: every position scored against every other
+  let cells = "";
+  const n = 6, cell = 13;
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++)
+      cells += `<rect class="m-score" x="${112 + j * cell}" y="${16 + i * cell}"
+        width="${cell - 1.5}" height="${cell - 1.5}" rx="1" opacity="0.08">
+        <animate attributeName="opacity"
+          values="0.08;${(0.15 + 0.75 * Math.exp(-Math.abs(i - j) / 1.7)).toFixed(2)};0.08"
+          dur="3s" begin="${(i * 0.12 + j * 0.05).toFixed(2)}s"
+          repeatCount="indefinite"></animate></rect>`;
+  let toks = "";
+  for (let i = 0; i < n; i++)
+    toks += `<rect class="m-in" x="20" y="${16 + i * cell}" width="${cell * 2}"
+              height="${cell - 1.5}" rx="1.5"></rect>`;
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    ${toks}${cells}
+    <path class="m-arrow" d="M78 48 L104 48" marker-end="url(#mtip)"></path>
+    <text class="m-cap" x="20" y="102">tokens</text>
+    <text class="m-cap" x="112" y="102">QK\u1d40 scores</text>
+  </svg>`;
+}
+
+function diagramRecurrent(){
+  let cells = "";
+  for (let t = 0; t < 4; t++){
+    const x = 22 + t * 46;
+    cells += `<rect class="m-cell" x="${x}" y="34" width="30" height="26" rx="4"></rect>
+      <text class="m-tiny" x="${x + 15}" y="51" text-anchor="middle">h${t + 1}</text>
+      ${t < 3 ? `<path class="m-arrow" d="M${x + 30} 47 L${x + 44} 47"
+        marker-end="url(#mtip)"></path>` : ""}
+      <path class="m-feed" d="M${x + 15} 34 L${x + 15} 22"></path>
+      <circle class="m-dot" cx="${x + 15}" cy="18" r="3">
+        <animate attributeName="opacity" values="0.2;1;0.2" dur="2.4s"
+          begin="${(t * 0.5).toFixed(1)}s" repeatCount="indefinite"></animate>
+      </circle>`;
+  }
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    ${cells}
+    <text class="m-cap" x="20" y="14">x\u209c</text>
+    <text class="m-cap" x="20" y="80">the cell state runs left to right</text>
+  </svg>`;
+}
+
+function diagramEmbedding(){
+  let rows = "";
+  for (let i = 0; i < 6; i++)
+    rows += `<rect class="${i === 2 ? "m-out" : "m-in"}" x="96" y="${14 + i * 13}"
+              width="72" height="11" rx="1.5"></rect>`;
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    <rect class="m-cell" x="22" y="${14 + 2 * 13}" width="30" height="11" rx="2"></rect>
+    <text class="m-tiny" x="37" y="${23 + 2 * 13}" text-anchor="middle">i</text>
+    ${rows}
+    <path class="m-arrow" d="M56 45 L90 45" marker-end="url(#mtip)"></path>
+    <text class="m-cap" x="96" y="102">one row of W, straight out</text>
+  </svg>`;
+}
+
+function diagramDropout(entry){
+  const rate = 0.4;
+  let dots = "";
+  for (let i = 0; i < 6; i++)
+    for (let j = 0; j < 8; j++){
+      const off = ((i * 8 + j) % 5) < rate * 5;
+      dots += `<circle class="m-node" cx="${26 + j * 21}" cy="${22 + i * 12}" r="4">
+        <animate attributeName="opacity" values="${off ? "1;0.08;1" : "1;1;1"}"
+          dur="1.8s" begin="${((i + j) * 0.05).toFixed(2)}s"
+          repeatCount="indefinite"></animate></circle>`;
+    }
+  return `<svg viewBox="0 0 210 106" class="mathsvg">${dots}
+    <text class="m-cap" x="20" y="100">a fresh mask every step, in training only</text>
+  </svg>`;
+}
+
+function diagramMerge(){
+  return `<svg viewBox="0 0 210 106" class="mathsvg">
+    <path class="m-arrow" d="M20 26 C70 26 70 52 100 52" marker-end="url(#mtip)"></path>
+    <path class="m-arrow" d="M20 78 C70 78 70 52 100 52" marker-end="url(#mtip)"></path>
+    <circle class="m-node out" cx="112" cy="52" r="9"></circle>
+    <path class="m-arrow" d="M124 52 L182 52" marker-end="url(#mtip)"></path>
+    <text class="m-cap" x="20" y="18">x\u2081</text>
+    <text class="m-cap" x="20" y="98">x\u2082</text>
+  </svg>`;
+}
+
+function diagramReshape(){
+  let cubes = "";
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++)
+      cubes += `<rect class="m-in" x="${18 + j * 16}" y="${22 + i * 16}"
+                 width="14" height="14" rx="1.5"></rect>`;
+  let line = "";
+  for (let i = 0; i < 9; i++)
+    line += `<rect class="m-out" x="${104 + i * 10}" y="42" width="8" height="14" rx="1.5"></rect>`;
+  return `<svg viewBox="0 0 210 106" class="mathsvg">${cubes}${line}
+    <path class="m-arrow" d="M76 46 L98 46" marker-end="url(#mtip)"></path>
+    <text class="m-cap" x="18" y="88">same numbers</text>
+    <text class="m-cap" x="104" y="88">read in order</text>
+  </svg>`;
+}
+
+/* ---------- the panel ---------- */
+
+async function renderMathPanel(){
+  const host = $("mathBody");
+  const node = nodeById(state.sel);
+  if (!node){
+    host.innerHTML = `<div class="empty" style="padding:14px">
+      Select a layer to see the mathematics it performs, with this network's
+      numbers in it.</div>`;
+    return;
+  }
+  if (state.mathFor === node.id && state.mathEntry){
+    paintMath(state.mathEntry);
+    return;
+  }
+  host.innerHTML = `<div class="empty" style="padding:14px">working it through…</div>`;
+  let d;
+  try{
+    const r = await fetch(API + "/api/math", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ graph: state.graph, node: node.id }),
+    });
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="empty" style="padding:14px">No answer.</div>`; return; }
+  state.mathFor = node.id;
+  state.mathEntry = d;
+  paintMath(d);
+}
+
+function paintMath(d){
+  const host = $("mathBody");
+  if (d.missing){
+    host.innerHTML = `<div class="mathhead"><b>${d.label}</b></div>
+      <div class="mathmissing">${d.missing}</div>`;
+    return;
+  }
+  host.innerHTML =
+    `<div class="mathhead"><b>${d.label}</b><span>${d.title}</span></div>`
+    + `<div class="mathfig">${mathDiagram(d)}</div>`
+    + `<div class="matheq">${d.equation}</div>`
+    + (d.shape ? `<div class="mathwhere">${d.shape}</div>` : "")
+    + (d.symbols.length
+        ? `<div class="mathsec">what each part is</div>`
+          + `<table class="mathtab">${d.symbols.map(s =>
+              `<tr><td class="sym">${s[0]}</td><td>${s[1]}</td></tr>`).join("")}</table>`
+        : "")
+    + `<div class="mathsec">worked through, here</div>`
+    + `<table class="mathtab">${d.arithmetic.map(a =>
+        `<tr><td class="key">${a[0]}</td><td class="val">${a[1]}</td></tr>`).join("")}</table>`
+    + (d.freedom.length
+        ? `<div class="mathsec">where the freedom is</div>`
+          + d.freedom.filter(Boolean).map(f => `<p class="mathnote">${f}</p>`).join("")
+        : "");
+}
 
 /* ============================ sheets ============================ */
 
