@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.21.0
+
+- **Every account starts with the example designs.** They used to live only in
+  the first account's workspace, so anyone registering afterwards arrived at an
+  empty app. They are shipped assets now, in `examples/`, copied into each new
+  workspace when it is created.
+- **Copied once, at registration.** Deleting them is a decision, not an accident
+  to undo on the next sign-in, so a workspace that has been seeded is never
+  seeded again.
+- **Asking for them back is easy.** Opening a design in an empty workspace
+  offers to add them, and `POST /api/examples/restore` does it directly.
+  Restoring skips any name already present, so it can never overwrite your own
+  work — verified with a design saved under an example's name.
+
 ## 1.20.1
 
 **Fixed: signing out looked exactly like losing everything.**

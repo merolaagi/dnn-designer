@@ -1,0 +1,180 @@
+{
+  "name": "Generator",
+  "nodes": [
+    {
+      "id": "z",
+      "type": "Input",
+      "params": {
+        "shape": [
+          64
+        ]
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "fc",
+      "type": "Linear",
+      "params": {
+        "units": 8192
+      },
+      "x": 0,
+      "y": 110
+    },
+    {
+      "id": "rs",
+      "type": "Reshape",
+      "params": {
+        "shape": [
+          128,
+          8,
+          8
+        ]
+      },
+      "x": 0,
+      "y": 220
+    },
+    {
+      "id": "a0",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 330
+    },
+    {
+      "id": "u1",
+      "type": "ConvTranspose2d",
+      "params": {
+        "filters": 64,
+        "kernel": 4,
+        "stride": 2,
+        "padding": 1
+      },
+      "x": 0,
+      "y": 440
+    },
+    {
+      "id": "n1",
+      "type": "BatchNorm2d",
+      "params": {},
+      "x": 0,
+      "y": 550
+    },
+    {
+      "id": "a1",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 660
+    },
+    {
+      "id": "u2",
+      "type": "ConvTranspose2d",
+      "params": {
+        "filters": 32,
+        "kernel": 4,
+        "stride": 2,
+        "padding": 1
+      },
+      "x": 0,
+      "y": 770
+    },
+    {
+      "id": "a2",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 880
+    },
+    {
+      "id": "out",
+      "type": "Conv2d",
+      "params": {
+        "filters": 3,
+        "kernel": 3,
+        "padding": "same"
+      },
+      "x": 0,
+      "y": 990
+    },
+    {
+      "id": "sig",
+      "type": "Activation",
+      "params": {
+        "kind": "sigmoid"
+      },
+      "x": 0,
+      "y": 1100
+    },
+    {
+      "id": "o",
+      "type": "Output",
+      "params": {},
+      "x": 0,
+      "y": 1210
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "source": "z",
+      "target": "fc"
+    },
+    {
+      "id": "e1",
+      "source": "fc",
+      "target": "rs"
+    },
+    {
+      "id": "e2",
+      "source": "rs",
+      "target": "a0"
+    },
+    {
+      "id": "e3",
+      "source": "a0",
+      "target": "u1"
+    },
+    {
+      "id": "e4",
+      "source": "u1",
+      "target": "n1"
+    },
+    {
+      "id": "e5",
+      "source": "n1",
+      "target": "a1"
+    },
+    {
+      "id": "e6",
+      "source": "a1",
+      "target": "u2"
+    },
+    {
+      "id": "e7",
+      "source": "u2",
+      "target": "a2"
+    },
+    {
+      "id": "e8",
+      "source": "a2",
+      "target": "out"
+    },
+    {
+      "id": "e9",
+      "source": "out",
+      "target": "sig"
+    },
+    {
+      "id": "e10",
+      "source": "sig",
+      "target": "o"
+    }
+  ]
+}

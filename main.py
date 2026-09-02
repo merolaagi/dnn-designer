@@ -971,6 +971,19 @@ def _describe(entry: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+@app.post("/api/examples/restore")
+def restore_examples():
+    """Copy the shipped designs into this workspace.
+
+    Skips any name already there, so it can never overwrite your own work.
+    """
+    copied = auth.restore_examples(auth.workspace())
+    return {"copied": copied,
+            "message": (f"Added {copied} example design{'' if copied == 1 else 's'}."
+                        if copied else
+                        "They are all here already, under their original names.")}
+
+
 @app.get("/api/graphs")
 def list_graphs():
     names = {p.stem for p in saved_dir().glob("*.json")}

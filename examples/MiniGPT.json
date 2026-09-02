@@ -1,0 +1,133 @@
+{
+  "name": "MiniGPT",
+  "nodes": [
+    {
+      "id": "tok",
+      "type": "Input",
+      "params": {
+        "shape": [
+          128
+        ],
+        "dtype": "long"
+      },
+      "label": "tokens",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "emb",
+      "type": "Embedding",
+      "params": {
+        "vocab": 48,
+        "dim": 128
+      },
+      "x": 0,
+      "y": 110
+    },
+    {
+      "id": "pos",
+      "type": "PositionalEncoding",
+      "params": {},
+      "x": 0,
+      "y": 220
+    },
+    {
+      "id": "drop",
+      "type": "Dropout",
+      "params": {
+        "rate": 0.1
+      },
+      "x": 0,
+      "y": 330
+    },
+    {
+      "id": "gpt",
+      "type": "GPTStack",
+      "params": {
+        "depth": 4,
+        "heads": 4,
+        "mlp_ratio": 4.0,
+        "dropout": 0.1
+      },
+      "x": 0,
+      "y": 440
+    },
+    {
+      "id": "head",
+      "type": "Linear",
+      "params": {
+        "units": 48,
+        "bias": false
+      },
+      "label": "lm_head",
+      "x": 0,
+      "y": 550
+    },
+    {
+      "id": "o",
+      "type": "Output",
+      "params": {
+        "task": "language_modeling"
+      },
+      "x": 0,
+      "y": 660
+    },
+    {
+      "id": "gen",
+      "type": "TextGenerator",
+      "params": {
+        "vocab_path": "uploads/demo_corpus.txt.vocab.json",
+        "max_new_tokens": 240,
+        "temperature": 0.8,
+        "top_k": 40,
+        "block_size": 128
+      },
+      "x": 250,
+      "y": 770
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "source": "tok",
+      "target": "emb",
+      "port": 0
+    },
+    {
+      "id": "e1",
+      "source": "emb",
+      "target": "pos",
+      "port": 0
+    },
+    {
+      "id": "e2",
+      "source": "pos",
+      "target": "drop",
+      "port": 0
+    },
+    {
+      "id": "e3",
+      "source": "drop",
+      "target": "gpt",
+      "port": 0
+    },
+    {
+      "id": "e4",
+      "source": "gpt",
+      "target": "head",
+      "port": 0
+    },
+    {
+      "id": "e5",
+      "source": "head",
+      "target": "o",
+      "port": 0
+    },
+    {
+      "id": "e6",
+      "source": "o",
+      "target": "gen",
+      "port": 0
+    }
+  ]
+}

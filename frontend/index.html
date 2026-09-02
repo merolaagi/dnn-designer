@@ -3428,7 +3428,17 @@ $("versionPick").addEventListener("change", async () => {
 $("btnOpen").addEventListener("click", async () => {
   const res = await fetch(API + "/api/graphs");
   const data = await res.json();
-  if (!data.graphs.length){ toast("Nothing saved yet"); return; }
+  if (!data.graphs.length){
+    // an empty workspace should offer the examples rather than just say no
+    if (confirm("Nothing saved in this workspace yet.\n\n"
+              + "Add the example designs that ship with the app?")){
+      const r = await fetch(API + "/api/examples/restore", { method:"POST" });
+      const added = await r.json();
+      toast(added.message || "Added the examples");
+      if (added.copied) $("btnOpen").click();
+    }
+    return;
+  }
   const pick = prompt("Open which design?\n\n" +
     data.graphs.map(g => `${g.name}  ·  ${g.versions} version`
       + `${g.versions > 1 ? "s" : ""}, latest ${g.saved_at}`).join("\n"),

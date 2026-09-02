@@ -977,6 +977,48 @@ def _():
             assert expected in str(exc), f"got {exc}, wanted {expected!r}"
 
 
+@check("every account starts with the example designs")
+def _():
+    import shutil
+
+    import auth
+
+    assert auth.EXAMPLES.is_dir(), "the examples are not shipped"
+    shipped = {p.stem for p in auth.EXAMPLES.glob("*.json")}
+    assert shipped, "the examples folder is empty"
+
+    backup = None
+    if auth.DATA.exists():
+        backup = auth.DATA.with_suffix(".backup")
+        shutil.move(auth.DATA, backup)
+    try:
+        auth.register("firstone", "longenough1")     # adopts the shared workspace
+        auth.register("secondone", "longenough2")
+        home = auth.workspace_for("secondone")
+        got = {p.stem for p in (home / "saved").glob("*.json")}
+        assert shipped <= got, f"a new account is missing {shipped - got}"
+
+        # deleting them is a decision, not an accident to be undone
+        for path in (home / "saved").glob("*.json"):
+            path.unlink()
+        assert auth.seed(home) == 0, "seeding must happen once, not on every sign-in"
+        assert not list((home / "saved").glob("*.json"))
+
+        # but asking for them back works
+        assert auth.restore_examples(home) == len(shipped)
+
+        # and restoring never treads on work of the same name
+        mine = home / "saved" / (sorted(shipped)[0] + ".json")
+        mine.write_text('{"name":"mine","nodes":[],"edges":[]}')
+        assert auth.restore_examples(home) == 0
+        assert json.loads(mine.read_text())["name"] == "mine", \
+            "restoring overwrote the user's own design"
+    finally:
+        shutil.rmtree(auth.DATA, ignore_errors=True)
+        if backup:
+            shutil.move(backup, auth.DATA)
+
+
 @check("signing out locks the page instead of emptying it")
 def _():
     """Signing out used to look exactly like losing everything.

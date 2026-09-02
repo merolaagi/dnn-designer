@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 
 HERE = Path(__file__).resolve().parent
 DATA = HERE / "data"
+EXAMPLES = HERE / "examples"
 USERS = DATA / "users.json"
 SESSIONS = DATA / "sessions.json"
 
@@ -99,7 +100,9 @@ def register(name: str, password: str) -> Dict[str, Any]:
             "adopts_legacy": not everyone,
         }
         _write(USERS, everyone)
-    workspace_for(name).mkdir(parents=True, exist_ok=True)
+    home = workspace_for(name)
+    home.mkdir(parents=True, exist_ok=True)
+    seed(home)
     return {"name": name}
 
 
@@ -182,6 +185,41 @@ def workspace_for(name: Optional[str]) -> Path:
     if record.get("adopts_legacy"):
         return HERE
     return DATA / "users" / name
+
+
+def seed(target: Path) -> int:
+    """Give a new workspace the designs the app ships with.
+
+    Only into an empty one. Someone who deleted the examples on purpose should
+    not find them back the next time they sign in — `restore_examples` is there
+    for wanting them again.
+    """
+    marker = target / ".seeded"
+    if marker.exists():
+        return 0
+    saved = target / "saved"
+    saved.mkdir(parents=True, exist_ok=True)
+    copied = 0 if any(saved.iterdir()) else restore_examples(target)
+    marker.write_text("the shipped designs were copied in once\n")
+    return copied
+
+
+def restore_examples(target: Path) -> int:
+    """Copy the shipped designs in, without overwriting anything of the same name."""
+    import shutil
+
+    saved = target / "saved"
+    saved.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    if not EXAMPLES.is_dir():
+        return 0
+    for source in sorted(EXAMPLES.glob("*.json")):
+        destination = saved / source.name
+        if destination.exists() or (saved / source.stem).exists():
+            continue                      # never tread on the user's own work
+        shutil.copy2(source, destination)
+        copied += 1
+    return copied
 
 
 def set_current(name: Optional[str]) -> None:

@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Seventy-nine checks, with the torch-dependent ones skipping themselves when it is
+Eighty checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -275,6 +275,10 @@ has. *Set up an account*, in the header, turns authentication on; the first
 account inherits the work already there, and every account after it gets its own
 designs, runs, studies and panel layout. Passwords are hashed with scrypt and a
 per-account salt, and changing one signs out every other session.
+
+Every account starts with the example designs — they ship in `examples/` and are
+copied into each new workspace once. Deleting them sticks; opening a design in an
+empty workspace offers to put them back.
 
 Signing out locks the page rather than emptying it — the work stays exactly
 where it was, under `saved/`, `runs/` and `studies/`. If you cannot get back in,
@@ -571,4 +575,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.20.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.21.0 — see `CHANGELOG.md`.

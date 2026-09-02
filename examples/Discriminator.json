@@ -1,0 +1,134 @@
+{
+  "name": "Discriminator",
+  "nodes": [
+    {
+      "id": "i",
+      "type": "Input",
+      "params": {
+        "shape": [
+          3,
+          32,
+          32
+        ]
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "c1",
+      "type": "Conv2d",
+      "params": {
+        "filters": 32,
+        "kernel": 4,
+        "stride": 2,
+        "padding": 1
+      },
+      "x": 0,
+      "y": 110
+    },
+    {
+      "id": "a1",
+      "type": "Activation",
+      "params": {
+        "kind": "leaky_relu"
+      },
+      "x": 0,
+      "y": 220
+    },
+    {
+      "id": "c2",
+      "type": "Conv2d",
+      "params": {
+        "filters": 64,
+        "kernel": 4,
+        "stride": 2,
+        "padding": 1
+      },
+      "x": 0,
+      "y": 330
+    },
+    {
+      "id": "n2",
+      "type": "BatchNorm2d",
+      "params": {},
+      "x": 0,
+      "y": 440
+    },
+    {
+      "id": "a2",
+      "type": "Activation",
+      "params": {
+        "kind": "leaky_relu"
+      },
+      "x": 0,
+      "y": 550
+    },
+    {
+      "id": "g",
+      "type": "GlobalAvgPool",
+      "params": {},
+      "x": 0,
+      "y": 660
+    },
+    {
+      "id": "l",
+      "type": "Linear",
+      "params": {
+        "units": 1
+      },
+      "x": 0,
+      "y": 770
+    },
+    {
+      "id": "o",
+      "type": "Output",
+      "params": {
+        "task": "binary"
+      },
+      "x": 0,
+      "y": 880
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "source": "i",
+      "target": "c1"
+    },
+    {
+      "id": "e1",
+      "source": "c1",
+      "target": "a1"
+    },
+    {
+      "id": "e2",
+      "source": "a1",
+      "target": "c2"
+    },
+    {
+      "id": "e3",
+      "source": "c2",
+      "target": "n2"
+    },
+    {
+      "id": "e4",
+      "source": "n2",
+      "target": "a2"
+    },
+    {
+      "id": "e5",
+      "source": "a2",
+      "target": "g"
+    },
+    {
+      "id": "e6",
+      "source": "g",
+      "target": "l"
+    },
+    {
+      "id": "e7",
+      "source": "l",
+      "target": "o"
+    }
+  ]
+}
