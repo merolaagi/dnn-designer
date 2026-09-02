@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.17.0
+
+A **Studies** page: agents that run experiments for you.
+
+Worth being precise about the word. A workflow tool's agentic tasks orchestrate
+calls to external AI services — chat completions, embeddings, MCP tools. Those
+are not layers: they are not differentiable, carry no tensor shape, and nothing
+downstream could consume them. The automation this app was actually short of is
+different, and it is this: somebody still had to sit there changing one number
+and pressing Train.
+
+- **Hyperparameter sweep** — the same network trained across learning rates,
+  batch sizes and optimizers.
+- **Architecture search** — wider, narrower and more regularized versions of the
+  network, each trained and ranked. The final head is left alone, because the
+  number of classes is not a hyperparameter.
+- **Try the review's fixes** — takes what `review` found, applies each fix on its
+  own, and trains them beside the network as drawn, so you learn which of them
+  actually helped rather than assuming. On a test network it ranked adding
+  dropout above adding batch norm, and both above leaving it alone.
+- Variants that would not build are discarded during planning, before anything
+  is trained.
+- **Every trial is an ordinary run**: it appears in the run history, writes
+  checkpoints, and can be reopened. The study adds a leaderboard over the top,
+  and *open* puts any variant on the canvas.
+- Studies persist to `studies/`, so a leaderboard survives a restart.
+- Three tests, including one asserting every proposed variant builds and one
+  that width search never resizes the head.
+
 ## 1.16.0
 
 - **A quick-add picker anchored to the `+` you pressed**, rather than a list in

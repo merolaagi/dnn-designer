@@ -749,6 +749,39 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
 .kv{display:grid;grid-template-columns:118px 1fr;gap:3px 10px;font-size:11.5px;
   line-height:1.6}
 .kv b{color:var(--muted);font-weight:600}
+.agentcard{
+  padding:9px 10px;border-radius:6px;margin-bottom:5px;cursor:pointer;background:#fff;
+  border:1px solid var(--paper-3);border-left:3px solid #8D6E63;
+}
+.agentcard:hover{background:var(--paper-2)}
+.agentcard.on{border-color:var(--amber);border-left-color:var(--amber)}
+.agentcard b{display:block;font-size:12px;font-weight:600}
+.agentcard span{display:block;font-size:10.5px;color:var(--muted);line-height:1.45;
+  margin-top:3px}
+.studyrow{
+  padding:7px 9px;border-radius:5px;margin-bottom:3px;cursor:pointer;background:#fff;
+  border:1px solid transparent;
+}
+.studyrow:hover{background:var(--paper-2)}
+.studyrow.on{border-color:var(--amber)}
+.studyrow b{font-size:11.5px}
+.studyrow span{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
+table.trials{width:100%;border-collapse:collapse;font-size:11.5px}
+table.trials th{
+  text-align:left;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:#98A6B8;font-weight:700;padding:6px 8px;border-bottom:1px solid var(--paper-3);
+}
+table.trials td{padding:8px;border-bottom:1px solid #EDF1F5;vertical-align:top}
+table.trials td b{font-weight:600}
+table.trials td span{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
+table.trials .num{text-align:right;font-family:var(--mono);font-size:10.5px}
+table.trials tr.best{background:#F1F8F3}
+table.trials tr.best td:first-child::after{content:" ★";color:var(--good)}
+table.trials td.st{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);white-space:nowrap}
+table.trials td.st.done{color:#256B39}
+table.trials td.st.running{color:#7A5400}
+table.trials td.st.error{color:#8C2F27}
 .kv code{font-family:var(--mono);font-size:10.5px}
 .buildwrap{display:flex;height:100%;min-height:0;width:100%}
 .buildside{width:330px;flex:none;border-right:1px solid var(--paper-3);
@@ -893,6 +926,7 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
 
     <div class="group">Executions</div>
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
+    <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
     <button data-page="pageRuns"><i>&#8635;</i>Run history</button>
     <button data-page="pageChat"><i>&#9998;</i>Chat</button>
 
@@ -1040,6 +1074,13 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
       </div>
     </div>
   </section>
+  <section class="page" id="pageAgents">
+    <div class="runwrap">
+      <div class="runlist" id="agentSide"></div>
+      <div class="rundetail" id="agentMain"></div>
+    </div>
+  </section>
+
   <section class="page" id="pageRuns">
     <div class="runwrap">
       <div class="runlist" id="runList"></div>
@@ -1175,6 +1216,8 @@ const state = {
   blocks:[], blockFile:null, blockDraft:false, blockKind:"blocks", colmap:null, csv:null,
   nodeCode:{}, checkpoints:[], augmentations:[], corpus:null,
   recipes:[], recipeConfig:{}, extraModels:{},
+  agentCatalog:[], agentKind:null, agentConfig:{}, studies:[], studyId:null,
+  study:null, studyPoll:null,
   projects:[], projectCategories:[], projectCat:"", projectId:null,
   project:null, stepAt:0, stepIds:{}, picked:new Set(),
   version:null, insertInto:null,
@@ -3337,6 +3380,7 @@ dragSplitter($("splitBottom"), ev => {
 const PAGE_SETUP = {
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
+  pageAgents: () => refreshAgents(),
   pageChat: () => refreshChatModels(),
   pageExtend: () => refreshBlocks(),
 };
@@ -3392,6 +3436,202 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* ============================ agents ============================ */
+
+function agentRow(trial, index, study){
+  const best = study.leader && study.leader.label === trial.label;
+  const score = trial.score !== undefined && trial.score !== null
+    ? trial.score.toFixed(5) : (trial.last !== undefined ? trial.last + "…" : "—");
+  const change = Object.values(trial.change || {})[0] || "";
+  return `<tr class="${best ? "best" : ""}">
+    <td class="st ${trial.status}">${trial.status}</td>
+    <td><b>${trial.label}</b><span>${change}</span></td>
+    <td class="num">${(trial.learnables || 0).toLocaleString()}</td>
+    <td class="num">${score}</td>
+    <td>${trial.run ? `<button class="linkbtn" data-run="${trial.run}">run</button>` : ""}
+        ${trial.graph || trial.run ? `<button class="linkbtn" data-open="${index}">open</button>` : ""}</td>
+  </tr>`;
+}
+
+async function refreshAgents(){
+  let d;
+  try { d = await (await fetch(API + "/api/agents")).json(); }
+  catch { return; }
+  state.agentCatalog = d.catalog;
+  state.studies = d.studies;
+
+  const side = $("agentSide");
+  side.innerHTML = d.catalog.map(a => `
+    <div class="agentcard${state.agentKind === a.id ? " on" : ""}" data-agent="${a.id}">
+      <b>${a.name}</b><span>${a.doc}</span>
+    </div>`).join("")
+    + `<div class="cat eyebrow" style="margin-top:14px">Past studies</div>`
+    + (d.studies.length ? d.studies.map(s => `
+        <div class="studyrow${state.studyId === s.id ? " on" : ""}" data-study="${s.id}">
+          <b>${s.design}</b>
+          <span><span class="status ${s.status}">${s.status}</span>
+          ${s.kind} · ${s.at}/${s.total}${s.leader ? " · " + s.leader : ""}</span>
+        </div>`).join("")
+      : `<div class="empty">No studies yet.</div>`);
+
+  side.querySelectorAll("[data-agent]").forEach(el =>
+    el.addEventListener("click", () => { state.agentKind = el.dataset.agent;
+                                         refreshAgents(); renderAgentForm(); }));
+  side.querySelectorAll("[data-study]").forEach(el =>
+    el.addEventListener("click", () => openStudy(el.dataset.study)));
+
+  if (state.studyId) openStudy(state.studyId, true);
+  else renderAgentForm();
+}
+
+function renderAgentForm(){
+  const spec = (state.agentCatalog || []).find(a => a.id === state.agentKind);
+  const host = $("agentMain");
+  if (!spec){
+    host.innerHTML = `<div class="head"><h4>Studies</h4>
+      <p>Pick a study on the left. Each one trains several variants of the network
+      on the canvas and tells you which won — every trial is an ordinary run.</p></div>`;
+    return;
+  }
+  state.agentConfig = state.agentConfig || {};
+  spec.params.forEach(q => {
+    if (state.agentConfig[q.name] === undefined) state.agentConfig[q.name] = q.default;
+  });
+
+  host.innerHTML = `<div class="head"><h4>${spec.name}</h4><p>${spec.doc}</p></div>
+    <div class="inner">
+      <div class="kv" style="grid-template-columns:150px 1fr">
+        ${spec.params.map(q => {
+          if (q.kind === "multi"){
+            return `<b>${q.name}</b><span>${q.options.map(o =>
+              `<label style="margin-right:11px;font-size:11.5px">
+                 <input type="checkbox" data-multi="${q.name}" value="${o}"
+                  ${(state.agentConfig[q.name] || []).includes(o) ? "checked" : ""}> ${o}</label>`
+              ).join("")}</span>`;
+          }
+          return `<b>${q.name}</b><span><input type="number" data-ap="${q.name}"
+            value="${state.agentConfig[q.name]}" style="width:90px;padding:4px 7px;
+            border:1px solid var(--paper-3);border-radius:5px"></span>`;
+        }).join("")}
+        <b>dataset</b><span><select id="ag_dataset">${
+          (state.datasets || []).map(d => `<option value="${d.id}">${d.label}</option>`).join("")
+        }</select></span>
+        <b>device</b><span><select id="ag_device">
+          <option value="auto">auto</option><option value="cpu">cpu</option>
+          <option value="mps">mps</option><option value="cuda">cuda</option></select></span>
+        <b>samples</b><span><input type="number" id="ag_samples" value="1024"
+          style="width:90px;padding:4px 7px;border:1px solid var(--paper-3);border-radius:5px"></span>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn go" id="btnStudyGo">Run the study</button>
+        <span class="empty" id="agentNote">Uses the network currently on the canvas.</span>
+      </div>
+    </div>`;
+
+  host.querySelectorAll("[data-ap]").forEach(el => el.addEventListener("input", () => {
+    state.agentConfig[el.dataset.ap] = +el.value;
+  }));
+  host.querySelectorAll("[data-multi]").forEach(el => el.addEventListener("change", () => {
+    const key = el.dataset.multi;
+    const chosen = [...host.querySelectorAll(`[data-multi="${key}"]`)]
+      .filter(x => x.checked).map(x => x.value);
+    state.agentConfig[key] = chosen;
+  }));
+  $("btnStudyGo").addEventListener("click", startStudy);
+}
+
+async function startStudy(){
+  const note = $("agentNote");
+  note.textContent = "starting…";
+  const config = { ...state.agentConfig,
+    dataset: $("ag_dataset").value,
+    device: $("ag_device").value,
+    train_samples: +$("ag_samples").value,
+    batch_size: 32 };
+  let r, d;
+  try{
+    r = await fetch(API + "/api/agents", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ graph: state.graph, agent: state.agentKind, config }),
+    });
+    d = await r.json();
+  } catch { note.textContent = "The server did not respond."; return; }
+  if (!r.ok){ note.textContent = (d.detail && d.detail.message) || "Could not start"; return; }
+  state.studyId = d.id;
+  openStudy(d.id);
+  refreshAgents();
+}
+
+async function openStudy(id, quiet){
+  let s;
+  try { s = await (await fetch(API + "/api/agents/" + encodeURIComponent(id))).json(); }
+  catch { return; }
+  state.studyId = id;
+  state.study = s;
+
+  const running = s.status === "running" || s.status === "planning";
+  $("agentMain").innerHTML = `
+    <div class="head">
+      <h4>${s.design} · ${s.kind}</h4>
+      <p><span class="status ${s.status}">${s.status}</span>
+         ${s.at}/${s.total} trials · lower ${s.objective} is
+         ${s.lower_is_better ? "better" : "worse"}</p>
+    </div>
+    <div class="inner">
+      <table class="trials"><thead><tr>
+        <th>state</th><th>variant</th><th class="num">parameters</th>
+        <th class="num">${s.objective}</th><th></th></tr></thead>
+        <tbody>${(s.trials || []).map((t, i) => agentRow(t, i, s)).join("")}</tbody>
+      </table>
+      <div style="margin-top:13px;display:flex;gap:8px">
+        ${running ? `<button class="btn stop" id="btnStudyStop">Stop</button>` : ""}
+        <button class="btn" id="btnStudyNew">New study</button>
+      </div>
+    </div>`;
+
+  const main = $("agentMain");
+  main.querySelectorAll("[data-open]").forEach(el =>
+    el.addEventListener("click", () => openTrial(id, +el.dataset.open)));
+  main.querySelectorAll("[data-run]").forEach(el =>
+    el.addEventListener("click", () => {
+      showPage("pageRuns");
+      document.querySelectorAll("#rail button").forEach(b =>
+        b.classList.toggle("on", b.dataset.page === "pageRuns"));
+      refreshRuns(el.dataset.run);
+    }));
+  const stop = $("btnStudyStop");
+  if (stop) stop.addEventListener("click", async () => {
+    await fetch(API + "/api/agents/" + encodeURIComponent(id) + "/stop", { method:"POST" });
+    openStudy(id);
+  });
+  const fresh = $("btnStudyNew");
+  if (fresh) fresh.addEventListener("click", () => {
+    state.studyId = null; state.study = null; renderAgentForm(); refreshAgents();
+  });
+
+  if (running && !quiet){
+    clearTimeout(state.studyPoll);
+    state.studyPoll = setTimeout(() => openStudy(id), 2500);
+  }
+}
+
+async function openTrial(studyId, index){
+  const r = await fetch(API + "/api/agents/" + encodeURIComponent(studyId)
+                        + "/graph/" + index);
+  if (!r.ok){ toast("That trial kept no design"); return; }
+  pushHistory();
+  state.graph = await r.json();
+  state.seq = state.graph.nodes.length + state.graph.edges.length + 600;
+  $("gname").value = state.graph.name || "Variant";
+  state.version = null;
+  clearSelection();
+  showPage("pageDesign");
+  document.querySelectorAll("#rail button").forEach(b =>
+    b.classList.toggle("on", b.dataset.page === "pageDesign" && !b.dataset.side));
+  render(); fitView(); analyze();
+  toast("Opened that variant on the canvas");
+}
 
 /* ========================== executions ========================== */
 

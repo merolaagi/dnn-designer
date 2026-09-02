@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
+import agents
 import assistant
 import blockloader
 import codegen
@@ -127,6 +128,60 @@ def post_analyze(body: GraphPayload):
         requires = {"error": f"{type(exc).__name__}: {exc}"}
     return {"report": report, "code": code, "node_code": node_code,
             "requires": requires}
+
+
+class AgentPayload(BaseModel):
+    graph: Dict[str, Any]
+    agent: str
+    config: Dict[str, Any] = {}
+
+
+@app.get("/api/agents")
+def list_agents():
+    return {"catalog": agents.CATALOG, "studies": agents.listing()}
+
+
+@app.post("/api/agents")
+def start_agent(body: AgentPayload):
+    g, report = _analyze(body.graph)
+    if not report["ok"]:
+        raise HTTPException(400, detail={
+            "message": "Fix the highlighted layers before running a study."})
+    try:
+        agent = agents.start(body.agent, body.graph, body.config)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    return agent.snapshot()
+
+
+@app.get("/api/agents/{agent_id}")
+def get_agent(agent_id: str):
+    try:
+        return agents.read(agent_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such study."})
+
+
+@app.post("/api/agents/{agent_id}/stop")
+def stop_agent(agent_id: str):
+    agent = agents.AGENTS.get(agent_id)
+    if not agent:
+        raise HTTPException(404, detail={"message": "No such study."})
+    agent.stop.set()
+    return {"ok": True}
+
+
+@app.get("/api/agents/{agent_id}/graph/{index}")
+def agent_trial_graph(agent_id: str, index: int):
+    """The exact variant a trial used, so a winner can be opened on the canvas."""
+    try:
+        study = agents.read(agent_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such study."})
+    trials = study.get("trials") or []
+    if not 0 <= index < len(trials):
+        raise HTTPException(404, detail={"message": "No such trial."})
+    return trials[index]["graph"]
 
 
 class AssistantPayload(BaseModel):

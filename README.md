@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Sixty-three checks, with the torch-dependent ones skipping themselves when it is
+Sixty-six checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -267,6 +267,25 @@ the pretrained stem's kernels across the colour axis.
 Save writes a new version each time rather than overwriting. The selector beside
 the design name lists every version with its timestamp, and switching loads that
 one onto the canvas. Deleting takes either one version or the whole history.
+
+## Studies
+
+**Studies** run experiments so you do not have to. A hyperparameter sweep trains
+the same network across learning rates, batch sizes and optimizers. An
+architecture search proposes wider, narrower and more regularized versions and
+ranks them — leaving the final head alone, since the number of classes is not a
+hyperparameter. *Try the review's fixes* takes what the assistant's `review`
+found, applies each fix on its own, and trains them beside the unchanged network
+so you learn which actually helped.
+
+Variants that would not build are discarded during planning. Every trial is an
+ordinary run — it appears in the run history and writes checkpoints — and any
+variant can be opened on the canvas from the leaderboard.
+
+This is deliberately not "call a language model from inside your network". Those
+tasks belong in a workflow orchestrator; they are not differentiable and have no
+tensor shape. Running the experiments is the automation a network designer
+actually needs.
 
 ## Runs
 
@@ -489,6 +508,7 @@ recipes_sdk.py   the Recipe/Context surface training loops write against
 recipeloader.py  scans recipes/, hot-reloads, isolates failures
 checkpoints/     saved weights, each carrying the design that made it
 runs/            one record per training run, with its design and metrics
+studies/         one record per experiment study, with its leaderboard
 saved/           designs saved from the Open/Save buttons
 uploads/         tables and corpora
 tests/           the test suite
@@ -508,4 +528,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.16.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.17.0 — see `CHANGELOG.md`.

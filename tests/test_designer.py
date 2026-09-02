@@ -916,6 +916,83 @@ def _():
     assert not missing, f"no glyph for: {missing}"
 
 
+@check("agents propose variants that actually build")
+def _():
+    import agents
+
+    graph = {"name": "Study", "nodes": [
+        {"id": "i", "type": "Input", "params": {"shape": [3, 16, 16]}},
+        {"id": "c", "type": "Conv2d",
+         "params": {"filters": 16, "kernel": 3, "padding": "same"}},
+        {"id": "a", "type": "Activation", "params": {"kind": "relu"}},
+        {"id": "f", "type": "Flatten", "params": {}},
+        {"id": "l1", "type": "Linear", "params": {"units": 64}},
+        {"id": "l2", "type": "Linear", "params": {"units": 4}, "label": "head"},
+        {"id": "o", "type": "Output", "params": {"task": "classification"}}],
+        "edges": [{"id": "e1", "source": "i", "target": "c"},
+                  {"id": "e2", "source": "c", "target": "a"},
+                  {"id": "e3", "source": "a", "target": "f"},
+                  {"id": "e4", "source": "f", "target": "l1"},
+                  {"id": "e5", "source": "l1", "target": "l2"},
+                  {"id": "e6", "source": "l2", "target": "o"}]}
+
+    for kind in ("sweep", "search", "repair"):
+        trials = agents.BUILDERS[kind](json.loads(json.dumps(graph)), {"trials": 6})
+        assert trials, f"{kind} proposed nothing"
+        for trial in trials:
+            rep = G.analyze(G.parse(trial["graph"]))
+            assert rep["ok"], \
+                f"{kind} proposed '{trial['label']}' which does not build: {rep['errors'][:1]}"
+            assert trial.get("learnables") is not None, \
+                f"{kind} trial '{trial['label']}' reports no size"
+
+
+@check("architecture search leaves the head alone")
+def _():
+    import agents
+
+    graph = {"name": "S", "nodes": [
+        {"id": "i", "type": "Input", "params": {"shape": [8]}},
+        {"id": "h", "type": "Linear", "params": {"units": 32}},
+        {"id": "a", "type": "Activation", "params": {"kind": "relu"}},
+        {"id": "o2", "type": "Linear", "params": {"units": 5}, "label": "head"},
+        {"id": "o", "type": "Output", "params": {"task": "classification"}}],
+        "edges": [{"id": "e1", "source": "i", "target": "h"},
+                  {"id": "e2", "source": "h", "target": "a"},
+                  {"id": "e3", "source": "a", "target": "o2"},
+                  {"id": "e4", "source": "o2", "target": "o"}]}
+    trials = agents.BUILDERS["search"](json.loads(json.dumps(graph)), {"trials": 8})
+    widened = [t for t in trials if "width" in t["label"]]
+    assert widened, "search proposed no width variants"
+    for trial in widened:
+        head = [n for n in trial["graph"]["nodes"] if n.get("label") == "head"][0]
+        assert head["params"]["units"] == 5, (
+            f"{trial['label']} resized the head to {head['params']['units']}; "
+            f"the number of classes is not a hyperparameter")
+
+
+@check("the repair agent turns review findings into trials")
+def _():
+    import agents
+
+    graph = {"name": "R", "nodes": [
+        {"id": "i", "type": "Input", "params": {"shape": [8]}},
+        {"id": "l1", "type": "Linear", "params": {"units": 64}},
+        {"id": "l2", "type": "Linear", "params": {"units": 4}, "label": "head"},
+        {"id": "o", "type": "Output", "params": {"task": "classification"}}],
+        "edges": [{"id": "e1", "source": "i", "target": "l1"},
+                  {"id": "e2", "source": "l1", "target": "l2"},
+                  {"id": "e3", "source": "l2", "target": "o"}]}
+    trials = agents.BUILDERS["repair"](json.loads(json.dumps(graph)), {"trials": 6})
+    labels = [t["label"] for t in trials]
+    assert "as drawn" in labels, "there is no baseline to compare against"
+    assert any("activation between" in l for l in labels), labels
+    # and the fix must actually separate the two dense layers
+    fixed = [t for t in trials if "activation between" in t["label"]][0]
+    kinds = [n["type"] for n in fixed["graph"]["nodes"]]
+    assert kinds.count("Activation") == 1, kinds
+
+
 @check("the assistant edits the graph and finds real problems")
 def _():
     import assistant
@@ -1135,6 +1212,7 @@ def _():
         "highlightPython", "drawCodeMap", "syncCodeMap", "escapeHtml", "testLayer",
         "sendAsk", "askSay", "loadAssistant", "askObservations",
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
+        "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",
         "nodeBox", "wirePath", "portIn", "portOut",

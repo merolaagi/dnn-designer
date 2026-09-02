@@ -15,6 +15,7 @@ checkpoints/*.pth
 
 # run records and workspace layout are local, not source
 runs/*.json
+studies/*.json
 prefs.json
 
 # datasets pulled or uploaded at runtime
