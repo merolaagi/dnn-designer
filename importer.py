@@ -253,6 +253,16 @@ def _module_to_node(module, b: Builder, name: str) -> Optional[Tuple[str, Dict[s
     return None
 
 
+def _wants_indices(model) -> bool:
+    """True when the first thing the model does is an embedding lookup."""
+    import torch.nn as nn
+
+    for module in model.modules():
+        if isinstance(module, nn.Embedding):
+            return True
+    return False
+
+
 def from_pytorch(model, name: str = "Imported",
                  input_shape: Optional[List[int]] = None) -> Dict[str, Any]:
     """Trace an nn.Module and rebuild it as a designer graph."""
@@ -270,9 +280,60 @@ def from_pytorch(model, name: str = "Imported",
             f"{type(exc).__name__}: {exc}"
         ) from exc
 
+    # Ask PyTorch what shape every intermediate actually has, by running one
+    # example through. Reconstructing `view(B, T, h, C // h)` from the traced
+    # arithmetic is guesswork; this is the real answer.
+    real_shapes: Dict[Any, List[int]] = {}
+    if input_shape:
+        try:
+            from torch.fx.passes.shape_prop import ShapeProp
+
+            sample = (torch.zeros(1, *input_shape, dtype=torch.long)
+                      if _wants_indices(model)
+                      else torch.zeros(1, *input_shape))
+            with torch.no_grad():
+                ShapeProp(traced).propagate(sample)
+            for n in traced.graph.nodes:
+                meta = n.meta.get("tensor_meta")
+                if meta is not None and hasattr(meta, "shape"):
+                    real_shapes[n] = [int(d) for d in meta.shape]
+        except Exception as exc:  # noqa: BLE001 - shapes are a bonus, not a requirement
+            import os
+            if os.environ.get("DNN_DEBUG"):
+                print("ShapeProp:", type(exc).__name__, exc)
+            real_shapes = {}
+
     b = Builder(name)
     produced: Dict[Any, str] = {}
     output_sources: List[str] = []
+
+    # Nodes that carry shape numbers rather than tensors. `B, T, C = x.size()`
+    # and `C // self.n_head` are bookkeeping the author does to reshape with —
+    # drawing them as layers buries the architecture in arithmetic. They are
+    # tracked so they can be left out, not guessed at.
+    shape_valued = set()
+
+    SHAPE_SOURCES = {"size", "dim", "numel", "shape"}
+    SHAPE_OPS = {operator.floordiv, operator.truediv, operator.mul, operator.add,
+                 operator.sub, operator.mod, operator.getitem}
+
+    def is_shape_node(node) -> bool:
+        target = node.target
+        fname = getattr(target, "__name__", str(target)).split(".")[-1]
+        if node.op == "call_method" and fname in SHAPE_SOURCES:
+            return True
+        if node.op == "call_function" and target in SHAPE_OPS:
+            # only when every tensor-ish input is itself shape-valued
+            refs = [a for a in node.args if isinstance(a, fx.Node)]
+            return bool(refs) and all(a in shape_valued for a in refs)
+        if node.op == "call_function" and fname in SHAPE_SOURCES:
+            return True
+        return False
+
+    # Operations that return their input unchanged as far as the diagram is
+    # concerned. Keeping them adds nodes and says nothing.
+    PASSTHROUGH = {"contiguous", "detach", "clone", "to", "cpu", "cuda", "float",
+                   "double", "half", "requires_grad_", "type_as"}
 
     def resolve(arg) -> Optional[str]:
         return produced.get(arg) if isinstance(arg, fx.Node) else None
@@ -287,6 +348,17 @@ def from_pytorch(model, name: str = "Imported",
         return out
 
     for node in traced.graph.nodes:
+        if is_shape_node(node):
+            shape_valued.add(node)
+            continue
+
+        fname_ = getattr(node.target, "__name__", str(node.target)).split(".")[-1]
+        if node.op in ("call_method", "call_function") and fname_ in PASSTHROUGH:
+            upstream = [a for a in node.args if isinstance(a, fx.Node) and a in produced]
+            if upstream:
+                produced[node] = produced[upstream[0]]
+                continue
+
         if node.op == "placeholder":
             shape = [int(d) for d in (input_shape or [3, 224, 224])]
             produced[node] = b.add("Input", {"shape": shape, "dtype": "float"},
@@ -333,9 +405,15 @@ def from_pytorch(model, name: str = "Imported",
                 nid = b.add("Concat", {"axis": axis})
             elif fname in ("flatten",):
                 nid = b.add("Flatten", {})
+            elif fname in ("view", "reshape") and node in real_shapes:
+                # the measured shape, not one reconstructed from traced arithmetic
+                nid = b.add("Reshape", {"shape": real_shapes[node][1:]})
             elif fname in ("view", "reshape"):
                 dims = [int(a) for a in node.args[1:] if isinstance(a, int)]
                 nid = b.add("Reshape", {"shape": dims[1:] or [-1]})
+            elif fname == "scaled_dot_product_attention":
+                nid = b.add("Attention",
+                            {"causal": bool(node.kwargs.get("is_causal", False))})
             elif fname in ("max_pool2d", "avg_pool2d", "max_pool1d"):
                 # the functional forms are as common as the modules in real code
                 size = node.args[1] if len(node.args) > 1 else 2
@@ -358,6 +436,16 @@ def from_pytorch(model, name: str = "Imported",
                 nid = b.add("GlobalAvgPool", {})
             elif fname in ("dropout",):
                 nid = b.add("Dropout", {"rate": 0.5})
+            elif fname in ("transpose", "swapaxes"):
+                dims = [a for a in node.args[1:] if isinstance(a, int)]
+                nid = b.add("Transpose", {"dim_a": dims[0] if dims else 1,
+                                          "dim_b": dims[1] if len(dims) > 1 else 2})
+            elif fname in ("split", "chunk"):
+                axis = node.kwargs.get("dim")
+                if axis is None and len(node.args) > 2:
+                    axis = node.args[2]
+                nid = b.add("Split", {"pieces": 3, "axis": max(0, int(axis or 0) - 1),
+                                      "take": 0})
             elif fname in ("getattr", "getitem"):
                 produced[node] = ins[0] if ins else None
                 continue

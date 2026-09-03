@@ -916,6 +916,98 @@ def _():
     assert not missing, f"no glyph for: {missing}"
 
 
+@check("a transformer block imports with nothing left opaque")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import importer
+
+    source = """
+import torch.nn as nn
+from torch.nn import functional as F
+
+
+class Block(nn.Module):
+    def __init__(self, n_embd=768, n_head=12):
+        super().__init__()
+        self.n_head, self.n_embd = n_head, n_embd
+        self.ln_1 = nn.LayerNorm(n_embd)
+        self.c_attn = nn.Linear(n_embd, 3 * n_embd)
+        self.c_proj = nn.Linear(n_embd, n_embd)
+        self.ln_2 = nn.LayerNorm(n_embd)
+        self.c_fc = nn.Linear(n_embd, 4 * n_embd)
+        self.gelu = nn.GELU()
+        self.c_proj2 = nn.Linear(4 * n_embd, n_embd)
+
+    def forward(self, x):
+        B, T, C = x.size()
+        h = self.ln_1(x)
+        q, k, v = self.c_attn(h).split(self.n_embd, dim=2)
+        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+        x = x + self.c_proj(y)
+        return x + self.c_proj2(self.gelu(self.c_fc(self.ln_2(x))))
+"""
+    payload = importer.from_source(source, [64, 768])
+    notes = payload.pop("_notes", [])
+    payload.pop("_entry", None)
+    kinds = [n["type"] for n in payload["nodes"]]
+
+    assert "Custom" not in kinds, f"opaque nodes remain: {notes}"
+    for expected in ("Split", "Transpose", "Attention", "LayerNorm", "Add"):
+        assert expected in kinds, f"{expected} did not come through: {kinds}"
+    # the shape bookkeeping the author wrote must not appear as layers
+    assert "size" not in json.dumps(notes)
+
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+
+    import train as T
+    model = T.build_model(codegen.to_pytorch(g, rep), codegen.model_class_name(g))
+    real = sum(p.numel() for p in model.parameters())
+    assert real == rep["total_learnables"], \
+        f"canvas {rep['total_learnables']:,}, torch {real:,}"
+
+
+@check("the rearrangement layers agree with torch")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import torch
+
+    import layers as L
+
+    assert L.REGISTRY["Transpose"].infer({"dim_a": 1, "dim_b": 2},
+                                         [[64, 12, 64]]) == [12, 64, 64]
+    x = torch.zeros(2, 64, 12, 64)
+    assert list(x.transpose(1, 2).shape)[1:] == [12, 64, 64], "the canvas disagrees with torch"
+
+    assert L.REGISTRY["Split"].infer({"pieces": 3, "axis": 1, "take": 0},
+                                     [[64, 2304]]) == [64, 768]
+    assert list(torch.zeros(2, 64, 2304).chunk(3, dim=2)[0].shape)[1:] == [64, 768]
+
+    assert L.REGISTRY["Attention"].infer({}, [[12, 64, 64]] * 3) == [12, 64, 64]
+    q = torch.zeros(2, 12, 64, 64)
+    got = torch.nn.functional.scaled_dot_product_attention(q, q, q)
+    assert list(got.shape)[1:] == [12, 64, 64]
+
+    for params, shapes, why in [
+        ({"pieces": 5, "axis": 0}, [[7, 4]], "an uneven split"),
+        ({}, [[12, 64, 64], [12, 64, 32], [12, 64, 64]], "mismatched query and key widths"),
+    ]:
+        name = "Split" if "pieces" in params else "Attention"
+        try:
+            L.REGISTRY[name].infer(params, shapes)
+            raise AssertionError(f"{why} should be refused")
+        except L.ShapeError:
+            pass
+
+
 @check("pasted code becomes a diagram")
 def _():
     if not HAVE_TORCH:

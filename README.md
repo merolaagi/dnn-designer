@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Eighty-four checks, with the torch-dependent ones skipping themselves when it is
+Eighty-six checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -364,6 +364,17 @@ its own class that the parent instantiates, exactly as the code would be written
 by hand. Shapes flow through the reference; circular references are refused with
 the circle named.
 
+Transformer code imports well: a GPT-2 block written in the usual style arrives
+as 21 layers with nothing opaque, shapes resolved and the parameter count exact.
+Shape bookkeeping (`B, T, C = x.size()`) is elided rather than drawn, and
+reshape targets are measured by running one example through rather than
+reconstructed from the traced arithmetic.
+
+What cannot be imported is a `forward` that slices by a traced value — older
+GPT-2 attention masks do this — because `torch.fx` cannot trace it into a single
+graph. The import says so and names the reason; the same model written with
+`F.scaled_dot_product_attention` imports without trouble.
+
 Pasting code is the quickest route for a single model: a class subclassing `nn.Module`, or a
 variable holding one such as `model = nn.Sequential(...)`. It is traced by
 running it, which is the only way to learn what `forward` does, so it has to be
@@ -583,4 +594,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.22.2 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.23.0 — see `CHANGELOG.md`.

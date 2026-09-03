@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.23.0
+
+**Transformer blocks import cleanly.** A GPT-2 block, written the way nanoGPT
+writes it, now arrives as 21 layers with nothing opaque and every shape
+resolved — 7,087,872 parameters, matching PyTorch exactly.
+
+Before this it was 26 nodes with 11 of them marked "no layer equivalent", which
+told you nothing about the architecture.
+
+- **Shape bookkeeping is no longer drawn.** `B, T, C = x.size()` and
+  `C // self.n_head` are arithmetic the author does in order to reshape. They
+  were appearing as layers, burying the architecture. They are tracked so they
+  can be left out rather than guessed at.
+- **Pass-through operations are elided** — `.contiguous()`, `.detach()`, `.to()`
+  add a node and say nothing.
+- **Three new layers for what was left**: `Transpose` (swap two axes),
+  `Split` (cut into equal pieces, which is how one projection becomes Q, K and
+  V), and `Attention` (`softmax(QKᵀ/√d_k)V` itself, holding no weights — the
+  projections around it hold them). All three have full entries in the Maths
+  panel.
+- **Reshape targets are measured, not reconstructed.** The import now runs one
+  example through the traced model and reads the real shape of every
+  intermediate, so `view(B, T, h, C // h)` becomes `[64, 12, 64]` rather than a
+  guess.
+
+### What still cannot be imported
+
+A model whose `forward` slices by a traced value — the classic
+`att.masked_fill(self.bias[:, :, :T, :T] == 0, -inf)` in older GPT-2 code —
+cannot be traced into a graph at all, and says so. The same model written with
+`F.scaled_dot_product_attention` imports perfectly. That is a property of
+`torch.fx`, not a limitation this app can wish away, and the refusal names the
+reason.
+
 ## 1.22.2
 
 - **Maths is in the sidebar**, under Definitions beside Canvas and Code. It was

@@ -579,7 +579,104 @@ def subgraph(p, ins, out):
     }
 
 
+def transpose(p, ins, out):
+    a, b = int(p.get("dim_a", 1)), int(p.get("dim_b", 2))
+    return {
+        "family": "reshape",
+        "title": "Axis swap",
+        "equation": f"y[\u2026, j, \u2026, i, \u2026] = x[\u2026, i, \u2026, j, \u2026]"
+                    f"   (axes {a} and {b})",
+        "shape": f"{_shape_str(ins[0] if ins else None)} \u2192 {_shape_str(out)}",
+        "symbols": [("i, j", f"the indices along axes {a} and {b}, exchanged")],
+        "arithmetic": [
+            ("output size", _shape_str(out)),
+            ("parameters", "none — not one value changes, only how they are indexed"),
+        ],
+        "freedom": [
+            "Nothing is computed. In attention this is how a batch of tokens each "
+            "holding h heads becomes a batch of h heads each holding tokens, so "
+            "the heads can be processed in parallel as independent matrices.",
+            "It can force a copy: the memory is no longer laid out in the order "
+            "the indices now imply, which is why .contiguous() so often follows.",
+        ],
+    }
+
+
+def split(p, ins, out):
+    pieces = int(p.get("pieces", 3))
+    axis = int(p.get("axis", 0))
+    take = int(p.get("take", 0))
+    width = ins[0][axis] if ins and ins[0] and axis < len(ins[0]) else 0
+    return {
+        "family": "reshape",
+        "title": "Equal split",
+        "equation": f"x \u2192 (x\u2081, \u2026, x_{pieces}),  each "
+                    f"{_fmt(width // max(1, pieces))} wide along axis {axis}",
+        "shape": f"{_shape_str(ins[0] if ins else None)} \u2192 {_shape_str(out)}",
+        "symbols": [
+            ("pieces", f"{pieces}"),
+            ("take", f"piece {take} continues along this path"),
+        ],
+        "arithmetic": [
+            ("each piece", f"{_fmt(width)}/{pieces} = {_fmt(width // max(1, pieces))}"),
+            ("parameters", "none"),
+        ],
+        "freedom": [
+            "One projection three times as wide, then split, is exactly one "
+            "projection per piece — but as a single matrix multiply, which is why "
+            "attention implementations write it that way.",
+            "The pieces are contiguous slices, so which piece becomes Q, K and V is "
+            "decided purely by the ordering of that one weight matrix.",
+        ],
+    }
+
+
+def sdpa(p, ins, out):
+    q = ins[0] if ins and ins[0] else [0, 0]
+    heads = q[0] if len(q) == 3 else 1
+    tokens = q[-2] if len(q) >= 2 else 0
+    d_k = q[-1] if q else 0
+    causal = bool(p.get("causal"))
+    return {
+        "family": "attention",
+        "title": "Scaled dot-product attention",
+        "equation": "y = softmax(QK\u1d40 / \u221ad_k" +
+                    (" + M" if causal else "") + ") V",
+        "shape": f"Q,K,V each {_shape_str(q)}",
+        "symbols": [
+            ("QK\u1d40", f"{_fmt(tokens)}\u00d7{_fmt(tokens)} scores per head, "
+                          f"{_fmt(heads)} head{'' if heads == 1 else 's'}"),
+            ("\u221ad_k", f"\u221a{_fmt(d_k)} \u2248 "
+                           f"{math.sqrt(max(1, d_k)):.2f}"),
+        ] + ([("M", "\u2212\u221e above the diagonal, so a position cannot "
+                    "read anything after it")] if causal else []),
+        "arithmetic": [
+            ("scores", f"{_fmt(heads)} \u00d7 {_fmt(tokens)}\u00b2 = "
+                       f"{_fmt(heads * tokens * tokens)} numbers held at once"),
+            ("parameters", "none — this operation holds no weights; the "
+                           "projections around it do"),
+            ("cost", f"grows as tokens\u00b2; doubling {_fmt(tokens)} tokens "
+                     f"quadruples this to {_fmt(heads * 4 * tokens * tokens)}"),
+        ],
+        "freedom": [
+            f"The \u221ad_k divisor is not cosmetic: a dot product of two "
+            f"{_fmt(d_k)}-dimensional vectors with unit-variance entries has "
+            f"variance {_fmt(d_k)}. Without dividing, the softmax saturates and "
+            f"almost no gradient survives.",
+            "The mask is added before the softmax, not after — \u2212\u221e "
+            "becomes exactly zero probability, where masking afterwards would "
+            "leave the distribution unnormalised.",
+            "That quadratic term is the entire subject of efficient attention: "
+            "sparsity patterns, low-rank approximations of the score matrix, and "
+            "kernel methods that never form it at all.",
+        ],
+    }
+
+
 ENTRIES: Dict[str, Callable] = {
+    "Transpose": transpose,
+    "Split": split,
+    "Attention": sdpa,
     "Linear": linear,
     "Conv2d": conv2d,
     "Conv1d": conv2d,

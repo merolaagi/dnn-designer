@@ -951,6 +951,97 @@ def _stack_blocks(x, depth, heads, ff_dim, rate):
 
 
 # --------------------------------------------------------------------------
+# tensor rearrangement, and attention without its projections
+# --------------------------------------------------------------------------
+
+def _transpose_infer(p, ins):
+    shape = list(ins[0])
+    a, b = int(p.get("dim_a", 0)), int(p.get("dim_b", 1))
+    # the batch dimension is not part of the shape the canvas carries
+    a = a - 1 if a > 0 else a
+    b = b - 1 if b > 0 else b
+    if not (-len(shape) <= a < len(shape) and -len(shape) <= b < len(shape)):
+        raise ShapeError(f"This tensor has {len(shape)} dimensions after the batch; "
+                         f"cannot swap {p.get('dim_a')} and {p.get('dim_b')}.")
+    shape[a], shape[b] = shape[b], shape[a]
+    return shape
+
+
+register(LayerSpec(
+    name="Transpose",
+    category="Shape",
+    doc="Swaps two dimensions. No arithmetic — the same numbers, read along "
+        "different axes, which is how a batch of tokens becomes a batch of heads.",
+    params=[P("dim_a", "int", 1), P("dim_b", "int", 2)],
+    infer=_transpose_infer,
+    torch_init=lambda p, ins: None,
+    torch_call=lambda p, ins, mod, s:
+        f"{ins[0]}.transpose({int(p['dim_a'])}, {int(p['dim_b'])})",
+    keras_call=None,
+))
+
+
+def _split_infer(p, ins):
+    shape = list(ins[0])
+    axis = int(p.get("axis", 0))
+    pieces = max(1, int(p.get("pieces", 3)))
+    if not 0 <= axis < len(shape):
+        raise ShapeError(f"Axis {axis} is outside this tensor's {len(shape)} dimensions.")
+    if shape[axis] % pieces:
+        raise ShapeError(f"{shape[axis]} does not divide into {pieces} equal pieces.")
+    shape[axis] //= pieces
+    return shape
+
+
+register(LayerSpec(
+    name="Split",
+    category="Shape",
+    doc="Cuts a tensor into equal pieces along one axis. One projection "
+        "producing 3x the width and splitting it is the usual way to make "
+        "queries, keys and values in one matrix multiply.",
+    params=[P("pieces", "int", 3), P("axis", "int", 0),
+            P("take", "int", 0, help="Which piece continues down this path")],
+    infer=_split_infer,
+    torch_init=lambda p, ins: None,
+    torch_call=lambda p, ins, mod, s:
+        f"{ins[0]}.chunk({int(p['pieces'])}, dim={int(p['axis']) + 1})"
+        f"[{int(p['take'])}]",
+    keras_call=None,
+))
+
+
+def _sdpa_infer(p, ins):
+    if len(ins) < 3:
+        raise ShapeError("Attention needs queries, keys and values on ports 0, 1 and 2.")
+    q, k, v = ins[0], ins[1], ins[2]
+    if q[-1] != k[-1]:
+        raise ShapeError(f"Queries are {q[-1]} wide and keys are {k[-1]}; "
+                         f"their dot product needs them equal.")
+    if k[-2] != v[-2]:
+        raise ShapeError(f"{k[-2]} keys but {v[-2]} values; there must be one "
+                         f"value per key.")
+    return list(q[:-1]) + [v[-1]]
+
+
+register(LayerSpec(
+    name="Attention",
+    category="Sequence",
+    doc="softmax(QK^T / sqrt(d_k)) V — the attention operation itself, with the "
+        "projections left outside it. This is what F.scaled_dot_product_attention "
+        "computes, and it holds no weights of its own.",
+    params=[P("causal", "bool", True,
+              help="Mask so a position can only attend to earlier ones")],
+    infer=_sdpa_infer,
+    n_inputs=3,
+    torch_init=lambda p, ins: None,
+    torch_call=lambda p, ins, mod, s:
+        f"F.scaled_dot_product_attention({ins[0]}, {ins[1]}, {ins[2]}, "
+        f"is_causal={bool(p.get('causal'))})",
+    keras_call=None,
+))
+
+
+# --------------------------------------------------------------------------
 # a reference to another sheet
 # --------------------------------------------------------------------------
 
