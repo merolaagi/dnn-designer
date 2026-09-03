@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.22.2
+
+- **Maths is in the sidebar**, under Definitions beside Canvas and Code. It was
+  reachable only from the right panel's tab strip, which is a lot of tabs to
+  scan. Grouped with the design rather than with Status, since it explains what
+  the network does rather than reporting on its condition.
+
 ## 1.22.1
 
 **Fixed: `mathbook.py` would not parse on Python 3.11, so the server would not

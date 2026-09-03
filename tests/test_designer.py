@@ -1084,6 +1084,12 @@ def _():
             f"the panel has no diagram for the {family} family"
     assert 'data-side="math"' in PAGE and 'id="mathBody"' in PAGE
     assert "function renderMathPanel" in PAGE
+    # reachable from the sidebar, and grouped with the design rather than status
+    rail = PAGE[PAGE.index('<nav id="rail">'):PAGE.index("</nav>")]
+    assert 'data-side="math"' in rail, "Maths has no sidebar entry"
+    definitions = rail[rail.index("Definitions"):rail.index("Executions")]
+    assert 'data-side="math"' in definitions, \
+        "Maths belongs with the design, not with status"
 
 
 @check("every account starts with the example designs")
