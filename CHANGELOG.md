@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.27.1
+
+`doctor.py` now answers the question behind "but I installed it".
+
+- It names **which interpreter it checked**, and says so explicitly when that is
+  a virtual environment — where anything installed outside does not count.
+- When a package is absent, it looks for it on the other interpreters on the
+  machine and reports **"it is installed for /usr/bin/python3 — but not here"**,
+  which is almost always the real situation.
+- Install lines use `<that interpreter> -m pip install`, so the packages land
+  where the check looked rather than wherever `pip` happens to point.
+
+## 1.27.0
+
+- **`python doctor.py`** reports what this machine has and what each thing
+  unlocks — Python version, the three packages the server needs, and the
+  optional ones with a plain statement of what is lost without each. Nothing is
+  fatal except the first three, so it describes rather than alarms.
+- It also reports what torch can train on (CPU, CUDA, Apple GPU), how many model
+  families the installed `transformers` makes readable and the exact path to
+  scan them from, whether the storage directories are writable, free disk space,
+  and which accounts exist.
+- Tested with the optional packages hidden as well as present, because a check
+  that has only ever seen a working machine is not a check.
+
 ## 1.26.1
 
 Tested against the real Hugging Face `transformers` library rather than

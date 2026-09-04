@@ -1328,6 +1328,38 @@ def _():
             assert expected in str(exc), f"got {exc}, wanted {expected!r}"
 
 
+@check("the environment check reports on what is actually installed")
+def _():
+    import subprocess
+
+    result = subprocess.run([sys.executable, str(ROOT / "doctor.py")],
+                            capture_output=True, text=True, timeout=180)
+    assert result.returncode == 0, result.stderr[-400:]
+    report = result.stdout
+    for expected in ("python", "fastapi", "torch", "storage", "free space"):
+        assert expected in report, f"{expected} is not reported"
+    # it must state a verdict either way
+    assert "Ready." in report or "Install first" in report, report[-200:]
+    # and say which interpreter it checked, since that is the usual confusion
+    assert sys.executable in report, \
+        "the report does not say which python it looked at"
+
+    # and it must not claim something is present when it is not
+    import importlib
+
+    for module in ("transformers", "onnx"):
+        try:
+            importlib.import_module(module)
+            installed = True
+        except Exception:  # noqa: BLE001
+            installed = False
+        line = [l for l in report.splitlines() if l.strip().startswith(module)]
+        assert line, f"{module} is not mentioned"
+        says_present = "yes" in line[0]
+        assert says_present == installed, \
+            f"the report says {module} is {'present' if says_present else 'absent'}"
+
+
 @check("every module parses under Python 3.11")
 def _():
     """Guards a difference between 3.11 and 3.12 that a 3.12 machine cannot see.
