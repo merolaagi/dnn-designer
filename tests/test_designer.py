@@ -1356,6 +1356,28 @@ def _():
             shutil.move(backup, auth.DATA)
 
 
+@check("designs are opened by clicking, not by retyping a name")
+def _():
+    """The browser prompt listed the designs and then made you type one in."""
+    for token in ('id="picker"', 'id="pickBody"', 'id="pickSearch"',
+                  "function openPicker", "function openDesign", "data-open="):
+        assert token in PAGE, f"{token} is missing from the picker"
+
+    script = PAGE[PAGE.index("<script>"):]
+    opener = script[script.index("function openPicker"):
+                    script.index("function openDesign")]
+    assert "prompt(" not in opener, "the picker still asks you to type a name"
+
+    # the remaining prompts are for naming something new, which has nothing to
+    # pick from — those are fine; picking from a list is not
+    import re
+
+    for match in re.finditer(r"[^\w.]prompt\(([^,)]*)", script):
+        argument = match.group(1).lower()
+        assert "which" not in argument and "open" not in argument, \
+            f"something is still asking you to type a choice: {match.group(1)[:60]}"
+
+
 @check("signing out locks the page instead of emptying it")
 def _():
     """Signing out used to look exactly like losing everything.
@@ -1971,6 +1993,7 @@ def _():
         "importFolderPicks", "loadProjectTree", "renderProjectTree",
         "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
         "submitSignIn", "signOut", "renderMathPanel", "mathDiagram", "paintMath",
+        "openPicker", "renderPickList", "openDesign",
         "diagramConv", "diagramActivation", "diagramAttention",
         "renderNetworkPanel", "renderNeedsPanel", "refreshVersions",
         "buildTrainForm", "startTraining", "refreshCheckpoints",

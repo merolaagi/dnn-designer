@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.25.0
+
+- **Open is a list you click.** It was a browser prompt that showed you the
+  names and then made you type one of them into a box, which is a strange thing
+  to ask of someone who is looking straight at the list.
+- Each row shows the design, how many versions it has and when it was last
+  saved. Designs with more than one version get a version selector on the row,
+  so an older one can be opened without a second dialog.
+- Search filters as you type; arrow keys move; Enter opens; Escape closes;
+  clicking outside closes.
+- Delete is on the row, behind a hover, rather than being a separate flow.
+- An empty workspace offers the example designs as a button rather than a
+  yes/no question.
+- Opening a workbook restores its sheets properly — the old handler predated
+  sheets and would have flattened a multi-sheet design like GPT2 to whichever
+  arrays happened to be at the top level.
+
 ## 1.24.1
 
 **Fixed: GPT2 would not have appeared for anyone already using the app.**

@@ -418,6 +418,52 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 #whoami button:hover{border-color:var(--amber);color:var(--text)}
 
+#picker{
+  position:fixed;inset:0;background:rgba(22,32,46,.34);z-index:210;
+  display:none;align-items:flex-start;justify-content:center;padding-top:9vh;
+}
+#picker.on{display:flex}
+.pickbox{
+  width:440px;max-height:70vh;background:#fff;border-radius:12px;
+  box-shadow:0 22px 60px rgba(22,32,46,.3);display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.pickhead{
+  display:flex;align-items:center;padding:13px 16px 10px;font-size:14px;
+  font-weight:600;
+}
+.pickhead button{
+  margin-left:auto;background:none;border:none;font-size:19px;line-height:1;
+  color:var(--muted);
+}
+.pickhead button:hover{color:var(--text)}
+#pickSearch{
+  margin:0 16px 10px;padding:8px 11px;border:1px solid var(--paper-3);
+  border-radius:7px;font-size:13px;
+}
+#pickSearch:focus{outline:none;border-color:var(--amber)}
+.pickbody{overflow-y:auto;padding:0 8px 10px}
+.pickrow{
+  display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;
+  cursor:pointer;border:1px solid transparent;
+}
+.pickrow:hover,.pickrow.on{background:var(--paper-2);border-color:var(--paper-3)}
+.pickmain{flex:1;min-width:0}
+.pickmain b{display:block;font-size:13px;font-weight:600}
+.pickmain span{display:block;font-size:11px;color:var(--muted);margin-top:1px}
+.pickver{
+  border:1px solid var(--paper-3);border-radius:5px;font-size:11px;padding:2px 5px;
+  background:#fff;
+}
+.pickkill{
+  background:none;border:none;color:#B3BDC9;font-size:17px;line-height:1;
+  padding:0 3px;border-radius:4px;visibility:hidden;
+}
+.pickrow:hover .pickkill{visibility:visible}
+.pickkill:hover{color:var(--bad)}
+.pickempty{padding:20px 16px;text-align:center}
+.pickempty p{margin:0 0 12px;font-size:12.5px;color:var(--muted)}
+
 #signin{
   position:fixed;inset:0;background:rgba(22,32,46,.34);z-index:220;
   display:none;align-items:center;justify-content:center;
@@ -1335,6 +1381,17 @@ table.trials td.st.error{color:#8C2F27}
     <div class="cmdlist" id="cmdList"></div>
   </div>
 </div>
+<div id="picker">
+  <div class="pickbox">
+    <div class="pickhead">
+      <b>Open a design</b>
+      <button id="pickClose" title="Close">&times;</button>
+    </div>
+    <input id="pickSearch" placeholder="Search designs" spellcheck="false">
+    <div class="pickbody" id="pickBody"></div>
+  </div>
+</div>
+
 <div id="signin">
   <div class="sibox">
     <button id="siClose" title="Close">&times;</button>
@@ -1444,7 +1501,7 @@ const state = {
   quick:{ mode:null, context:null, expanded:false, hits:[], at:0 },
   book:null, sheet:"main", bookReports:null, scan:null, tree:null,
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
-  mathFor:null, mathEntry:null,
+  mathFor:null, mathEntry:null, pickList:[], pickAt:0,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
@@ -3486,36 +3543,136 @@ $("versionPick").addEventListener("change", async () => {
   toast(`Opened version ${version}`);
 });
 
-$("btnOpen").addEventListener("click", async () => {
-  const res = await fetch(API + "/api/graphs");
-  const data = await res.json();
-  if (!data.graphs.length){
-    // an empty workspace should offer the examples rather than just say no
-    if (confirm("Nothing saved in this workspace yet.\n\n"
-              + "Add the example designs that ship with the app?")){
+/* ========================== opening a design ========================== */
+
+/* A list you click, rather than a name you retype. The browser's prompt gave
+   you the names and then made you copy one of them into a box by hand. */
+
+async function openPicker(){
+  const box = $("picker");
+  const body = $("pickBody");
+  box.classList.add("on");
+  body.innerHTML = `<div class="empty" style="padding:16px">reading…</div>`;
+  $("pickSearch").value = "";
+
+  let data;
+  try { data = await (await fetch(API + "/api/graphs")).json(); }
+  catch { body.innerHTML = `<div class="empty" style="padding:16px">No answer.</div>`; return; }
+
+  state.pickList = data.graphs || [];
+  if (!state.pickList.length){
+    body.innerHTML =
+      `<div class="pickempty">
+         <p>Nothing saved in this workspace yet.</p>
+         <button class="btn go" id="pickSeed">Add the example designs</button>
+       </div>`;
+    $("pickSeed").addEventListener("click", async () => {
       const r = await fetch(API + "/api/examples/restore", { method:"POST" });
       const added = await r.json();
       toast(added.message || "Added the examples");
-      if (added.copied) $("btnOpen").click();
-    }
+      openPicker();
+    });
     return;
   }
-  const pick = prompt("Open which design?\n\n" +
-    data.graphs.map(g => `${g.name}  ·  ${g.versions} version`
-      + `${g.versions > 1 ? "s" : ""}, latest ${g.saved_at}`).join("\n"),
-    data.graphs[0].name);
-  if (!pick) return;
-  const r2 = await fetch(API + "/api/graphs/" + encodeURIComponent(pick.trim()));
-  if (!r2.ok){ toast("No design under that name"); return; }
+  renderPickList();
+  $("pickSearch").focus();
+}
+
+function renderPickList(){
+  const term = ($("pickSearch").value || "").toLowerCase();
+  const rows = state.pickList.filter(g => g.name.toLowerCase().includes(term));
+  const body = $("pickBody");
+  if (!rows.length){
+    body.innerHTML = `<div class="empty" style="padding:16px">Nothing matches that.</div>`;
+    return;
+  }
+  body.innerHTML = rows.map((g, i) => `
+    <div class="pickrow${i === 0 ? " on" : ""}" data-open="${g.name}">
+      <div class="pickmain">
+        <b>${g.name}</b>
+        <span>${g.versions} version${g.versions > 1 ? "s" : ""} ·
+              latest ${g.saved_at}</span>
+      </div>
+      ${g.versions > 1
+        ? `<select class="pickver" data-for="${g.name}">
+             ${Array.from({ length: g.versions }, (_, k) => g.versions - k)
+                .map(v => `<option value="${v}">v${v}</option>`).join("")}
+           </select>` : ""}
+      <button class="pickkill" data-kill="${g.name}" title="Delete every version">&times;</button>
+    </div>`).join("");
+
+  body.querySelectorAll("[data-open]").forEach(el => el.addEventListener("click", ev => {
+    if (ev.target.dataset.kill || ev.target.classList.contains("pickver")) return;
+    const chooser = el.querySelector(".pickver");
+    openDesign(el.dataset.open, chooser ? +chooser.value : null);
+  }));
+  body.querySelectorAll("[data-kill]").forEach(el =>
+    el.addEventListener("click", async ev => {
+      ev.stopPropagation();
+      const name = el.dataset.kill;
+      if (!confirm(`Delete ${name} and every saved version of it?`)) return;
+      await fetch(API + "/api/graphs/" + encodeURIComponent(name), { method:"DELETE" });
+      toast(`${name} deleted`);
+      openPicker();
+    }));
+  state.pickAt = 0;
+}
+
+async function openDesign(name, version){
+  const url = API + "/api/graphs/" + encodeURIComponent(name)
+            + (version ? "?version=" + version : "");
+  let r, payload;
+  try { r = await fetch(url); payload = await r.json(); }
+  catch { toast("No answer from the server"); return; }
+  if (!r.ok){ toast("Could not open that design"); return; }
+
+  $("picker").classList.remove("on");
   pushHistory();
-  state.graph = await r2.json();
+
+  if (payload.sheets){
+    state.book = payload;
+    state.sheet = payload.main || payload.sheets[0].name;
+    const active = payload.sheets.find(s => s.name === state.sheet) || payload.sheets[0];
+    state.graph = { name: payload.name || name, nodes: active.nodes, edges: active.edges };
+  } else {
+    state.book = null;
+    state.graph = payload;
+    state.graph.name = payload.name || name;
+  }
   state.seq = state.graph.nodes.length + state.graph.edges.length + 100;
-  $("gname").value = state.graph.name || pick;
-  state.version = state.graph._version;
-  delete state.graph._version; delete state.graph._latest;
+  $("gname").value = state.graph.name;
+  state.version = payload._version;
+  delete state.graph._version;
+  delete state.graph._latest;
   clearSelection();
+  renderSheetTabs();
   render(); fitView(); analyze();
   refreshVersions($("gname").value, state.version);
+}
+
+$("btnOpen").addEventListener("click", openPicker);
+$("pickClose").addEventListener("click", () => $("picker").classList.remove("on"));
+$("pickSearch").addEventListener("input", renderPickList);
+$("pickSearch").addEventListener("keydown", e => {
+  const rows = [...$("pickBody").querySelectorAll("[data-open]")];
+  if (!rows.length) return;
+  if (e.key === "Escape"){ $("picker").classList.remove("on"); return; }
+  if (e.key === "Enter"){
+    const row = rows[state.pickAt || 0];
+    if (row) row.click();
+    return;
+  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    state.pickAt = Math.max(0, Math.min(rows.length - 1,
+      (state.pickAt || 0) + (e.key === "ArrowDown" ? 1 : -1)));
+    rows.forEach((r, i) => r.classList.toggle("on", i === state.pickAt));
+    const active = rows[state.pickAt];
+    if (active) active.scrollIntoView({ block: "nearest" });
+  }
+});
+$("picker").addEventListener("pointerdown", e => {
+  if (e.target.id === "picker") $("picker").classList.remove("on");
 });
 
 /* ==================== panel docking and resizing ==================== */
