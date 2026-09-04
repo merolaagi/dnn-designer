@@ -2233,6 +2233,27 @@ def _():
     assert "placeStep(" in guided[:600], "the stepper no longer shares placeStep"
 
 
+@check("no two functions on the page share a name")
+def _():
+    """A later definition silently replaces an earlier one.
+
+    Two functions called scanFolder — one scanning Python files for models, one
+    scanning a folder of images for training — meant the Import dialog's Scan
+    button ran the dataset scanner, read an empty field and complained that no
+    path had been typed. Nothing was undefined, so the existing checks passed.
+    """
+    import re
+    from collections import Counter
+
+    script = PAGE[PAGE.index("<script>"):]
+    names = re.findall(r"^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(",
+                       script, re.M)
+    clashes = {name: n for name, n in Counter(names).items() if n > 1}
+    assert not clashes, (
+        "these names are defined more than once, so only the last one runs: "
+        + ", ".join(f"{name} ({n}\u00d7)" for name, n in sorted(clashes.items())))
+
+
 @check("every function the page calls is actually defined")
 def _():
     """Catches a whole section being deleted.
@@ -2265,7 +2286,7 @@ def _():
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
         "switchSheet", "addSheet", "renameSheet", "deleteSheet", "renderSheetTabs",
         "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",
-        "importFolderPicks", "loadProjectTree", "renderProjectTree",
+        "importFolderPicks", "scanCodeFolder", "loadProjectTree", "renderProjectTree",
         "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
         "submitSignIn", "signOut", "renderMathPanel", "mathDiagram", "paintMath",
         "openPicker", "renderPickList", "openDesign",

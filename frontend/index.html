@@ -5493,7 +5493,7 @@ $("btnImportGo").addEventListener("click", async () => {
 
 /* ---------- scanning a folder ---------- */
 
-async function scanFolder(){
+async function scanCodeFolder(){
   const root = ($("im_folder").value || "").trim();
   const host = $("scanResult");
   if (!root){ host.innerHTML = `<div class="scannote">Give it a folder path.</div>`; return; }
@@ -5595,9 +5595,9 @@ async function importFolderPicks(){
   return true;
 }
 
-$("btnScan").addEventListener("click", scanFolder);
+$("btnScan").addEventListener("click", scanCodeFolder);
 $("im_folder").addEventListener("keydown", e => {
-  if (e.key === "Enter") scanFolder();
+  if (e.key === "Enter") scanCodeFolder();
 });
 
 /* ============================ blocks ============================ */

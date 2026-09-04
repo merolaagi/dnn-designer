@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.27.2
+
+**Fixed: the Import dialog's Scan button ran the wrong scanner.**
+
+Two functions were called `scanFolder` — the one that reads Python files for
+model classes, and an older one that counts images in a training dataset folder.
+The second definition replaced the first, so pressing Scan with a path typed
+into the Import dialog read a different, empty field and answered "Type a folder
+path first".
+
+- The code scanner is `scanCodeFolder` now; the dataset one keeps its name.
+- **A test that no two functions on the page share a name.** Every existing
+  check passed on this bug, because nothing was undefined — the wrong thing was
+  defined twice, which is invisible to a check for missing definitions.
+
 ## 1.27.1
 
 `doctor.py` now answers the question behind "but I installed it".
