@@ -1862,6 +1862,25 @@ def _():
         shutil.rmtree(root)
 
 
+@check("the import dialog can be moved, resized and split")
+def _():
+    for token in ('id="sheetGrip"', 'id="scanDrag"', 'id="importGrab"',
+                  "function applyImportSize", "function wireScanDrag",
+                  "nwse-resize", "col-resize"):
+        assert token in PAGE, f"{token} is missing from the dialog sizing"
+
+    # a size remembered on a large screen must be clamped, not applied blindly
+    script = PAGE[PAGE.index("function applyImportSize"):]
+    body = script[: script.index("\n}\n")]
+    assert "window.innerWidth" in body and "Math.min" in body, \
+        "applyImportSize does not clamp to the window"
+
+    # the argument boxes must beat the dialog's generic field rule
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    assert "input[type=text].scanargs" in css, \
+        "the argument boxes will stretch to the full row width"
+
+
 @check("the scan results are browsable, not just listed")
 def _():
     for token in ("function renderScanResults", "function peekAt",
@@ -2399,6 +2418,7 @@ def _():
         "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",
         "importFolderPicks", "scanCodeFolder", "renderScanResults", "peekAt",
         "tryClass", "scanRow", "modelFor", "paintPeek",
+        "applyImportSize", "wireScanDrag", "resetImportSize",
         "loadProjectTree", "renderProjectTree",
         "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
         "submitSignIn", "signOut", "renderMathPanel", "mathDiagram", "paintMath",

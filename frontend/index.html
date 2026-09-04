@@ -1051,9 +1051,37 @@ table.trials td.st.error{color:#8C2F27}
   overflow:hidden;
 }
 /* the import dialog carries a table of hundreds of classes and needs the room */
-#modal .sheet.wide{width:920px}
+#modal .sheet.wide{
+  width:920px;max-width:96vw;display:flex;flex-direction:column;position:relative;
+}
+#modal .sheet.wide.sized{max-height:none}
+.sheet.wide h3{cursor:grab;user-select:none}
+.sheet.wide h3.dragging{cursor:grabbing}
+.sheet.wide .inner{flex:1;min-height:0}
+
+/* a grip in the corner, and one on each edge */
+.grip{position:absolute;z-index:3}
+.grip.corner{
+  right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 0 45%, var(--paper-3) 45% 55%, transparent 55%),
+    linear-gradient(135deg, transparent 0 70%, var(--paper-3) 70% 80%, transparent 80%);
+}
+.grip.east{right:0;top:0;bottom:18px;width:6px;cursor:ew-resize}
+.grip.south{left:0;right:18px;bottom:0;height:6px;cursor:ns-resize}
+.grip:hover{background-color:rgba(240,162,2,.18)}
+body.sizing{user-select:none}
+
+/* the split between the class list and what it is showing */
+.scansplit{position:relative}
+.peeksplit{
+  flex:none;width:7px;cursor:col-resize;border-radius:3px;
+}
+.peeksplit:hover,.peeksplit.dragging{background:var(--amber);opacity:.35}
 .sheet h3{margin:0;padding:13px 16px;font-size:13px;background:var(--paper-2);
   border-bottom:1px solid var(--paper-3);font-weight:600}
+.sheet.wide h3{cursor:grab;user-select:none}
+.sheet.wide h3:active{cursor:grabbing}
 .sheet .inner{padding:14px 16px;max-height:60vh;overflow-y:auto}
 .sheet.wide .inner{max-height:74vh}
 .sheet .foot{display:flex;gap:8px;padding:11px 16px;border-top:1px solid var(--paper-3);
@@ -1090,10 +1118,14 @@ table.trials td.st.error{color:#8C2F27}
 .scanmain b{display:block;font-weight:600;font-size:12px}
 .scanmain span{display:block;font-size:9.5px;color:var(--muted);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.scanargs{
-  width:150px;font-family:var(--mono);font-size:10px;padding:3px 6px;
+/* the dialog's generic field rule is more specific than a bare class, so these
+   have to match it to win — otherwise every box stretches to the full row and
+   squashes the class name it sits beside */
+.field input[type=text].scanargs, .scanargs{
+  width:168px;font-family:var(--mono);font-size:10px;padding:3px 6px;
   border:1px solid var(--paper-3);border-radius:5px;flex:none;
 }
+.field input[type=text]#scanFilter{flex:1;width:auto}
 .scanargs.none{border:none;color:#B7C0CB;font-size:9.5px;text-align:right}
 .scanrow em{font-style:normal;font-size:9.5px;white-space:nowrap;flex:none}
 .v-ok{color:#256B39}
@@ -1461,8 +1493,9 @@ table.trials td.st.error{color:#8C2F27}
 
 
 <div id="modal">
-  <div class="sheet wide">
-    <h3>Import an existing model</h3>
+  <div class="sheet wide" id="importSheet">
+    <h3 id="importGrab">Import an existing model</h3>
+    <div id="sheetGrip" title="Drag to resize"></div>
     <div class="inner">
       <div class="field"><label>Pretrained architecture</label>
         <select id="im_arch"></select>
@@ -1514,6 +1547,9 @@ or  model = nn.Sequential(...)"></textarea>
       <button class="btn" id="btnImportCancel">Cancel</button>
       <button class="btn go" id="btnImportGo">Import</button>
     </div>
+    <div class="grip east" data-grip="east"></div>
+    <div class="grip south" data-grip="south"></div>
+    <div class="grip corner" data-grip="corner"></div>
   </div>
 </div>
 
@@ -1553,6 +1589,7 @@ const state = {
   book:null, sheet:"main", bookReports:null, scan:null, tree:null,
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
+  importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
            sizes:{palette:212, inspector:390, bottom:260} }
@@ -5458,6 +5495,7 @@ $("ch_model").addEventListener("change", () => {
 /* ============================ import ============================ */
 
 $("btnImport").addEventListener("click", async () => {
+  resetImportSize();
   const sel = $("im_arch");
   if (!sel.options.length){
     try{
@@ -5542,6 +5580,139 @@ $("btnImportGo").addEventListener("click", async () => {
   if (d.ok && !(d.notes || []).length) setTimeout(() => $("modal").classList.remove("on"), 900);
 });
 
+/* ---------- sizing the import dialog ---------- */
+
+/* Reading a class means reading its source, and 46vh of a fixed-width box is
+   not enough of it. The dialog can be dragged by its header, resized from the
+   corner, and the split between the list and the source moved. */
+
+function applyImportSize(){
+  const sheet = $("importSheet");
+  if (!sheet) return;
+  const size = state.importSize;
+  // clamp here rather than only while dragging: a size remembered on a large
+  // screen must not open off the edge of a smaller one
+  if (size.w) size.w = Math.max(520, Math.min(window.innerWidth - 40, size.w));
+  if (size.h) size.h = Math.max(360, Math.min(window.innerHeight - 40, size.h));
+  if (size.x !== null && size.x !== undefined)
+    size.x = Math.max(8, Math.min(window.innerWidth - 120, size.x));
+  if (size.y !== null && size.y !== undefined)
+    size.y = Math.max(8, Math.min(window.innerHeight - 80, size.y));
+  if (size.peek) size.peek = Math.max(220, Math.min((size.w || 920) - 260, size.peek));
+
+  if (size.w) sheet.style.width = size.w + "px";
+  if (size.h){
+    sheet.style.height = size.h + "px";
+    const inner = sheet.querySelector(".inner");
+    if (inner) inner.style.maxHeight = "none";
+  }
+  if (size.x !== null && size.y !== null){
+    sheet.style.position = "fixed";
+    sheet.style.left = size.x + "px";
+    sheet.style.top = size.y + "px";
+    sheet.style.margin = "0";
+  }
+  const list = $("scanList"), peek = $("scanPeek");
+  if (peek && size.peek) peek.style.width = size.peek + "px";
+  if (list && size.h){
+    // the browser takes whatever the dialog's height leaves it
+    const room = Math.max(220, size.h - 470);
+    list.style.maxHeight = room + "px";
+    peek.style.maxHeight = room + "px";
+  }
+}
+
+function rememberImportSize(){
+  clearTimeout(state.importSizeTimer);
+  state.importSizeTimer = setTimeout(() => {
+    state.layout.importDialog = { ...state.importSize };
+    saveLayout();
+  }, 400);
+}
+
+$("sheetGrip").addEventListener("pointerdown", ev => {
+  ev.preventDefault();
+  const sheet = $("importSheet");
+  const box = sheet.getBoundingClientRect();
+  const startX = ev.clientX, startY = ev.clientY;
+  const w0 = box.width, h0 = box.height;
+  document.body.classList.add("sizing");
+  const move = e2 => {
+    state.importSize.w = Math.max(520, Math.min(window.innerWidth - 40,
+                                                w0 + (e2.clientX - startX)));
+    state.importSize.h = Math.max(360, Math.min(window.innerHeight - 40,
+                                                h0 + (e2.clientY - startY)));
+    applyImportSize();
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    document.body.classList.remove("sizing");
+    rememberImportSize();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+$("importGrab").addEventListener("pointerdown", ev => {
+  if (ev.target.id === "sheetGrip") return;
+  const sheet = $("importSheet");
+  const box = sheet.getBoundingClientRect();
+  const dx = ev.clientX - box.left, dy = ev.clientY - box.top;
+  const move = e2 => {
+    state.importSize.x = Math.max(8, Math.min(window.innerWidth - 120,
+                                              e2.clientX - dx));
+    state.importSize.y = Math.max(8, Math.min(window.innerHeight - 80,
+                                              e2.clientY - dy));
+    applyImportSize();
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    rememberImportSize();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+function wireScanDrag(){
+  const handle = $("scanDrag");
+  if (!handle || handle.dataset.wired) return;
+  handle.dataset.wired = "1";
+  handle.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    handle.classList.add("on");
+    const peek = $("scanPeek");
+    const startX = ev.clientX;
+    const w0 = peek.getBoundingClientRect().width;
+    document.body.classList.add("resizing");
+    const move = e2 => {
+      state.importSize.peek = Math.max(220, Math.min(900, w0 - (e2.clientX - startX)));
+      applyImportSize();
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      handle.classList.remove("on");
+      document.body.classList.remove("resizing");
+      rememberImportSize();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+function resetImportSize(){
+  state.importSize = { w: null, h: null, x: null, y: null, peek: null,
+                       ...(state.layout.importDialog || {}) };
+  const sheet = $("importSheet");
+  if (sheet && state.importSize.x === null){
+    sheet.style.position = "";
+    sheet.style.left = sheet.style.top = sheet.style.margin = "";
+  }
+  applyImportSize();
+}
+
 /* ---------- scanning a folder ---------- */
 
 /* ---------- browsing what a scan found ---------- */
@@ -5599,6 +5770,7 @@ function renderScanResults(){
          ${rows.length > 400 ? `<div class="scannote">…and ${rows.length - 400}
            more. Narrow the filter to see them.</div>` : ""}
        </div>
+       <div class="scandrag" id="scanDrag"></div>
        <div class="scanpeek" id="scanPeek">
          <div class="peekempty">Point at a class to see it.</div>
        </div>
@@ -5623,6 +5795,9 @@ function renderScanResults(){
       scan.picked = scan.picked || new Set();
       if (el.checked) scan.picked.add(el.dataset.pick); else scan.picked.delete(el.dataset.pick);
     }));
+
+  wireScanDrag();
+  applyImportSize();
 
   const filter = $("scanFilter");
   filter.addEventListener("input", () => {

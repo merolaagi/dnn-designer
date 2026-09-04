@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Ninety-eight checks, with the torch-dependent ones skipping themselves when it is
+Ninety-nine checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -611,4 +611,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.28.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.28.1 — see `CHANGELOG.md`.

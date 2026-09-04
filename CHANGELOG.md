@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.28.1
+
+- **The import dialog resizes.** Drag the corner grip to make it as large as the
+  window allows; the class list and the source preview both grow with it, so a
+  38-line class can be read without scrolling in a strip.
+- **Drag it by its header** to move it out of the way of the canvas behind.
+- **The split between the list and the source is draggable**, for when the
+  source is what you are reading rather than the names.
+- The size, position and split are remembered with the rest of the panel layout.
+  A size remembered on a large screen is clamped when the dialog opens on a
+  smaller one, rather than opening off the edge.
+- **Fixed: the argument boxes stretched across the whole row**, squashing every
+  class name to a single letter. The dialog's generic field rule sets every text
+  input to full width and outranked the class on those boxes.
+
 ## 1.28.0
 
 Scanning a model library returns hundreds of classes, so the Import dialog is a
