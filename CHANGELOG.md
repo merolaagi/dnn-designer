@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.24.1
+
+**Fixed: GPT2 would not have appeared for anyone already using the app.**
+
+Seeding recorded a single "this workspace has had the examples" flag, so a
+workspace set up when three examples existed never received a fourth. GPT2
+shipped in 1.24.0 and was invisible to every existing account — which is most of
+the point of shipping it.
+
+- The marker now records **which** examples have been delivered, not merely that
+  some were. Anything newly shipped arrives; anything deleted stays deleted,
+  because the record is of what has been offered rather than what is present.
+- Old markers are understood: for those, whatever is in `saved/` is taken as the
+  record, which is correct — at that point the only way an example could be
+  there is that it was delivered.
+- Delivery happens when the design list is opened, so it reaches accounts that
+  already existed rather than only new ones.
+
 ## 1.24.0
 
 **GPT-2 ships as an example design.** Open `GPT2` and it is there as a workbook:

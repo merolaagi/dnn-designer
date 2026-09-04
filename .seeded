@@ -1,1 +1,6 @@
-the shipped designs were copied in once
+[
+ "Discriminator",
+ "GPT2",
+ "Generator",
+ "MiniGPT"
+]

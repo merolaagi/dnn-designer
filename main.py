@@ -1015,6 +1015,9 @@ def restore_examples():
 
 @app.get("/api/graphs")
 def list_graphs():
+    # deliver anything newly shipped before listing, so an example added in a
+    # later version reaches workspaces that already existed
+    auth.seed(auth.workspace())
     names = {p.stem for p in saved_dir().glob("*.json")}
     names |= {p.name for p in saved_dir().iterdir() if p.is_dir()}
     items = []

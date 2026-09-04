@@ -188,20 +188,55 @@ def workspace_for(name: Optional[str]) -> Path:
 
 
 def seed(target: Path) -> int:
-    """Give a new workspace the designs the app ships with.
+    """Deliver any shipped design this workspace has never been offered.
 
-    Only into an empty one. Someone who deleted the examples on purpose should
-    not find them back the next time they sign in — `restore_examples` is there
-    for wanting them again.
+    Per example, not once overall. A single flag meant that a workspace seeded
+    when three examples existed never received a fourth — so a design added in a
+    later version was invisible to everyone already using the app.
+
+    Deleting an example still sticks, because its name stays on the delivered
+    list. The record is of what has been offered, not of what is present.
     """
     marker = target / ".seeded"
-    if marker.exists():
-        return 0
+    delivered = _delivered(target, marker)
     saved = target / "saved"
     saved.mkdir(parents=True, exist_ok=True)
-    copied = 0 if any(saved.iterdir()) else restore_examples(target)
-    marker.write_text("the shipped designs were copied in once\n")
+
+    shipped = {path.stem for path in EXAMPLES.glob("*.json")} if EXAMPLES.is_dir() else set()
+    fresh = shipped - delivered
+    copied = 0
+    for name in sorted(fresh):
+        destination = saved / f"{name}.json"
+        if destination.exists() or (saved / name).exists():
+            continue                       # their own work of that name wins
+        import shutil
+
+        shutil.copy2(EXAMPLES / f"{name}.json", destination)
+        copied += 1
+
+    marker.write_text(json.dumps(sorted(delivered | shipped), indent=1))
     return copied
+
+
+def _delivered(target: Path, marker: Path) -> set:
+    """Which examples this workspace has already been offered.
+
+    Older installs wrote a sentence here rather than a list. For those, take
+    what is in `saved/` as the record — which is right, since at that point the
+    only way an example could be there is that it was delivered.
+    """
+    if not marker.exists():
+        return set()
+    try:
+        stored = json.loads(marker.read_text())
+        if isinstance(stored, list):
+            return set(stored)
+    except Exception:  # noqa: BLE001
+        pass
+    saved = target / "saved"
+    if not saved.is_dir():
+        return set()
+    return {path.stem for path in saved.iterdir()}
 
 
 def restore_examples(target: Path) -> int:

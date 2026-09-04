@@ -285,7 +285,8 @@ designs, runs, studies and panel layout. Passwords are hashed with scrypt and a
 per-account salt, and changing one signs out every other session.
 
 Every account starts with the example designs — they ship in `examples/` and are
-copied into each new workspace once. Deleting them sticks; opening a design in an
+copied in per example, so a design added in a later version reaches workspaces
+that already exist. Deleting one sticks; opening a design in an
 empty workspace offers to put them back.
 
 Signing out locks the page rather than emptying it — the work stays exactly
@@ -597,4 +598,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.24.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.24.1 — see `CHANGELOG.md`.

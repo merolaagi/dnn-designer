@@ -1313,11 +1313,36 @@ def _():
         # deleting them is a decision, not an accident to be undone
         for path in (home / "saved").glob("*.json"):
             path.unlink()
-        assert auth.seed(home) == 0, "seeding must happen once, not on every sign-in"
+        assert auth.seed(home) == 0, "a deleted example must not come back"
         assert not list((home / "saved").glob("*.json"))
 
-        # but asking for them back works
-        assert auth.restore_examples(home) == len(shipped)
+        # but an example shipped in a later version does reach an old workspace
+        probe = auth.EXAMPLES / "_probe_example.json"
+        probe.write_text('{"name":"_probe_example","nodes":[],"edges":[]}')
+        try:
+            assert auth.seed(home) == 1, \
+                "a newly shipped example never reaches existing workspaces"
+            assert (home / "saved" / "_probe_example.json").exists()
+            # and it is not delivered twice
+            (home / "saved" / "_probe_example.json").unlink()
+            assert auth.seed(home) == 0
+        finally:
+            probe.unlink(missing_ok=True)
+
+        # an old workspace with the previous marker format is understood
+        (home / ".seeded").write_text("the shipped designs were copied in once\n")
+        for name in ("Discriminator", "Generator"):
+            (home / "saved" / f"{name}.json").write_text("{}")
+        delivered = auth.seed(home)
+        assert delivered >= 1, \
+            "the old marker format should not block later examples"
+
+        # but asking for them back works — from a clean slate, so the count is
+        # the whole set rather than whatever the checks above left behind
+        for path in (home / "saved").glob("*.json"):
+            path.unlink()
+        assert auth.restore_examples(home) == len(shipped), \
+            "restoring should bring back every shipped example"
 
         # and restoring never treads on work of the same name
         mine = home / "saved" / (sorted(shipped)[0] + ".json")
