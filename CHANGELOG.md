@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.26.1
+
+Tested against the real Hugging Face `transformers` library rather than
+reimplementations of it, which changed some of what 1.26.0 claimed.
+
+**Confirmed against library code**, with parameter counts matching exactly:
+`LlamaMLP`, `Qwen3MLP`, `DeepseekV3MLP`. `LlamaRMSNorm` and `DeepseekV3RMSNorm`
+import with nothing opaque, and the parameter check correctly reports their
+learned scale as belonging to no layer.
+
+**Confirmed as out of reach**: every attention module in the library, and
+`MixtralSparseMoeBlock`. Their `forward` takes `**kwargs`, which `torch.fx`
+cannot trace through. Wrapping them does not help — the same pattern appears
+inside, which I found by trying it.
+
+- **Refusals now name the obstacle** instead of offering one generic guess.
+  A length taken from another tensor, more than one required tensor argument,
+  and a variadic signature are three different problems, and only some have a
+  way round. Each says which one it hit.
+
 ## 1.26.0
 
 Work on importing larger language models, prompted by asking whether something

@@ -1270,6 +1270,41 @@ class Net(nn.Module):
     assert analyzed(seq)[1]["ok"]
 
 
+@check("a refusal names the obstacle it actually hit")
+def _():
+    """Three different problems, and the message should say which.
+
+    A variadic signature is the one that stops the Hugging Face attention and
+    mixture-of-experts modules, and it has no way round — wrapping them does not
+    help, because the same pattern appears inside.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import importer
+
+    try:
+        importer.from_source("""
+import torch.nn as nn
+
+
+class Variadic(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Linear(8, 8)
+
+    def forward(self, x, **kwargs):
+        for key in kwargs:
+            x = x + kwargs[key]
+        return self.fc(x)
+""", [4, 8])
+        raise AssertionError("a variadic forward should not have traced")
+    except importer.ImportError_ as exc:
+        assert "variadic" in str(exc), str(exc)
+        assert "wrapping them does not help" in str(exc), \
+            "the message should not suggest a workaround that fails"
+
+
 @check("pasted code that cannot be traced says why")
 def _():
     if not HAVE_TORCH:

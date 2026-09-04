@@ -262,6 +262,51 @@ ROUTING_OPS = {"topk", "nonzero", "scatter", "scatter_add", "index_put",
                "gather", "bincount", "unique"}
 
 
+def _why_untraceable(model, exc) -> str:
+    """Name the actual obstacle rather than offering one generic guess.
+
+    The three causes look nothing alike to someone reading their own code, and
+    two of them have a straightforward way round.
+    """
+    import inspect
+
+    detail = str(exc)
+    head = "This model cannot be traced into a single graph. "
+
+    try:
+        signature = inspect.signature(model.forward)
+        variadic = [n for n, p in signature.parameters.items()
+                    if p.kind in (p.VAR_KEYWORD, p.VAR_POSITIONAL)]
+        tensor_args = [n for n, p in signature.parameters.items()
+                       if p.default is inspect._empty
+                       and p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL)]
+    except (TypeError, ValueError):
+        variadic, tensor_args = [], []
+
+    if "Proxy object cannot be iterated" in detail:
+        extra = (f"Its forward() takes {'/'.join('*' + v for v in variadic)}, and "
+                 if variadic else "It ")
+        return (head + extra + "tracing cannot see through a variadic argument or "
+                "a loop over a traced value. Recent transformers attention and "
+                "mixture-of-experts modules are written this way, and wrapping "
+                "them does not help — the same pattern appears inside. The same "
+                "architectures written directly, as nanoGPT writes them, import "
+                "without trouble.")
+    if len(tensor_args) > 1:
+        return (head + f"Its forward() takes {len(tensor_args)} required "
+                f"arguments ({', '.join(tensor_args[:4])}), and the import "
+                f"supplies one input. Wrap it in a module that takes the one "
+                f"tensor and supplies the others.")
+    if "slice indices" in detail or "__index__" in detail:
+        return (head + "Its forward() slices a tensor using a length taken from "
+                "another tensor — `x[:, :, :T]` where T came from `x.size()`. "
+                "Tracing has no value for T. Written with "
+                "F.scaled_dot_product_attention, or with the length fixed, it "
+                "imports without trouble.")
+    return (head + "Usually this means forward() branches on tensor values. "
+            f"torch.fx reported: {type(exc).__name__}: {detail[:160]}")
+
+
 def _wants_indices(model) -> bool:
     """True when the first thing the model does is an embedding lookup."""
     import torch.nn as nn
@@ -283,11 +328,7 @@ def from_pytorch(model, name: str = "Imported",
     try:
         traced = fx.symbolic_trace(model)
     except Exception as exc:  # noqa: BLE001
-        raise ImportError_(
-            "This model cannot be traced into a single graph, usually because its "
-            "forward() branches on tensor values. torch.fx reported: "
-            f"{type(exc).__name__}: {exc}"
-        ) from exc
+        raise ImportError_(_why_untraceable(model, exc)) from exc
 
     # Ask PyTorch what shape every intermediate actually has, by running one
     # example through. Reconstructing `view(B, T, h, C // h)` from the traced
