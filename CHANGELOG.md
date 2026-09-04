@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.24.0
+
+**GPT-2 ships as an example design.** Open `GPT2` and it is there as a workbook:
+the transformer block on one sheet, imported from real code, and the model on
+another — embeddings, twelve `block` references, final norm, language-model
+head. 163,037,184 parameters, which is what PyTorch reports for the same
+architecture, and the generated file runs.
+
+- **A `LearnedPositions` layer**, since attention is blind to order and GPT-2's
+  learned position table had no equivalent here.
+- Select any layer in the block and the Maths panel derives it with GPT-2's own
+  numbers: attention showing √64 ≈ 8, the 12 × 64² = 49,152 scores held at once,
+  the quadratic cost of doubling the context.
+
+### A correctness bug this found, and fixed
+
+Reconstructing `q, k, v = t.split(n, dim=2)` gave **all three branches piece
+zero**. fx models that line as one split followed by three getitems, and the
+importer emitted the Split when it saw the split — so every branch took index 0.
+The shapes were right. The parameter count was right. The network computed
+something else entirely.
+
+Splits are now recorded and a node emitted per selection, carrying the index it
+actually takes. Two tests came out of it: one asserting the branches take pieces
+0, 1 and 2, and one that loads an original model's weights into the
+reconstruction and compares outputs — because matching shapes is not the same as
+matching behaviour. On the GPT-2 block the difference is now exactly zero.
+
 ## 1.23.0
 
 **Transformer blocks import cleanly.** A GPT-2 block, written the way nanoGPT

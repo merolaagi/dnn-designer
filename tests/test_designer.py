@@ -973,6 +973,111 @@ class Block(nn.Module):
         f"canvas {rep['total_learnables']:,}, torch {real:,}"
 
 
+@check("a split's branches keep their own piece")
+def _():
+    """q, k and v came out as the same tensor.
+
+    fx models `q, k, v = t.split(n, dim=2)` as one split followed by three
+    getitems. Emitting the Split when the split appeared gave every branch
+    piece 0 — the shapes were right, the parameter count was right, and the
+    network computed something else entirely. Silent wrong answers are the
+    worst kind, so this checks the indices.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import importer
+
+    payload = importer.from_source("""
+import torch.nn as nn
+
+
+class Three(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.proj = nn.Linear(16, 48)
+
+    def forward(self, x):
+        a, b, c = self.proj(x).split(16, dim=2)
+        return a + b * c
+""", [8, 16])
+    payload.pop("_notes", None)
+    payload.pop("_entry", None)
+    takes = sorted(n["params"]["take"] for n in payload["nodes"]
+                   if n["type"] == "Split")
+    assert takes == [0, 1, 2], f"the branches take pieces {takes}, not one each"
+
+
+@check("an imported model computes what the original did")
+def _():
+    """Shapes matching is not the same as behaviour matching."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import torch
+
+    import importer
+    import train as T
+
+    source = """
+import torch.nn as nn
+from torch.nn import functional as F
+
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.ln = nn.LayerNorm(32)
+        self.qkv = nn.Linear(32, 96)
+        self.out = nn.Linear(32, 32)
+
+    def forward(self, x):
+        B, T, C = x.size()
+        h = self.qkv(self.ln(x))
+        q, k, v = h.split(32, dim=2)
+        q = q.view(B, T, 4, 8).transpose(1, 2)
+        k = k.view(B, T, 4, 8).transpose(1, 2)
+        v = v.view(B, T, 4, 8).transpose(1, 2)
+        y = F.scaled_dot_product_attention(q, k, v)
+        return self.out(y.transpose(1, 2).reshape(B, T, C))
+"""
+    namespace = {}
+    exec(compile(source, "<t>", "exec"), namespace)  # noqa: S102
+    original = namespace["Net"]().eval()
+
+    payload = importer.from_source(source, [8, 32])
+    payload.pop("_notes", None)
+    payload.pop("_entry", None)
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+
+    rebuilt = T.build_model(codegen.to_pytorch(g, rep),
+                            codegen.model_class_name(g)).eval()
+    # Pair the n-th tensor of a given shape with the n-th of that shape, rather
+    # than the first that fits: a LayerNorm's weight and bias are the same
+    # shape, so shape alone would swap them.
+    def by_shape(state):
+        buckets = {}
+        for key, tensor in state.items():
+            buckets.setdefault(tuple(tensor.shape), []).append((key, tensor))
+        return buckets
+
+    source_buckets = by_shape(original.state_dict())
+    mapped = {}
+    for shape, entries in by_shape(rebuilt.state_dict()).items():
+        origin = source_buckets.get(shape, [])
+        assert len(origin) == len(entries), \
+            f"{len(entries)} tensors of shape {shape} but {len(origin)} to fill them"
+        for (key, _), (_, tensor) in zip(entries, origin):
+            mapped[key] = tensor
+    rebuilt.load_state_dict(mapped, strict=False)
+
+    x = torch.randn(1, 8, 32)
+    with torch.no_grad():
+        gap = (original(x) - rebuilt(x)).abs().max().item()
+    assert gap < 1e-5, f"the reconstruction computes something else: {gap}"
+
+
 @check("the rearrangement layers agree with torch")
 def _():
     if not HAVE_TORCH:

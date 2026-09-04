@@ -1,0 +1,783 @@
+{
+ "name": "GPT2",
+ "main": "model",
+ "sheets": [
+  {
+   "name": "block",
+   "nodes": [
+    {
+     "id": "i1",
+     "type": "Input",
+     "params": {
+      "shape": [
+       64,
+       768
+      ],
+      "dtype": "float"
+     },
+     "label": "x",
+     "x": 0,
+     "y": 0
+    },
+    {
+     "id": "i2",
+     "type": "LayerNorm",
+     "params": {
+      "eps": 1e-05
+     },
+     "label": "ln_1",
+     "x": 0,
+     "y": 108
+    },
+    {
+     "id": "i3",
+     "type": "Linear",
+     "params": {
+      "units": 2304,
+      "bias": true
+     },
+     "label": "c_attn",
+     "x": 0,
+     "y": 216
+    },
+    {
+     "id": "i4",
+     "type": "Split",
+     "params": {
+      "pieces": 3,
+      "axis": 1,
+      "take": 0
+     },
+     "label": "",
+     "x": 0,
+     "y": 324
+    },
+    {
+     "id": "i5",
+     "type": "Split",
+     "params": {
+      "pieces": 3,
+      "axis": 1,
+      "take": 1
+     },
+     "label": "",
+     "x": 240,
+     "y": 324
+    },
+    {
+     "id": "i6",
+     "type": "Split",
+     "params": {
+      "pieces": 3,
+      "axis": 1,
+      "take": 2
+     },
+     "label": "",
+     "x": 480,
+     "y": 324
+    },
+    {
+     "id": "i7",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       64,
+       12,
+       64
+      ]
+     },
+     "label": "",
+     "x": 0,
+     "y": 432
+    },
+    {
+     "id": "i8",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 0,
+     "y": 540
+    },
+    {
+     "id": "i9",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       64,
+       12,
+       64
+      ]
+     },
+     "label": "",
+     "x": 240,
+     "y": 432
+    },
+    {
+     "id": "i10",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 240,
+     "y": 540
+    },
+    {
+     "id": "i11",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       64,
+       12,
+       64
+      ]
+     },
+     "label": "",
+     "x": 480,
+     "y": 432
+    },
+    {
+     "id": "i12",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 480,
+     "y": 540
+    },
+    {
+     "id": "i13",
+     "type": "Attention",
+     "params": {
+      "causal": true
+     },
+     "label": "",
+     "x": 0,
+     "y": 648
+    },
+    {
+     "id": "i14",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 0,
+     "y": 756
+    },
+    {
+     "id": "i15",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       64,
+       768
+      ]
+     },
+     "label": "",
+     "x": 0,
+     "y": 864
+    },
+    {
+     "id": "i16",
+     "type": "Linear",
+     "params": {
+      "units": 768,
+      "bias": true
+     },
+     "label": "c_proj",
+     "x": 0,
+     "y": 972
+    },
+    {
+     "id": "i17",
+     "type": "Add",
+     "params": {},
+     "label": "",
+     "x": 0,
+     "y": 1080
+    },
+    {
+     "id": "i18",
+     "type": "LayerNorm",
+     "params": {
+      "eps": 1e-05
+     },
+     "label": "ln_2",
+     "x": 0,
+     "y": 1188
+    },
+    {
+     "id": "i19",
+     "type": "Linear",
+     "params": {
+      "units": 3072,
+      "bias": true
+     },
+     "label": "c_fc",
+     "x": 0,
+     "y": 1296
+    },
+    {
+     "id": "i20",
+     "type": "Activation",
+     "params": {
+      "kind": "gelu"
+     },
+     "label": "gelu",
+     "x": 0,
+     "y": 1404
+    },
+    {
+     "id": "i21",
+     "type": "Linear",
+     "params": {
+      "units": 768,
+      "bias": true
+     },
+     "label": "c_proj",
+     "x": 0,
+     "y": 1512
+    },
+    {
+     "id": "i22",
+     "type": "Add",
+     "params": {},
+     "label": "",
+     "x": 0,
+     "y": 1620
+    },
+    {
+     "id": "i23",
+     "type": "Output",
+     "params": {
+      "task": "classification"
+     },
+     "label": "",
+     "x": 0,
+     "y": 1728
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "source": "i1",
+     "target": "i2",
+     "port": 0
+    },
+    {
+     "id": "e2",
+     "source": "i2",
+     "target": "i3",
+     "port": 0
+    },
+    {
+     "id": "e3",
+     "source": "i3",
+     "target": "i4",
+     "port": 0
+    },
+    {
+     "id": "e4",
+     "source": "i3",
+     "target": "i5",
+     "port": 0
+    },
+    {
+     "id": "e5",
+     "source": "i3",
+     "target": "i6",
+     "port": 0
+    },
+    {
+     "id": "e6",
+     "source": "i5",
+     "target": "i7",
+     "port": 0
+    },
+    {
+     "id": "e7",
+     "source": "i7",
+     "target": "i8",
+     "port": 0
+    },
+    {
+     "id": "e8",
+     "source": "i4",
+     "target": "i9",
+     "port": 0
+    },
+    {
+     "id": "e9",
+     "source": "i9",
+     "target": "i10",
+     "port": 0
+    },
+    {
+     "id": "e10",
+     "source": "i6",
+     "target": "i11",
+     "port": 0
+    },
+    {
+     "id": "e11",
+     "source": "i11",
+     "target": "i12",
+     "port": 0
+    },
+    {
+     "id": "e12",
+     "source": "i10",
+     "target": "i13",
+     "port": 0
+    },
+    {
+     "id": "e13",
+     "source": "i8",
+     "target": "i13",
+     "port": 1
+    },
+    {
+     "id": "e14",
+     "source": "i12",
+     "target": "i13",
+     "port": 2
+    },
+    {
+     "id": "e15",
+     "source": "i13",
+     "target": "i14",
+     "port": 0
+    },
+    {
+     "id": "e16",
+     "source": "i14",
+     "target": "i15",
+     "port": 0
+    },
+    {
+     "id": "e17",
+     "source": "i15",
+     "target": "i16",
+     "port": 0
+    },
+    {
+     "id": "e18",
+     "source": "i1",
+     "target": "i17",
+     "port": 0
+    },
+    {
+     "id": "e19",
+     "source": "i16",
+     "target": "i17",
+     "port": 1
+    },
+    {
+     "id": "e20",
+     "source": "i17",
+     "target": "i18",
+     "port": 0
+    },
+    {
+     "id": "e21",
+     "source": "i18",
+     "target": "i19",
+     "port": 0
+    },
+    {
+     "id": "e22",
+     "source": "i19",
+     "target": "i20",
+     "port": 0
+    },
+    {
+     "id": "e23",
+     "source": "i20",
+     "target": "i21",
+     "port": 0
+    },
+    {
+     "id": "e24",
+     "source": "i17",
+     "target": "i22",
+     "port": 0
+    },
+    {
+     "id": "e25",
+     "source": "i21",
+     "target": "i22",
+     "port": 1
+    },
+    {
+     "id": "e26",
+     "source": "i22",
+     "target": "i23",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "name": "model",
+   "nodes": [
+    {
+     "id": "in",
+     "type": "Input",
+     "params": {
+      "shape": [
+       64
+      ],
+      "dtype": "long"
+     },
+     "label": "tokens",
+     "x": 0,
+     "y": 0
+    },
+    {
+     "id": "wte",
+     "type": "Embedding",
+     "params": {
+      "vocab": 50257,
+      "dim": 768
+     },
+     "label": "token embedding",
+     "x": 0,
+     "y": 118
+    },
+    {
+     "id": "wpe",
+     "type": "LearnedPositions",
+     "params": {
+      "max_len": 1024,
+      "dim": 768
+     },
+     "label": "positions",
+     "x": 0,
+     "y": 236
+    },
+    {
+     "id": "h0",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 1",
+     "x": 0,
+     "y": 354
+    },
+    {
+     "id": "h1",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 2",
+     "x": 0,
+     "y": 472
+    },
+    {
+     "id": "h2",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 3",
+     "x": 0,
+     "y": 590
+    },
+    {
+     "id": "h3",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 4",
+     "x": 0,
+     "y": 708
+    },
+    {
+     "id": "h4",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 5",
+     "x": 0,
+     "y": 826
+    },
+    {
+     "id": "h5",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 6",
+     "x": 0,
+     "y": 944
+    },
+    {
+     "id": "h6",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 7",
+     "x": 0,
+     "y": 1062
+    },
+    {
+     "id": "h7",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 8",
+     "x": 0,
+     "y": 1180
+    },
+    {
+     "id": "h8",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 9",
+     "x": 0,
+     "y": 1298
+    },
+    {
+     "id": "h9",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 10",
+     "x": 0,
+     "y": 1416
+    },
+    {
+     "id": "h10",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 11",
+     "x": 0,
+     "y": 1534
+    },
+    {
+     "id": "h11",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       64,
+       768
+      ],
+      "_learnables": 7087872
+     },
+     "label": "block 12",
+     "x": 0,
+     "y": 1652
+    },
+    {
+     "id": "lnf",
+     "type": "LayerNorm",
+     "params": {
+      "eps": 1e-05
+     },
+     "label": "final norm",
+     "x": 0,
+     "y": 1770
+    },
+    {
+     "id": "head",
+     "type": "Linear",
+     "params": {
+      "units": 50257,
+      "bias": false
+     },
+     "label": "lm_head",
+     "x": 0,
+     "y": 1888
+    },
+    {
+     "id": "out",
+     "type": "Output",
+     "params": {
+      "task": "classification"
+     },
+     "label": "next token",
+     "x": 0,
+     "y": 2006
+    }
+   ],
+   "edges": [
+    {
+     "id": "e0",
+     "source": "in",
+     "target": "wte",
+     "port": 0
+    },
+    {
+     "id": "e1",
+     "source": "wte",
+     "target": "wpe",
+     "port": 0
+    },
+    {
+     "id": "e2",
+     "source": "wpe",
+     "target": "h0",
+     "port": 0
+    },
+    {
+     "id": "e3",
+     "source": "h0",
+     "target": "h1",
+     "port": 0
+    },
+    {
+     "id": "e4",
+     "source": "h1",
+     "target": "h2",
+     "port": 0
+    },
+    {
+     "id": "e5",
+     "source": "h2",
+     "target": "h3",
+     "port": 0
+    },
+    {
+     "id": "e6",
+     "source": "h3",
+     "target": "h4",
+     "port": 0
+    },
+    {
+     "id": "e7",
+     "source": "h4",
+     "target": "h5",
+     "port": 0
+    },
+    {
+     "id": "e8",
+     "source": "h5",
+     "target": "h6",
+     "port": 0
+    },
+    {
+     "id": "e9",
+     "source": "h6",
+     "target": "h7",
+     "port": 0
+    },
+    {
+     "id": "e10",
+     "source": "h7",
+     "target": "h8",
+     "port": 0
+    },
+    {
+     "id": "e11",
+     "source": "h8",
+     "target": "h9",
+     "port": 0
+    },
+    {
+     "id": "e12",
+     "source": "h9",
+     "target": "h10",
+     "port": 0
+    },
+    {
+     "id": "e13",
+     "source": "h10",
+     "target": "h11",
+     "port": 0
+    },
+    {
+     "id": "e14",
+     "source": "h11",
+     "target": "lnf",
+     "port": 0
+    },
+    {
+     "id": "e15",
+     "source": "lnf",
+     "target": "head",
+     "port": 0
+    },
+    {
+     "id": "e16",
+     "source": "head",
+     "target": "out",
+     "port": 0
+    }
+   ]
+  }
+ ]
+}

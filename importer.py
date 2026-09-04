@@ -313,6 +313,12 @@ def from_pytorch(model, name: str = "Imported",
     # tracked so they can be left out, not guessed at.
     shape_valued = set()
 
+    # A split produces a tuple; the getitem that follows picks which piece.
+    # Emitting the Split when the split is seen would give every branch piece 0,
+    # which silently makes q, k and v the same tensor. So the split is recorded
+    # and a node is emitted per getitem, with the index it actually selects.
+    pending_splits: Dict[Any, Dict[str, Any]] = {}
+
     SHAPE_SOURCES = {"size", "dim", "numel", "shape"}
     SHAPE_OPS = {operator.floordiv, operator.truediv, operator.mul, operator.add,
                  operator.sub, operator.mod, operator.getitem}
@@ -444,8 +450,29 @@ def from_pytorch(model, name: str = "Imported",
                 axis = node.kwargs.get("dim")
                 if axis is None and len(node.args) > 2:
                     axis = node.args[2]
-                nid = b.add("Split", {"pieces": 3, "axis": max(0, int(axis or 0) - 1),
-                                      "take": 0})
+                width = None
+                if real_shapes.get(node.args[0]) and len(node.args) > 1 \
+                        and isinstance(node.args[1], int):
+                    full = real_shapes[node.args[0]][int(axis or 0)]
+                    # torch.split takes a piece size, chunk takes a count
+                    width = (full // node.args[1] if fname == "split"
+                             else node.args[1])
+                sources = tensor_args(node)
+                pending_splits[node] = {
+                    "source": sources[0] if sources else None,
+                    "axis": max(0, int(axis or 0) - 1),
+                    "pieces": int(width or 3),
+                }
+                continue
+            elif fname == "getitem" and node.args and node.args[0] in pending_splits:
+                info = pending_splits[node.args[0]]
+                index = node.args[1] if isinstance(node.args[1], int) else 0
+                nid = b.add("Split", {"pieces": info["pieces"], "axis": info["axis"],
+                                      "take": index})
+                if info["source"]:
+                    b.link(info["source"], nid, 0)
+                produced[node] = nid
+                continue
             elif fname in ("getattr", "getitem"):
                 produced[node] = ins[0] if ins else None
                 continue

@@ -951,6 +951,38 @@ def _stack_blocks(x, depth, heads, ff_dim, rate):
 
 
 # --------------------------------------------------------------------------
+# learned positions
+# --------------------------------------------------------------------------
+
+def _positions_infer(p, ins):
+    shape = list(ins[0])
+    if len(shape) != 2:
+        raise ShapeError("Positions are added to a sequence: expected "
+                         "(tokens, width).")
+    if shape[0] > int(p.get("max_len", 1024)):
+        raise ShapeError(f"{shape[0]} tokens arrive but the table only holds "
+                         f"{int(p.get('max_len', 1024))} positions.")
+    return shape
+
+
+register(LayerSpec(
+    name="LearnedPositions",
+    category="Sequence",
+    doc="Adds a learned vector per position. Attention is blind to order, so "
+        "without something like this a sequence and its shuffle look identical.",
+    params=[P("max_len", "int", 1024), P("dim", "int", 768)],
+    infer=_positions_infer,
+    torch_init=lambda p, ins:
+        f"nn.Embedding({int(p['max_len'])}, {int(p['dim'])})",
+    torch_call=lambda p, ins, mod, s:
+        f"{ins[0]} + {mod}(torch.arange({ins[0]}.size(1), "
+        f"device={ins[0]}.device))",
+    keras_call=None,
+    learnables=lambda p, ins, out: int(p["max_len"]) * int(p["dim"]),
+))
+
+
+# --------------------------------------------------------------------------
 # tensor rearrangement, and attention without its projections
 # --------------------------------------------------------------------------
 

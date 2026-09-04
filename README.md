@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Eighty-six checks, with the torch-dependent ones skipping themselves when it is
+Eighty-eight checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -364,6 +364,9 @@ its own class that the parent instantiates, exactly as the code would be written
 by hand. Shapes flow through the reference; circular references are refused with
 the circle named.
 
+`GPT2` is one of the example designs: the transformer block on one sheet and the
+model on another, 163,037,184 parameters, generating code that runs.
+
 Transformer code imports well: a GPT-2 block written in the usual style arrives
 as 21 layers with nothing opaque, shapes resolved and the parameter count exact.
 Shape bookkeeping (`B, T, C = x.size()`) is elided rather than drawn, and
@@ -594,4 +597,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.23.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.24.0 — see `CHANGELOG.md`.
