@@ -594,6 +594,10 @@ def from_torchvision(arch: str, weights: str = "none",
     return from_pytorch(model, name=arch, input_shape=input_shape or [3, 224, 224])
 
 
+SKIP_BELOW = {".venv", "venv", "site-packages", "__pycache__", "build",
+              "node_modules", ".git", ".mypy_cache", ".tox", "dist"}
+
+
 def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
     """Find every nn.Module in a folder without running any of it.
 
@@ -609,9 +613,11 @@ def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
 
     found, scanned, skipped = [], 0, []
     for path in sorted(base.rglob("*.py")):
-        parts = set(path.parts)
-        if parts & {".venv", "venv", "site-packages", "__pycache__", "build",
-                    "node_modules", ".git"}:
+        # Skip these only *below* the folder given, never because the folder
+        # itself sits inside one. Pointing deliberately at a library inside a
+        # virtual environment is a reasonable thing to do, and judging the
+        # absolute path made every file look like something to ignore.
+        if set(path.relative_to(base).parts) & SKIP_BELOW:
             continue
         if scanned >= limit:
             break

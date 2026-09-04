@@ -1800,6 +1800,45 @@ def _():
             assert "outside" in str(exc) or "No such file" in str(exc), exc
 
 
+@check("a folder inside a virtual environment can still be scanned")
+def _():
+    """Pointing deliberately at a library is not the same as crawling into one.
+
+    The skip list judged the absolute path, so a folder that merely sat inside
+    .venv had every one of its files ignored — the scan reported reading zero
+    files and finding nothing, with no indication why.
+    """
+    import shutil
+    import tempfile
+
+    import importer
+
+    root = Path(tempfile.mkdtemp())
+    try:
+        inside = root / ".venv" / "lib" / "pkg"
+        inside.mkdir(parents=True)
+        (inside / "net.py").write_text(
+            "import torch.nn as nn\n"
+            "class Deep(nn.Module):\n"
+            "    def forward(self, x): return x\n")
+
+        # pointed at the library itself, it is read
+        result = importer.scan_folder(str(inside))
+        assert result["files"] == 1, f"read {result['files']} files"
+        assert [m["cls"] for m in result["models"]] == ["Deep"]
+
+        # pointed at the project above it, the environment is left alone
+        (root / "mine.py").write_text(
+            "import torch.nn as nn\n"
+            "class Mine(nn.Module):\n"
+            "    def forward(self, x): return x\n")
+        outer = importer.scan_folder(str(root))
+        assert [m["cls"] for m in outer["models"]] == ["Mine"], \
+            "a project scan should not crawl into its own environment"
+    finally:
+        shutil.rmtree(root)
+
+
 @check("a folder is scanned without running any of it")
 def _():
     import shutil

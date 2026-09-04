@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.27.3
+
+**Fixed: scanning a folder inside a virtual environment read nothing.**
+
+The scanner ignores `.venv`, `site-packages`, `node_modules` and the like so
+that pointing it at a project root does not crawl into the environment. It
+judged the whole absolute path, so a folder that merely *sat* inside one had
+every file skipped — "Read 0 files and found no nn.Module classes", with nothing
+to say why.
+
+Those names are now matched only *below* the folder you gave. Pointing
+deliberately at a library inside a virtual environment works; pointing at a
+project still leaves its environment alone. Both are tested.
+
 ## 1.27.2
 
 **Fixed: the Import dialog's Scan button ran the wrong scanner.**

@@ -573,9 +573,7 @@ def scan_tree(body: ScanPayload):
 
     entries = []
     for path in sorted(base.rglob("*")):
-        parts = set(path.parts)
-        if parts & {".venv", "venv", "site-packages", "__pycache__", "build",
-                    "node_modules", ".git", ".mypy_cache"}:
+        if set(path.relative_to(base).parts) & importer.SKIP_BELOW:
             continue
         rel = str(path.relative_to(base))
         if path.is_dir():
