@@ -2559,11 +2559,6 @@ function render(){
         el("rect", { class:"node-card", width:W, height:H, rx:7 }, g);
       }
 
-      if (n.type === "Subgraph"){
-        const target = n.params.sheet || "";
-        const badge = el("text", { class:"node-sub", x:inset, y:H-12 }, g);
-        badge.textContent = target ? `↪ continues on “${target}”` : "↪ pick a sheet";
-      }
       if (box.shape === "card" || box.shape === "predefined"){
         el("rect", { class:"node-rail", width:4, height:H-2,
                      x: box.shape === "predefined" ? 3 : 1, y:1, rx:2,
@@ -2579,7 +2574,13 @@ function render(){
       title.textContent = n.label || n.type;
       if (!single){
         const sub = el("text", { class:"node-sub", x:inset, y:33 }, g);
-        sub.textContent = subtitle(n) || n.type.toLowerCase();
+        if (n.type === "Subgraph"){
+          const target = n.params.sheet || "";
+          sub.textContent = target ? `\u21aa continues on \u201c${target}\u201d`
+                                   : "\u21aa pick a sheet";
+        } else {
+          sub.textContent = subtitle(n) || n.type.toLowerCase();
+        }
       } else {
         const sub = el("text", { class:"node-sub", x:inset + 84, y:H/2 + 4 }, g);
         sub.textContent = subtitle(n) || "";

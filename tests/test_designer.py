@@ -1356,6 +1356,95 @@ def _():
             shutil.move(backup, auth.DATA)
 
 
+@check("every node on a workbook sheet actually draws")
+def _():
+    """Rendering stops at the first exception, so one bad node hides the rest.
+
+    A reference to `inset` placed above its own declaration threw on the first
+    Subgraph node and left sixteen of eighteen layers invisible — no error
+    anywhere the user could see, just a mostly empty canvas with arrows
+    pointing at nothing.
+    """
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        print("        (node absent, skipped)")
+        return
+
+    example = ROOT / "examples" / "GPT2.json"
+    if not example.exists():
+        print("        (GPT2 example absent, skipped)")
+        return
+
+    import main
+    import workbook
+
+    book = json.loads(example.read_text())
+    analysis = workbook.analyze(book)
+    sheet = next(s for s in book["sheets"] if s["name"] == book["main"])
+
+    script = ROOT / "tests" / "_render_probe.js"
+    page = PAGE[PAGE.index("<script>") + 8: PAGE.rindex("</script>")]
+    page = page.replace("\nboot();", "\n")
+    harness = """
+const store = {};
+function mk(id){return{id,value:"",textContent:"",innerHTML:"",style:{},dataset:{},
+ classList:{_s:new Set(),add(...c){c.forEach(x=>this._s.add(x))},
+  remove(...c){c.forEach(x=>this._s.delete(x))},toggle(){},contains(){return false}},
+ addEventListener(){},appendChild(){},insertBefore(){},setAttribute(){},
+ querySelector:()=>null,querySelectorAll:()=>[],focus(){},remove(){},
+ scrollIntoView(){},closest:()=>null,firstChild:null,children:[],
+ getBoundingClientRect:()=>({left:0,top:0,right:900,bottom:600,width:900,height:600})};}
+global.window={addEventListener(){},open(){},innerWidth:1600,innerHeight:900,
+  fetch:async()=>({ok:true,status:200,json:async()=>({})})};
+global.document={activeElement:{tagName:"BODY"},body:mk("b"),
+ getElementById:id=>store[id]||(store[id]=mk(id)),
+ querySelectorAll:()=>[],querySelector:()=>mk("q"),
+ createElement:()=>mk("n"),createElementNS:()=>mk("s")};
+global.fetch=global.window.fetch;
+global.EventSource=function(){};global.navigator={clipboard:{writeText:async()=>{}}};
+global.setTimeout=(f)=>{try{f&&f()}catch(e){}};global.clearTimeout=()=>{};
+"""
+    tail = """
+let titles = 0;
+const realEl = el;
+el = (tag, attrs, parent) => {
+  if (tag === "text" && attrs && attrs.class === "node-title") titles++;
+  return realEl(tag, attrs, parent);
+};
+state.graph = DATA.graph;
+state.report = DATA.report;
+state.specs = {};
+DATA.specs.forEach(s => state.specs[s.name] = s);
+let threw = "";
+try { render(); } catch (e) { threw = e.constructor.name + ": " + e.message; }
+console.log(JSON.stringify({ threw, titles }));
+"""
+    payload = {
+        "graph": {"name": "GPT2", "nodes": sheet["nodes"], "edges": sheet["edges"]},
+        "report": analysis["sheets"][book["main"]],
+        "specs": layers.catalog(),
+    }
+    script.write_text(harness + "const DATA = " + json.dumps(payload) + ";\n"
+                      + page + tail)
+    try:
+        result = subprocess.run([node, str(script)], capture_output=True,
+                                text=True, timeout=90)
+        line = [l for l in result.stdout.splitlines() if l.startswith("{")]
+        assert line, f"the probe produced nothing: {result.stderr[-300:]}"
+        outcome = json.loads(line[-1])
+        assert not outcome["threw"], f"rendering threw: {outcome['threw']}"
+        # Input and Output are circles and draw their text another way
+        drawable = sum(1 for n in sheet["nodes"]
+                       if n["type"] not in ("Input", "Output"))
+        assert outcome["titles"] == drawable, \
+            f"only {outcome['titles']} of {drawable} layers drew"
+    finally:
+        script.unlink(missing_ok=True)
+
+
 @check("designs are opened by clicking, not by retyping a name")
 def _():
     """The browser prompt listed the designs and then made you type one in."""

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.25.1
+
+**Fixed: the GPT2 model sheet drew almost nothing.**
+
+It was an error, not a slow render. The continuation label on a Subgraph node
+read a variable declared later in the same function — `Cannot access 'inset'
+before initialization`. Rendering stops at the first exception, so the first
+block came out as an empty white box and the remaining sixteen layers never
+drew at all: arrows pointing at nothing, with stale shape labels left over from
+the previously rendered sheet.
+
+Nothing was wrong with the design, the analysis or the generated code. Only the
+drawing.
+
+- The label moved below the declaration it depends on, and now replaces the
+  node's subtitle rather than being an extra line.
+- **A test that renders a real sheet.** It drives the page's own `render()` over
+  the GPT2 model sheet in Node and asserts every layer produced a title.
+  Verified against the broken version: it fails with the exact ReferenceError
+  and reports 2 of 16 layers drawn.
+
+That last part is the point. Every existing check passed on the broken build —
+they tested the analysis, the code generation and the parameter counts, all of
+which were correct. Nothing tested that the canvas actually drew.
+
 ## 1.25.0
 
 - **Open is a list you click.** It was a browser prompt that showed you the
