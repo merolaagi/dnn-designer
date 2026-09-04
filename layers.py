@@ -951,6 +951,70 @@ def _stack_blocks(x, depth, heads, ff_dim, rate):
 
 
 # --------------------------------------------------------------------------
+# RMS normalization and elementwise arithmetic
+# --------------------------------------------------------------------------
+
+register(LayerSpec(
+    name="RMSNorm",
+    category="Normalization",
+    doc="Scales by the root mean square of the features, with no mean "
+        "subtraction. Cheaper than LayerNorm and in practice just as good, "
+        "which is why most recent language models use it.",
+    params=[P("eps", "float", 1e-6)],
+    infer=lambda p, ins: list(ins[0]),
+    torch_init=lambda p, ins: f"nn.Parameter(torch.ones({int(ins[0][-1])}))",
+    torch_call=lambda p, ins, mod, s:
+        f"{ins[0]} * torch.rsqrt({ins[0]}.pow(2).mean(-1, keepdim=True) "
+        f"+ {float(p['eps'])}) * {mod}",
+    keras_call=None,
+    learnables=lambda p, ins, out: int(ins[0][-1]),
+))
+
+
+ELEMENTWISE = {
+    "pow": "x ** {n}", "rsqrt": "torch.rsqrt(x)", "sqrt": "torch.sqrt(x)",
+    "exp": "torch.exp(x)", "log": "torch.log(x)", "abs": "torch.abs(x)",
+    "neg": "-x", "reciprocal": "1 / x", "sign": "torch.sign(x)",
+}
+
+
+register(LayerSpec(
+    name="Elementwise",
+    category="Numerical",
+    doc="One arithmetic operation applied to every element. Imported code "
+        "often spells out arithmetic the framework has no single layer for; "
+        "this keeps it visible instead of opaque.",
+    params=[P("op", "choice", "rsqrt", options=sorted(ELEMENTWISE)),
+            P("n", "float", 2.0, help="The exponent, when the operation is pow")],
+    infer=lambda p, ins: list(ins[0]),
+    torch_init=lambda p, ins: None,
+    torch_call=lambda p, ins, mod, s:
+        (f"{ins[0]}.pow({float(p.get('n', 2))})" if p.get("op") == "pow"
+         else ELEMENTWISE.get(str(p.get("op")), "x").replace("x", ins[0])),
+    keras_call=None,
+))
+
+
+register(LayerSpec(
+    name="Reduce",
+    category="Numerical",
+    doc="Collapses one axis by mean, sum, max or min. Keeping the axis leaves "
+        "a length of 1 in its place, which is what broadcasting needs.",
+    params=[P("op", "choice", "mean", options=["mean", "sum", "max", "min"]),
+            P("axis", "int", -1), P("keep", "bool", True)],
+    infer=lambda p, ins: (
+        [(1 if i == (int(p["axis"]) % len(ins[0])) else d)
+         for i, d in enumerate(ins[0])] if p.get("keep")
+        else [d for i, d in enumerate(ins[0])
+              if i != (int(p["axis"]) % len(ins[0]))]),
+    torch_init=lambda p, ins: None,
+    torch_call=lambda p, ins, mod, s:
+        f"{ins[0]}.{p['op']}(dim={int(p['axis'])}, keepdim={bool(p.get('keep'))})",
+    keras_call=None,
+))
+
+
+# --------------------------------------------------------------------------
 # learned positions
 # --------------------------------------------------------------------------
 

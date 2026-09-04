@@ -486,10 +486,30 @@ class FolderImportPayload(BaseModel):
 
 def _finish_import(graph: Dict[str, Any]) -> Dict[str, Any]:
     """Analyze what came in so the response can say what needs attention."""
+    expected = graph.pop("_expected_parameters", None)
+    routing = graph.pop("_routing", None)
     notes = graph.pop("_notes", [])
     g = G.parse(graph)
     report = G.analyze(g)
     problems = [v["error"] for v in report["nodes"].values() if v["error"]]
+
+    warnings = []
+    if routing:
+        warnings.append(
+            f"This model decides at run time which path data takes "
+            f"({', '.join(routing)}). A diagram is a fixed structure, so every "
+            f"branch is drawn as though it always runs — for a mixture of "
+            f"experts that means all the experts appear, when the design is "
+            f"that only a few of them run per token.")
+    if expected is not None and report["ok"] and expected != report["total_learnables"]:
+        gap = expected - report["total_learnables"]
+        warnings.append(
+            f"The model holds {expected:,} parameters but the diagram accounts "
+            f"for {report['total_learnables']:,}, a difference of {abs(gap):,}. "
+            f"That usually means a learned tensor is used in plain arithmetic "
+            f"rather than through a layer — a hand-written norm's scale, for "
+            f"instance — so it belongs to no node here.")
+
     return {
         "graph": graph,
         "notes": notes,
@@ -498,6 +518,8 @@ def _finish_import(graph: Dict[str, Any]) -> Dict[str, Any]:
         "problems": (report["errors"] + problems)[:6],
         "problem_count": len(report["errors"]) + len(problems),
         "learnables": report["total_learnables"],
+        "expected_parameters": expected,
+        "warnings": warnings,
     }
 
 

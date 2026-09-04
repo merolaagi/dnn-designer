@@ -916,6 +916,125 @@ def _():
     assert not missing, f"no glyph for: {missing}"
 
 
+@check("a latent-attention block imports and is counted honestly")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import importer
+    import main
+
+    source = """
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class RMSNorm(nn.Module):
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(dim))
+        self.eps = eps
+
+    def forward(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps) * self.weight
+
+
+class Latent(nn.Module):
+    def __init__(self, dim=256, heads=4, latent=64):
+        super().__init__()
+        self.heads, self.dim = heads, dim
+        self.hd = dim // heads
+        self.n = RMSNorm(dim)
+        self.q = nn.Linear(dim, dim, bias=False)
+        self.kv_down = nn.Linear(dim, latent, bias=False)
+        self.kv_up = nn.Linear(latent, 2 * dim, bias=False)
+        self.o = nn.Linear(dim, dim, bias=False)
+
+    def forward(self, x):
+        B, T, C = x.size()
+        h = self.n(x)
+        q = self.q(h).view(B, T, self.heads, self.hd).transpose(1, 2)
+        k, v = self.kv_up(self.kv_down(h)).split(self.dim, dim=2)
+        k = k.view(B, T, self.heads, self.hd).transpose(1, 2)
+        v = v.view(B, T, self.heads, self.hd).transpose(1, 2)
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        return self.o(y.transpose(1, 2).reshape(B, T, C))
+"""
+    payload = importer.from_source(source + "\nmodel = Latent()\n", [32, 256])
+    payload.pop("_entry", None)
+    notes = payload.pop("_notes", [])
+    expected = payload.get("_expected_parameters")
+    result = main._finish_import(payload)
+
+    assert result["ok"], result["problems"]
+    assert not notes, f"low-rank attention should import cleanly: {notes}"
+    kinds = [n["type"] for n in result["graph"]["nodes"]]
+    for wanted in ("Split", "Attention", "Elementwise", "Reduce"):
+        assert wanted in kinds, f"{wanted} missing from {set(kinds)}"
+
+    # the norm's learned scale belongs to no layer, and that is said out loud
+    assert expected and expected != result["learnables"]
+    assert result["warnings"], "an unaccounted parameter passed silently"
+    assert "difference of" in result["warnings"][0]
+
+
+@check("runtime routing is refused a confident diagram")
+def _():
+    """A mixture of experts cannot be drawn as a fixed graph.
+
+    fx unrolls the loop over experts, so all of them appear as though all of
+    them run — and the parameter count comes out far above the real one. The
+    diagram is not wrong about the code; it is wrong about the model, which is
+    worse. So it says so.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import importer
+    import main
+
+    source = """
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class Expert(nn.Module):
+    def __init__(self, dim=64):
+        super().__init__()
+        self.fc = nn.Linear(dim, dim)
+
+    def forward(self, x):
+        return self.fc(x)
+
+
+class MoE(nn.Module):
+    def __init__(self, dim=64, experts=4, top_k=2):
+        super().__init__()
+        self.top_k = top_k
+        self.gate = nn.Linear(dim, experts, bias=False)
+        self.experts = nn.ModuleList([Expert(dim) for _ in range(experts)])
+
+    def forward(self, x):
+        scores = F.softmax(self.gate(x), dim=-1)
+        weights, picks = torch.topk(scores, self.top_k, dim=-1)
+        out = torch.zeros_like(x)
+        for slot in range(self.top_k):
+            for i, expert in enumerate(self.experts):
+                mask = (picks[..., slot] == i).unsqueeze(-1)
+                out = out + mask * expert(x) * weights[..., slot:slot + 1]
+        return out
+"""
+    payload = importer.from_source(source + "\nmodel = MoE()\n", [16, 64])
+    payload.pop("_entry", None)
+    assert payload.get("_routing"), "topk routing was not noticed"
+    result = main._finish_import(payload)
+    assert result["warnings"], "the diagram claimed to represent the model"
+    assert "run time" in result["warnings"][0]
+    assert "experts" in result["warnings"][0]
+
+
 @check("a transformer block imports with nothing left opaque")
 def _():
     if not HAVE_TORCH:

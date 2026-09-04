@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Ninety checks, with the torch-dependent ones skipping themselves when it is
+Ninety-two checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -374,6 +374,13 @@ Shape bookkeeping (`B, T, C = x.size()`) is elided rather than drawn, and
 reshape targets are measured by running one example through rather than
 reconstructed from the traced arithmetic.
 
+Recent language-model components import well too: multi-head latent attention,
+SwiGLU, and hand-written RMSNorm all come through with nothing opaque. A mixture
+of experts does not, and says so — tracing unrolls the loop over experts, so all
+of them appear as though all of them run, and the parameter count comes out far
+above the real one. Every import also checks its own parameter total against the
+model's and reports any gap.
+
 What cannot be imported is a `forward` that slices by a traced value — older
 GPT-2 attention masks do this — because `torch.fx` cannot trace it into a single
 graph. The import says so and names the reason; the same model written with
@@ -598,4 +605,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.25.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.26.0 — see `CHANGELOG.md`.

@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.26.0
+
+Work on importing larger language models, prompted by asking whether something
+like DeepSeek could be analysed. Measured rather than assumed, on faithful
+implementations of the pieces that make those models distinctive.
+
+**What now imports cleanly**
+
+- **Multi-head latent attention** — the low-rank KV compression DeepSeek-V2
+  introduced — comes through with nothing opaque: 17 layers, shapes resolved.
+- **SwiGLU** feed-forwards: 7 layers, nothing opaque.
+- **RMSNorm** written by hand as `x * rsqrt(x.pow(2).mean(-1)) * weight` now
+  resolves, via three new layers: `RMSNorm` itself for building with,
+  `Elementwise` (pow, rsqrt, sqrt, exp, log, abs, neg) and `Reduce` (mean, sum,
+  max, min over an axis). A whole dense block — norm, latent attention, SwiGLU,
+  residuals — imports as 32 layers with nothing opaque and runs.
+- Fixed: `mean` was being read as global average pooling even when given an
+  explicit axis, which is a different operation entirely.
+
+**What is now refused rather than misdrawn**
+
+A mixture of experts cannot be honestly drawn as a fixed graph. `torch.fx`
+unrolls the loop over experts, so all of them appear as though all of them run —
+and the parameter count comes out at 158,613,504 for a model holding 89,411,584.
+The diagram is not wrong about the code; it is wrong about the model, which is
+worse.
+
+- Operations that route at run time — `topk`, `where`, `scatter`, `gather`,
+  `nonzero` and others — are recognised, and an import containing them says
+  plainly that every branch is drawn as though it always runs.
+- **Imports now check their own parameter count** against the model's. A gap
+  means a learned tensor is used in plain arithmetic rather than through a
+  layer, so it belongs to no node — that is now reported with the exact
+  difference instead of quietly undercounting.
+
 ## 1.25.1
 
 **Fixed: the GPT2 model sheet drew almost nothing.**

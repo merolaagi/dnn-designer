@@ -253,6 +253,15 @@ def _module_to_node(module, b: Builder, name: str) -> Optional[Tuple[str, Dict[s
     return None
 
 
+# Operations that decide at run time which path data takes. A traced graph is a
+# fixed structure, so a mixture of experts comes out with every expert drawn as
+# though all of them run — when the point of the design is that two of them do.
+# Better to say so than to draw a confident lie.
+ROUTING_OPS = {"topk", "nonzero", "scatter", "scatter_add", "index_put",
+               "index_select", "masked_select", "where", "argmax", "argmin",
+               "gather", "bincount", "unique"}
+
+
 def _wants_indices(model) -> bool:
     """True when the first thing the model does is an embedding lookup."""
     import torch.nn as nn
@@ -303,6 +312,7 @@ def from_pytorch(model, name: str = "Imported",
                 print("ShapeProp:", type(exc).__name__, exc)
             real_shapes = {}
 
+    routing_found: set = set()
     b = Builder(name)
     produced: Dict[Any, str] = {}
     output_sources: List[str] = []
@@ -438,10 +448,27 @@ def from_pytorch(model, name: str = "Imported",
                 size = node.args[1] if len(node.args) > 1 else 1
                 size = size[0] if isinstance(size, (tuple, list)) else size
                 nid = b.add("AdaptiveAvgPool2d", {"size": int(size or 1)})
-            elif fname == "mean":
+            elif fname == "mean" and not node.kwargs.get("dim") \
+                    and not any(isinstance(a, int) for a in node.args[1:]):
                 nid = b.add("GlobalAvgPool", {})
             elif fname in ("dropout",):
                 nid = b.add("Dropout", {"rate": 0.5})
+            elif fname in ("pow", "rsqrt", "sqrt", "exp", "log", "abs", "neg",
+                           "reciprocal", "sign"):
+                params = {"op": fname}
+                if fname == "pow" and len(node.args) > 1 \
+                        and isinstance(node.args[1], (int, float)):
+                    params["n"] = float(node.args[1])
+                nid = b.add("Elementwise", params)
+            elif fname in ("mean", "sum", "amax", "amin"):
+                axis = node.kwargs.get("dim")
+                if axis is None and len(node.args) > 1 \
+                        and isinstance(node.args[1], int):
+                    axis = node.args[1]
+                nid = b.add("Reduce", {
+                    "op": {"amax": "max", "amin": "min"}.get(fname, fname),
+                    "axis": int(axis if axis is not None else -1),
+                    "keep": bool(node.kwargs.get("keepdim", False))})
             elif fname in ("transpose", "swapaxes"):
                 dims = [a for a in node.args[1:] if isinstance(a, int)]
                 nid = b.add("Transpose", {"dim_a": dims[0] if dims else 1,
@@ -476,6 +503,11 @@ def from_pytorch(model, name: str = "Imported",
             elif fname in ("getattr", "getitem"):
                 produced[node] = ins[0] if ins else None
                 continue
+            elif fname in ROUTING_OPS:
+                nid = b.opaque(fname, f"# {node.format_node()}",
+                               "chooses at run time which path the data takes, "
+                               "which a fixed diagram cannot show")
+                routing_found.add(fname)
             else:
                 nid = b.opaque(fname, f"# {node.format_node()}",
                                "operation has no layer equivalent")
@@ -497,6 +529,16 @@ def from_pytorch(model, name: str = "Imported",
 
     graph = b.layout()
     graph["_notes"] = b.notes
+    if routing_found:
+        graph["_routing"] = sorted(routing_found)
+    # What the model actually holds, so the import can be checked against it.
+    # A parameter reached through get_attr and used in plain arithmetic — an
+    # RMSNorm's scale, say — belongs to no layer here and would otherwise go
+    # missing from the count without anything saying so.
+    try:
+        graph["_expected_parameters"] = sum(p.numel() for p in model.parameters())
+    except Exception:  # noqa: BLE001
+        pass
     return graph
 
 
