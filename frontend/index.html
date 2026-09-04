@@ -1036,17 +1036,26 @@ table.trials td.st.error{color:#8C2F27}
 .notecard b{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--muted);margin-bottom:4px}
 #modal{
-  position:fixed;inset:0;background:rgba(10,16,24,.72);z-index:150;
+  position:fixed;inset:0;background:rgba(10,16,24,.5);z-index:150;
   display:none;align-items:center;justify-content:center;
+  backdrop-filter:blur(2px);
 }
 #modal.on{display:flex}
 .sheet{
-  background:var(--paper);border-radius:10px;width:430px;max-width:92vw;
-  box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden;
+  background:var(--paper);border-radius:14px;width:430px;max-width:94vw;
+  /* layered rather than one heavy drop, so it sits on the page instead of
+     hovering over a smudge */
+  box-shadow:0 1px 2px rgba(16,24,36,.10),
+             0 8px 20px rgba(16,24,36,.14),
+             0 28px 64px rgba(16,24,36,.24);
+  overflow:hidden;
 }
+/* the import dialog carries a table of hundreds of classes and needs the room */
+#modal .sheet.wide{width:920px}
 .sheet h3{margin:0;padding:13px 16px;font-size:13px;background:var(--paper-2);
   border-bottom:1px solid var(--paper-3);font-weight:600}
 .sheet .inner{padding:14px 16px;max-height:60vh;overflow-y:auto}
+.sheet.wide .inner{max-height:74vh}
 .sheet .foot{display:flex;gap:8px;padding:11px 16px;border-top:1px solid var(--paper-3);
   background:var(--paper-2)}
 .sheet .foot .grow{flex:1}
@@ -1056,16 +1065,58 @@ table.trials td.st.error{color:#8C2F27}
   border-radius:6px;background:#FCFCFD;color:#3C4453;
 }
 #im_code:focus{outline:none;border-color:var(--amber)}
-#scanResult{margin-top:8px}
-#scanResult table{width:100%;border-collapse:collapse;font-size:11px}
-#scanResult th{text-align:left;font-size:9px;letter-spacing:.11em;text-transform:uppercase;
-  color:#98A6B8;padding:4px 6px;border-bottom:1px solid var(--paper-3)}
-#scanResult td{padding:5px 6px;border-bottom:1px solid #EDF1F5;vertical-align:middle}
-#scanResult td.mono{font-family:var(--mono);font-size:10px;color:var(--muted)}
-#scanResult input[type=text]{width:88px;font-family:var(--mono);font-size:10px;
-  padding:2px 5px;border:1px solid var(--paper-3);border-radius:4px}
-#scanResult .scannote{font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.5}
+#scanResult{margin-top:10px}
+#scanResult .scannote{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.55}
 #scanResult .scanskip{color:#8C2F27}
+.scanbar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.scanbar input{
+  flex:1;padding:6px 10px;border:1px solid var(--paper-3);border-radius:7px;
+  font-size:12px;
+}
+.scanbar input:focus{outline:none;border-color:var(--amber)}
+.scancount{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.scansplit{display:flex;gap:10px;align-items:stretch;min-height:300px}
+.scanlist{
+  flex:1;min-width:0;max-height:46vh;overflow-y:auto;border:1px solid var(--paper-3);
+  border-radius:9px;background:#fff;
+}
+.scanrow{
+  display:flex;align-items:center;gap:9px;padding:6px 10px;
+  border-bottom:1px solid #F0F3F7;font-size:12px;cursor:default;
+}
+.scanrow:last-child{border-bottom:none}
+.scanrow:hover,.scanrow:focus{background:#F4F8FD;outline:none}
+.scanmain{flex:1;min-width:0}
+.scanmain b{display:block;font-weight:600;font-size:12px}
+.scanmain span{display:block;font-size:9.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scanargs{
+  width:150px;font-family:var(--mono);font-size:10px;padding:3px 6px;
+  border:1px solid var(--paper-3);border-radius:5px;flex:none;
+}
+.scanargs.none{border:none;color:#B7C0CB;font-size:9.5px;text-align:right}
+.scanrow em{font-style:normal;font-size:9.5px;white-space:nowrap;flex:none}
+.v-ok{color:#256B39}
+.v-no{color:#8C2F27}
+.v-wait{color:var(--muted)}
+.btn.tiny{font-size:10px;padding:2px 8px;flex:none}
+.scanpeek{
+  width:380px;flex:none;max-height:46vh;overflow-y:auto;border:1px solid var(--paper-3);
+  border-radius:9px;background:#FCFCFD;
+}
+.peekempty{padding:16px;font-size:11.5px;color:var(--muted)}
+.peekhead{padding:10px 12px 6px;border-bottom:1px solid var(--paper-3)}
+.peekhead b{font-size:12.5px;font-weight:600}
+.peekhead span{display:block;font-size:10px;color:var(--muted);margin-top:2px;
+  word-break:break-word}
+.peekdoc{padding:8px 12px 0;font-size:11px;color:#3C4B5F;line-height:1.5}
+.peekmeta{padding:6px 12px;font-size:10px;color:var(--muted);
+  font-family:var(--mono)}
+.peekcode{
+  margin:0;padding:8px 12px 12px;font-family:var(--mono);font-size:10px;
+  line-height:1.55;white-space:pre;overflow-x:auto;color:#3C4453;
+}
+.peekwhy{padding:12px;font-size:11.5px;line-height:1.6;color:#8C2F27}
 #importNote{
   font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:10px;
   max-height:120px;overflow-y:auto;
@@ -1410,7 +1461,7 @@ table.trials td.st.error{color:#8C2F27}
 
 
 <div id="modal">
-  <div class="sheet">
+  <div class="sheet wide">
     <h3>Import an existing model</h3>
     <div class="inner">
       <div class="field"><label>Pretrained architecture</label>
@@ -5493,6 +5544,8 @@ $("btnImportGo").addEventListener("click", async () => {
 
 /* ---------- scanning a folder ---------- */
 
+/* ---------- browsing what a scan found ---------- */
+
 async function scanCodeFolder(){
   const root = ($("im_folder").value || "").trim();
   const host = $("scanResult");
@@ -5510,52 +5563,195 @@ async function scanCodeFolder(){
     host.innerHTML = `<div class="scannote">${(d.detail && d.detail.message) || "Could not scan"}</div>`;
     return;
   }
-  state.scan = { root: d.root, models: d.models };
-  loadProjectTree(d.root);       // the folder stays browsable in the side panel
-  if (!d.models.length){
-    host.innerHTML = `<div class="scannote">Read ${d.files} files and found no
-      nn.Module classes.</div>`;
+  state.scan = { root: d.root, models: d.models, files: d.files,
+                 skipped: d.skipped, tried: {}, args: {} };
+  loadProjectTree(d.root);
+  renderScanResults();
+}
+
+function scanFamily(file){
+  return file.split("/")[0].replace(/\.py$/, "");
+}
+
+function renderScanResults(){
+  const scan = state.scan;
+  const host = $("scanResult");
+  if (!scan) return;
+  if (!scan.models.length){
+    host.innerHTML = `<div class="scannote">Read ${scan.files} files and found
+      no nn.Module classes.</div>`;
     return;
   }
-  host.innerHTML = `<table><thead><tr><th></th><th>class</th><th>file</th>
-      <th>arguments</th></tr></thead><tbody>`
-    + d.models.map((m, i) => `<tr>
-        <td><input type="checkbox" data-pick="${i}" ${m.arguments === 0 ? "checked" : ""}></td>
-        <td><b>${m.cls}</b>${m.forward ? "" : " <i title='no forward'>?</i>"}</td>
-        <td class="mono">${m.file}:${m.line}</td>
-        <td>${m.arguments > 0
-              ? `<input type="text" data-args="${i}" placeholder="${m.arguments} needed">`
-              : `<span class="mono">none</span>`}</td>
-      </tr>`).join("")
-    + `</tbody></table>`
-    + `<div class="scannote">Read ${d.files} files.
-       ${d.skipped.length ? `<span class="scanskip">Skipped ${d.skipped.length}
-         with syntax errors (${d.skipped[0].file}).</span>` : ""}
-       Each picked class becomes its own sheet; the last pick becomes the model.
-       Classes needing constructor arguments take them as they would in code,
-       e.g. <span class="mono">width=64</span>.</div>`;
+  const term = (state.scanTerm || "").toLowerCase();
+  const rows = scan.models.filter(m =>
+    !term || m.cls.toLowerCase().includes(term) || m.file.toLowerCase().includes(term));
+
+  host.innerHTML =
+    `<div class="scanbar">
+       <input id="scanFilter" placeholder="Filter ${scan.models.length} classes"
+              value="${(state.scanTerm || "").replace(/"/g, "&quot;")}" spellcheck="false">
+       <span class="scancount">${rows.length} shown</span>
+       <button class="btn" id="scanNone">clear ticks</button>
+     </div>
+     <div class="scansplit">
+       <div class="scanlist" id="scanList">
+         ${rows.slice(0, 400).map(m => scanRow(m, scan)).join("")}
+         ${rows.length > 400 ? `<div class="scannote">…and ${rows.length - 400}
+           more. Narrow the filter to see them.</div>` : ""}
+       </div>
+       <div class="scanpeek" id="scanPeek">
+         <div class="peekempty">Point at a class to see it.</div>
+       </div>
+     </div>
+     <div class="scannote">Read ${scan.files} files.
+       ${scan.skipped.length ? `<span class="scanskip">${scan.skipped.length}
+         skipped for syntax errors.</span>` : ""}
+       Ticked classes import as sheets. A class needing arguments takes them as
+       written in code — <span class="mono">LlamaConfig(hidden_size=256)</span>.</div>`;
+
+  const list = $("scanList");
+  list.querySelectorAll("[data-peek]").forEach(el => {
+    el.addEventListener("mouseenter", () => peekAt(el.dataset.peek));
+    el.addEventListener("focus", () => peekAt(el.dataset.peek));
+  });
+  list.querySelectorAll("[data-try]").forEach(el =>
+    el.addEventListener("click", ev => { ev.stopPropagation(); tryClass(el.dataset.try); }));
+  list.querySelectorAll("[data-args]").forEach(el =>
+    el.addEventListener("input", () => { scan.args[el.dataset.args] = el.value; }));
+  list.querySelectorAll("[data-pick]").forEach(el =>
+    el.addEventListener("change", () => {
+      scan.picked = scan.picked || new Set();
+      if (el.checked) scan.picked.add(el.dataset.pick); else scan.picked.delete(el.dataset.pick);
+    }));
+
+  const filter = $("scanFilter");
+  filter.addEventListener("input", () => {
+    state.scanTerm = filter.value;
+    const at = filter.selectionStart;
+    renderScanResults();
+    const again = $("scanFilter");
+    again.focus();
+    again.setSelectionRange(at, at);
+  });
+  $("scanNone").addEventListener("click", () => {
+    scan.picked = new Set();
+    renderScanResults();
+  });
+}
+
+function scanRow(model, scan){
+  const key = model.file + ":" + model.cls;
+  const verdict = scan.tried[key];
+  const picked = scan.picked && scan.picked.has(key);
+  let badge = "";
+  if (verdict === "…") badge = `<em class="v-wait">trying…</em>`;
+  else if (verdict && verdict.ok)
+    badge = `<em class="v-ok">${verdict.nodes} layers`
+          + (verdict.opaque ? `, ${verdict.opaque} opaque` : "")
+          + (verdict.learnables ? ` · ${verdict.learnables.toLocaleString()}` : "")
+          + `</em>`;
+  else if (verdict) badge = `<em class="v-no">will not trace</em>`;
+
+  return `<div class="scanrow" data-peek="${key}" tabindex="0">
+    <input type="checkbox" data-pick="${key}" ${picked ? "checked" : ""}>
+    <div class="scanmain">
+      <b>${model.cls}</b>
+      <span class="mono">${model.file}:${model.line}</span>
+    </div>
+    ${model.arguments > 0
+      ? `<input type="text" class="scanargs" data-args="${key}"
+           placeholder="${model.arguments} arg${model.arguments > 1 ? "s" : ""}"
+           value="${(scan.args[key] || "").replace(/"/g, "&quot;")}">`
+      : `<span class="scanargs none">no args</span>`}
+    ${badge}
+    <button class="btn tiny" data-try="${key}">Try</button>
+  </div>`;
+}
+
+function modelFor(key){
+  return (state.scan.models || []).find(m => m.file + ":" + m.cls === key);
+}
+
+async function peekAt(key){
+  const model = modelFor(key);
+  const peek = $("scanPeek");
+  if (!model || !peek) return;
+  state.peekKey = key;
+
+  const cached = (state.peekCache = state.peekCache || {})[key];
+  if (cached){ paintPeek(model, cached); return; }
+  peek.innerHTML = `<div class="peekempty">reading…</div>`;
+  let d;
+  try{
+    d = await (await fetch(API + "/api/scan-folder/source", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root: state.scan.root, file: model.file, cls: model.cls }),
+    })).json();
+  } catch { return; }
+  state.peekCache[key] = d;
+  if (state.peekKey === key) paintPeek(model, d);
+}
+
+function paintPeek(model, d){
+  const peek = $("scanPeek");
+  const lines = highlightPython(d.source || "").slice(0, 60);
+  peek.innerHTML =
+    `<div class="peekhead">
+       <b>${model.cls}</b>
+       <span class="mono">${d.signature ? "(" + d.signature + ")" : "()"}</span>
+     </div>`
+    + (d.doc ? `<div class="peekdoc">${d.doc.split("\n")[0].slice(0, 200)}</div>` : "")
+    + `<div class="peekmeta">${d.lines} lines · ${d.methods.join(", ")}</div>`
+    + `<pre class="peekcode">` + lines.map(parts =>
+        parts.map(pair => pair[1]
+          ? `<span class="${pair[1]}">${escapeHtml(pair[0])}</span>`
+          : escapeHtml(pair[0])).join("")).join("\n") + `</pre>`;
+}
+
+async function tryClass(key){
+  const model = modelFor(key);
+  if (!model) return;
+  const scan = state.scan;
+  scan.tried[key] = "…";
+  renderScanResults();
+  const shape = $("im_shape").value.split(/[^0-9]+/).filter(Boolean).map(Number);
+  let d;
+  try{
+    d = await (await fetch(API + "/api/scan-folder/try", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root: scan.root, file: model.file, cls: model.cls,
+                             arguments: scan.args[key] || "",
+                             input_shape: shape })
+    })).json();
+  } catch { scan.tried[key] = { ok: false, reason: "no answer" }; renderScanResults(); return; }
+  scan.tried[key] = d;
+  renderScanResults();
+  if (!d.ok){
+    const peek = $("scanPeek");
+    peek.innerHTML = `<div class="peekhead"><b>${model.cls}</b></div>`
+      + `<div class="peekwhy">${d.reason}</div>`;
+    state.peekKey = null;
+  } else {
+    peekAt(key);
+  }
 }
 
 function scanPicks(){
-  const host = $("scanResult");
+  const scan = state.scan;
+  if (!scan || !scan.picked) return [];
   const shape = $("im_shape").value.split(/[^0-9]+/).filter(Boolean).map(Number);
-  return [...host.querySelectorAll("[data-pick]")]
-    .filter(el => el.checked)
-    .map(el => {
-      const i = +el.dataset.pick;
-      const model = state.scan.models[i];
-      const args = host.querySelector(`[data-args="${i}"]`);
-      return { file: model.file, cls: model.cls,
-               arguments: args ? args.value.trim() : "",
-               input_shape: shape };
-    });
+  return [...scan.picked].map(key => {
+    const model = modelFor(key);
+    return model && { file: model.file, cls: model.cls,
+                      arguments: scan.args[key] || "", input_shape: shape };
+  }).filter(Boolean);
 }
 
 async function importFolderPicks(){
   const picks = scanPicks();
   const note = $("importNote");
   if (!picks.length){ note.innerHTML = "Tick at least one class."; return false; }
-  note.innerHTML = `importing ${picks.length}…`;
+  note.innerHTML = `importing ${picks.length}\u2026`;
   let r, d;
   try{
     r = await fetch(API + "/api/import/folder", {

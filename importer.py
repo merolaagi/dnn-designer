@@ -262,6 +262,24 @@ ROUTING_OPS = {"topk", "nonzero", "scatter", "scatter_add", "index_put",
                "gather", "bincount", "unique"}
 
 
+def _dotted_name(target: Path) -> str:
+    """The import path of a file that lives inside a package, if it does."""
+    parts = [target.stem]
+    folder = target.parent
+    while (folder / "__init__.py").exists():
+        parts.append(folder.name)
+        if folder.parent == folder:
+            break
+        folder = folder.parent
+    if len(parts) == 1:
+        return ""
+    import sys as _sys
+
+    if str(folder) not in _sys.path:
+        _sys.path.insert(0, str(folder))
+    return ".".join(reversed(parts))
+
+
 def _why_untraceable(model, exc) -> str:
     """Name the actual obstacle rather than offering one generic guess.
 
@@ -685,28 +703,49 @@ def from_folder(root: str, file: str, cls: str,
         if entry not in sys.path:
             sys.path.insert(0, entry)
 
-    spec = importlib.util.spec_from_file_location(
-        f"scanned_{target.stem}", target)
-    if spec is None or spec.loader is None:
-        raise ImportError_(f"Could not load {file}.")
-    module = importlib.util.module_from_spec(spec)
-    try:
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-    except Exception as exc:  # noqa: BLE001
-        raise ImportError_(
-            f"{file} did not import: {type(exc).__name__}: {exc}. "
-            f"If it needs the project installed, install it first.") from exc
+    # A file inside a package has to be imported as part of it, or its relative
+    # imports have nothing to be relative to. Walk up while there are
+    # __init__.py files, and import by the dotted name that produces.
+    dotted = _dotted_name(target)
+    module = None
+    if dotted:
+        try:
+            module = importlib.import_module(dotted)
+        except Exception:  # noqa: BLE001 - fall back to loading the file alone
+            module = None
+
+    if module is None:
+        spec = importlib.util.spec_from_file_location(
+            f"scanned_{target.stem}", target)
+        if spec is None or spec.loader is None:
+            raise ImportError_(f"Could not load {file}.")
+        module = importlib.util.module_from_spec(spec)
+        try:
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+        except Exception as exc:  # noqa: BLE001
+            hint = ""
+            if "relative import" in str(exc):
+                hint = (" It uses relative imports, so it belongs to a package "
+                        "that is not importable from here — installing the "
+                        "project would fix it.")
+            raise ImportError_(
+                f"{file} did not import: {type(exc).__name__}: {exc}.{hint}"
+            ) from exc
 
     candidate = getattr(module, cls, None)
     if candidate is None:
         raise ImportError_(f"{file} has no class called {cls}.")
+    # Evaluate the arguments where the class itself lives, so a config class
+    # the file imports can be named without spelling out where it came from.
+    scope = dict(vars(module))
+    scope["candidate"] = candidate
     try:
-        model = eval(f"candidate({arguments})", {"candidate": candidate,  # noqa: S307
-                                                 "module": module})
+        model = eval(f"candidate({arguments})", scope)  # noqa: S307
     except Exception as exc:  # noqa: BLE001
         raise ImportError_(
-            f"{cls} could not be built with ({arguments}): {type(exc).__name__}: {exc}")
+            f"{cls} could not be built with ({arguments}): "
+            f"{type(exc).__name__}: {exc}")
     graph = from_pytorch(model, name=cls, input_shape=input_shape)
     graph["_entry"] = cls
     return graph

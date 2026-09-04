@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-Ninety-six checks, with the torch-dependent ones skipping themselves when it is
+Ninety-eight checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -349,6 +349,12 @@ when keeping a trunk and resizing the head for a different class count.
 
 The Import button takes pasted PyTorch source, a torchvision architecture by
 name, an `.onnx` export, or a `.pt` holding the module itself.
+
+The scan results are browsable: filter by name, hover a class to read its
+signature, docstring and source, and press Try to find out whether it imports —
+with layer count and parameters on success, or the reason on failure — before
+committing to it. Constructor arguments are evaluated where the class lives, so
+`LlamaConfig(hidden_size=256)` works without naming the import.
 
 After a scan the folder stays browsable under **Files** in the left panel:
 directories, files, and a chip for every model found in each. Clicking a
@@ -605,4 +611,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.27.3 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.28.0 — see `CHANGELOG.md`.

@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.28.0
+
+Scanning a model library returns hundreds of classes, so the Import dialog is a
+browser now rather than a list.
+
+- **The dialog is 920px wide** when importing, with a layered shadow — a tight
+  contact shadow, a mid one and a wide soft one — instead of a single heavy
+  drop, and a slight blur behind it.
+- **A filter** across every class found. Scanning the whole `transformers`
+  models tree finds 691; typing `MLP` narrows it immediately.
+- **Hover a class and see it**: its `__init__` signature, its docstring, how many
+  lines it is, its methods, and the source itself with syntax highlighting. Read
+  by syntax tree, so the preview ends where the class ends.
+- **A Try button per class.** Most classes in a library will not trace, and
+  finding that out should not mean committing to an import. Try reports layers,
+  opaque nodes and parameter count on success, and the specific reason on
+  failure.
+- Classes needing constructor arguments get a box on their row, and those
+  arguments are evaluated **where the class lives** — so `LlamaConfig(hidden_size=256)`
+  resolves without you spelling out the import.
+
+**Two fixes that made the above work at all:**
+
+- A file inside an installed package is now imported by its dotted module name,
+  so its relative imports resolve. Every `transformers` module failed with
+  "attempted relative import with no known parent package" before this.
+- Verified against the real library: `LlamaMLP`, `Qwen3MLP` and `DeepseekV3MLP`
+  all import as 7 layers with nothing opaque and 393,216 parameters exactly.
+
 ## 1.27.3
 
 **Fixed: scanning a folder inside a virtual environment read nothing.**

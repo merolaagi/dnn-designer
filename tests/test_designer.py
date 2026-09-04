@@ -1800,6 +1800,78 @@ def _():
             assert "outside" in str(exc) or "No such file" in str(exc), exc
 
 
+@check("a class can be read and tried before importing it")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import shutil
+    import tempfile
+
+    import main
+
+    root = Path(tempfile.mkdtemp())
+    try:
+        (root / "net.py").write_text(
+            "import torch.nn as nn\n"
+            "\n"
+            "\n"
+            "class Small(nn.Module):\n"
+            '    """A tiny thing."""\n'
+            "    def __init__(self, width=8):\n"
+            "        super().__init__()\n"
+            "        self.fc = nn.Linear(width, width)\n"
+            "\n"
+            "    def forward(self, x):\n"
+            "        return self.fc(x)\n")
+
+        probe = type("P", (), {"root": str(root), "file": "net.py",
+                               "cls": "Small", "arguments": "",
+                               "input_shape": [8]})()
+        source = main.scan_source(probe)
+        assert "class Small" in source["source"]
+        assert source["signature"] == "width=8", source["signature"]
+        assert source["doc"] == "A tiny thing."
+        assert source["methods"] == ["__init__", "forward"]
+
+        verdict = main.scan_try(probe)
+        assert verdict["ok"], verdict
+        assert verdict["learnables"] == 8 * 8 + 8, verdict
+
+        # and a class that cannot be traced reports why rather than throwing
+        (root / "bad.py").write_text(
+            "import torch.nn as nn\n"
+            "\n"
+            "\n"
+            "class Variadic(nn.Module):\n"
+            "    def __init__(self):\n"
+            "        super().__init__()\n"
+            "        self.fc = nn.Linear(8, 8)\n"
+            "\n"
+            "    def forward(self, x, **kw):\n"
+            "        for k in kw:\n"
+            "            x = x + kw[k]\n"
+            "        return self.fc(x)\n")
+        bad = type("P", (), {"root": str(root), "file": "bad.py",
+                             "cls": "Variadic", "arguments": "",
+                             "input_shape": [8]})()
+        verdict = main.scan_try(bad)
+        assert not verdict["ok"]
+        assert "variadic" in verdict["reason"], verdict["reason"]
+    finally:
+        shutil.rmtree(root)
+
+
+@check("the scan results are browsable, not just listed")
+def _():
+    for token in ("function renderScanResults", "function peekAt",
+                  "function tryClass", 'id="scanFilter"', 'id="scanPeek"',
+                  "data-try=", "sheet wide"):
+        assert token in PAGE, f"{token} is missing from the scan browser"
+    # a library scan returns hundreds of classes; a filter is not optional
+    assert "Filter " in PAGE, "there is no way to narrow the list"
+
+
 @check("a folder inside a virtual environment can still be scanned")
 def _():
     """Pointing deliberately at a library is not the same as crawling into one.
@@ -2325,7 +2397,9 @@ def _():
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
         "switchSheet", "addSheet", "renameSheet", "deleteSheet", "renderSheetTabs",
         "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",
-        "importFolderPicks", "scanCodeFolder", "loadProjectTree", "renderProjectTree",
+        "importFolderPicks", "scanCodeFolder", "renderScanResults", "peekAt",
+        "tryClass", "scanRow", "modelFor", "paintPeek",
+        "loadProjectTree", "renderProjectTree",
         "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
         "submitSignIn", "signOut", "renderMathPanel", "mathDiagram", "paintMath",
         "openPicker", "renderPickList", "openDesign",

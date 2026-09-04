@@ -606,6 +606,88 @@ def scan_file(body: Dict[str, Any]):
             "text": target.read_text(encoding="utf-8", errors="replace")}
 
 
+class ClassProbe(BaseModel):
+    root: str
+    file: str
+    cls: str
+    arguments: str = ""
+    input_shape: List[int] = [3, 224, 224]
+
+
+def _class_source(root: str, file: str, cls: str) -> Dict[str, Any]:
+    """The source of one class, found by its syntax tree rather than by guessing
+    where it ends."""
+    import ast
+
+    base = Path(root).expanduser().resolve()
+    target = (base / file).resolve()
+    if not str(target).startswith(str(base)) or not target.is_file():
+        raise HTTPException(404, detail={"message": "No such file."})
+    text = target.read_text(encoding="utf-8", errors="replace")
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == cls:
+            lines = text.splitlines()
+            start = (node.decorator_list[0].lineno - 1
+                     if node.decorator_list else node.lineno - 1)
+            end = node.end_lineno or (start + 40)
+            body = "\n".join(lines[start:end])
+            doc = ast.get_docstring(node) or ""
+            methods = [f.name for f in node.body
+                       if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            init = next((f for f in node.body if isinstance(f, ast.FunctionDef)
+                         and f.name == "__init__"), None)
+            signature = ""
+            if init:
+                args = [a.arg for a in init.args.args][1:]
+                defaults = [ast.unparse(d) for d in init.args.defaults]
+                pad = [""] * (len(args) - len(defaults)) + defaults
+                signature = ", ".join(
+                    a + (f"={d}" if d else "") for a, d in zip(args, pad))
+            return {"source": body, "doc": doc, "methods": methods,
+                    "signature": signature, "line": node.lineno,
+                    "lines": end - start}
+    raise HTTPException(404, detail={"message": f"{cls} is not in {file}."})
+
+
+@app.post("/api/scan-folder/source")
+def scan_source(body: ClassProbe):
+    return _class_source(body.root, body.file, body.cls)
+
+
+@app.post("/api/scan-folder/try")
+def scan_try(body: ClassProbe):
+    """Attempt one class and report how it went, without touching the canvas.
+
+    With hundreds of classes in a library, most of which cannot be traced,
+    trying one should not mean committing to it.
+    """
+    try:
+        graph = importer.from_folder(body.root, body.file, body.cls,
+                                     body.input_shape, body.arguments)
+    except importer.ImportError_ as exc:
+        return {"ok": False, "reason": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    graph.pop("_entry", None)
+    notes = graph.pop("_notes", [])
+    expected = graph.pop("_expected_parameters", None)
+    routing = graph.pop("_routing", None)
+    g, report = _analyze(graph)
+    opaque = sum(1 for n in graph["nodes"] if n["type"] == "Custom")
+    return {
+        "ok": report["ok"],
+        "nodes": len(graph["nodes"]),
+        "opaque": opaque,
+        "learnables": report["total_learnables"],
+        "expected": expected,
+        "routing": routing,
+        "reason": (report["errors"][:1] or [""])[0] if not report["ok"] else "",
+        "notes": notes[:3],
+    }
+
+
 @app.post("/api/import/folder")
 def import_folder(body: FolderImportPayload):
     """Import chosen classes from a scanned folder.
