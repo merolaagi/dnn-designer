@@ -1338,6 +1338,7 @@ body.sizing{user-select:none}
           <option value="keras">Keras</option>
         </select>
         <span class="count" id="codeCount"></span>
+        <span class="count" id="codeWhere"></span>
         <button class="btn" id="btnCopy">Copy</button>
       </div>
       <div class="codeview">
@@ -2870,6 +2871,12 @@ $("btnRedo").addEventListener("click", redo);
 
 function renderInspector(){
   if (state.sidePanel === "math" && state.mathFor !== state.sel) renderMathPanel();
+  // with the file already open, selecting a layer should take you to its line
+  // rather than leaving you to find it
+  if (state.sidePanel === "code" && state.sel){
+    const entry = state.nodeCode && state.nodeCode[state.sel];
+    if (entry && entry.var) highlightInCode(entry.var);
+  }
   if (state.sidePanel !== "layer" && state.sidePanel !== "guide"
       && state.sidePanel !== "ask" && state.sidePanel !== "math"
       && (state.sel || state.selEdge) && state.page === "pageDesign"){
@@ -3429,6 +3436,8 @@ function showCode(){
 
   $("codeGutter").innerHTML = lines.map((_, i) => "<div>" + (i + 1) + "</div>").join("");
   $("codeCount").textContent = lines.length + " lines";
+  const where = $("codeWhere");
+  if (where) where.textContent = "";
   drawCodeMap();
 }
 
@@ -3491,6 +3500,16 @@ $("codeMap").addEventListener("pointerdown", ev => {
   holder.scrollTop = Math.max(0, (line - 6) * codeLineHeight());
 });
 
+function classAround(index){
+  const lines = state.codeLines || [];
+  for (let i = index; i >= 0; i--){
+    const text = lines[i].map(pair => pair[0]).join("");
+    const match = text.match(/^class\s+(\w+)/);
+    if (match) return match[1];
+  }
+  return "";
+}
+
 function highlightInCode(varName){
   const lines = state.codeLines || [];
   const index = lines.findIndex(parts => {
@@ -3504,6 +3523,13 @@ function highlightInCode(varName){
   const target = spans[index];
   if (target) target.classList.add("hit");
   $("codeBody").scrollTop = Math.max(0, (index - 5) * codeLineHeight());
+  const where = $("codeWhere");
+  if (where){
+    // a workbook generates several classes, so the line number alone is not
+    // enough to say where you have landed
+    const cls = classAround(index);
+    where.textContent = cls ? `line ${index + 1} in ${cls}` : `line ${index + 1}`;
+  }
   syncCodeMap();
 }
 

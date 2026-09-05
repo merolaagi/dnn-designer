@@ -2366,6 +2366,48 @@ def _():
     assert "no setting called kernel" in reply["reply"], reply
 
 
+@check("selecting a layer finds it in the generated file")
+def _():
+    """The Code tab shows the whole file, so a layer has to point at its line.
+
+    With a workbook the file holds several classes, so the line number alone
+    does not say where you have landed — hence the class name beside it.
+    """
+    assert "function classAround" in PAGE, "there is no way to name the class"
+    assert 'id="codeWhere"' in PAGE, "nothing reports where the highlight went"
+
+    inspector = PAGE[PAGE.index("function renderInspector"):]
+    inspector = inspector[: inspector.index("\n}\n")]
+    assert "highlightInCode" in inspector, \
+        "selecting a layer does not move the open code panel"
+
+    # and every layer with a constructor should be findable
+    import json as _json
+
+    import blockloader
+    import codegen as cg
+    import workbook as wb
+
+    blockloader.load_all()
+    example = ROOT / "examples" / "MicroLean.json"
+    if not example.exists():
+        print("        (MicroLean absent, skipped)")
+        return
+    book = _json.loads(example.read_text())
+    analysis = wb.analyze(book)
+    source = wb.to_pytorch(book, analysis)
+    for sheet in book["sheets"]:
+        node_code: dict = {}
+        cg.to_pytorch(G.parse(wb.sheet_graph(book, sheet["name"])),
+                      analysis["sheets"][sheet["name"]], node_code)
+        for entry in node_code.values():
+            if not entry.get("init"):
+                continue                    # terminals have no constructor
+            var = entry["var"]
+            assert f"self.{var} =" in source, \
+                f"{var} has a constructor but no line in the file"
+
+
 @check("the code panel renders a real viewer, not a dump")
 def _():
     for token in ("function highlightPython", "function drawCodeMap",
@@ -2533,6 +2575,7 @@ def _():
         "openInserter", "insertIntoEdge", "openAppender", "appendAfterNode",
         "importSteps", "placeStep", "startGuided", "renderGuide", "renderPlanOverview",
         "highlightPython", "drawCodeMap", "syncCodeMap", "escapeHtml", "testLayer",
+        "classAround", "highlightInCode",
         "sendAsk", "askSay", "loadAssistant", "askObservations",
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",

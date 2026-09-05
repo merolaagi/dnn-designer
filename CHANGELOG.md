@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.29.1
+
+The Code tab shows the whole generated file — every sheet, every class — because
+that is what you would save and run. It does not change per layer, and there was
+nothing to say so.
+
+- **Selecting a layer now jumps to its line** when the Code panel is open, the
+  way the Layer tab's *Show in Code* button always did. Selecting another layer
+  moves to that one.
+- **The header says where you landed** — `line 13 in Block`, `line 57 in Model` —
+  because a workbook generates several classes and a line number alone does not
+  place you.
+- Verified across the MicroLean design: 21 of its 23 block layers locate their
+  line, the two that do not being Input and Output, which have no constructor.
+
 ## 1.29.0
 
 **A micro proof assistant, and a network that learns to drive it.**
