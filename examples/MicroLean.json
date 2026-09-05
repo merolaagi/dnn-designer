@@ -1,0 +1,605 @@
+{
+ "name": "MicroLean",
+ "main": "model",
+ "sheets": [
+  {
+   "name": "block",
+   "nodes": [
+    {
+     "id": "i",
+     "type": "Input",
+     "params": {
+      "shape": [
+       48,
+       128
+      ]
+     },
+     "label": "state",
+     "x": 0,
+     "y": 0
+    },
+    {
+     "id": "n1",
+     "type": "RMSNorm",
+     "params": {
+      "eps": 1e-06
+     },
+     "label": "",
+     "x": 0,
+     "y": 118
+    },
+    {
+     "id": "qkv",
+     "type": "Linear",
+     "params": {
+      "units": 384,
+      "bias": false
+     },
+     "label": "qkv",
+     "x": 0,
+     "y": 236
+    },
+    {
+     "id": "sq",
+     "type": "Split",
+     "params": {
+      "pieces": 3,
+      "axis": 1,
+      "take": 0
+     },
+     "label": "q",
+     "x": 0,
+     "y": 354
+    },
+    {
+     "id": "sk",
+     "type": "Split",
+     "params": {
+      "pieces": 3,
+      "axis": 1,
+      "take": 1
+     },
+     "label": "k",
+     "x": 0,
+     "y": 472
+    },
+    {
+     "id": "sv",
+     "type": "Split",
+     "params": {
+      "pieces": 3,
+      "axis": 1,
+      "take": 2
+     },
+     "label": "v",
+     "x": 0,
+     "y": 590
+    },
+    {
+     "id": "rq",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       48,
+       4,
+       32
+      ]
+     },
+     "label": "",
+     "x": 0,
+     "y": 708
+    },
+    {
+     "id": "rk",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       48,
+       4,
+       32
+      ]
+     },
+     "label": "",
+     "x": 0,
+     "y": 826
+    },
+    {
+     "id": "rv",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       48,
+       4,
+       32
+      ]
+     },
+     "label": "",
+     "x": 0,
+     "y": 944
+    },
+    {
+     "id": "tq",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 0,
+     "y": 1062
+    },
+    {
+     "id": "tk",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 0,
+     "y": 1180
+    },
+    {
+     "id": "tv",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 0,
+     "y": 1298
+    },
+    {
+     "id": "at",
+     "type": "Attention",
+     "params": {
+      "causal": false
+     },
+     "label": "attention",
+     "x": 0,
+     "y": 1416
+    },
+    {
+     "id": "to",
+     "type": "Transpose",
+     "params": {
+      "dim_a": 1,
+      "dim_b": 2
+     },
+     "label": "",
+     "x": 0,
+     "y": 1534
+    },
+    {
+     "id": "ro",
+     "type": "Reshape",
+     "params": {
+      "shape": [
+       48,
+       128
+      ]
+     },
+     "label": "",
+     "x": 0,
+     "y": 1652
+    },
+    {
+     "id": "po",
+     "type": "Linear",
+     "params": {
+      "units": 128,
+      "bias": false
+     },
+     "label": "project",
+     "x": 0,
+     "y": 1770
+    },
+    {
+     "id": "a1",
+     "type": "Add",
+     "params": {},
+     "label": "",
+     "x": 0,
+     "y": 1888
+    },
+    {
+     "id": "n2",
+     "type": "RMSNorm",
+     "params": {
+      "eps": 1e-06
+     },
+     "label": "",
+     "x": 0,
+     "y": 2006
+    },
+    {
+     "id": "f1",
+     "type": "Linear",
+     "params": {
+      "units": 512,
+      "bias": false
+     },
+     "label": "",
+     "x": 0,
+     "y": 2124
+    },
+    {
+     "id": "ac",
+     "type": "Activation",
+     "params": {
+      "kind": "gelu"
+     },
+     "label": "",
+     "x": 0,
+     "y": 2242
+    },
+    {
+     "id": "f2",
+     "type": "Linear",
+     "params": {
+      "units": 128,
+      "bias": false
+     },
+     "label": "",
+     "x": 0,
+     "y": 2360
+    },
+    {
+     "id": "a2",
+     "type": "Add",
+     "params": {},
+     "label": "",
+     "x": 0,
+     "y": 2478
+    },
+    {
+     "id": "o",
+     "type": "Output",
+     "params": {},
+     "label": "",
+     "x": 0,
+     "y": 2596
+    }
+   ],
+   "edges": [
+    {
+     "id": "e0",
+     "source": "i",
+     "target": "n1",
+     "port": 0
+    },
+    {
+     "id": "e1",
+     "source": "n1",
+     "target": "qkv",
+     "port": 0
+    },
+    {
+     "id": "e2",
+     "source": "qkv",
+     "target": "sq",
+     "port": 0
+    },
+    {
+     "id": "e3",
+     "source": "qkv",
+     "target": "sk",
+     "port": 0
+    },
+    {
+     "id": "e4",
+     "source": "qkv",
+     "target": "sv",
+     "port": 0
+    },
+    {
+     "id": "e5",
+     "source": "sq",
+     "target": "rq",
+     "port": 0
+    },
+    {
+     "id": "e6",
+     "source": "sk",
+     "target": "rk",
+     "port": 0
+    },
+    {
+     "id": "e7",
+     "source": "sv",
+     "target": "rv",
+     "port": 0
+    },
+    {
+     "id": "e8",
+     "source": "rq",
+     "target": "tq",
+     "port": 0
+    },
+    {
+     "id": "e9",
+     "source": "rk",
+     "target": "tk",
+     "port": 0
+    },
+    {
+     "id": "e10",
+     "source": "rv",
+     "target": "tv",
+     "port": 0
+    },
+    {
+     "id": "e11",
+     "source": "tq",
+     "target": "at",
+     "port": 0
+    },
+    {
+     "id": "e12",
+     "source": "tk",
+     "target": "at",
+     "port": 1
+    },
+    {
+     "id": "e13",
+     "source": "tv",
+     "target": "at",
+     "port": 2
+    },
+    {
+     "id": "e14",
+     "source": "at",
+     "target": "to",
+     "port": 0
+    },
+    {
+     "id": "e15",
+     "source": "to",
+     "target": "ro",
+     "port": 0
+    },
+    {
+     "id": "e16",
+     "source": "ro",
+     "target": "po",
+     "port": 0
+    },
+    {
+     "id": "e17",
+     "source": "i",
+     "target": "a1",
+     "port": 0
+    },
+    {
+     "id": "e18",
+     "source": "po",
+     "target": "a1",
+     "port": 1
+    },
+    {
+     "id": "e19",
+     "source": "a1",
+     "target": "n2",
+     "port": 0
+    },
+    {
+     "id": "e20",
+     "source": "n2",
+     "target": "f1",
+     "port": 0
+    },
+    {
+     "id": "e21",
+     "source": "f1",
+     "target": "ac",
+     "port": 0
+    },
+    {
+     "id": "e22",
+     "source": "ac",
+     "target": "f2",
+     "port": 0
+    },
+    {
+     "id": "e23",
+     "source": "a1",
+     "target": "a2",
+     "port": 0
+    },
+    {
+     "id": "e24",
+     "source": "f2",
+     "target": "a2",
+     "port": 1
+    },
+    {
+     "id": "e25",
+     "source": "a2",
+     "target": "o",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "name": "model",
+   "nodes": [
+    {
+     "id": "in",
+     "type": "Input",
+     "params": {
+      "shape": [
+       48
+      ],
+      "dtype": "long"
+     },
+     "label": "proof state",
+     "x": 0,
+     "y": 0
+    },
+    {
+     "id": "em",
+     "type": "Embedding",
+     "params": {
+      "vocab": 15,
+      "dim": 128
+     },
+     "label": "tokens",
+     "x": 0,
+     "y": 118
+    },
+    {
+     "id": "po",
+     "type": "LearnedPositions",
+     "params": {
+      "max_len": 48,
+      "dim": 128
+     },
+     "label": "positions",
+     "x": 0,
+     "y": 236
+    },
+    {
+     "id": "b1",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       48,
+       128
+      ],
+      "_learnables": 196864
+     },
+     "label": "block 1",
+     "x": 0,
+     "y": 354
+    },
+    {
+     "id": "b2",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       48,
+       128
+      ],
+      "_learnables": 196864
+     },
+     "label": "block 2",
+     "x": 0,
+     "y": 472
+    },
+    {
+     "id": "b3",
+     "type": "Subgraph",
+     "params": {
+      "sheet": "block",
+      "_out": [
+       48,
+       128
+      ],
+      "_learnables": 196864
+     },
+     "label": "block 3",
+     "x": 0,
+     "y": 590
+    },
+    {
+     "id": "nf",
+     "type": "RMSNorm",
+     "params": {
+      "eps": 1e-06
+     },
+     "label": "final norm",
+     "x": 0,
+     "y": 708
+    },
+    {
+     "id": "gp",
+     "type": "GlobalAvgPool",
+     "params": {},
+     "label": "pool over the goal",
+     "x": 0,
+     "y": 826
+    },
+    {
+     "id": "hd",
+     "type": "Linear",
+     "params": {
+      "units": 84,
+      "bias": true
+     },
+     "label": "head",
+     "x": 0,
+     "y": 944
+    },
+    {
+     "id": "ou",
+     "type": "Output",
+     "params": {
+      "task": "classification"
+     },
+     "label": "which tactic",
+     "x": 0,
+     "y": 1062
+    }
+   ],
+   "edges": [
+    {
+     "id": "e0",
+     "source": "in",
+     "target": "em",
+     "port": 0
+    },
+    {
+     "id": "e1",
+     "source": "em",
+     "target": "po",
+     "port": 0
+    },
+    {
+     "id": "e2",
+     "source": "po",
+     "target": "b1",
+     "port": 0
+    },
+    {
+     "id": "e3",
+     "source": "b1",
+     "target": "b2",
+     "port": 0
+    },
+    {
+     "id": "e4",
+     "source": "b2",
+     "target": "b3",
+     "port": 0
+    },
+    {
+     "id": "e5",
+     "source": "b3",
+     "target": "nf",
+     "port": 0
+    },
+    {
+     "id": "e6",
+     "source": "nf",
+     "target": "gp",
+     "port": 0
+    },
+    {
+     "id": "e7",
+     "source": "gp",
+     "target": "hd",
+     "port": 0
+    },
+    {
+     "id": "e8",
+     "source": "hd",
+     "target": "ou",
+     "port": 0
+    }
+   ]
+  }
+ ]
+}

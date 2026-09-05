@@ -2,5 +2,6 @@
  "Discriminator",
  "GPT2",
  "Generator",
+ "MicroLean",
  "MiniGPT"
 ]

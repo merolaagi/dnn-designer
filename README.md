@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-One hundred checks, with the torch-dependent ones skipping themselves when it is
+A hundred and three checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -302,6 +302,19 @@ Accounts separate people from each other, **not from the machine**. Importing
 code, importing a folder, and the blocks and recipes folders all execute Python
 by design, so anyone who can sign in can run code as this process. Run it on a
 network you trust.
+
+## Proving things
+
+`microlean.py` is a small proof kernel — equational logic, twelve axioms,
+rewriting at a position — and `check` is the only thing here that decides
+whether a proof holds. The **MicroLean** example design is a three-block
+transformer that proposes the next tactic; the kernel decides whether it was
+right. `python prove.py` trains it and reports how many held-out theorems it
+proves, with the kernel verifying every one.
+
+This is the shape of neural theorem proving generally: the network is a policy,
+not an oracle. A confident wrong suggestion costs a search node and nothing
+else.
 
 ## Studies
 
@@ -611,4 +624,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.28.2 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.29.0 — see `CHANGELOG.md`.

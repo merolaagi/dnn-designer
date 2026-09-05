@@ -54,6 +54,8 @@ BUILTIN_DATASETS = {
     "folder": {"label": "Folder of images", "shape": None, "classes": None},
     "text": {"label": "Text file (character language model)", "shape": None,
              "classes": None},
+    "microlean": {"label": "Micro-Lean tactic prediction", "shape": None,
+                  "classes": None},
 }
 
 AUGMENTATIONS = [
@@ -529,6 +531,37 @@ def inspect_text(name: str) -> Dict[str, Any]:
     }
 
 
+def _microlean_loaders(cfg, in_shapes, job):
+    """Proof states in, tactics out.
+
+    Every example is a step of a proof the kernel has already verified, so the
+    labels are moves that demonstrably advanced a real goal rather than moves
+    that merely looked plausible.
+    """
+    import torch
+
+    import microlean as ml
+
+    total = int(cfg.get("train_samples") or 4000)
+    rows, labels = ml.training_pairs(total, steps=int(cfg.get("proof_steps", 3)),
+                                     seed=int(cfg.get("seed", 0)))
+    if not rows:
+        raise TrainError("The generator produced no proofs to learn from.")
+
+    x = torch.tensor(rows, dtype=torch.long)
+    y = torch.tensor(labels, dtype=torch.long)
+    cut = max(1, int(len(x) * 0.9))
+    if job is not None:
+        job.emit("dataset", rows=len(x), train=cut, val=len(x) - cut,
+                 note=f"{len(x):,} verified proof steps · {ml.N_TACTICS} tactics "
+                      f"· vocabulary {ml.VOCAB}")
+    train = torch.utils.data.TensorDataset(x[:cut], y[:cut])
+    valid = torch.utils.data.TensorDataset(x[cut:], y[cut:])
+    batch = int(cfg.get("batch_size", 64))
+    return (torch.utils.data.DataLoader(train, batch_size=batch, shuffle=True),
+            torch.utils.data.DataLoader(valid, batch_size=batch))
+
+
 def _text_loaders(cfg, in_shapes, job: Optional[Job]):
     """Random crops of the corpus, each paired with itself shifted one step."""
     import torch
@@ -606,6 +639,9 @@ def _make_loaders(cfg, in_shapes, in_ids, out_shape, task, job: Optional[Job] = 
 
     if name == "text":
         return _text_loaders(cfg, in_shapes, job)
+
+    if name == "microlean":
+        return _microlean_loaders(cfg, in_shapes, job)
 
     if name == "synthetic":
         n = limit or 2048

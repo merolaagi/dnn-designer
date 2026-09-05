@@ -1800,6 +1800,58 @@ def _():
             assert "outside" in str(exc) or "No such file" in str(exc), exc
 
 
+@check("the proof kernel accepts only real proofs")
+def _():
+    import microlean as ml
+
+    theorem = ml.Theorem.parse("((a * 1) * b)", "(a * b)")
+    assert ml.check(theorem, [(0, (1,))]), "a correct proof was rejected"
+    assert not ml.check(theorem, [(6, ())]), "a wrong proof was accepted"
+    assert not ml.check(theorem, [(2, (1,))]), "an illegal move was accepted"
+    assert not ml.check(theorem, []), "an empty proof closed a real goal"
+    assert not ml.check(theorem, [(99, ())]), "a nonexistent rule was accepted"
+
+    # everything the generator emits is checked before it is handed out
+    made = ml.corpus(120, steps=3, seed=5)
+    assert len(made) > 60, f"only {len(made)} theorems generated"
+    for statement, proof in made:
+        assert ml.check(statement, proof), f"generated an unprovable goal: {statement}"
+        assert statement.lhs != statement.rhs, "a goal that was already closed"
+
+
+@check("training and evaluation theorems can be kept apart")
+def _():
+    """A differently-seeded sample is not a held-out set.
+
+    The reachable space is small, so an independent draw shared about a third
+    of its theorems with training — which would have flattered the result badly.
+    """
+    import microlean as ml
+
+    train = ml.corpus(1500, steps=3, seed=0)
+    used = ml.statements(train)
+
+    naive = ml.corpus(120, steps=3, seed=4242)
+    shared = len(ml.statements(naive) & used)
+    assert shared > 0, ("this test exists because independent seeds overlap; "
+                        "if they no longer do, the risk it guards has changed")
+
+    clean = ml.corpus(120, steps=3, seed=4242, exclude=used)
+    assert not (ml.statements(clean) & used), "exclude did not keep them apart"
+
+
+@check("the tactic space covers what the generator produces")
+def _():
+    import microlean as ml
+
+    rows, labels = ml.training_pairs(400, steps=3, seed=1)
+    assert rows and labels
+    assert len(rows) == len(labels)
+    assert all(len(r) == ml.CONTEXT for r in rows), "a state was the wrong length"
+    assert all(0 <= v < ml.VOCAB for r in rows for v in r), "a token id is out of range"
+    assert all(0 <= v < ml.N_TACTICS for v in labels), "a tactic id is out of range"
+
+
 @check("a class can be read and tried before importing it")
 def _():
     if not HAVE_TORCH:
