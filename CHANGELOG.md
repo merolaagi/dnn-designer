@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.28.2
+
+**Fixed: "will not trace" was shown for every kind of failure.**
+
+A class that was never given its config got the same badge as one whose
+`forward` genuinely cannot be traced. Only the first is the user's to fix, and
+it is fixed by typing in the box on the same row — so the label was sending
+people to look at the wrong thing entirely.
+
+The badge now says which happened: **needs arguments**, **cannot be traced**,
+**import failed**, **shapes unresolved** or **not found**, with the full reason
+on hover. A class that needs a config and has not been given one shows its box
+in amber before you press anything.
+
 ## 1.28.1
 
 - **The import dialog resizes.** Drag the corner grip to make it as large as the

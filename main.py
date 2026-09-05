@@ -606,6 +606,25 @@ def scan_file(body: Dict[str, Any]):
             "text": target.read_text(encoding="utf-8", errors="replace")}
 
 
+def _failure_kind(reason: str) -> str:
+    """Which sort of failure this was.
+
+    Saying "will not trace" for every failure sends people to look at the wrong
+    thing. Not being given a config is a different problem from a forward() that
+    cannot be traced, and only one of them is the user's to fix.
+    """
+    text = reason.lower()
+    if "could not be built with" in text or "missing" in text and "argument" in text:
+        return "arguments"
+    if "did not import" in text or "no module named" in text:
+        return "module"
+    if "cannot be traced" in text or "variadic" in text:
+        return "trace"
+    if "has no class called" in text:
+        return "missing"
+    return "error"
+
+
 class ClassProbe(BaseModel):
     root: str
     file: str
@@ -666,9 +685,10 @@ def scan_try(body: ClassProbe):
         graph = importer.from_folder(body.root, body.file, body.cls,
                                      body.input_shape, body.arguments)
     except importer.ImportError_ as exc:
-        return {"ok": False, "reason": str(exc)}
+        return {"ok": False, "reason": str(exc), "kind": _failure_kind(str(exc))}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}",
+                "kind": _failure_kind(str(exc))}
 
     graph.pop("_entry", None)
     notes = graph.pop("_notes", [])
@@ -678,6 +698,7 @@ def scan_try(body: ClassProbe):
     opaque = sum(1 for n in graph["nodes"] if n["type"] == "Custom")
     return {
         "ok": report["ok"],
+        "kind": "" if report["ok"] else "shapes",
         "nodes": len(graph["nodes"]),
         "opaque": opaque,
         "learnables": report["total_learnables"],

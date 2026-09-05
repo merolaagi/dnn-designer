@@ -1126,10 +1126,15 @@ body.sizing{user-select:none}
   border:1px solid var(--paper-3);border-radius:5px;flex:none;
 }
 .field input[type=text]#scanFilter{flex:1;width:auto}
+/* a class that needs a config and has not been given one */
+.field input[type=text].scanargs.wanting, .scanargs.wanting{
+  border-color:#E0C48A;background:#FFFCF3;
+}
 .scanargs.none{border:none;color:#B7C0CB;font-size:9.5px;text-align:right}
 .scanrow em{font-style:normal;font-size:9.5px;white-space:nowrap;flex:none}
 .v-ok{color:#256B39}
 .v-no{color:#8C2F27}
+.v-args{color:#7A5400}
 .v-wait{color:var(--muted)}
 .btn.tiny{font-size:10px;padding:2px 8px;flex:none}
 .scanpeek{
@@ -5825,7 +5830,15 @@ function scanRow(model, scan){
           + (verdict.opaque ? `, ${verdict.opaque} opaque` : "")
           + (verdict.learnables ? ` · ${verdict.learnables.toLocaleString()}` : "")
           + `</em>`;
-  else if (verdict) badge = `<em class="v-no">will not trace</em>`;
+  else if (verdict){
+    // each failure sends you somewhere different, so say which it was
+    const said = { arguments: "needs arguments", module: "import failed",
+                   trace: "cannot be traced", shapes: "shapes unresolved",
+                   missing: "not found" }[verdict.kind] || "failed";
+    const tone = verdict.kind === "arguments" ? "v-args" : "v-no";
+    badge = `<em class="${tone}" title="${(verdict.reason || "")
+      .replace(/"/g, "&quot;").slice(0, 300)}">${said}</em>`;
+  }
 
   return `<div class="scanrow" data-peek="${key}" tabindex="0">
     <input type="checkbox" data-pick="${key}" ${picked ? "checked" : ""}>
@@ -5834,8 +5847,9 @@ function scanRow(model, scan){
       <span class="mono">${model.file}:${model.line}</span>
     </div>
     ${model.arguments > 0
-      ? `<input type="text" class="scanargs" data-args="${key}"
-           placeholder="${model.arguments} arg${model.arguments > 1 ? "s" : ""}"
+      ? `<input type="text" class="scanargs${
+             (scan.args[key] || "").trim() ? "" : " wanting"}" data-args="${key}"
+           placeholder="${model.arguments} argument${model.arguments > 1 ? "s" : ""} needed"
            value="${(scan.args[key] || "").replace(/"/g, "&quot;")}">`
       : `<span class="scanargs none">no args</span>`}
     ${badge}

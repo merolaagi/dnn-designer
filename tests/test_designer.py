@@ -1862,6 +1862,76 @@ def _():
         shutil.rmtree(root)
 
 
+@check("a failed try says which kind of failure it was")
+def _():
+    """One label for every failure sends people to fix the wrong thing.
+
+    A class that was never given its config had the same badge as one whose
+    forward() genuinely cannot be traced — but only the first is the user's to
+    fix, and it is fixed by typing in the box beside it.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import shutil
+    import tempfile
+
+    import main
+
+    root = Path(tempfile.mkdtemp())
+    try:
+        (root / "net.py").write_text(
+            "import torch.nn as nn\n"
+            "\n"
+            "\n"
+            "class NeedsConfig(nn.Module):\n"
+            "    def __init__(self, width):\n"
+            "        super().__init__()\n"
+            "        self.fc = nn.Linear(width, width)\n"
+            "\n"
+            "    def forward(self, x):\n"
+            "        return self.fc(x)\n"
+            "\n"
+            "\n"
+            "class Variadic(nn.Module):\n"
+            "    def __init__(self):\n"
+            "        super().__init__()\n"
+            "        self.fc = nn.Linear(8, 8)\n"
+            "\n"
+            "    def forward(self, x, **kw):\n"
+            "        for k in kw:\n"
+            "            x = x + kw[k]\n"
+            "        return self.fc(x)\n")
+
+        def probe(cls, arguments=""):
+            body = type("P", (), {"root": str(root), "file": "net.py", "cls": cls,
+                                  "arguments": arguments, "input_shape": [8]})()
+            return main.scan_try(body)
+
+        # not given its argument: the user's to fix, and the badge should say so
+        missing = probe("NeedsConfig")
+        assert not missing["ok"]
+        assert missing["kind"] == "arguments", missing
+
+        # given it, the same class imports
+        given = probe("NeedsConfig", "8")
+        assert given["ok"], given
+
+        # genuinely untraceable is a different answer
+        hopeless = probe("Variadic")
+        assert hopeless["kind"] == "trace", hopeless
+
+        # and a name that is not there again
+        gone = probe("NotHere")
+        assert gone["kind"] == "missing", gone
+
+    finally:
+        shutil.rmtree(root)
+
+    assert "needs arguments" in PAGE and "cannot be traced" in PAGE, \
+        "the badge does not distinguish the kinds"
+
+
 @check("the import dialog can be moved, resized and split")
 def _():
     for token in ('id="sheetGrip"', 'id="scanDrag"', 'id="importGrab"',
