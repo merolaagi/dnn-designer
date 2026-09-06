@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.32.1
+
+- **The heavy black rule down each side of the canvas was a scrollbar.** Only
+  the thumb had ever been styled, so the track fell back to the browser default —
+  which on a machine set to dark mode is nearly black. The page now declares
+  itself light and styles the track, the corner and the Firefox equivalent, so
+  no control renders in a colour the app never chose.
+- Panel edges are a hairline plus a soft shadow rather than a hard border, so
+  the canvas reads as sitting under the panels rather than being fenced off.
+- **The toolbar floats over the canvas**, top left, instead of occupying a band
+  across the window — which puts the header on one line, as it should be.
+- **Tabs read as tabs**: sentence case at 12px, light grey when idle, near-black
+  and semibold with a blue rule when active.
+- **Fixed while checking the above**: `applyLayout` redrew without reapplying
+  the fold state, so re-docking or resizing a folded panel silently brought it
+  back. Folding is part of the layout, and a test now holds docking, resizing
+  and folding together.
+
 ## 1.32.0
 
 - **Both side panels fold away.** A chevron in each panel's header collapses it

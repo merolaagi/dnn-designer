@@ -6,6 +6,9 @@
 <title>Deep Network Designer</title>
 <style>
 :root{
+  color-scheme:light;      /* never inherit the system's dark form controls */
+  scrollbar-width:thin;
+  scrollbar-color:#D3DAE2 transparent;
   --ink:#141C28;          /* dark chrome: header, rail, code */
   --ink-2:#1B2635;        /* raised surfaces on dark */
   --grid:#253449;
@@ -81,10 +84,11 @@ header{
 
 /* the canvas toolbar, its own strip under the title */
 .toolbar{
-  display:flex;align-items:center;gap:1px;padding:4px;flex:none;
+  position:absolute;top:10px;left:10px;z-index:7;
+  display:flex;align-items:center;gap:1px;padding:4px;
   background:#fff;border:1px solid var(--paper-3);border-radius:9px;
-  box-shadow:0 1px 2px rgba(22,32,46,.06), 0 4px 12px rgba(22,32,46,.06);
-  margin:8px 0 8px 8px;width:max-content;
+  box-shadow:0 1px 2px rgba(22,32,46,.06), 0 4px 12px rgba(22,32,46,.08);
+  width:max-content;max-width:calc(100% - 20px);flex-wrap:wrap;
 }
 .toolbar button{
   background:none;border:none;color:#5C6B7F;font-size:14px;line-height:1;
@@ -102,13 +106,16 @@ header{
 /* ---------------- shell ---------------- */
 /* right panel tabs, in the manner of a workflow editor's side rail */
 .ptabs{display:flex;gap:0;border-bottom:1px solid var(--paper-3);flex:none;
-  background:var(--paper-2)}
+  background:#fff}
 .ptabs button{
-  flex:1;background:none;border:none;padding:9px 2px 8px;font-size:9.5px;
-  font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
-  border-bottom:2px solid transparent;
+  flex:1;background:none;border:none;padding:11px 4px 9px;font-size:12px;
+  font-weight:500;letter-spacing:0;text-transform:none;color:#93A0AF;
+  border-bottom:2px solid transparent;white-space:nowrap;
 }
-.ptabs button.on{color:var(--text);border-bottom-color:#2D7DD2;background:#fff}
+.ptabs button:hover{color:#5C6B7F}
+.ptabs button.on{
+  color:#1B2635;font-weight:600;border-bottom-color:#2D7DD2;background:#fff;
+}
 .ptabs .tabfold{
   flex:none;width:30px;font-size:13px;letter-spacing:0;text-transform:none;
   color:#9AA6B4;border-bottom-color:transparent;
@@ -287,17 +294,34 @@ body.resizing-v{cursor:row-resize;user-select:none}
 #versionPick:focus{outline:none;border-color:var(--amber)}
 .pane.full{position:absolute;inset:0;background:var(--paper);z-index:5;overflow:auto}
 .panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
-#palette{width:212px;border-right:1px solid var(--paper-3);flex:none}
+#palette{
+  width:212px;flex:none;border-right:1px solid var(--paper-3);
+  box-shadow:2px 0 8px rgba(22,32,46,.045);
+  position:relative;z-index:2;
+}
 #palette, #inspector{min-width:150px}
-#inspector{width:390px;border-left:1px solid var(--paper-3);flex:none}
+#inspector{
+  width:390px;flex:none;border-left:1px solid var(--paper-3);
+  box-shadow:-2px 0 8px rgba(22,32,46,.045);
+  position:relative;z-index:2;
+}
 .panel h2{
   margin:0;padding:10px 14px 9px;font-size:10px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--muted);font-weight:700;
 }
 .panel{overflow:hidden}
 .scroll{overflow-y:auto;flex:1;padding:0 10px 16px}
-.scroll::-webkit-scrollbar{width:9px}
-.scroll::-webkit-scrollbar-thumb{background:var(--paper-3);border-radius:5px}
+/* Only the thumb was styled, so the track fell back to the browser's default —
+   which on a machine set to dark mode is nearly black, and read as a heavy rule
+   down the edge of the canvas. */
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{
+  background:#D3DAE2;border-radius:6px;border:2px solid transparent;
+  background-clip:content-box;
+}
+*::-webkit-scrollbar-thumb:hover{background:#B6C0CC;background-clip:content-box}
+*::-webkit-scrollbar-corner{background:transparent}
 
 #search{
   width:calc(100% - 20px);margin:0 10px 10px;padding:6px 9px;
@@ -1225,28 +1249,6 @@ body.sizing{user-select:none}
     <button class="btn" id="btnSave">Save</button>
     <button class="btn go" id="btnTrain">Train</button>
   </div>
-
-  <div class="toolbar" id="canvasTools">
-    <button id="zhome" title="Reset the view">&#8962;</button>
-    <button id="zfit" title="Fit to view">&#8982;</button>
-    <button id="zout" title="Zoom out">&minus;</button>
-    <span class="zoomval" id="zoomVal">100%</span>
-    <button id="zin" title="Zoom in">+</button>
-    <span class="sep"></span>
-    <button id="btnTidy" title="Tidy the layout">&#9776;</button>
-    <button id="zroute" title="Straight or curved wires">&#8735;</button>
-    <button id="zsnap" title="Snap to grid">#</button>
-    <button id="zflow" title="Vertical or horizontal flow">&#8646;</button>
-    <button id="zgrid" title="Grid weight">&#9638;</button>
-    <button id="zmap" class="on" title="Minimap">&#9635;</button>
-    <span class="sep"></span>
-    <button id="btnUndo" title="Undo" disabled>&#8630;</button>
-    <button id="btnRedo" title="Redo" disabled>&#8631;</button>
-    <span class="sep"></span>
-    <button id="zfind" title="Find a layer">&#9906;</button>
-    <span class="sep"></span>
-    <button id="zpan" title="Drag the whole graph (or hold space)">&#9995;</button>
-  </div>
 </header>
 
 <div class="shell">
@@ -1295,6 +1297,28 @@ body.sizing{user-select:none}
 
   <div class="splitter" data-panel="palette" id="splitPalette"></div>
   <main id="stage">
+
+    <div class="toolbar" id="canvasTools">
+      <button id="zhome" title="Reset the view">&#8962;</button>
+      <button id="zfit" title="Fit to view">&#8982;</button>
+      <button id="zout" title="Zoom out">&minus;</button>
+      <span class="zoomval" id="zoomVal">100%</span>
+      <button id="zin" title="Zoom in">+</button>
+      <span class="sep"></span>
+      <button id="btnTidy" title="Tidy the layout">&#9776;</button>
+      <button id="zroute" title="Straight or curved wires">&#8735;</button>
+      <button id="zsnap" title="Snap to grid">#</button>
+      <button id="zflow" title="Vertical or horizontal flow">&#8646;</button>
+      <button id="zgrid" title="Grid weight">&#9638;</button>
+      <button id="zmap" class="on" title="Minimap">&#9635;</button>
+      <span class="sep"></span>
+      <button id="btnUndo" title="Undo" disabled>&#8630;</button>
+      <button id="btnRedo" title="Redo" disabled>&#8631;</button>
+      <span class="sep"></span>
+      <button id="zfind" title="Find a layer">&#9906;</button>
+      <span class="sep"></span>
+      <button id="zpan" title="Drag the whole graph (or hold space)">&#9995;</button>
+    </div>
     <svg id="mdefs" width="0" height="0" style="position:absolute">
   <defs><marker id="mtip" viewBox="0 0 8 8" refX="7" refY="4"
     markerWidth="6" markerHeight="6" orient="auto">
@@ -1355,7 +1379,7 @@ body.sizing{user-select:none}
       <button data-side="train">Train</button>
       <button data-side="math">Maths</button>
       <button data-side="guide">Guide</button>
-      <button data-side="ask">Assist</button>
+      <button data-side="ask">Assistant</button>
       <button data-side="needs">Needs</button>
     </div>
     <div class="scroll" id="inspBody">
@@ -3911,7 +3935,10 @@ function applyLayout(){
       b.classList.toggle("on", b.dataset.dock === dock[name]));
   });
 
-  render(); drawMinimap(); drawChart();
+  // folding is part of the layout: re-docking or resizing must not quietly
+  // bring back a panel that was put away
+  applyCollapse();
+  drawChart();
 }
 
 /* ---------- collapsing the side panels ---------- */

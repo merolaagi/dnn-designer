@@ -2783,6 +2783,40 @@ def _():
         "the tab handlers will pick up the fold chevron as a tab"
 
 
+@check("docking, resizing and folding do not undo each other")
+def _():
+    """Folding is part of the layout, not a separate mode.
+
+    applyLayout ended by redrawing without reapplying the fold state, so
+    re-docking or resizing a folded panel silently brought it back.
+    """
+    script = PAGE[PAGE.index("<script>"):]
+    layout = script[script.index("function applyLayout"):]
+    layout = layout[: layout.index("\n}\n")]
+    assert "applyCollapse()" in layout, \
+        "applyLayout does not reapply the fold state, so docking will unfold a panel"
+
+    collapse = script[script.index("function applyCollapse"):]
+    collapse = collapse[: collapse.index("\n}\n")]
+    for effect in ("style.display", "splitter", "bottomRow"):
+        assert effect in collapse, f"folding does not deal with {effect}"
+
+
+@check("nothing renders against a system-coloured default")
+def _():
+    """The scrollbar track was never styled, only the thumb.
+
+    On a machine set to dark mode the browser's default track is nearly black,
+    and it read as a heavy rule down the edge of the canvas — a control the app
+    had never drawn.
+    """
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    assert "color-scheme:light" in css.replace(" ", ""), \
+        "the page can inherit dark form controls from the system"
+    assert "::-webkit-scrollbar-track" in css, "the scrollbar track is unstyled"
+    assert "scrollbar-color" in css, "Firefox scrollbars are unstyled"
+
+
 @check("panels can be docked and resized")
 def _():
     for token in ('id="mainRow"', 'id="bottomRow"', 'class="splitter"',
