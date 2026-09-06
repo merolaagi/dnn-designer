@@ -5560,7 +5560,10 @@ $("btnImport").addEventListener("click", async () => {
   if (!sel.options.length){
     try{
       const d = await (await fetch(API + "/api/import/models")).json();
-      sel.innerHTML = d.torchvision.map(m => `<option value="${m}">${m}</option>`).join("");
+      // an empty first option, so "nothing chosen" is a state the dialog can
+      // be in rather than silently meaning resnet18
+      sel.innerHTML = `<option value="">— none —</option>`
+        + d.torchvision.map(m => `<option value="${m}">${m}</option>`).join("");
     } catch { toast("Cannot reach the server"); return; }
   }
   $("importNote").innerHTML = "";
@@ -5577,6 +5580,26 @@ $("im_file").addEventListener("change", e => {
 
 $("btnImportGo").addEventListener("click", async () => {
   const note = $("importNote");
+
+  // Say what will happen rather than falling through to whatever the first
+  // control happens to hold. Importing resnet18 because nothing was ticked is
+  // never what anyone meant.
+  const picks = (state.scan && scanPicks().length) || 0;
+  const pastedNow = ($("im_code").value || "").trim();
+  const chosenFile = $("im_file").files[0];
+  const architecture = $("im_arch").value;
+  const repo = ($("im_repo").value || "").trim();
+
+  if (!picks && !pastedNow && !chosenFile && !architecture){
+    note.innerHTML = state.scan
+      ? "Tick at least one class in the list above, or choose another route."
+      : (repo
+          ? "Press <b>Fetch</b> first, then tick the classes you want."
+          : "Nothing chosen yet. Pick an architecture, paste code, fetch a "
+            + "repository, scan a folder, or choose a file.");
+    return;
+  }
+
   note.textContent = "Tracing…";
   if (state.scan && scanPicks().length){
     const done = await importFolderPicks();

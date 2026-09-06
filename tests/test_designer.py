@@ -2159,6 +2159,38 @@ def _():
     assert "Filter " in PAGE, "there is no way to narrow the list"
 
 
+@check("import does not guess what you meant")
+def _():
+    """Pressing Import with nothing chosen fetched resnet18.
+
+    The architecture dropdown always held a value, so "nothing chosen" was not a
+    state the dialog could be in — and the failure that surfaced was about
+    torchvision, which had nothing to do with what the person was doing.
+    """
+    assert "\u2014 none \u2014" in PAGE, \
+        "the architecture list has no empty option, so it always means something"
+
+    script = PAGE[PAGE.index("<script>"):]
+    handler = script[script.index('$("btnImportGo").addEventListener'):]
+    handler = handler[: handler.index("\n});")]
+    assert "Nothing chosen yet" in handler, \
+        "the handler still falls through instead of saying nothing was chosen"
+    for control in ("im_code", "im_file", "im_arch", "im_repo"):
+        assert control in handler, f"{control} is not considered before importing"
+
+
+@check("a missing package says how to install it")
+def _():
+    import main
+
+    message = main._missing_package(ModuleNotFoundError("No module named 'torchvision'"))
+    assert message and "pip install torchvision" in message, message
+    assert sys.executable in message, "it does not say which interpreter"
+
+    # anything else is passed through rather than dressed up
+    assert main._missing_package(ValueError("unrelated")) is None
+
+
 @check("a GitHub address is understood before anything is downloaded")
 def _():
     import importer

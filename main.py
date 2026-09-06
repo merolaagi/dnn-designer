@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -524,6 +525,17 @@ def _finish_import(graph: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _missing_package(exc: Exception) -> Optional[str]:
+    text = str(exc)
+    if "torchvision" in text:
+        return ("Importing an architecture by name needs torchvision, which is "
+                "not installed for the interpreter running this server. "
+                f"Install it with: {sys.executable} -m pip install torchvision")
+    if "No module named" in text:
+        return f"{text}. Install it for {sys.executable}."
+    return None
+
+
 @app.get("/api/import/models")
 def import_models():
     return {"torchvision": TORCHVISION_MODELS}
@@ -538,7 +550,8 @@ def import_torchvision(body: ImportPayload):
     except importer.ImportError_ as exc:
         raise HTTPException(400, detail={"message": str(exc)})
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(400, detail={"message": f"{type(exc).__name__}: {exc}"})
+        raise HTTPException(400, detail={
+            "message": _missing_package(exc) or f"{type(exc).__name__}: {exc}"})
     return _finish_import(graph)
 
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.31.1
+
+**Fixed: Import fell through to the architecture dropdown when nothing was
+chosen.**
+
+With no class ticked and nothing pasted, pressing Import fetched resnet18 —
+because the dropdown always held a value, so "nothing chosen" was not a state
+the dialog could be in. The failure that surfaced was then about torchvision,
+which had nothing to do with what the person was doing.
+
+- The architecture list starts at **— none —**, so choosing one is a decision.
+- Import considers every route before doing anything, and says which is missing:
+  *"Press Fetch first, then tick the classes you want"* when a repository
+  address is typed but not fetched, *"Tick at least one class"* when a scan is
+  showing, and a plain list of the routes when nothing at all is filled in.
+- **A missing package says how to install it**, naming the interpreter:
+  `/path/to/.venv/bin/python -m pip install torchvision`. Anything else is
+  passed through unchanged rather than dressed up.
+
 ## 1.31.0
 
 **Import straight from GitHub.** Paste a repository address into the Import
