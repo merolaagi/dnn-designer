@@ -2815,6 +2815,33 @@ def _():
         "folding by another route leaves the rail entry looking open"
 
 
+@check("one line divides a panel from the canvas")
+def _():
+    """There were three: the panel's border, the drag handle's hover bar, and
+    the dark page background showing through the transparent splitter between
+    them."""
+    import re
+
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    rules = {m.group(1).strip(): m.group(2)
+             for m in re.finditer(r"(?:^|\n)([^\n{}]+)\{([^}]*)\}", css)}
+
+    for panel in ("#palette", "#inspector"):
+        rule = rules.get(panel, "")
+        assert "border-left" not in rule and "border-right" not in rule, \
+            f"{panel} still draws its own edge beside the splitter"
+
+    splitter = rules.get(".splitter", "")
+    assert "background:transparent" not in splitter.replace(" ", ""), \
+        "the splitter is transparent, so the page background shows through it"
+    assert "var(--board)" in splitter, "the splitter does not match the canvas"
+
+    # and it still has to be a handle, not just a line
+    assert "col-resize" in splitter, "the splitter is no longer draggable"
+    assert "row-resize" in rules.get(".splitter.horiz", ""), \
+        "the horizontal splitter is no longer draggable"
+
+
 @check("a folded panel leaves nothing behind")
 def _():
     """The rail opens the panels, so a strip beside the canvas is a second

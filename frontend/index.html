@@ -153,24 +153,36 @@ header{
 .page{flex:1;display:none;min-width:0;min-height:0}
 .page.on{display:flex}
 #pageDesign{position:relative;flex-direction:column}
-#mainRow{flex:1;display:flex;min-height:0;min-width:0}
-#bottomRow{flex:none;display:none;min-height:0;border-top:1px solid var(--paper-3)}
+#mainRow{flex:1;display:flex;min-height:0;min-width:0;background:var(--board)}
+#bottomRow{flex:none;display:none;min-height:0;background:var(--board)}
 #bottomRow.on{display:flex}
 #bottomRow .panel{flex:1;border-left:1px solid var(--paper-3)}
 #bottomRow .panel:first-child{border-left:none}
 
 /* drag handles between panels */
+/* The divider and the drag handle are the same thing now. This used to be a
+   transparent gap, which let the dark page background show through as a black
+   rule, with the panel's own border beside it and an amber bar on hover — three
+   lines where there should be one. */
 .splitter{
-  flex:none;width:5px;cursor:col-resize;background:transparent;
+  flex:none;width:9px;cursor:col-resize;background:var(--board);
   position:relative;z-index:4;
 }
 .splitter::after{
-  content:"";position:absolute;inset:0 2px;background:var(--paper-3);opacity:0;
-  transition:opacity .12s;
+  content:"";position:absolute;top:0;bottom:0;left:4px;width:1px;
+  background:var(--paper-3);
+  transition:background .12s, width .12s, left .12s;
 }
-.splitter:hover::after,.splitter.dragging::after{opacity:1;background:var(--amber)}
-.splitter.horiz{width:auto;height:5px;cursor:row-resize}
-.splitter.horiz::after{inset:2px 0}
+.splitter:hover::after,.splitter.dragging::after{
+  background:var(--amber);width:3px;left:3px;
+}
+.splitter.horiz{width:auto;height:9px;cursor:row-resize}
+.splitter.horiz::after{
+  left:0;right:0;top:4px;bottom:auto;width:auto;height:1px;
+}
+.splitter.horiz:hover::after,.splitter.horiz.dragging::after{
+  height:3px;top:3px;width:auto;left:0;
+}
 .splitter.hidden{display:none}
 body.resizing{cursor:col-resize;user-select:none}
 body.resizing-v{cursor:row-resize;user-select:none}
@@ -295,13 +307,13 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .pane.full{position:absolute;inset:0;background:var(--paper);z-index:5;overflow:auto}
 .panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
 #palette{
-  width:212px;flex:none;border-right:1px solid var(--paper-3);
+  width:212px;flex:none;
   box-shadow:2px 0 8px rgba(22,32,46,.045);
   position:relative;z-index:2;
 }
 #palette, #inspector{min-width:150px}
 #inspector{
-  width:390px;flex:none;border-left:1px solid var(--paper-3);
+  width:390px;flex:none;
   box-shadow:-2px 0 8px rgba(22,32,46,.045);
   position:relative;z-index:2;
 }
@@ -425,7 +437,6 @@ body.resizing-v{cursor:row-resize;user-select:none}
   font-size:13px;color:#6E7C8C;transition:transform .14s;
 }
 #rail .railpal.open .chev{transform:translateY(-50%) rotate(90deg);color:#fff}
-#palette{border-left:none}
 
 .paltabs{display:flex;gap:2px;padding:7px 8px 6px;flex:1}
 .paltabs button{

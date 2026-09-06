@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.33.3
+
+**One line between a panel and the canvas, and it is the one you drag.**
+
+There were three. The panel drew its own border. The drag handle drew an amber
+bar when you pointed at it. And between them sat a 5px transparent splitter,
+through which the dark page background showed as a black rule — the app was not
+drawing that line at all, it was a gap.
+
+- The splitter is the divider now: it matches the canvas, carries a single
+  hairline down its centre, and thickens to amber under the pointer or while
+  being dragged. The panels no longer draw an edge of their own.
+- The same for the horizontal splitter above a bottom-docked panel.
+- Every gap in the layout is painted, so nothing can reveal the page background
+  again.
+- Dragging is unchanged and verified: the width follows the pointer and still
+  clamps between 150 and 760.
+
 ## 1.33.2
 
 - **A folded panel now leaves nothing behind.** The 26px strip that held a
