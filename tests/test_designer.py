@@ -2815,12 +2815,24 @@ def _():
         "folding by another route leaves the rail entry looking open"
 
 
-@check("both side panels fold away and come back")
+@check("a folded panel leaves nothing behind")
 def _():
-    for token in ('class="panelfold"', 'id="paletteStrip"', 'id="inspectorStrip"',
-                  "function applyCollapse", "function toggleCollapse",
-                  "function collapseGlyph", 'class="tabfold"'):
+    """The rail opens the panels, so a strip beside the canvas is a second
+    control for a job already done — and it took up room in the state the
+    fold exists to clear."""
+    assert "panelstrip" not in PAGE, \
+        "a folded panel still leaves a strip beside the canvas"
+
+    for token in ('class="panelfold"', "function applyCollapse",
+                  "function toggleCollapse", 'class="tabfold"'):
         assert token in PAGE, f"{token} is missing from the folding"
+
+    # a tab has to be able to bring its panel back, or folding it strands you
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function showSide"):]
+    body = body[: body.index("\n}\n")]
+    assert "hidden.inspector = false" in body, \
+        "asking for a tab does not reopen the panel it lives in"
 
     # the chevron has to point the way the panel will move, which depends on
     # which edge it is docked to

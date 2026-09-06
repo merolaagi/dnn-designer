@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.33.2
+
+- **A folded panel now leaves nothing behind.** The 26px strip that held a
+  chevron was a second control for a job the rail already does — Layers and
+  Files open the left panel, and Code, Maths, Train, Assistant or Checks open
+  the right one. It also occupied room in exactly the state the fold exists to
+  clear.
+- **Asking for a tab reopens its panel.** Pressing Code in the rail while the
+  right panel is folded now unfolds it rather than doing nothing, which is what
+  removing its strip requires.
+
 ## 1.33.1
 
 **Fixed: pressing Layers or Files blanked the whole canvas.**

@@ -645,4 +645,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.33.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.33.2 — see `CHANGELOG.md`.

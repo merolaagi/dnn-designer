@@ -417,17 +417,6 @@ body.resizing-v{cursor:row-resize;user-select:none}
   padding:6px 8px;border-radius:5px;flex:none;
 }
 .panelfold:hover{color:var(--text);background:var(--paper-3)}
-.panelstrip{
-  flex:none;width:26px;display:flex;align-items:flex-start;justify-content:center;
-  padding-top:9px;background:var(--paper-2);
-}
-.panelstrip.left{border-right:1px solid var(--paper-3)}
-.panelstrip.right{border-left:1px solid var(--paper-3)}
-.panelstrip button{
-  background:none;border:1px solid transparent;color:#9AA6B4;font-size:13px;
-  line-height:1;padding:5px 4px;border-radius:5px;
-}
-.panelstrip button:hover{color:var(--text);border-color:var(--paper-3);background:#fff}
 
 /* the palette opens from the rail, so it reads as part of the same column */
 #rail .railpal{position:relative}
@@ -1288,9 +1277,6 @@ body.sizing{user-select:none}
 
   <section class="page on" id="pageDesign">
   <div id="mainRow">
-  <div class="panelstrip left" id="paletteStrip" style="display:none">
-    <button data-show="palette" title="Show the layers">&#187;</button>
-  </div>
   <aside class="panel" id="palette">
     <div class="panelhead">
       <div class="paltabs">
@@ -1373,9 +1359,6 @@ body.sizing{user-select:none}
   </main>
 
   <div class="splitter" data-panel="inspector" id="splitInspector"></div>
-  <div class="panelstrip right" id="inspectorStrip" style="display:none">
-    <button data-show="inspector" title="Show the panel">&#171;</button>
-  </div>
   <aside class="panel" id="inspector">
     <div class="panelhead"><h2 id="inspTitle">Panel</h2>
       <button class="panelfold" data-fold="inspector" title="Hide the panel">&#187;</button>
@@ -3971,20 +3954,14 @@ function collapseGlyph(name){
 }
 
 function applyCollapse(){
+  // A folded panel leaves nothing behind. The rail is where panels are opened
+  // from — Layers and Files for the left one, Code, Maths, Train, Assistant and
+  // Checks for the right — so a strip beside the canvas would be a second
+  // control for a job the rail already does.
   ["palette", "inspector"].forEach(name => {
     const panel = $(name);
-    const strip = $(name + "Strip");
     const hidden = !!state.layout.hidden[name];
     panel.style.display = hidden ? "none" : "";
-    if (strip){
-      strip.style.display = hidden ? "" : "none";
-      strip.className = "panelstrip " + state.layout.dock[name];
-      const button = strip.querySelector("button");
-      if (button){
-        button.textContent = collapseGlyph(name);
-        button.title = `Show the ${name === "palette" ? "layers" : "panel"}`;
-      }
-    }
     const splitter = $(name === "palette" ? "splitPalette" : "splitInspector");
     if (splitter){
       splitter.classList.toggle("hidden",
@@ -4012,9 +3989,6 @@ function toggleCollapse(name){
 
 document.querySelectorAll(".panelfold, .tabfold").forEach(button =>
   button.addEventListener("click", () => toggleCollapse(button.dataset.fold)));
-document.querySelectorAll(".panelstrip button").forEach(button =>
-  button.addEventListener("click", () => toggleCollapse(button.dataset.show)));
-
 let layoutSaveTimer = null;
 function saveLayout(){
   clearTimeout(layoutSaveTimer);
@@ -4153,6 +4127,12 @@ const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
                       ask:"Assistant", math:"The mathematics" };
 
 function showSide(side){
+  // asking for a tab is asking for the panel it lives in
+  if (state.layout && state.layout.hidden && state.layout.hidden.inspector){
+    state.layout.hidden.inspector = false;
+    applyCollapse();
+    saveLayout();
+  }
   state.sidePanel = side;
   const title = $("inspTitle");
   if (title) title.textContent = SIDE_TITLES[side] || "Panel";
