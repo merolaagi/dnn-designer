@@ -17,6 +17,7 @@ checkpoints/*.pth
 runs/*.json
 studies/*.json
 prefs.json
+.seeded
 
 # datasets pulled or uploaded at runtime
 data/

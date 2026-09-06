@@ -1475,6 +1475,48 @@ def _():
         "Maths belongs with the design, not with status"
 
 
+@check("workspace state cannot ride along in a release")
+def _():
+    """The seeding marker shipped inside a release and suppressed delivery.
+
+    It lived at the top of the project, beside the source, so packaging swept it
+    in; unpacking then told the receiving machine that examples it had never
+    seen were already delivered.
+
+    What this checks is that such files are excluded and that the marker sits
+    with the designs — not that they are absent from disk. On a machine that is
+    actually running the app they are supposed to be there, and an earlier
+    version of this check failed on exactly that.
+    """
+    import subprocess
+
+    ignored = (ROOT / ".gitignore").read_text()
+    for name in (".seeded", "prefs.json", "data/", "runs/", "studies/"):
+        assert name in ignored, f"{name} is not ignored, so it can ship"
+
+    # the marker belongs beside the designs it describes, not at the root
+    assert 'target / "saved" / ".seeded"' in (ROOT / "auth.py").read_text(), \
+        "the marker is back at the project root, where releases pick it up"
+
+    # and nothing of the sort is actually tracked
+    try:
+        tracked = subprocess.run(["git", "ls-files"], cwd=ROOT,
+                                 capture_output=True, text=True, timeout=30)
+    except Exception:  # noqa: BLE001 - git is not required to run the tests
+        return
+    if tracked.returncode != 0:
+        return
+    listed = set(tracked.stdout.split())
+    stray = [name for name in (".seeded", "prefs.json", "saved/.seeded",
+                               "microgo.pt", "saved/MicroGo.json",
+                               "saved/MicroLean.json")
+             if name in listed]
+    assert not stray, (
+        f"{', '.join(stray)} tracked, so a release will carry it. Ignoring a "
+        f"file does not untrack one already committed:\n"
+        f"        git rm --cached {' '.join(stray)}")
+
+
 @check("every account starts with the example designs")
 def _():
     import shutil
@@ -1515,13 +1557,22 @@ def _():
         finally:
             probe.unlink(missing_ok=True)
 
-        # an old workspace with the previous marker format is understood
+        # an old workspace with the previous marker format, holding only some of
+        # the examples, should still receive the ones it has never seen
+        for path in (home / "saved").glob("*.json"):
+            path.unlink()
+        (home / "saved" / ".seeded").unlink(missing_ok=True)
         (home / ".seeded").write_text("the shipped designs were copied in once\n")
-        for name in ("Discriminator", "Generator"):
+        kept = sorted(shipped)[:2]
+        for name in kept:
             (home / "saved" / f"{name}.json").write_text("{}")
+
         delivered = auth.seed(home)
-        assert delivered >= 1, \
-            "the old marker format should not block later examples"
+        assert delivered == len(shipped) - len(kept), \
+            f"delivered {delivered}, expected {len(shipped) - len(kept)}"
+        assert not (home / ".seeded").exists(), \
+            "the old marker was left at the root, where a release would ship it"
+        assert (home / "saved" / ".seeded").exists(), "the marker was not migrated"
 
         # but asking for them back works — from a clean slate, so the count is
         # the whole set rather than whatever the checks above left behind

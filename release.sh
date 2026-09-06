@@ -24,6 +24,13 @@ esac
 echo "==> version $VERSION"
 
 echo "==> tests"
+stray=$(git ls-files .seeded prefs.json saved/.seeded microgo.pt 2>/dev/null)
+if [ -n "$stray" ]; then
+  echo "==> untracking workspace state that must not ship:"
+  echo "$stray" | sed 's/^/      /'
+  git rm --cached --quiet $stray
+fi
+
 python3 tests/test_designer.py
 
 if [ -z "$(git status --porcelain)" ]; then

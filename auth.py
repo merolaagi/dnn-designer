@@ -197,7 +197,16 @@ def seed(target: Path) -> int:
     Deleting an example still sticks, because its name stays on the delivered
     list. The record is of what has been offered, not of what is present.
     """
-    marker = target / ".seeded"
+    # Beside the designs it describes, rather than at the top of the project —
+    # at the root it sat next to the source and rode along in a release archive,
+    # where it then told every machine that unpacked it that examples it had
+    # never seen were already delivered.
+    marker = target / "saved" / ".seeded"
+    legacy = target / ".seeded"
+    if legacy.exists() and not marker.exists():
+        (target / "saved").mkdir(parents=True, exist_ok=True)
+        marker.write_text(legacy.read_text())
+        legacy.unlink()
     delivered = _delivered(target, marker)
     saved = target / "saved"
     saved.mkdir(parents=True, exist_ok=True)

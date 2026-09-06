@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.30.3
+
+The check added in 1.30.2 did its job and found the rest of the problem:
+`.seeded` was **committed** in an earlier release, and adding a name to
+`.gitignore` does not untrack a file already in the repository. So it would have
+kept shipping.
+
+- `release.sh` untracks workspace state before it tests and tags, so this cannot
+  recur through inattention.
+- The test's message now names the files and gives the command to fix them,
+  rather than only reporting that something is wrong.
+
+To clear it on a machine that has already committed one:
+
+    git rm --cached .seeded && rm -f .seeded
+
+## 1.30.2
+
+**Fixed: the test added in 1.30.1 failed on any machine actually running the
+app.**
+
+It asserted that `.seeded` and `prefs.json` were not on disk. That is right for
+a clean checkout and wrong for a working install, where those files are supposed
+to exist — so the check reported a problem on precisely the machines that had
+none.
+
+It now verifies what it meant to: that such files are git-ignored and untracked,
+and that the marker sits with the designs rather than at the project root.
+Absence from disk was never the property worth testing; exclusion from the
+release is. Verified with those files both present and absent.
+
+## 1.30.1
+
+**Fixed: MicroGo could not arrive, because the release said it already had.**
+
+The file recording which examples a workspace has been given sat at the top of
+the project, next to the source — so it was swept into the release archive.
+Unpacking it overwrote the receiving machine's own record with mine, which
+listed MicroGo as delivered. The app then correctly declined to deliver
+something it had been told was already there.
+
+- The marker lives in `saved/` now, beside the designs it describes, where a
+  release cannot pick it up. An existing marker at the old location is moved
+  automatically.
+- It is git-ignored, along with the trained weights `play.py` writes.
+- **A test asserts a release carries no workspace state**, checking both the
+  files and the ignore rules — the packaging step was the only thing standing
+  between my machine's state and yours, and it was not enough.
+
+Verified against a workspace in exactly the state this broke: old marker, no
+MicroGo. It arrives, the old marker is migrated, and an example deleted on
+purpose still stays deleted.
+
 ## 1.30.0
 
 **A micro AlphaGo: the rules, the search, the network — and an honest account
