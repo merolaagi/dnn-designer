@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.35.0
+
+**An End to end tab**, beside Maths: a narrated walk through what happens to the
+data, one layer at a time.
+
+Each step gives what arrives, the mathematics applied, what leaves, and what the
+values actually look like afterwards — measured from one real example passing
+through, not described in the abstract. A ReLU is not said to remove the
+negatives; it is run, and the step reports that 49% of the tensor is now exactly
+zero and the minimum is 0.
+
+- **Back, Next and Play** step through it; the canvas highlights whichever layer
+  is being read about.
+- **The closing step reads the output the way the task means it.** A classifier's
+  logits become the top classes with their probabilities. A model that scores
+  every position in a sequence is recognised as such, and the last position's
+  distribution is presented as the next token it would choose. A regression head
+  keeps its numbers and says they are the prediction, not a score. Which reading
+  applies comes from the Output layer, so this works for whatever is on the
+  canvas rather than for one architecture.
+- Token indices are reported as a range and a count of distinct values, never
+  averaged — the mean of a set of token ids means nothing.
+- A layer with no module of its own says its values were not captured, rather
+  than showing a blank that reads as nothing having happened.
+
+Tested on a small classifier, a sequence model and a regression head, and on the
+GPT-2 block from the examples, which walks through in 23 steps.
+
 ## 1.34.0
 
 **Run a batch and watch it happen.** A new **Run** tab, and a rail entry beside

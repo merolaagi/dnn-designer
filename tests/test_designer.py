@@ -838,6 +838,85 @@ def _():
         and 'shape: "hex"' in PAGE, "nodeBox does not assign all four shapes"
 
 
+@check("the walkthrough narrates a real pass, not an idea of one")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import walkthrough as walk
+
+    graph = build(
+        [("i", "Input", {"shape": [3, 16, 16]}),
+         ("c", "Conv2d", {"filters": 8, "kernel": 3, "padding": "same"}),
+         ("a", "Activation", {"kind": "relu"}),
+         ("g", "GlobalAvgPool", {}),
+         ("l", "Linear", {"units": 4}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "c", 0), ("c", "a", 0), ("a", "g", 0), ("g", "l", 0), ("l", "o", 0)],
+        "Story")
+
+    story = walk.walkthrough(graph, batch=1)
+    assert len(story["steps"]) == 6
+
+    # the ReLU's claim is measured from the tensor, not asserted about relus
+    relu = next(s for s in story["steps"] if s["type"] == "Activation")
+    assert relu["values"] and relu["values"]["zeros"] > 0, relu["values"]
+    assert "zero" in relu["note"], relu["note"]
+    assert relu["values"]["min"] == 0.0, "a relu should leave nothing negative"
+
+    # each step carries the mathematics for that layer
+    conv = next(s for s in story["steps"] if s["type"] == "Conv2d")
+    assert conv["equation"], "no equation for the convolution"
+    assert conv["parameters"] > 0
+
+    # a layer with no module says so rather than showing a blank
+    quiet = [s for s in story["steps"] if s["unwatched"]]
+    assert quiet, "nothing was reported as unwatched"
+    assert all(s["values"] is None for s in quiet)
+
+    closing = story["closing"]
+    assert closing["task"] == "classification"
+    assert len(closing["picks"]) == 4, closing
+    assert abs(sum(p["p"] for p in closing["picks"]) - 1.0) < 1e-3, \
+        "the probabilities should account for the whole distribution"
+
+
+@check("the walkthrough reads a sequence model as next-token")
+def _():
+    """The closing step follows the task, not the architecture, so it suits
+    whatever is on the canvas."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import walkthrough as walk
+
+    sequence = build(
+        [("i", "Input", {"shape": [8], "dtype": "long"}),
+         ("e", "Embedding", {"vocab": 50, "dim": 16}),
+         ("n", "RMSNorm", {}),
+         ("h", "Linear", {"units": 50}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "e", 0), ("e", "n", 0), ("n", "h", 0), ("h", "o", 0)], "Seq")
+    story = walk.walkthrough(sequence, batch=1)
+    closing = story["closing"]
+    assert closing["sequence"], "a per-position output was not recognised"
+    assert "next token" in closing["note"], closing["note"]
+
+    # token indices are described as indices, never averaged
+    first = story["steps"][0]
+    assert first["values"]["indices"], "token ids were treated as quantities"
+    assert "vocabulary" in first["note"], first["note"]
+
+    regression = build(
+        [("i", "Input", {"shape": [4]}),
+         ("l", "Linear", {"units": 1}),
+         ("o", "Output", {"task": "regression"})],
+        [("i", "l", 0), ("l", "o", 0)], "Reg")
+    closing = walk.walkthrough(regression, batch=1)["closing"]
+    assert closing["task"] == "regression"
+    assert "not a score" in closing["note"], closing["note"]
+
+
 @check("a forward pass is traced layer by layer")
 def _():
     """A workflow shows tasks going green because they run one at a time. A
@@ -3073,6 +3152,8 @@ def _():
         "classAround", "highlightInCode",
         "sendAsk", "askSay", "loadAssistant", "askObservations",
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
+        "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
+        "storyOpening", "storyStep", "storyClosing",
         "renderRunPanel", "runTrace", "animateTrace", "traceStateOf", "runTable",
         "runTimeline", "runSummary", "formatBytes",
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",

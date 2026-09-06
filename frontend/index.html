@@ -937,6 +937,47 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
 .rantick .tickpath{fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;
   stroke-linejoin:round}
 .ranms{font-family:var(--mono);font-size:9px;fill:#256B39}
+.node.reading .node-card,.node.reading .node-terminal,.node.reading .node-diamond,
+.node.reading .node-data,.node.reading .node-stadium,
+.node.reading .node-hex{stroke:#8A5CF6;stroke-width:2.4}
+
+/* the walkthrough */
+.storybar{
+  display:flex;align-items:center;gap:7px;padding:11px 13px;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+}
+.storywhere{margin-left:auto;font-size:10.5px;color:var(--muted);
+  font-family:var(--mono)}
+.storyrail{display:flex;gap:3px;padding:9px 13px 0}
+.storyrail i{
+  flex:1;height:3px;border-radius:2px;background:var(--paper-3);cursor:pointer;
+}
+.storyrail i.past{background:#BFD4EA}
+.storyrail i.on{background:#8A5CF6}
+.storycard{padding:13px}
+.storykind{
+  font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98A6B8;
+  font-weight:700;
+}
+.storycard h4{margin:3px 0 9px;font-size:15px;font-weight:600}
+.storyflow{
+  display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;
+  color:var(--muted);margin-bottom:10px;flex-wrap:wrap;
+}
+.storyflow i{font-style:normal;color:#8A5CF6}
+.storyflow .out{color:var(--text);font-weight:600}
+.storytext{margin:0 0 10px;font-size:12.5px;line-height:1.6;color:#3C4B5F}
+.storyshape{
+  display:inline-block;font-family:var(--mono);font-size:12px;padding:4px 9px;
+  background:var(--paper-2);border-radius:6px;margin:0 5px 8px 0;
+}
+.storypicks{margin:10px 0}
+.pick{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px}
+.pickid{width:64px;flex:none;font-family:var(--mono);color:var(--muted)}
+.pickbar{flex:1;height:13px;background:#F1F4F8;border-radius:4px;overflow:hidden}
+.pickbar i{display:block;height:100%;background:#BFD4EA}
+.pick.best .pickbar i{background:#8A5CF6}
+.pickp{width:52px;text-align:right;font-family:var(--mono);font-size:10.5px}
 
 /* the run panel */
 .runbar{
@@ -1332,6 +1373,7 @@ body.sizing{user-select:none}
       <span class="chev">&#8250;</span></button>
     <button data-page="pageDesign" data-side="code"><i>&#60;&#62;</i>Code</button>
     <button data-page="pageDesign" data-side="math"><i>&#8747;</i>Maths</button>
+    <button data-page="pageDesign" data-side="story"><i>&#9654;&#9654;</i>End to end</button>
     <button data-page="pageBuild"><i>&#9776;</i>Projects</button>
     <button data-page="pageExtend"><i>&#9881;</i>Blocks &amp; recipes</button>
 
@@ -1449,6 +1491,7 @@ body.sizing{user-select:none}
       <button data-side="train">Train</button>
       <button data-side="run">Run</button>
       <button data-side="math">Maths</button>
+      <button data-side="story">Story</button>
       <button data-side="guide">Guide</button>
       <button data-side="ask">Assistant</button>
       <button data-side="needs">Needs</button>
@@ -1459,6 +1502,7 @@ body.sizing{user-select:none}
     <div class="scroll" id="networkBody" style="display:none"></div>
     <div class="scroll" id="runBody" style="display:none;padding:0"></div>
     <div class="scroll" id="mathBody" style="display:none;padding:0"></div>
+    <div class="scroll" id="storyBody" style="display:none;padding:0"></div>
     <div class="scroll" id="guideBody" style="display:none;padding:0"></div>
     <div id="askBody" style="display:none">
       <div id="askLog"></div>
@@ -1759,6 +1803,7 @@ const state = {
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
+  story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
@@ -2771,7 +2816,8 @@ function render(){
     const ran = traceStateOf(n.id);
     const g = el("g", { class:"node" + (state.selection.has(n.id)?" sel":"")
                         + (bad?" err":"") + (isRuntime?" runtime":"")
-                        + (ran ? (ran.done ? " ran" : " waiting") : ""),
+                        + (ran ? (ran.done ? " ran" : " waiting") : "")
+                        + (state.storyFocus === n.id ? " reading" : ""),
                         transform:`translate(${n.x},${n.y})` }, gNodes);
 
     if (box.shape === "circle"){
@@ -3060,7 +3106,7 @@ function renderInspector(){
   }
   if (state.sidePanel !== "layer" && state.sidePanel !== "guide"
       && state.sidePanel !== "ask" && state.sidePanel !== "math"
-      && state.sidePanel !== "run"
+      && state.sidePanel !== "run" && state.sidePanel !== "story"
       && (state.sel || state.selEdge) && state.page === "pageDesign"){
     showSide("layer");
   }
@@ -4218,7 +4264,8 @@ function showPage(pageId){
 
 const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
                       code:"Generated code", train:"Training", guide:"Guided build",
-                      ask:"Assistant", math:"The mathematics", run:"The forward pass" };
+                      ask:"Assistant", math:"The mathematics", run:"The forward pass",
+                      story:"End to end" };
 
 function showSide(side){
   // asking for a tab is asking for the panel it lives in
@@ -4234,7 +4281,8 @@ function showSide(side){
     b.classList.toggle("on", b.dataset.side === side));
   const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",
                 code:"codeBody", train:"trainBody", guide:"guideBody",
-                ask:"askBody", math:"mathBody", run:"runBody" };
+                ask:"askBody", math:"mathBody", run:"runBody",
+                story:"storyBody" };
   Object.entries(map).forEach(([key, id]) => {
     const el = $(id);
     if (el) el.style.display = (key === side) ? "" : "none";
@@ -4247,6 +4295,7 @@ function showSide(side){
   if (side === "ask") loadAssistant();
   if (side === "math") renderMathPanel();
   if (side === "run") renderRunPanel();
+  if (side === "story") renderStoryPanel();
 }
 
 document.querySelectorAll(".ptabs button[data-side]").forEach(btn =>
@@ -5138,6 +5187,189 @@ $("siSwitch").addEventListener("click", () =>
 $("siPass").addEventListener("keydown", e => { if (e.key === "Enter") submitSignIn(); });
 $("siName").addEventListener("keydown", e => { if (e.key === "Enter") $("siPass").focus(); });
 $("siClose").addEventListener("click", () => $("signin").classList.remove("on"));
+
+/* ============================== story ============================== */
+
+/* An end-to-end walk through what happens to the data, one layer at a time:
+   what arrives, the mathematics applied, what leaves, and what the values
+   actually look like once it has. The canvas follows, so the step being read
+   about is the box being looked at. */
+
+async function renderStoryPanel(){
+  const host = $("storyBody");
+  if (!state.story){
+    host.innerHTML = `<div class="storybar">
+        <button class="btn go" id="btnStory">Walk it through</button>
+      </div>
+      <div class="empty" style="padding:14px">
+        Sends one example through and narrates it: what each layer does to the
+        data, the mathematics it applies, and what the numbers look like
+        afterwards. It ends by reading the output the way the task means it —
+        classes for a classifier, the next token for a language model.</div>`;
+    const go = $("btnStory");
+    if (go) go.addEventListener("click", loadStory);
+    return;
+  }
+  paintStory();
+}
+
+async function loadStory(){
+  const host = $("storyBody");
+  host.innerHTML = `<div class="empty" style="padding:14px">running one example…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/walkthrough", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ graph: state.graph, batch: 1 }),
+    });
+    d = await r.json();
+  } catch {
+    host.innerHTML = `<div class="runfail">The server did not respond.</div>`;
+    return;
+  }
+  if (!r.ok){
+    host.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "Could not walk it through"}</div>`;
+    return;
+  }
+  state.story = d;
+  state.storyAt = 0;          // 0 is the opening, then one per step, then the close
+  paintStory();
+}
+
+function storyLength(){
+  return state.story ? state.story.steps.length + 2 : 0;
+}
+
+function paintStory(){
+  const story = state.story;
+  const host = $("storyBody");
+  const at = state.storyAt;
+  const last = storyLength() - 1;
+
+  let card;
+  if (at === 0) card = storyOpening(story);
+  else if (at === last) card = storyClosing(story);
+  else card = storyStep(story.steps[at - 1]);
+
+  host.innerHTML = `
+    <div class="storybar">
+      <button class="btn" id="storyPrev" ${at === 0 ? "disabled" : ""}>Back</button>
+      <button class="btn go" id="storyNext" ${at === last ? "disabled" : ""}>Next</button>
+      <button class="btn" id="storyPlay">${state.storyTimer ? "Pause" : "Play"}</button>
+      <span class="storywhere">${at === 0 ? "in"
+        : at === last ? "out" : `${at} of ${story.steps.length}`}</span>
+      <button class="btn" id="storyAgain">Again</button>
+    </div>
+    <div class="storyrail">${Array.from({ length: last + 1 }, (_, i) =>
+      `<i class="${i === at ? "on" : (i < at ? "past" : "")}" data-jump="${i}"></i>`
+      ).join("")}</div>
+    ${card}`;
+
+  $("storyPrev").addEventListener("click", () => stepStory(-1));
+  $("storyNext").addEventListener("click", () => stepStory(1));
+  $("storyAgain").addEventListener("click", loadStory);
+  $("storyPlay").addEventListener("click", playStory);
+  host.querySelectorAll("[data-jump]").forEach(dot =>
+    dot.addEventListener("click", () => { state.storyAt = +dot.dataset.jump; paintStory(); }));
+
+  // the canvas follows the reading
+  const step = (at > 0 && at < last) ? story.steps[at - 1] : null;
+  state.sel = step ? step.id : null;
+  state.selection = new Set(step ? [step.id] : []);
+  state.storyFocus = step ? step.id : null;
+  render();
+}
+
+function stepStory(by){
+  state.storyAt = Math.max(0, Math.min(storyLength() - 1, state.storyAt + by));
+  paintStory();
+}
+
+function playStory(){
+  if (state.storyTimer){
+    clearInterval(state.storyTimer);
+    state.storyTimer = null;
+    paintStory();
+    return;
+  }
+  state.storyTimer = setInterval(() => {
+    if (state.storyAt >= storyLength() - 1){
+      clearInterval(state.storyTimer);
+      state.storyTimer = null;
+      paintStory();
+      return;
+    }
+    stepStory(1);
+  }, 1800);
+  paintStory();
+}
+
+function storyOpening(story){
+  return `<div class="storycard">
+    <div class="storykind">the input</div>
+    <h4>${story.opening.title}</h4>
+    <p class="storytext">${story.opening.text}.</p>
+    ${story.opening.shapes.map(s => `<div class="storyshape">${
+      (s || []).join(" \u00d7 ")}</div>`).join("")}
+    <p class="mathnote">Everything below is measured from one real example
+    passing through, not described in the abstract.</p>
+  </div>`;
+}
+
+function storyStep(step){
+  const v = step.values;
+  return `<div class="storycard">
+    <div class="storykind">step ${step.seq} \u00b7 ${step.type}</div>
+    <h4>${step.name}</h4>
+    <div class="storyflow">
+      <span>${(step.in_shapes || []).filter(Boolean)
+        .map(s => s.join("\u00d7")).join("  +  ") || "\u2014"}</span>
+      <i>\u2192</i>
+      <span class="out">${(step.out_shape || []).join("\u00d7")}</span>
+    </div>
+    ${step.equation ? `<div class="matheq">${step.equation}</div>` : ""}
+    ${step.note ? `<p class="storytext">${step.note}</p>` : ""}
+    ${step.missing ? `<p class="mathmissing">${step.missing}</p>` : ""}
+    ${v && !v.indices ? `<table class="mathtab">
+        <tr><td class="key">values now</td><td class="val">mean ${v.mean}
+          \u00b7 sd ${v.std}</td></tr>
+        <tr><td class="key">range</td><td class="val">${v.min} to ${v.max}</td></tr>
+        ${v.zeros > 0.5 ? `<tr><td class="key">exactly zero</td>
+          <td class="val">${v.zeros}%</td></tr>` : ""}
+        <tr><td class="key">carrying</td><td class="val">${
+          v.count.toLocaleString()} numbers</td></tr>
+      </table>` : ""}
+    ${v && v.indices ? `<table class="mathtab">
+        <tr><td class="key">indices</td><td class="val">${v.low} to ${v.high},
+          ${v.distinct} distinct</td></tr></table>` : ""}
+    ${step.unwatched ? `<p class="mathnote">No values captured here: this layer
+      has no module of its own to watch, so only its shape is known.</p>` : ""}
+    ${step.parameters ? `<p class="mathnote">${
+      step.parameters.toLocaleString()} learned parameters take part.</p>` : ""}
+  </div>`;
+}
+
+function storyClosing(story){
+  const c = story.closing;
+  const top = (c.picks || []).slice(0, 5);
+  const most = Math.max(...top.map(p => Math.abs(p.p)), 1e-9);
+  return `<div class="storycard">
+    <div class="storykind">the output</div>
+    <h4>${c.title || "What comes out"}</h4>
+    <p class="storytext">${c.text}</p>
+    ${top.length ? `<div class="storypicks">${top.map((p, i) => `
+      <div class="pick${i === 0 ? " best" : ""}">
+        <span class="pickid">${c.task === "regression" ? "value " + p.index
+                                                       : "#" + p.index}</span>
+        <span class="pickbar"><i style="width:${
+          (Math.abs(p.p) / most * 100).toFixed(1)}%"></i></span>
+        <span class="pickp">${c.task === "regression"
+          ? p.p : (p.p * 100).toFixed(1) + "%"}</span>
+      </div>`).join("")}</div>` : ""}
+    ${c.note ? `<p class="mathnote">${c.note}</p>` : ""}
+  </div>`;
+}
 
 /* ============================== run ============================== */
 

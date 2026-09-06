@@ -35,6 +35,7 @@ import graph as G
 import workbook
 import tracer
 import train as T
+import walkthrough as walk
 from layers import REGISTRY, catalog
 from version import __version__
 
@@ -306,6 +307,23 @@ def layer_math(body: MathPayload):
 class TracePayload(BaseModel):
     graph: Dict[str, Any]
     batch: int = 2
+
+
+class WalkPayload(BaseModel):
+    graph: Dict[str, Any]
+    batch: int = 1
+
+
+@app.post("/api/walkthrough")
+def explain_pass(body: WalkPayload):
+    """Step through the network with real values at every layer."""
+    try:
+        return walk.walkthrough(body.graph, batch=max(1, min(8, body.batch)))
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={
+            "message": _missing_package(exc) or f"{type(exc).__name__}: {exc}"})
 
 
 @app.post("/api/trace")
