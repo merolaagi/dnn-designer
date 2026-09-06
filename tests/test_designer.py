@@ -1800,6 +1800,100 @@ def _():
             assert "outside" in str(exc) or "No such file" in str(exc), exc
 
 
+@check("the Go rules are the rules")
+def _():
+    import microgo as go
+
+    def position(rows, to_move=go.BLACK, komi=0.5):
+        size = len(rows)
+        stones = []
+        for row in rows:
+            for ch in row.split():
+                stones.append({"X": go.BLACK, "O": go.WHITE, ".": go.EMPTY}[ch])
+        return go.Board(size, tuple(stones), to_move, None, 0, komi)
+
+    # a stone with one liberty left is taken when it is filled
+    board = position([". X . . .",
+                      "X O . . .",
+                      ". X . . .",
+                      ". . . . .",
+                      ". . . . ."])
+    assert sorted(board.group(6)[1]) == [7], "liberties counted wrongly"
+    assert board.play(7).stones[6] == go.EMPTY, "the stone was not captured"
+
+    # a whole group goes together
+    board = position([". X X . .",
+                      "X O O X .",
+                      ". X . . .",
+                      ". . . . .",
+                      ". . . . ."])
+    after = board.play(12)
+    assert after.stones[6] == after.stones[7] == go.EMPTY, "the group survived"
+
+    # suicide is refused, unless it captures
+    board = position([". O . . .",
+                      "O . O . .",
+                      ". O . . .",
+                      ". . . . .",
+                      ". . . . ."])
+    assert not board.legal(6), "suicide was allowed"
+    board = position(["X O . . .",
+                      "O . . . .",
+                      ". . . . .",
+                      ". . . . .",
+                      ". . . . ."], to_move=go.WHITE)
+    assert board.legal(6), "a capturing move was refused as suicide"
+
+    # ko: the immediate retake is forbidden
+    board = position([". X O . .",
+                      "X . X O .",
+                      ". X O . .",
+                      ". . . . .",
+                      ". . . . ."], to_move=go.WHITE)
+    taken = board.play(6)
+    assert taken.ko is not None, "no ko point was recorded"
+    assert not taken.legal(taken.ko), "the ko was retaken immediately"
+
+    # area scoring, with komi
+    even = position(["X X X X X", "X X X X X", ". . . . .",
+                     "O O O O O", "O O O O O"])
+    assert even.score() == -0.5, f"even position scored {even.score()}"
+    alone = position(["X . . . .", ". . . . .", ". . . . .",
+                      ". . . . .", ". . . . ."])
+    assert alone.score() == 24.5, f"whole board scored {alone.score()}"
+
+    # games finish and are decided
+    import random
+
+    rng = random.Random(3)
+    board = go.Board(5)
+    for _ in range(300):
+        if board.over:
+            break
+        moves = go.sensible_moves(board)
+        board = board.play(rng.choice(moves))
+    assert board.over, "a random game did not finish"
+    assert board.winner() in (go.BLACK, go.WHITE)
+
+
+@check("search prefers the centre on an empty small board")
+def _():
+    import random
+
+    import microgo as go
+
+    rng = random.Random(0)
+    board = go.Board(5)
+    counts, _ = go.mcts(board, go.random_evaluator(rng), simulations=120, rng=rng)
+    best = max(range(len(counts)), key=lambda i: counts[i])
+    row, col = divmod(best, 5)
+    assert 1 <= row <= 3 and 1 <= col <= 3, \
+        f"search preferred {row},{col}, which is not near the centre"
+    # passing is not offered while there is anything to play
+    assert board.pass_move not in go.sensible_moves(board), \
+        "a search that considers passing everywhere teaches a policy to pass"
+
+
 @check("the proof kernel accepts only real proofs")
 def _():
     import microlean as ml

@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and four checks, with the torch-dependent ones skipping themselves when it is
+A hundred and six checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -302,6 +302,20 @@ Accounts separate people from each other, **not from the machine**. Importing
 code, importing a folder, and the blocks and recipes folders all execute Python
 by design, so anyone who can sign in can run code as this process. Run it on a
 network you trust.
+
+## Playing Go
+
+`microgo.py` is Go on a small board with the rules done properly — captures,
+suicide, ko, area scoring — plus AlphaZero-style PUCT search. The **MicroGo**
+design is a residual trunk with a policy head and a value head, and
+`python play.py` trains it by self-play.
+
+Be warned about the result: at any budget you can run in a few minutes, self-play
+does not produce a strong player, and `play.py` reports that rather than hiding
+it. The measured reason is that the search is too weak to teach — at 40
+simulations its visit counts are nearly uniform, so the policy target is close to
+noise. The parts are right; the compute is three orders of magnitude short of
+what the method needs.
 
 ## Proving things
 
@@ -624,4 +638,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.29.1 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.30.0 — see `CHANGELOG.md`.

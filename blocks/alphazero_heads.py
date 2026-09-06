@@ -10,10 +10,13 @@ class PolicyHead(nn.Module):
     wants them raw, and the search applies its own softmax.
     """
 
-    def __init__(self, in_ch: int, plane_size: int, actions: int, planes: int = 2):
+    def __init__(self, in_ch: int, plane_size: int, actions: int, planes: int = 2,
+                 norm: str = 'batch'):
         super().__init__()
         self.conv = nn.Conv2d(in_ch, planes, 1, bias=False)
-        self.bn = nn.BatchNorm2d(planes)
+        self.bn = (nn.GroupNorm(1, planes) if norm == 'group'
+                   else nn.Identity() if norm == 'none'
+                   else nn.BatchNorm2d(planes))
         self.fc = nn.Linear(planes * plane_size, actions)
 
     def forward(self, x):
@@ -25,10 +28,13 @@ VALUE = '''
 class ValueHead(nn.Module):
     """Board features to a single number in [-1, 1], from the mover's point of view."""
 
-    def __init__(self, in_ch: int, plane_size: int, hidden: int = 256, planes: int = 1):
+    def __init__(self, in_ch: int, plane_size: int, hidden: int = 256, planes: int = 1,
+                 norm: str = 'batch'):
         super().__init__()
         self.conv = nn.Conv2d(in_ch, planes, 1, bias=False)
-        self.bn = nn.BatchNorm2d(planes)
+        self.bn = (nn.GroupNorm(1, planes) if norm == 'group'
+                   else nn.Identity() if norm == 'none'
+                   else nn.BatchNorm2d(planes))
         self.fc1 = nn.Linear(planes * plane_size, hidden)
         self.fc2 = nn.Linear(hidden, 1)
 
@@ -69,13 +75,16 @@ install(Block(
     params=[
         Param("actions", "int", 362, min=1, help="Legal move count, plus pass if there is one"),
         Param("planes", "int", 2, min=1, help="1x1 convolution width before the linear layer"),
+        Param("norm", "choice", "batch", options=["batch", "group", "none"],
+              help="Group when batches are small or correlated"),
     ],
     infer=policy_infer,
     learnables=policy_learnables,
     prelude=POLICY,
     torch_init=lambda p, ins: (
         f"PolicyHead({ins[0][0]}, {ins[0][1] * ins[0][2]}, "
-        f"{int(p['actions'])}, planes={int(p['planes'])})"
+        f"{int(p['actions'])}, planes={int(p['planes'])}, "
+        f"norm={str(p.get('norm', 'batch'))!r})"
     ),
 ))
 
@@ -87,12 +96,15 @@ install(Block(
     params=[
         Param("hidden", "int", 256, min=1),
         Param("planes", "int", 1, min=1),
+        Param("norm", "choice", "batch", options=["batch", "group", "none"],
+              help="Group when batches are small or correlated"),
     ],
     infer=value_infer,
     learnables=value_learnables,
     prelude=VALUE,
     torch_init=lambda p, ins: (
         f"ValueHead({ins[0][0]}, {ins[0][1] * ins[0][2]}, "
-        f"hidden={int(p['hidden'])}, planes={int(p['planes'])})"
+        f"hidden={int(p['hidden'])}, planes={int(p['planes'])}, "
+        f"norm={str(p.get('norm', 'batch'))!r})"
     ),
 ))

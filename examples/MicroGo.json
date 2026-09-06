@@ -1,0 +1,197 @@
+{
+ "name": "MicroGo",
+ "nodes": [
+  {
+   "id": "in",
+   "type": "Input",
+   "params": {
+    "shape": [
+     3,
+     5,
+     5
+    ]
+   },
+   "label": "board",
+   "x": 0,
+   "y": 0
+  },
+  {
+   "id": "c0",
+   "type": "Conv2d",
+   "params": {
+    "filters": 48,
+    "kernel": 3,
+    "padding": "same",
+    "bias": false
+   },
+   "label": "stem",
+   "x": 0,
+   "y": 118
+  },
+  {
+   "id": "n0",
+   "type": "GroupNorm",
+   "params": {
+    "groups": 8
+   },
+   "label": "",
+   "x": 0,
+   "y": 236
+  },
+  {
+   "id": "a0",
+   "type": "Activation",
+   "params": {
+    "kind": "relu"
+   },
+   "label": "",
+   "x": 0,
+   "y": 354
+  },
+  {
+   "id": "r0",
+   "type": "ResidualBlock",
+   "params": {
+    "filters": 48,
+    "stride": 1,
+    "groups": 1,
+    "norm": "group"
+   },
+   "label": "block 1",
+   "x": 0,
+   "y": 472
+  },
+  {
+   "id": "r1",
+   "type": "ResidualBlock",
+   "params": {
+    "filters": 48,
+    "stride": 1,
+    "groups": 1,
+    "norm": "group"
+   },
+   "label": "block 2",
+   "x": 0,
+   "y": 590
+  },
+  {
+   "id": "r2",
+   "type": "ResidualBlock",
+   "params": {
+    "filters": 48,
+    "stride": 1,
+    "groups": 1,
+    "norm": "group"
+   },
+   "label": "block 3",
+   "x": 0,
+   "y": 708
+  },
+  {
+   "id": "ph",
+   "type": "PolicyHead",
+   "params": {
+    "actions": 26,
+    "planes": 2,
+    "norm": "group"
+   },
+   "label": "policy",
+   "x": 0,
+   "y": 826
+  },
+  {
+   "id": "po",
+   "type": "Output",
+   "params": {
+    "task": "classification"
+   },
+   "label": "move",
+   "x": 0,
+   "y": 944
+  },
+  {
+   "id": "vh",
+   "type": "ValueHead",
+   "params": {
+    "hidden": 64,
+    "planes": 1,
+    "norm": "group"
+   },
+   "label": "value",
+   "x": 0,
+   "y": 1062
+  },
+  {
+   "id": "vo",
+   "type": "Output",
+   "params": {
+    "task": "regression"
+   },
+   "label": "who is winning",
+   "x": 0,
+   "y": 1180
+  }
+ ],
+ "edges": [
+  {
+   "id": "e0",
+   "source": "in",
+   "target": "c0",
+   "port": 0
+  },
+  {
+   "id": "e1",
+   "source": "c0",
+   "target": "n0",
+   "port": 0
+  },
+  {
+   "id": "e2",
+   "source": "n0",
+   "target": "a0",
+   "port": 0
+  },
+  {
+   "id": "e3",
+   "source": "a0",
+   "target": "r0",
+   "port": 0
+  },
+  {
+   "id": "e4",
+   "source": "r0",
+   "target": "r1",
+   "port": 0
+  },
+  {
+   "id": "e5",
+   "source": "r1",
+   "target": "r2",
+   "port": 0
+  },
+  {
+   "id": "e6",
+   "source": "r2",
+   "target": "ph",
+   "port": 0
+  },
+  {
+   "id": "e7",
+   "source": "ph",
+   "target": "po",
+   "port": 0
+  },
+  {
+   "id": "e8",
+   "source": "r2",
+   "target": "vh",
+   "port": 0
+  },
+  {
+   "id": "e9",
+   "source": "vh",
+   "target": "vo",
+   "port": 0
+  }
+ ]
+}

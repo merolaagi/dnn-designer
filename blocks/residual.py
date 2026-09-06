@@ -10,18 +10,33 @@ class ResidualBlock(nn.Module):
     what lets you stack these without thinking about channel bookkeeping.
     """
 
-    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, groups: int = 1):
+    def __init__(self, in_ch: int, out_ch: int, stride: int = 1, groups: int = 1,
+                 norm: str = "batch"):
         super().__init__()
+
+        def make_norm(channels):
+            # Batch statistics need a batch that resembles what the layer will
+            # see later. In reinforcement learning it does not: the positions in
+            # a batch come from one game and are highly correlated, so the
+            # running averages end up describing nothing, and eval() then uses
+            # them. Group normalization takes its statistics per sample and
+            # sidesteps the whole problem.
+            if norm == "group":
+                return nn.GroupNorm(min(8, channels), channels)
+            if norm == "none":
+                return nn.Identity()
+            return nn.BatchNorm2d(channels)
+
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, stride, 1, groups=groups, bias=False)
-        self.bn1 = nn.BatchNorm2d(out_ch)
+        self.bn1 = make_norm(out_ch)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, 1, 1, groups=groups, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_ch)
+        self.bn2 = make_norm(out_ch)
         if stride == 1 and in_ch == out_ch:
             self.skip = nn.Identity()
         else:
             self.skip = nn.Sequential(
                 nn.Conv2d(in_ch, out_ch, 1, stride, bias=False),
-                nn.BatchNorm2d(out_ch),
+                make_norm(out_ch),
             )
 
     def forward(self, x):
@@ -86,13 +101,17 @@ install(Block(
         Param("filters", "int", 64, min=1),
         Param("stride", "int", 1, min=1, help="2 halves the spatial size"),
         Param("groups", "int", 1, min=1, help="Set equal to filters for depthwise"),
+        Param("norm", "choice", "batch", options=["batch", "group", "none"],
+              help="Group normalization when batches are small or correlated, "
+                   "as in reinforcement learning"),
     ],
     infer=residual_infer,
     learnables=residual_learnables,
     prelude=RESIDUAL,
     torch_init=lambda p, ins: (
         f"ResidualBlock({ins[0][0]}, {int(p['filters'])}, "
-        f"stride={int(p['stride'])}, groups={int(p['groups'])})"
+        f"stride={int(p['stride'])}, groups={int(p['groups'])}, "
+        f"norm={str(p.get('norm', 'batch'))!r})"
     ),
 ))
 

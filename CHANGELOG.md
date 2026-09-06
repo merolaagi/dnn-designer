@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.30.0
+
+**A micro AlphaGo: the rules, the search, the network — and an honest account
+of what came out of it.**
+
+- **`microgo.py`** is Go on a small board with the rules done properly:
+  liberties, single and group capture, suicide refused, the ko rule, two passes
+  to end, and Chinese area scoring with komi. Tested against positions worked
+  out by hand.
+- **PUCT search**, the AlphaZero kind: priors and a value from an evaluator,
+  values negated up the tree, visit counts returned as the policy target.
+- **`MicroGo`** is an example design — a convolutional trunk with residual
+  blocks feeding a policy head over 26 actions and a value head, 129,589
+  parameters, matching PyTorch exactly.
+- **`python play.py`** runs self-play, trains on it, and reports games won
+  against a baseline, every game scored by the rules engine.
+
+### What actually happened
+
+Self-play training **did not produce a stronger player**, and the reason is
+measurable rather than mysterious. Against a random-move opponent the untrained
+network won 74/100 and the trained one 18/100 — training made it worse.
+
+The search is too weak to teach. At 40 simulations the visit counts over 25
+legal moves have an entropy of 2.96 where uniform is 3.22; at 800 simulations it
+is still 2.88. The policy target is very close to noise, and training a
+reasonable initialization toward noise degrades it. AlphaZero's numbers are
+hundreds of simulations per move and hundreds of thousands of games; this is
+three orders of magnitude short, and the shortfall shows up exactly where the
+theory says it would.
+
+Two real bugs were found and fixed on the way, both of which would have made
+things worse regardless of budget:
+
+- **BatchNorm in a reinforcement-learning loop.** Positions within a self-play
+  batch come from one game and are highly correlated, so the running statistics
+  described nothing — and `eval()` then used them, meaning the network the
+  search consulted was not the network that was trained. `ResidualBlock`,
+  `PolicyHead` and `ValueHead` take a `norm` choice now (batch, group or none),
+  and `MicroGo` uses group.
+- **A policy that learned to pass.** Passing is legal in every position, so
+  offering it at every node gave it prior mass everywhere, and the greedy policy
+  passed on move one. The search now offers it only when there is nothing else
+  to play — which is also when a person would consider it.
+
+The machinery is verified. The player is not strong, and this says so.
+
 ## 1.29.1
 
 The Code tab shows the whole generated file — every sheet, every class — because
