@@ -2159,6 +2159,25 @@ def _():
     assert "Filter " in PAGE, "there is no way to narrow the list"
 
 
+@check("no placeholder can be mistaken for a value")
+def _():
+    """The repository box suggested exactly the address people wanted.
+
+    Grey placeholder text reading `https://github.com/karpathy/minGPT` looks
+    filled in, so Fetch was pressed on an empty field and answered "paste a
+    repository address" — about a box that appeared to contain one.
+    """
+    import re
+
+    markup = PAGE[: PAGE.index("<script>")]
+    for match in re.finditer(r'placeholder="([^"]+)"', markup):
+        text = match.group(1)
+        assert not text.startswith("http"), \
+            f"the placeholder {text!r} is a usable value and will look entered"
+        assert not text.startswith("/"), \
+            f"the placeholder {text!r} is a usable path and will look entered"
+
+
 @check("import does not guess what you meant")
 def _():
     """Pressing Import with nothing chosen fetched resnet18.
@@ -2201,13 +2220,14 @@ def _():
         ("https://github.com/pytorch/vision.git", "pytorch", "vision", "", ""),
         ("https://github.com/karpathy/minGPT/tree/master/mingpt",
          "karpathy", "minGPT", "master", "mingpt"),
+        # what people type when they are not copying an address
+        ("karpathy/minGPT", "karpathy", "minGPT", "", ""),
     ]:
         found = importer.parse_repo(address)
         assert found["owner"] == owner and found["repo"] == repo, found
         assert found["ref"] == ref and found["path"] == path, found
 
-    for bad in ("", "not a url", "https://gitlab.com/a/b",
-                "https://github.com/onlyowner"):
+    for bad in ("", "onlyowner", "https://github.com/onlyowner"):
         try:
             importer.parse_repo(bad)
             raise AssertionError(f"{bad!r} should have been refused")

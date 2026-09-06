@@ -1539,16 +1539,18 @@ or  model = nn.Sequential(...)"></textarea>
       <div class="field"><label>Or a GitHub repository</label>
         <div style="display:flex;gap:6px">
           <input type="text" id="im_repo" spellcheck="false"
-                 placeholder="https://github.com/karpathy/minGPT">
+                 placeholder="owner/name, for example  karpathy/minGPT">
           <button class="btn" id="btnRepo">Fetch</button>
         </div>
-        <div class="help">Downloaded and read, never run. Add
-          <span class="mono">/tree/&lt;branch&gt;</span> or a folder path to narrow it.</div>
+        <div class="help">Downloaded and read, never run. Lands in
+          <span class="mono">data/github/</span>; the classes it holds appear
+          below. Add <span class="mono">/tree/&lt;branch&gt;</span> or a folder
+          path to narrow it.</div>
       </div>
 
       <div class="field"><label>Or scan a folder of Python files</label>
         <div style="display:flex;gap:6px">
-          <input type="text" id="im_folder" placeholder="/path/to/project" spellcheck="false" style="flex:1">
+          <input type="text" id="im_folder" placeholder="a folder on this machine holding .py files" spellcheck="false" style="flex:1">
           <button class="btn" id="btnScan">Scan</button>
         </div>
         <div class="help">Discovery only reads the files. Nothing runs until you
@@ -6069,7 +6071,7 @@ async function fetchRepo(){
   const url = ($("im_repo").value || "").trim();
   const host = $("scanResult");
   if (!url){ host.innerHTML = `<div class="scannote">Paste a repository address.</div>`; return; }
-  host.innerHTML = `<div class="scannote">downloading\u2026</div>`;
+  host.innerHTML = `<div class="scannote">downloading ${url}\u2026</div>`;
   let r, d;
   try{
     r = await fetch(API + "/api/github", {

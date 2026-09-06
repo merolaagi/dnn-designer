@@ -620,7 +620,7 @@ SKIP_BELOW = {".venv", "venv", "site-packages", "__pycache__", "build",
 GITHUB_CACHE = Path(__file__).resolve().parent / "data" / "github"
 
 REPO_URL = re.compile(
-    r"^(?:https?://)?(?:www\.)?github\.com/"
+    r"^(?:https?://)?(?:www\.)?(?:github\.com/)?"
     r"(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+?)(?:\.git)?"
     r"(?:/(?:tree|blob)/(?P<ref>[^/]+)(?:/(?P<path>.*))?)?/?$")
 
@@ -634,9 +634,16 @@ def parse_repo(url: str) -> Dict[str, str]:
     match = REPO_URL.match((url or "").strip())
     if not match:
         raise ImportError_(
-            "That does not look like a GitHub repository. Paste an address like "
-            "https://github.com/karpathy/minGPT")
+            "That does not look like a repository. Give it owner/name, such as "
+            "karpathy/minGPT, or the full github.com address.")
     found = match.groupdict()
+    # allowing the bare owner/name form means the host itself can be read as an
+    # owner: github.com/onlyowner would otherwise parse as a repository called
+    # onlyowner belonging to github.com
+    if found["owner"].lower() in ("github.com", "www.github.com", "http:", "https:"):
+        raise ImportError_(
+            "That address names an owner but no repository. It should be "
+            "owner/name, such as karpathy/minGPT.")
     return {"owner": found["owner"], "repo": found["repo"],
             "ref": found.get("ref") or "", "path": found.get("path") or ""}
 

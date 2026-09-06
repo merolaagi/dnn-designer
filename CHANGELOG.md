@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.31.3
+
+- **`GUIDE.md`** — what the app is, everything it can do, what is unusual about
+  it, and a beginner's first half hour. Every figure in it was checked against
+  the code rather than written from memory.
+
+## 1.31.2
+
+**Fixed: the repository box suggested exactly the address you wanted.**
+
+Its placeholder read `https://github.com/karpathy/minGPT` — grey, so the field
+was empty, but it looked filled in. Pressing Fetch then answered "paste a
+repository address" about a box that appeared to contain one.
+
+- The placeholder now reads *owner/name, for example karpathy/minGPT*, which
+  cannot be mistaken for an entered value.
+- **`karpathy/minGPT` works as typed**, without the address around it.
+- The folder box had the same trap with `/path/to/project`; it now describes
+  what to enter rather than showing something that looks entered.
+- **A test rejects any placeholder that is a usable value** — no URLs, no
+  paths. It found the folder box, which I had not noticed.
+- The shorthand introduced a hole the same test caught:
+  `github.com/onlyowner` parsed as a repository called `onlyowner` owned by
+  `github.com`. Refused now, with a message saying what was missing.
+- The hint says where the download lands (`data/github/`) and that the classes
+  appear below.
+
 ## 1.31.1
 
 **Fixed: Import fell through to the architecture dropdown when nothing was
