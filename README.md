@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and seven checks, with the torch-dependent ones skipping themselves when it is
+A hundred and nine checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -388,6 +388,13 @@ directories, files, and a chip for every model found in each. Clicking a
 filename reads its source into the code panel — reading never runs anything —
 and clicking a model chip imports that class onto a new sheet.
 
+**Or a GitHub repository**: paste an address and press Fetch. The repository is
+downloaded, unpacked and scanned, and its classes appear in the same browser. A
+branch or subfolder can be named with `/tree/<branch>/<folder>`. Nothing in it
+runs until a class is picked. A **setup** box takes the few lines a real
+configuration needs — `cfg = GPT.get_default_config()` and so on — which a
+single argument expression cannot express.
+
 For a whole project, *Scan a folder of Python files* lists every `nn.Module` it
 finds — without running any of it — and each class you pick becomes its own
 sheet. Sheets are tabbed at the bottom of the canvas like a spreadsheet: click
@@ -638,4 +645,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.30.3 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.31.0 — see `CHANGELOG.md`.

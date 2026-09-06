@@ -482,6 +482,7 @@ class FolderImportPayload(BaseModel):
     root: str
     picks: List[Dict[str, Any]]        # [{file, cls, arguments, input_shape}]
     as_sheets: bool = True
+    setup: str = ""
 
 
 def _finish_import(graph: Dict[str, Any]) -> Dict[str, Any]:
@@ -549,6 +550,26 @@ def scan_folder(body: ScanPayload):
         return importer.scan_folder(body.root)
     except importer.ImportError_ as exc:
         raise HTTPException(400, detail={"message": str(exc)})
+
+
+class RepoPayload(BaseModel):
+    url: str
+    refresh: bool = False
+
+
+@app.post("/api/github")
+def fetch_github(body: RepoPayload):
+    """Download a public repository and scan it.
+
+    Downloading and reading are safe. Nothing in it runs until a class is picked
+    for import, which is the same rule as for a folder already on disk.
+    """
+    try:
+        info = importer.fetch_repo(body.url, refresh=body.refresh)
+        found = importer.scan_folder(info["root"])
+    except importer.ImportError_ as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    return {**found, **info}
 
 
 @app.post("/api/scan-folder/tree")
@@ -630,6 +651,7 @@ class ClassProbe(BaseModel):
     file: str
     cls: str
     arguments: str = ""
+    setup: str = ""
     input_shape: List[int] = [3, 224, 224]
 
 
@@ -683,7 +705,8 @@ def scan_try(body: ClassProbe):
     """
     try:
         graph = importer.from_folder(body.root, body.file, body.cls,
-                                     body.input_shape, body.arguments)
+                                     body.input_shape, body.arguments,
+                                     body.setup)
     except importer.ImportError_ as exc:
         return {"ok": False, "reason": str(exc), "kind": _failure_kind(str(exc))}
     except Exception as exc:  # noqa: BLE001
@@ -724,7 +747,7 @@ def import_folder(body: FolderImportPayload):
             graph = importer.from_folder(
                 body.root, pick.get("file", ""), pick.get("cls", ""),
                 pick.get("input_shape") or [3, 224, 224],
-                str(pick.get("arguments") or ""))
+                str(pick.get("arguments") or ""), body.setup)
         except importer.ImportError_ as exc:
             failures.append({"cls": pick.get("cls"), "why": str(exc)})
             continue

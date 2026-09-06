@@ -2023,7 +2023,7 @@ def _():
             "        return self.fc(x)\n")
 
         probe = type("P", (), {"root": str(root), "file": "net.py",
-                               "cls": "Small", "arguments": "",
+                               "cls": "Small", "arguments": "", "setup": "",
                                "input_shape": [8]})()
         source = main.scan_source(probe)
         assert "class Small" in source["source"]
@@ -2050,7 +2050,7 @@ def _():
             "            x = x + kw[k]\n"
             "        return self.fc(x)\n")
         bad = type("P", (), {"root": str(root), "file": "bad.py",
-                             "cls": "Variadic", "arguments": "",
+                             "cls": "Variadic", "arguments": "", "setup": "",
                              "input_shape": [8]})()
         verdict = main.scan_try(bad)
         assert not verdict["ok"]
@@ -2102,7 +2102,8 @@ def _():
 
         def probe(cls, arguments=""):
             body = type("P", (), {"root": str(root), "file": "net.py", "cls": cls,
-                                  "arguments": arguments, "input_shape": [8]})()
+                                  "arguments": arguments, "setup": "",
+                                  "input_shape": [8]})()
             return main.scan_try(body)
 
         # not given its argument: the user's to fix, and the badge should say so
@@ -2156,6 +2157,84 @@ def _():
         assert token in PAGE, f"{token} is missing from the scan browser"
     # a library scan returns hundreds of classes; a filter is not optional
     assert "Filter " in PAGE, "there is no way to narrow the list"
+
+
+@check("a GitHub address is understood before anything is downloaded")
+def _():
+    import importer
+
+    for address, owner, repo, ref, path in [
+        ("https://github.com/karpathy/minGPT", "karpathy", "minGPT", "", ""),
+        ("github.com/karpathy/minGPT", "karpathy", "minGPT", "", ""),
+        ("https://github.com/pytorch/vision.git", "pytorch", "vision", "", ""),
+        ("https://github.com/karpathy/minGPT/tree/master/mingpt",
+         "karpathy", "minGPT", "master", "mingpt"),
+    ]:
+        found = importer.parse_repo(address)
+        assert found["owner"] == owner and found["repo"] == repo, found
+        assert found["ref"] == ref and found["path"] == path, found
+
+    for bad in ("", "not a url", "https://gitlab.com/a/b",
+                "https://github.com/onlyowner"):
+        try:
+            importer.parse_repo(bad)
+            raise AssertionError(f"{bad!r} should have been refused")
+        except importer.ImportError_:
+            pass
+
+
+@check("a class can be built from a few lines of setup")
+def _():
+    """One expression is not enough for a real configuration.
+
+    minGPT wants a default config with half a dozen fields set on it before
+    anything can be constructed, which no single argument expression expresses.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import shutil
+    import tempfile
+
+    import importer
+
+    root = Path(tempfile.mkdtemp())
+    try:
+        (root / "net.py").write_text(
+            "import torch.nn as nn\n"
+            "\n"
+            "\n"
+            "class Config:\n"
+            "    width = 0\n"
+            "\n"
+            "\n"
+            "class Net(nn.Module):\n"
+            "    def __init__(self, cfg):\n"
+            "        super().__init__()\n"
+            "        self.fc = nn.Linear(cfg.width, cfg.width)\n"
+            "\n"
+            "    def forward(self, x):\n"
+            "        return self.fc(x)\n")
+
+        setup = "cfg = Config()\ncfg.width = 8\n"
+        graph = importer.from_folder(str(root), "net.py", "Net", [8],
+                                     "cfg", setup)
+        graph.pop("_entry", None)
+        graph.pop("_notes", None)
+        expected = graph.pop("_expected_parameters", 0)
+        g, rep = analyzed(graph)
+        assert rep["ok"], rep["errors"]
+        assert rep["total_learnables"] == expected == 8 * 8 + 8
+
+        # and a setup that does not run says so, rather than failing later
+        try:
+            importer.from_folder(str(root), "net.py", "Net", [8], "cfg",
+                                 "cfg = Config(\ncfg.width = 8")
+            raise AssertionError("a broken setup should have been refused")
+        except importer.ImportError_ as exc:
+            assert "setup did not run" in str(exc), exc
+    finally:
+        shutil.rmtree(root)
 
 
 @check("a folder inside a virtual environment can still be scanned")
@@ -2726,7 +2805,7 @@ def _():
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
         "switchSheet", "addSheet", "renameSheet", "deleteSheet", "renderSheetTabs",
         "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",
-        "importFolderPicks", "scanCodeFolder", "renderScanResults", "peekAt",
+        "importFolderPicks", "scanCodeFolder", "fetchRepo", "renderScanResults", "peekAt",
         "tryClass", "scanRow", "modelFor", "paintPeek",
         "applyImportSize", "wireScanDrag", "resetImportSize",
         "loadProjectTree", "renderProjectTree",

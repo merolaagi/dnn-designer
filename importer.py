@@ -19,6 +19,7 @@ you to look at, rather than being silently dropped or silently guessed at.
 
 from __future__ import annotations
 
+import re
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -616,6 +617,100 @@ SKIP_BELOW = {".venv", "venv", "site-packages", "__pycache__", "build",
               "node_modules", ".git", ".mypy_cache", ".tox", "dist"}
 
 
+GITHUB_CACHE = Path(__file__).resolve().parent / "data" / "github"
+
+REPO_URL = re.compile(
+    r"^(?:https?://)?(?:www\.)?github\.com/"
+    r"(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+?)(?:\.git)?"
+    r"(?:/(?:tree|blob)/(?P<ref>[^/]+)(?:/(?P<path>.*))?)?/?$")
+
+
+def parse_repo(url: str) -> Dict[str, str]:
+    """Pull owner, repository, branch and subfolder out of a GitHub address.
+
+    Accepts what people actually paste: the repository page, a branch, or a
+    folder deep inside one.
+    """
+    match = REPO_URL.match((url or "").strip())
+    if not match:
+        raise ImportError_(
+            "That does not look like a GitHub repository. Paste an address like "
+            "https://github.com/karpathy/minGPT")
+    found = match.groupdict()
+    return {"owner": found["owner"], "repo": found["repo"],
+            "ref": found.get("ref") or "", "path": found.get("path") or ""}
+
+
+def fetch_repo(url: str, refresh: bool = False) -> Dict[str, Any]:
+    """Download a repository and unpack it for scanning.
+
+    Downloading and reading are safe; nothing here runs any of it. That happens
+    only when a class is picked for import, exactly as with a local folder.
+    """
+    import io
+    import shutil
+    import tarfile
+    import urllib.error
+    import urllib.request
+
+    spec = parse_repo(url)
+    refs = [spec["ref"]] if spec["ref"] else ["main", "master"]
+    GITHUB_CACHE.mkdir(parents=True, exist_ok=True)
+
+    last_error = ""
+    for ref in refs:
+        target = GITHUB_CACHE / f"{spec['owner']}-{spec['repo']}-{ref}"
+        if target.exists() and not refresh:
+            return _repo_result(spec, ref, target, cached=True)
+
+        address = (f"https://codeload.github.com/{spec['owner']}/"
+                   f"{spec['repo']}/tar.gz/refs/heads/{ref}")
+        try:
+            request = urllib.request.Request(
+                address, headers={"User-Agent": "deep-network-designer"})
+            with urllib.request.urlopen(request, timeout=60) as reply:
+                blob = reply.read()
+        except urllib.error.HTTPError as exc:
+            last_error = f"{exc.code} for branch {ref}"
+            continue
+        except Exception as exc:  # noqa: BLE001
+            raise ImportError_(f"Could not reach GitHub: {exc}") from exc
+
+        staging = target.with_suffix(".partial")
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as archive:
+            for member in archive.getmembers():
+                # an archive can name paths outside where you unpack it, and
+                # a link can point anywhere at all
+                place = (staging / member.name).resolve()
+                if not str(place).startswith(str(staging.resolve())):
+                    continue
+                if member.issym() or member.islnk():
+                    continue
+                archive.extract(member, staging)
+
+        # the tarball wraps everything in one directory named for the commit
+        inner = [p for p in staging.iterdir() if p.is_dir()]
+        shutil.rmtree(target, ignore_errors=True)
+        (inner[0] if len(inner) == 1 else staging).rename(target)
+        shutil.rmtree(staging, ignore_errors=True)
+        return _repo_result(spec, ref, target, cached=False)
+
+    raise ImportError_(
+        f"GitHub did not have that repository, or not on "
+        f"{' or '.join(refs)} ({last_error}). If the branch is named something "
+        f"else, paste the address with /tree/<branch> on the end.")
+
+
+def _repo_result(spec, ref, target: Path, cached: bool) -> Dict[str, Any]:
+    root = target / spec["path"] if spec["path"] else target
+    if not root.is_dir():
+        raise ImportError_(f"{spec['path']} is not a folder in that repository.")
+    return {"root": str(root), "repo": f"{spec['owner']}/{spec['repo']}",
+            "ref": ref, "cached": cached}
+
+
 def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
     """Find every nn.Module in a folder without running any of it.
 
@@ -679,7 +774,7 @@ def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
 
 def from_folder(root: str, file: str, cls: str,
                 input_shape: Optional[List[int]] = None,
-                arguments: str = "") -> Dict[str, Any]:
+                arguments: str = "", setup: str = "") -> Dict[str, Any]:
     """Import one class out of a folder, with its own package on the path.
 
     Importing the module properly rather than exec'ing the file in isolation is
@@ -740,6 +835,16 @@ def from_folder(root: str, file: str, cls: str,
     # the file imports can be named without spelling out where it came from.
     scope = dict(vars(module))
     scope["candidate"] = candidate
+
+    # Real configurations are rarely one expression. minGPT wants a default
+    # config with half a dozen fields set on it before anything can be built, so
+    # a few lines of setup run first and whatever they define is in scope.
+    if setup.strip():
+        try:
+            exec(compile(setup, "<setup>", "exec"), scope)  # noqa: S102
+        except Exception as exc:  # noqa: BLE001
+            raise ImportError_(
+                f"The setup did not run: {type(exc).__name__}: {exc}")
     try:
         model = eval(f"candidate({arguments})", scope)  # noqa: S307
     except Exception as exc:  # noqa: BLE001

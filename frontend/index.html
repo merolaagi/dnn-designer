@@ -1093,6 +1093,14 @@ body.sizing{user-select:none}
   border-radius:6px;background:#FCFCFD;color:#3C4453;
 }
 #im_code:focus{outline:none;border-color:var(--amber)}
+#im_setup{
+  width:100%;min-height:76px;resize:vertical;font-family:var(--mono);
+  font-size:11px;line-height:1.5;padding:8px 10px;border:1px solid var(--paper-3);
+  border-radius:6px;background:#FCFCFD;color:#3C4453;
+}
+#im_setup:focus{outline:none;border-color:var(--amber)}
+.repoline{font-size:10.5px;color:var(--muted);margin-top:6px}
+.repoline b{color:var(--text)}
 #scanResult{margin-top:10px}
 #scanResult .scannote{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.55}
 #scanResult .scanskip{color:#8C2F27}
@@ -1528,6 +1536,16 @@ or  model = nn.Sequential(...)"></textarea>
           A class is built with no arguments; assign a variable if yours needs some.</div>
       </div>
 
+      <div class="field"><label>Or a GitHub repository</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="im_repo" spellcheck="false"
+                 placeholder="https://github.com/karpathy/minGPT">
+          <button class="btn" id="btnRepo">Fetch</button>
+        </div>
+        <div class="help">Downloaded and read, never run. Add
+          <span class="mono">/tree/&lt;branch&gt;</span> or a folder path to narrow it.</div>
+      </div>
+
       <div class="field"><label>Or scan a folder of Python files</label>
         <div style="display:flex;gap:6px">
           <input type="text" id="im_folder" placeholder="/path/to/project" spellcheck="false" style="flex:1">
@@ -1536,6 +1554,17 @@ or  model = nn.Sequential(...)"></textarea>
         <div class="help">Discovery only reads the files. Nothing runs until you
           pick classes to import — each picked class becomes its own sheet.</div>
         <div id="scanResult"></div>
+      </div>
+
+      <div class="field" id="setupField" style="display:none">
+        <label>Setup, run before each class is built</label>
+        <textarea id="im_setup" spellcheck="false" placeholder="cfg = GPT.get_default_config()
+cfg.model_type = None
+cfg.n_layer = 2
+cfg.n_embd = 128"></textarea>
+        <div class="help">Real configurations are rarely one expression. Whatever
+          this defines can be named in the argument box on a row — put
+          <span class="mono">cfg</span> there once this has built one.</div>
       </div>
 
       <div class="field"><label>Or upload a file</label>
@@ -5806,11 +5835,16 @@ function renderScanResults(){
          <div class="peekempty">Point at a class to see it.</div>
        </div>
      </div>
+     ${scan.repo ? `<div class="repoline">from <b>${scan.repo}</b> at
+        <span class="mono">${scan.ref}</span></div>` : ""}
      <div class="scannote">Read ${scan.files} files.
        ${scan.skipped.length ? `<span class="scanskip">${scan.skipped.length}
          skipped for syntax errors.</span>` : ""}
        Ticked classes import as sheets. A class needing arguments takes them as
        written in code — <span class="mono">LlamaConfig(hidden_size=256)</span>.</div>`;
+
+  const setupField = $("setupField");
+  if (setupField) setupField.style.display = "";
 
   const list = $("scanList");
   list.querySelectorAll("[data-peek]").forEach(el => {
@@ -5936,6 +5970,7 @@ async function tryClass(key){
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ root: scan.root, file: model.file, cls: model.cls,
                              arguments: scan.args[key] || "",
+                             setup: ($("im_setup").value || ""),
                              input_shape: shape })
     })).json();
   } catch { scan.tried[key] = { ok: false, reason: "no answer" }; renderScanResults(); return; }
@@ -5971,7 +6006,8 @@ async function importFolderPicks(){
   try{
     r = await fetch(API + "/api/import/folder", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ root: state.scan.root, picks, as_sheets: true }),
+      body: JSON.stringify({ root: state.scan.root, picks, as_sheets: true,
+                             setup: ($("im_setup").value || "") }),
     });
     d = await r.json();
   } catch { note.innerHTML = "The server did not respond."; return false; }
@@ -6006,6 +6042,35 @@ async function importFolderPicks(){
   return true;
 }
 
+async function fetchRepo(){
+  const url = ($("im_repo").value || "").trim();
+  const host = $("scanResult");
+  if (!url){ host.innerHTML = `<div class="scannote">Paste a repository address.</div>`; return; }
+  host.innerHTML = `<div class="scannote">downloading\u2026</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/github", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="scannote">No answer from the server.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="scannote">${(d.detail && d.detail.message) || "Could not fetch"}</div>`;
+    return;
+  }
+  $("im_folder").value = d.root;
+  state.scan = { root: d.root, models: d.models, files: d.files,
+                 skipped: d.skipped, tried: {}, args: {},
+                 repo: d.repo, ref: d.ref };
+  loadProjectTree(d.root);
+  renderScanResults();
+}
+
+$("btnRepo").addEventListener("click", fetchRepo);
+$("im_repo").addEventListener("keydown", e => {
+  if (e.key === "Enter") fetchRepo();
+});
 $("btnScan").addEventListener("click", scanCodeFolder);
 $("im_folder").addEventListener("keydown", e => {
   if (e.key === "Enter") scanCodeFolder();

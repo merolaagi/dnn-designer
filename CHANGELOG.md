@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.31.0
+
+**Import straight from GitHub.** Paste a repository address into the Import
+dialog and press Fetch; it is downloaded, unpacked and scanned, and the classes
+it holds appear in the same browser as a local folder.
+
+- Accepts what people paste: `github.com/karpathy/minGPT`, the full https
+  address, a `.git` suffix, or `/tree/<branch>/<folder>` to go straight to one
+  part of a repository. Tries `main` then `master` when no branch is named.
+- Downloaded once and cached under `data/github/`, so a second look is instant.
+- Archive members whose paths point outside the unpack directory are skipped, as
+  are symlinks — an archive can name anywhere on disk, and this one is coming
+  from the internet.
+- Downloading and reading run nothing. Execution happens only when you pick a
+  class to import, which is the same rule as for a folder already on disk.
+
+**A setup box**, because one expression is not a configuration. minGPT wants a
+default config with half a dozen fields set on it before anything can be built.
+Whatever the setup defines can be named in a row's argument box.
+
+### minGPT, measured
+
+`NewGELU` imports cleanly. `CausalSelfAttention`, `Block` and `GPT` build
+correctly with the setup box and then refuse to trace, naming the reason: the
+attention slices its mask with `self.bias[:, :, :T, :T]`, where `T` came from
+another tensor. That is the same limit older GPT-2 code hits, and the same code
+written with `F.scaled_dot_product_attention` imports without trouble.
+
 ## 1.30.3
 
 The check added in 1.30.2 did its job and found the rest of the problem:
