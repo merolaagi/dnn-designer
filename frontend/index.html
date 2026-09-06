@@ -429,6 +429,15 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 .panelstrip button:hover{color:var(--text);border-color:var(--paper-3);background:#fff}
 
+/* the palette opens from the rail, so it reads as part of the same column */
+#rail .railpal{position:relative}
+#rail .railpal .chev{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  font-size:13px;color:#6E7C8C;transition:transform .14s;
+}
+#rail .railpal.open .chev{transform:translateY(-50%) rotate(90deg);color:#fff}
+#palette{border-left:none}
+
 .paltabs{display:flex;gap:2px;padding:7px 8px 6px;flex:1}
 .paltabs button{
   background:none;border:none;font-size:9.5px;font-weight:700;letter-spacing:.13em;
@@ -1255,6 +1264,10 @@ body.sizing{user-select:none}
   <nav id="rail">
     <div class="group">Definitions</div>
     <button data-page="pageDesign" class="on"><i>&#9634;</i>Canvas</button>
+    <button class="railpal" data-pal="layers"><i>&#9776;</i>Layers
+      <span class="chev">&#8250;</span></button>
+    <button class="railpal" data-pal="files"><i>&#9707;</i>Files
+      <span class="chev">&#8250;</span></button>
     <button data-page="pageDesign" data-side="code"><i>&#60;&#62;</i>Code</button>
     <button data-page="pageDesign" data-side="math"><i>&#8747;</i>Maths</button>
     <button data-page="pageBuild"><i>&#9776;</i>Projects</button>
@@ -1682,6 +1695,7 @@ const state = {
   orthogonal:false, snap:false, mm:null, finderHits:[], finderAt:0,
   flow:"vertical", gridLevel:2, appendAfter:null,
   quick:{ mode:null, context:null, expanded:false, hits:[], at:0 },
+  paletteTab:"layers",
   book:null, sheet:"main", bookReports:null, scan:null, tree:null,
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
@@ -3985,6 +3999,7 @@ function applyCollapse(){
     n => state.layout.dock[n] === "bottom" && !state.layout.hidden[n]);
   bottom.classList.toggle("on", anyBottom);
   $("splitBottom").classList.toggle("hidden", !anyBottom);
+  markRailPalette();
   render();
   drawMinimap();
 }
@@ -4023,14 +4038,45 @@ async function loadLayout(){
   applyLayout();
 }
 
+/* The rail is the left column; the palette is the part of it that expands.
+   Pressing the entry already showing folds it away, so the same control both
+   opens and closes — which is what the chevron is promising. */
+function showPalette(which){
+  const already = state.paletteTab === which
+    && !state.layout.hidden.palette
+    && state.layout.dock.palette !== "bottom";
+  if (already){
+    toggleCollapse("palette");
+  } else {
+    state.paletteTab = which;
+    state.layout.hidden.palette = false;
+    const files = which === "files";
+    $("palList").style.display = files ? "none" : "";
+    $("search").style.display = files ? "none" : "";
+    $("filesBody").style.display = files ? "" : "none";
+    document.querySelectorAll(".paltabs button").forEach(b =>
+      b.classList.toggle("on", b.dataset.pal === which));
+    if (files) renderProjectTree();
+    applyCollapse();
+    saveLayout();
+  }
+  markRailPalette();
+}
+
+function markRailPalette(){
+  const open = !state.layout.hidden.palette;
+  document.querySelectorAll("#rail .railpal").forEach(b =>
+    b.classList.toggle("open", open && b.dataset.pal === state.paletteTab));
+}
+
+document.querySelectorAll("#rail .railpal").forEach(btn =>
+  btn.addEventListener("click", () => showPalette(btn.dataset.pal)));
+
 document.querySelectorAll(".paltabs button").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".paltabs button").forEach(b =>
       b.classList.toggle("on", b === btn));
-    const files = btn.dataset.pal === "files";
-    $("palList").style.display = files ? "none" : "";
-    $("filesBody").style.display = files ? "" : "none";
-    if (files) renderProjectTree();
+    showPalette(btn.dataset.pal);
   });
 });
 

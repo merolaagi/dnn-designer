@@ -2759,6 +2759,32 @@ def _():
     assert "flex:none" in bar.replace(" ", ""), "the input bar is allowed to be squeezed away"
 
 
+@check("the layer palette opens from the rail")
+def _():
+    """One left column, not two.
+
+    Layers and Files are entries in the rail like everything else, and the
+    palette is the part of that column which expands. Pressing the entry already
+    showing folds it away, so the chevron's promise holds both ways.
+    """
+    rail = PAGE[PAGE.index('<nav id="rail">'):PAGE.index("</nav>")]
+    for which in ("layers", "files"):
+        assert f'data-pal="{which}"' in rail, f"{which} is not in the rail"
+    assert "railpal" in rail and "chev" in rail, "the entries carry no chevron"
+
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function showPalette"):]
+    body = body[: body.index("\n}\n")]
+    assert "toggleCollapse" in body, "pressing the open section does not fold it"
+    assert "state.paletteTab" in body, "the section showing is not remembered"
+
+    # and the rail keeps up when the layout changes some other way
+    collapse = script[script.index("function applyCollapse"):]
+    collapse = collapse[: collapse.index("\n}\n")]
+    assert "markRailPalette()" in collapse, \
+        "folding by another route leaves the rail entry looking open"
+
+
 @check("both side panels fold away and come back")
 def _():
     for token in ('class="panelfold"', 'id="paletteStrip"', 'id="inspectorStrip"',
@@ -2918,7 +2944,8 @@ def _():
         "importFolderPicks", "scanCodeFolder", "fetchRepo", "renderScanResults", "peekAt",
         "tryClass", "scanRow", "modelFor", "paintPeek",
         "applyImportSize", "wireScanDrag", "resetImportSize",
-        "applyCollapse", "toggleCollapse", "collapseGlyph",
+        "applyCollapse", "toggleCollapse", "collapseGlyph", "showPalette",
+        "markRailPalette",
         "loadProjectTree", "renderProjectTree",
         "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
         "submitSignIn", "signOut", "renderMathPanel", "mathDiagram", "paintMath",

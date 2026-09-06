@@ -1,0 +1,211 @@
+{
+  "name": "HandwrittendigitssmallCNN",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "Input",
+      "params": {
+        "shape": [
+          1,
+          28,
+          28
+        ]
+      },
+      "label": "",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "n2",
+      "type": "Conv2d",
+      "params": {
+        "filters": 32,
+        "kernel": 3,
+        "padding": "same"
+      },
+      "label": "",
+      "x": 0,
+      "y": 148
+    },
+    {
+      "id": "n4",
+      "type": "BatchNorm2d",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 266
+    },
+    {
+      "id": "n6",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "label": "",
+      "x": 0,
+      "y": 384
+    },
+    {
+      "id": "n8",
+      "type": "MaxPool2d",
+      "params": {
+        "kernel": 2
+      },
+      "label": "",
+      "x": 0,
+      "y": 478
+    },
+    {
+      "id": "n10",
+      "type": "Conv2d",
+      "params": {
+        "filters": 64,
+        "kernel": 3,
+        "padding": "same"
+      },
+      "label": "",
+      "x": 0,
+      "y": 596
+    },
+    {
+      "id": "n12",
+      "type": "BatchNorm2d",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 714
+    },
+    {
+      "id": "n14",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "label": "",
+      "x": 0,
+      "y": 832
+    },
+    {
+      "id": "n16",
+      "type": "MaxPool2d",
+      "params": {
+        "kernel": 2
+      },
+      "label": "",
+      "x": 0,
+      "y": 926
+    },
+    {
+      "id": "n18",
+      "type": "Flatten",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 1044
+    },
+    {
+      "id": "n20",
+      "type": "Dropout",
+      "params": {
+        "rate": 0.5
+      },
+      "label": "",
+      "x": 0,
+      "y": 1162
+    },
+    {
+      "id": "n22",
+      "type": "Linear",
+      "params": {
+        "units": 10
+      },
+      "label": "head",
+      "x": 0,
+      "y": 1280
+    },
+    {
+      "id": "n24",
+      "type": "Output",
+      "params": {
+        "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 1398
+    }
+  ],
+  "edges": [
+    {
+      "id": "e3",
+      "source": "n1",
+      "target": "n2",
+      "port": 0
+    },
+    {
+      "id": "e5",
+      "source": "n2",
+      "target": "n4",
+      "port": 0
+    },
+    {
+      "id": "e7",
+      "source": "n4",
+      "target": "n6",
+      "port": 0
+    },
+    {
+      "id": "e9",
+      "source": "n6",
+      "target": "n8",
+      "port": 0
+    },
+    {
+      "id": "e11",
+      "source": "n8",
+      "target": "n10",
+      "port": 0
+    },
+    {
+      "id": "e13",
+      "source": "n10",
+      "target": "n12",
+      "port": 0
+    },
+    {
+      "id": "e15",
+      "source": "n12",
+      "target": "n14",
+      "port": 0
+    },
+    {
+      "id": "e17",
+      "source": "n14",
+      "target": "n16",
+      "port": 0
+    },
+    {
+      "id": "e19",
+      "source": "n16",
+      "target": "n18",
+      "port": 0
+    },
+    {
+      "id": "e21",
+      "source": "n18",
+      "target": "n20",
+      "port": 0
+    },
+    {
+      "id": "e23",
+      "source": "n20",
+      "target": "n22",
+      "port": 0
+    },
+    {
+      "id": "e25",
+      "source": "n22",
+      "target": "n24",
+      "port": 0
+    }
+  ]
+}

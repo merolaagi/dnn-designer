@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.33.0
+
+- **Layers and Files are entries in the left sidebar**, under Definitions with
+  Canvas and Code, each carrying a chevron. Pressing one opens the palette on
+  that section; pressing the one already showing folds it away, so the same
+  control does both — which is what a chevron promises.
+- The palette reads as part of the sidebar rather than a second column beside
+  it: no border between them, and the rail entry stays lit while its section is
+  open.
+- Folding the palette any other way — its own chevron, its strip, a dock change —
+  updates the rail entry too, so the two can never disagree about what is
+  showing.
+- Docking, resizing and folding are unchanged, and the test that holds all three
+  together still passes.
+
 ## 1.32.1
 
 - **The heavy black rule down each side of the canvas was a scrollbar.** Only
