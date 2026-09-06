@@ -33,6 +33,7 @@ import recipeloader
 import recipes_sdk
 import graph as G
 import workbook
+import tracer
 import train as T
 from layers import REGISTRY, catalog
 from version import __version__
@@ -300,6 +301,23 @@ def layer_math(body: MathPayload):
     entry["out_shape"] = out_shape
     entry["learnables"] = report["nodes"].get(node.id, {}).get("learnables", 0)
     return entry
+
+
+class TracePayload(BaseModel):
+    graph: Dict[str, Any]
+    batch: int = 2
+
+
+@app.post("/api/trace")
+def trace_forward(body: TracePayload):
+    """Run one batch through the design and report what each layer did."""
+    try:
+        return tracer.run_trace(body.graph, batch=max(1, min(64, body.batch)))
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={
+            "message": _missing_package(exc) or f"{type(exc).__name__}: {exc}"})
 
 
 @app.post("/api/test-layer")

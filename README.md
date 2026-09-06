@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and eighteen checks, with the torch-dependent ones skipping themselves when it is
+A hundred and twenty checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -329,6 +329,17 @@ proves, with the kernel verifying every one.
 This is the shape of neural theorem proving generally: the network is a policy,
 not an oracle. A confident wrong suggestion costs a search node and nothing
 else.
+
+## Watching a run
+
+The **Run** tab sends one batch through the network and reports what every layer
+did — time, output shape, activation memory — with the canvas following along:
+each layer goes green with a tick as the pass reaches it. A **Timeline** view
+shows the same run as a Gantt, which makes a dominant layer obvious.
+
+Timings come from hooks on the generated model after a warm-up pass, so they are
+steady-state costs rather than one-off kernel setup. Layers with no module of
+their own are listed as untimed rather than as taking zero.
 
 ## Studies
 
@@ -645,4 +656,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.33.3 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.34.0 — see `CHANGELOG.md`.

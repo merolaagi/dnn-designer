@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.34.0
+
+**Run a batch and watch it happen.** A new **Run** tab, and a rail entry beside
+Train.
+
+A workflow engine can show tasks going green because they execute one at a time
+and report back. A forward pass has the same shape — modules run in order, each
+taking a measurable time and producing a definite tensor — so this is measured
+with hooks on the generated model rather than animated from a guess.
+
+- **The canvas follows the run.** Each layer takes a green border and a tick as
+  the pass reaches it, with what it actually cost printed beside it. Layers not
+  yet reached are dimmed.
+- **Layers**: a table of every layer in execution order with its time, a bar
+  showing its share, the shape it produced and the memory that holds. Clicking a
+  row selects that layer on the canvas.
+- **Timeline**: the same run as a Gantt, so a layer that dominates is obvious at
+  a glance.
+- **This run**: batch size, total time, the slowest layer and its share, total
+  activation memory, parameters, and the output shape.
+- **Timed after a warm-up.** Unwarmed, a small convolution reports several
+  hundred milliseconds of one-off kernel setup and looks like the bottleneck it
+  is not — on a test network that was 766ms against a true 0.26ms. Reporting the
+  first number would send you optimising the wrong layer.
+- A layer with no module of its own — an Add, a Flatten in some graphs — is
+  listed as untimed rather than as taking zero, and never dropped from the
+  table: a missing row reads as a layer that failed.
+
 ## 1.33.3
 
 **One line between a panel and the canvas, and it is the one you drag.**

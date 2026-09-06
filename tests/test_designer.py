@@ -838,6 +838,72 @@ def _():
         and 'shape: "hex"' in PAGE, "nodeBox does not assign all four shapes"
 
 
+@check("a forward pass is traced layer by layer")
+def _():
+    """A workflow shows tasks going green because they run one at a time. A
+    forward pass has the same shape, so this measures it rather than animating
+    a guess."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import tracer
+
+    graph = build(
+        [("i", "Input", {"shape": [1, 28, 28]}),
+         ("c", "Conv2d", {"filters": 16, "kernel": 3, "padding": "same"}),
+         ("b", "BatchNorm2d", {}),
+         ("a", "Activation", {"kind": "relu"}),
+         ("p", "MaxPool2d", {"kernel": 2}),
+         ("f", "Flatten", {}),
+         ("l", "Linear", {"units": 10}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "c", 0), ("c", "b", 0), ("b", "a", 0), ("a", "p", 0),
+         ("p", "f", 0), ("f", "l", 0), ("l", "o", 0)], "Trace")
+
+    result = tracer.run_trace(graph, batch=4)
+    assert result["ok"], result.get("error")
+    assert result["warmed"], "timings must come from a warmed pass"
+
+    rows = result["layers"]
+    assert len(rows) == 8, f"{len(rows)} rows for 8 layers"
+    assert [r["seq"] for r in rows] == list(range(1, 9)), "rows are out of order"
+
+    measured = [r for r in rows if r["measured"]]
+    assert len(measured) >= 5, f"only {len(measured)} layers were timed"
+    for row in measured:
+        assert row["ms"] >= 0, row
+        assert row["shape"] and row["shape"][0] == 4, \
+            f"{row['name']} reported {row['shape']} for a batch of 4"
+        assert row["bytes"] and row["bytes"] > 0, row
+
+    # a layer with no module of its own is reported, not dropped
+    terminals = [r for r in rows if r["type"] in ("Input", "Output")]
+    assert terminals and all(not r["measured"] for r in terminals)
+    assert all(r["ms"] is None for r in terminals), \
+        "an untimed layer should say so rather than claim zero"
+
+    # the times are steady-state, not first-call kernel setup
+    slowest = max(measured, key=lambda r: r["ms"])
+    assert slowest["ms"] < 200, \
+        f"{slowest['name']} took {slowest['ms']}ms, which looks unwarmed"
+
+    assert result["outputs"][0]["shape"] == [4, 10], result["outputs"]
+
+
+@check("the canvas shows a run as it progresses")
+def _():
+    for token in ("function renderRunPanel", "function animateTrace",
+                  "function traceStateOf", "rantick", "lanebar",
+                  'data-side="run"', 'id="runBody"'):
+        assert token in PAGE, f"{token} is missing from the run view"
+
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function traceStateOf"):]
+    body = body[: body.index("\n}\n")]
+    assert "state.traceAt === null" in body, \
+        "there is no settled state, so the run never finishes visibly"
+
+
 @check("a layer can be run on its own and checked against the canvas")
 def _():
     if not HAVE_TORCH:
@@ -3007,6 +3073,8 @@ def _():
         "classAround", "highlightInCode",
         "sendAsk", "askSay", "loadAssistant", "askObservations",
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
+        "renderRunPanel", "runTrace", "animateTrace", "traceStateOf", "runTable",
+        "runTimeline", "runSummary", "formatBytes",
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
         "switchSheet", "addSheet", "renameSheet", "deleteSheet", "renderSheetTabs",
         "ensureBook", "commitSheet", "openReferencedSheet", "scanFolder",

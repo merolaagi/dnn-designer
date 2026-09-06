@@ -928,6 +928,68 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
 .node.sel .node-diamond{stroke:#2D7DD2;stroke-width:2.2}
 .node.err .node-diamond{stroke:var(--bad);stroke-width:1.8}
 .node-hex{fill:#F4F7FA;stroke:#9DAEC2;stroke-width:1.2;stroke-dasharray:5 3}
+
+/* a layer that has run in the current trace */
+.node.ran .node-card,.node.ran .node-terminal,.node.ran .node-diamond,
+.node.ran .node-data,.node.ran .node-stadium{stroke:#3DA35D;stroke-width:1.8}
+.node.waiting{opacity:.45}
+.rantick circle{fill:#3DA35D}
+.rantick .tickpath{fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;
+  stroke-linejoin:round}
+.ranms{font-family:var(--mono);font-size:9px;fill:#256B39}
+
+/* the run panel */
+.runbar{
+  display:flex;align-items:center;gap:9px;padding:11px 13px;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+}
+.runbatch{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.runbatch input{
+  width:52px;padding:3px 6px;border:1px solid var(--paper-3);border-radius:5px;
+  font-size:11px;
+}
+.runtotal{margin-left:auto;font-family:var(--mono);font-size:11px;color:#256B39}
+.runfail{padding:13px;font-size:11.5px;color:#8C2F27;line-height:1.6}
+.runtabs{display:flex;gap:3px;padding:9px 12px 0}
+.runtabs button{
+  background:none;border:none;font-size:11px;color:var(--muted);padding:4px 9px;
+  border-radius:6px;
+}
+.runtabs button.on{background:#E9F1FB;color:#1F6BBD;font-weight:600}
+table.runtable{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:8px}
+table.runtable th{
+  text-align:left;font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+  color:#98A6B8;font-weight:700;padding:5px 8px;border-bottom:1px solid var(--paper-3);
+}
+table.runtable td{padding:6px 8px;border-bottom:1px solid #EDF1F5;vertical-align:middle}
+table.runtable td:first-child{padding-left:13px}
+table.runtable .num{text-align:right;font-family:var(--mono);font-size:10.5px;
+  position:relative}
+table.runtable td b{font-weight:600;display:block}
+table.runtable td span{font-size:9.5px;color:var(--muted)}
+table.runtable tr.pending{opacity:.35}
+table.runtable tr.picked{background:#FFF8E9}
+table.runtable tr:hover{background:var(--paper-2);cursor:pointer}
+table.runtable .bar{
+  position:absolute;left:4px;right:4px;bottom:2px;height:2px;background:#9CCFA4;
+  border-radius:1px;
+}
+.nomeasure{color:#B7C0CB;font-style:normal}
+.runline{padding:10px 13px 4px}
+.lane{display:flex;align-items:center;gap:9px;margin-bottom:5px;font-size:11px}
+.lane:hover{background:var(--paper-2);cursor:pointer}
+.lanename{width:104px;flex:none;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;color:var(--text)}
+.lanetrack{flex:1;position:relative;height:17px;background:#F1F4F8;border-radius:4px}
+.lanebar{
+  position:absolute;top:2px;bottom:2px;background:#9CCFA4;border:1px solid #6FB37F;
+  border-radius:3px;font-style:normal;font-size:9px;color:#1F5B31;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.untimed{position:absolute;left:0;top:7px;width:100%;height:1px;background:#DCE3EA;
+  display:block}
+.lanescale{display:flex;justify-content:space-between;font-size:9px;
+  color:var(--muted);font-family:var(--mono);padding:2px 0 0 113px}
 .node-data{fill:#FFFFFF;stroke:#C6D0DC;stroke-width:1;
   filter:drop-shadow(0 1px 1px rgba(22,32,46,.09))
          drop-shadow(0 4px 10px rgba(22,32,46,.10))}
@@ -1274,6 +1336,7 @@ body.sizing{user-select:none}
     <button data-page="pageExtend"><i>&#9881;</i>Blocks &amp; recipes</button>
 
     <div class="group">Executions</div>
+    <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
     <button data-page="pageRuns"><i>&#8635;</i>Run history</button>
@@ -1384,6 +1447,7 @@ body.sizing{user-select:none}
       <button data-side="network">Network</button>
       <button data-side="code">Code</button>
       <button data-side="train">Train</button>
+      <button data-side="run">Run</button>
       <button data-side="math">Maths</button>
       <button data-side="guide">Guide</button>
       <button data-side="ask">Assistant</button>
@@ -1393,6 +1457,7 @@ body.sizing{user-select:none}
       <div class="empty">Select a layer on the canvas to edit it.</div>
     </div>
     <div class="scroll" id="networkBody" style="display:none"></div>
+    <div class="scroll" id="runBody" style="display:none;padding:0"></div>
     <div class="scroll" id="mathBody" style="display:none;padding:0"></div>
     <div class="scroll" id="guideBody" style="display:none;padding:0"></div>
     <div id="askBody" style="display:none">
@@ -1693,6 +1758,7 @@ const state = {
   book:null, sheet:"main", bookReports:null, scan:null, tree:null,
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
+  trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
@@ -2702,8 +2768,10 @@ function render(){
     const box = nodeBox(n);
     const isRuntime = spec.kind === "runtime";
 
+    const ran = traceStateOf(n.id);
     const g = el("g", { class:"node" + (state.selection.has(n.id)?" sel":"")
-                        + (bad?" err":"") + (isRuntime?" runtime":""),
+                        + (bad?" err":"") + (isRuntime?" runtime":"")
+                        + (ran ? (ran.done ? " ran" : " waiting") : ""),
                         transform:`translate(${n.x},${n.y})` }, gNodes);
 
     if (box.shape === "circle"){
@@ -2852,6 +2920,20 @@ function render(){
       });
     }
 
+    if (ran && ran.done){
+      // the tick and what the layer actually cost, once the run reaches it
+      const mark = el("g", { class:"rantick",
+                             transform:`translate(${box.w - 11},-11)` }, g);
+      el("circle", { r:11, cx:0, cy:0 }, mark);
+      el("path", { d:"M-4.5,0 L-1.5,3.5 L4.5,-4", class:"tickpath" }, mark);
+      if (ran.row.measured){
+        const ms = el("text", { class:"ranms", x:box.w - 26, y:-14,
+                                "text-anchor":"end" }, g);
+        ms.textContent = ran.row.ms < 1
+          ? ran.row.ms.toFixed(2) + " ms" : ran.row.ms.toFixed(1) + " ms";
+      }
+    }
+
     g.addEventListener("pointerdown", ev => {
       if (ev.target.closest && (ev.target.closest(".port-plus")
           || ev.target.closest(".node-kill"))) return;
@@ -2978,6 +3060,7 @@ function renderInspector(){
   }
   if (state.sidePanel !== "layer" && state.sidePanel !== "guide"
       && state.sidePanel !== "ask" && state.sidePanel !== "math"
+      && state.sidePanel !== "run"
       && (state.sel || state.selEdge) && state.page === "pageDesign"){
     showSide("layer");
   }
@@ -4135,7 +4218,7 @@ function showPage(pageId){
 
 const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
                       code:"Generated code", train:"Training", guide:"Guided build",
-                      ask:"Assistant", math:"The mathematics" };
+                      ask:"Assistant", math:"The mathematics", run:"The forward pass" };
 
 function showSide(side){
   // asking for a tab is asking for the panel it lives in
@@ -4151,7 +4234,7 @@ function showSide(side){
     b.classList.toggle("on", b.dataset.side === side));
   const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",
                 code:"codeBody", train:"trainBody", guide:"guideBody",
-                ask:"askBody", math:"mathBody" };
+                ask:"askBody", math:"mathBody", run:"runBody" };
   Object.entries(map).forEach(([key, id]) => {
     const el = $(id);
     if (el) el.style.display = (key === side) ? "" : "none";
@@ -4163,6 +4246,7 @@ function showSide(side){
   if (side === "guide") renderGuide();
   if (side === "ask") loadAssistant();
   if (side === "math") renderMathPanel();
+  if (side === "run") renderRunPanel();
 }
 
 document.querySelectorAll(".ptabs button[data-side]").forEach(btn =>
@@ -5054,6 +5138,212 @@ $("siSwitch").addEventListener("click", () =>
 $("siPass").addEventListener("keydown", e => { if (e.key === "Enter") submitSignIn(); });
 $("siName").addEventListener("keydown", e => { if (e.key === "Enter") $("siPass").focus(); });
 $("siClose").addEventListener("click", () => $("signin").classList.remove("on"));
+
+/* ============================== run ============================== */
+
+/* A forward pass runs its layers in order, so the canvas can show it happening.
+   Each box goes green with a tick as the run reaches it, with the time it
+   actually took beside it — measured with hooks on the generated model, after a
+   warm-up, not estimated. */
+
+function renderRunPanel(){
+  const host = $("runBody");
+  const trace = state.trace;
+
+  const controls = `
+    <div class="runbar">
+      <button class="btn go" id="btnTrace">Run a batch</button>
+      <label class="runbatch">batch
+        <input type="number" id="traceBatch" min="1" max="64"
+               value="${state.traceBatch || 4}"></label>
+      ${trace && trace.ok
+        ? `<span class="runtotal">${trace.total_ms} ms total</span>` : ""}
+      ${trace && trace.ok
+        ? `<button class="btn" id="btnReplay">Replay</button>` : ""}
+    </div>`;
+
+  if (!trace){
+    host.innerHTML = controls + `<div class="empty" style="padding:14px">
+      Sends one batch through the network and reports what every layer did:
+      how long it took, the shape it produced and how much memory that holds.
+      The canvas follows along.</div>`;
+    wireRun();
+    return;
+  }
+
+  if (!trace.ok){
+    host.innerHTML = controls
+      + `<div class="runfail">The run stopped: ${trace.error}</div>`
+      + runTable(trace);
+    wireRun();
+    return;
+  }
+
+  host.innerHTML = controls + `
+    <div class="runtabs">
+      <button data-run="layers" class="${state.runView !== "timeline" ? "on" : ""}">Layers</button>
+      <button data-run="timeline" class="${state.runView === "timeline" ? "on" : ""}">Timeline</button>
+    </div>`
+    + (state.runView === "timeline" ? runTimeline(trace) : runTable(trace))
+    + runSummary(trace);
+
+  host.querySelectorAll("[data-run]").forEach(b =>
+    b.addEventListener("click", () => { state.runView = b.dataset.run; renderRunPanel(); }));
+  host.querySelectorAll("[data-layer]").forEach(row =>
+    row.addEventListener("click", () => {
+      state.sel = row.dataset.layer;
+      state.selection = new Set([state.sel]);
+      render();
+      renderRunPanel();
+    }));
+  wireRun();
+}
+
+function wireRun(){
+  const go = $("btnTrace");
+  if (go) go.addEventListener("click", runTrace);
+  const again = $("btnReplay");
+  if (again) again.addEventListener("click", () => animateTrace(state.trace));
+  const batch = $("traceBatch");
+  if (batch) batch.addEventListener("input", () => {
+    state.traceBatch = Math.max(1, Math.min(64, +batch.value || 1));
+  });
+}
+
+function runTable(trace){
+  const slowest = Math.max(...trace.layers.map(l => l.ms || 0), 0.0001);
+  return `<table class="runtable">
+    <thead><tr><th>#</th><th>layer</th><th class="num">time</th>
+      <th>output</th><th class="num">memory</th></tr></thead>
+    <tbody>${trace.layers.map(row => {
+      const done = state.traceAt === null || row.seq <= state.traceAt;
+      const share = row.ms ? (row.ms / slowest) * 100 : 0;
+      return `<tr data-layer="${row.id}" class="${done ? "" : "pending"}${
+                 state.sel === row.id ? " picked" : ""}">
+        <td class="num">${row.seq}</td>
+        <td><b>${row.name}</b><span>${row.type}</span></td>
+        <td class="num">${row.measured
+            ? `<span class="bar" style="width:${share.toFixed(0)}%"></span>`
+              + `${row.ms.toFixed(3)} ms`
+            : `<i class="nomeasure" title="no module of its own to time">—</i>`}</td>
+        <td class="mono">${(row.shape || []).map(d => d === null ? "B" : d).join("\u00d7")}</td>
+        <td class="num mono">${row.bytes ? formatBytes(row.bytes) : ""}</td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+}
+
+function runTimeline(trace){
+  const measured = trace.layers.filter(l => l.measured);
+  if (!measured.length) return `<div class="empty" style="padding:14px">Nothing was timed.</div>`;
+  const span = Math.max(...measured.map(l => l.at + l.ms), 0.001);
+  return `<div class="runline">${trace.layers.map(row => {
+    if (!row.measured){
+      return `<div class="lane" data-layer="${row.id}">
+        <span class="lanename">${row.name}</span>
+        <span class="lanetrack"><i class="untimed" title="no module of its own"></i></span></div>`;
+    }
+    const left = (row.at / span) * 100;
+    const width = Math.max(0.6, (row.ms / span) * 100);
+    return `<div class="lane" data-layer="${row.id}">
+      <span class="lanename">${row.name}</span>
+      <span class="lanetrack">
+        <i class="lanebar" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"
+           title="${row.ms.toFixed(3)} ms">${row.ms >= span / 12
+             ? row.ms.toFixed(2) + " ms" : ""}</i>
+      </span></div>`;
+  }).join("")}
+  <div class="lanescale"><span>0</span><span>${span.toFixed(2)} ms</span></div></div>`;
+}
+
+function runSummary(trace){
+  const measured = trace.layers.filter(l => l.measured);
+  const slowest = measured.length
+    ? measured.reduce((a, b) => (a.ms > b.ms ? a : b)) : null;
+  const held = trace.layers.reduce((sum, l) => sum + (l.bytes || 0), 0);
+  return `<div class="mathsec">this run</div>
+    <table class="mathtab">
+      <tr><td class="key">batch</td><td class="val">${trace.batch}</td></tr>
+      <tr><td class="key">total</td><td class="val">${trace.total_ms} ms</td></tr>
+      ${slowest ? `<tr><td class="key">slowest</td><td class="val">${slowest.name}
+        \u00b7 ${slowest.ms.toFixed(3)} ms \u00b7
+        ${(slowest.ms / trace.total_ms * 100).toFixed(0)}% of the pass</td></tr>` : ""}
+      <tr><td class="key">activations</td><td class="val">${formatBytes(held)} held
+        across ${measured.length} layers</td></tr>
+      <tr><td class="key">parameters</td><td class="val">${
+        (trace.parameters || 0).toLocaleString()}${
+        trace.trainable !== trace.parameters
+          ? ` (${(trace.trainable || 0).toLocaleString()} trainable)` : ""}</td></tr>
+      <tr><td class="key">output</td><td class="val mono">${
+        (trace.outputs || []).map(o => o.shape.join("\u00d7")).join("  ")}</td></tr>
+    </table>
+    <p class="mathnote">Timed after a warm-up pass, so these are the steady-state
+    costs rather than one-off kernel setup.</p>`;
+}
+
+function formatBytes(n){
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+async function runTrace(){
+  const host = $("runBody");
+  const note = $("btnTrace");
+  if (note){ note.disabled = true; note.textContent = "running\u2026"; }
+  let r, d;
+  try{
+    r = await fetch(API + "/api/trace", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ graph: state.graph, batch: state.traceBatch || 4 }),
+    });
+    d = await r.json();
+  } catch {
+    host.innerHTML = `<div class="runfail">The server did not respond.</div>`;
+    return;
+  }
+  if (!r.ok){
+    state.trace = null;
+    host.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "The run failed"}</div>`;
+    renderRunPanel();
+    return;
+  }
+  state.trace = d;
+  state.runView = state.runView || "layers";
+  animateTrace(d);
+}
+
+/* Step through the layers at a readable pace rather than in the microseconds
+   the pass actually takes — the point is to see the order, not to replay the
+   clock. */
+function animateTrace(trace){
+  if (!trace || !trace.ok){ renderRunPanel(); return; }
+  clearInterval(state.traceTimer);
+  state.traceAt = 0;
+  renderRunPanel();
+  render();
+  const last = trace.layers.length;
+  state.traceTimer = setInterval(() => {
+    state.traceAt += 1;
+    render();
+    renderRunPanel();
+    if (state.traceAt >= last){
+      clearInterval(state.traceTimer);
+      state.traceAt = null;          // null means every layer is settled
+      render();
+      renderRunPanel();
+    }
+  }, 140);
+}
+
+function traceStateOf(nodeId){
+  const trace = state.trace;
+  if (!trace || !trace.ok) return null;
+  const row = trace.layers.find(l => l.id === nodeId);
+  if (!row) return null;
+  if (state.traceAt === null) return { done: true, row };
+  return { done: row.seq <= state.traceAt, row };
+}
 
 /* ============================= maths ============================= */
 
