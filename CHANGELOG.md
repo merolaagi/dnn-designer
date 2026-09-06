@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.33.1
+
+**Fixed: pressing Layers or Files blanked the whole canvas.**
+
+The rail's click handler was bound to every button in the rail. The new Layers
+and Files entries carry no `data-page`, so pressing one called
+`showPage(undefined)`, which removed the display class from every page and added
+it to none. With no page shown, the dark page background appeared where the
+canvas should be — and because the palette was toggling correctly underneath, it
+looked like the panel was coming and going at random.
+
+- All seven rail handlers are scoped to entries that actually name a page.
+- A test asserts none of them is bound to the whole rail, and that a palette
+  entry never carries `data-page`. Verified against the broken version: it
+  reproduces the empty screen exactly.
+
+Nothing was wrong with the markup, the styling or the folding logic, which is
+why it took a reproduction rather than a reading to find.
+
 ## 1.33.0
 
 - **Layers and Files are entries in the left sidebar**, under Definitions with

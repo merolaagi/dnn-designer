@@ -3032,7 +3032,7 @@ function renderInspector(){
     const code = state.nodeCode && state.nodeCode[n.id];
     if (!code || !code.origin){ toast("No source file recorded"); return; }
     showPage("pageExtend");
-    document.querySelectorAll("#rail button").forEach(b =>
+    document.querySelectorAll("#rail button[data-page]").forEach(b =>
       b.classList.toggle("on", b.dataset.page === "pageExtend"));
     openBlock(code.origin, "blocks");
   });
@@ -3157,7 +3157,7 @@ function renderNodeSource(body, node){
     jump.title = "blocks/" + code.origin;
     jump.addEventListener("click", () => {
       showPage("pageExtend");
-      document.querySelectorAll("#rail button").forEach(b =>
+      document.querySelectorAll("#rail button[data-page]").forEach(b =>
         b.classList.toggle("on", b.dataset.page === "pageExtend"));
       state.blockFile = code.origin;
       openBlock(code.origin, "blocks");
@@ -4177,9 +4177,9 @@ function showSide(side){
 document.querySelectorAll(".ptabs button[data-side]").forEach(btn =>
   btn.addEventListener("click", () => showSide(btn.dataset.side)));
 
-document.querySelectorAll("#rail button").forEach(btn => {
+document.querySelectorAll("#rail button[data-page]").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll("#rail button").forEach(b =>
+    document.querySelectorAll("#rail button[data-page]").forEach(b =>
       b.classList.toggle("on", b === btn));
     showPage(btn.dataset.page);
     if (btn.dataset.side) showSide(btn.dataset.side);
@@ -4352,7 +4352,7 @@ async function openStudy(id, quiet){
   main.querySelectorAll("[data-run]").forEach(el =>
     el.addEventListener("click", () => {
       showPage("pageRuns");
-      document.querySelectorAll("#rail button").forEach(b =>
+      document.querySelectorAll("#rail button[data-page]").forEach(b =>
         b.classList.toggle("on", b.dataset.page === "pageRuns"));
       refreshRuns(el.dataset.run);
     }));
@@ -4383,7 +4383,7 @@ async function openTrial(studyId, index){
   state.version = null;
   clearSelection();
   showPage("pageDesign");
-  document.querySelectorAll("#rail button").forEach(b =>
+  document.querySelectorAll("#rail button[data-page]").forEach(b =>
     b.classList.toggle("on", b.dataset.page === "pageDesign" && !b.dataset.side));
   render(); fitView(); analyze();
   toast("Opened that variant on the canvas");
@@ -4672,7 +4672,7 @@ function renderPlanOverview(){
 
 function goToCanvas(side){
   showPage("pageDesign");
-  document.querySelectorAll("#rail button").forEach(b =>
+  document.querySelectorAll("#rail button[data-page]").forEach(b =>
     b.classList.toggle("on", b.dataset.page === "pageDesign" && !b.dataset.side));
   if (side) showSide(side);
 }

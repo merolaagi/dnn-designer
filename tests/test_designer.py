@@ -2759,6 +2759,36 @@ def _():
     assert "flex:none" in bar.replace(" ", ""), "the input bar is allowed to be squeezed away"
 
 
+@check("a rail entry that is not a page cannot blank the screen")
+def _():
+    """showPage(undefined) leaves no page displayed at all.
+
+    The rail's handler was bound to every button in it. The Layers and Files
+    entries carry no data-page, so pressing one called showPage(undefined),
+    which removed `on` from every page and added it to none — the dark body
+    showing through where the canvas should be.
+    """
+    script = PAGE[PAGE.index("<script>"):]
+    assert 'querySelectorAll("#rail button")' not in script, (
+        "a rail handler is bound to every button, including the ones that open "
+        "the palette rather than a page")
+
+    # the entries that open the palette must not claim to be pages
+    rail = PAGE[PAGE.index('<nav id="rail">'):PAGE.index("</nav>")]
+    import re
+
+    for match in re.finditer(r"<button([^>]*)>", rail):
+        attrs = match.group(1)
+        if "railpal" in attrs:
+            assert "data-page" not in attrs, \
+                "a palette entry also carries data-page, so it will switch pages"
+
+    # and showPage must be given something real
+    body = script[script.index("function showPage"):]
+    body = body[: body.index("\n}\n")]
+    assert "p.id === pageId" in body, "showPage no longer matches on the id"
+
+
 @check("the layer palette opens from the rail")
 def _():
     """One left column, not two.
