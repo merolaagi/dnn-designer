@@ -2759,6 +2759,30 @@ def _():
     assert "flex:none" in bar.replace(" ", ""), "the input bar is allowed to be squeezed away"
 
 
+@check("both side panels fold away and come back")
+def _():
+    for token in ('class="panelfold"', 'id="paletteStrip"', 'id="inspectorStrip"',
+                  "function applyCollapse", "function toggleCollapse",
+                  "function collapseGlyph", 'class="tabfold"'):
+        assert token in PAGE, f"{token} is missing from the folding"
+
+    # the chevron has to point the way the panel will move, which depends on
+    # which edge it is docked to
+    script = PAGE[PAGE.index("function collapseGlyph"):]
+    body = script[: script.index("\n}\n")]
+    assert "dock[name]" in body and "hidden[name]" in body, \
+        "the glyph ignores where the panel is docked or whether it is hidden"
+
+    # a hidden panel must not hold the bottom row open
+    layout = PAGE[PAGE.index("function applyLayout"):]
+    layout = layout[: layout.index("\n}\n")]
+    assert "hidden" in layout, "applyLayout ignores the hidden state"
+
+    # and the fold control must not be treated as one of the tabs
+    assert '.ptabs button")' not in PAGE, \
+        "the tab handlers will pick up the fold chevron as a tab"
+
+
 @check("panels can be docked and resized")
 def _():
     for token in ('id="mainRow"', 'id="bottomRow"', 'class="splitter"',
@@ -2860,6 +2884,7 @@ def _():
         "importFolderPicks", "scanCodeFolder", "fetchRepo", "renderScanResults", "peekAt",
         "tryClass", "scanRow", "modelFor", "paintPeek",
         "applyImportSize", "wireScanDrag", "resetImportSize",
+        "applyCollapse", "toggleCollapse", "collapseGlyph",
         "loadProjectTree", "renderProjectTree",
         "openProjectFile", "importFromTree", "loadAccount", "showSignIn",
         "submitSignIn", "signOut", "renderMathPanel", "mathDiagram", "paintMath",

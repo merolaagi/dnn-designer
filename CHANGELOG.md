@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.32.0
+
+- **Both side panels fold away.** A chevron in each panel's header collapses it
+  to a 26px strip carrying the chevron that brings it back, so the canvas can
+  have the window without the controls becoming unreachable. The right panel's
+  tab row carries the same control at its left, where a tab strip usually does.
+- The chevron points the way the panel will actually move: `«` for a panel on
+  the left, `»` on the right, `▼` and `▲` when docked at the bottom. A folded
+  panel no longer holds the bottom row open, and its splitter goes with it.
+- Folding is remembered with the rest of the layout.
+- **The canvas toolbar is a floating card** — rounded, shadowed, sitting over
+  the canvas rather than as a bar across it, with the controls grouped by
+  separators and the zoom shown as a number.
+- A **home** button resets the view to the origin at 100%, separate from *fit*,
+  which frames whatever is drawn.
+- The active tab is underlined in blue rather than amber, which reads as
+  selection rather than as a warning.
+
 ## 1.31.3
 
 - **`GUIDE.md`** — what the app is, everything it can do, what is unusual about

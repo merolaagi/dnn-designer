@@ -81,20 +81,23 @@ header{
 
 /* the canvas toolbar, its own strip under the title */
 .toolbar{
-  display:flex;align-items:center;gap:2px;padding:0 12px;height:40px;
-  border-top:1px solid var(--paper-3);background:var(--paper);
+  display:flex;align-items:center;gap:1px;padding:4px;flex:none;
+  background:#fff;border:1px solid var(--paper-3);border-radius:9px;
+  box-shadow:0 1px 2px rgba(22,32,46,.06), 0 4px 12px rgba(22,32,46,.06);
+  margin:8px 0 8px 8px;width:max-content;
 }
 .toolbar button{
-  background:none;border:none;color:#5C6B7F;width:30px;height:26px;
-  border-radius:5px;font-size:13px;line-height:1;
+  background:none;border:none;color:#5C6B7F;font-size:14px;line-height:1;
+  width:30px;height:28px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;
 }
 .toolbar button:hover{background:var(--paper-2);color:var(--text)}
 .toolbar button.on{background:#E6F0FA;color:#2D7DD2}
 .toolbar .zoomval{
-  font-family:var(--mono);font-size:11.5px;color:var(--muted);
-  min-width:44px;text-align:center;
+  font-size:11.5px;color:#5C6B7F;min-width:46px;text-align:center;
+  font-variant-numeric:tabular-nums;
 }
-.toolbar .sep{width:1px;height:18px;background:var(--paper-3);margin:0 7px}
+.toolbar .sep{width:1px;height:20px;background:var(--paper-3);margin:0 5px}
 
 /* ---------------- shell ---------------- */
 /* right panel tabs, in the manner of a workflow editor's side rail */
@@ -105,7 +108,12 @@ header{
   font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
   border-bottom:2px solid transparent;
 }
-.ptabs button.on{color:var(--text);border-bottom-color:var(--amber);background:#fff}
+.ptabs button.on{color:var(--text);border-bottom-color:#2D7DD2;background:#fff}
+.ptabs .tabfold{
+  flex:none;width:30px;font-size:13px;letter-spacing:0;text-transform:none;
+  color:#9AA6B4;border-bottom-color:transparent;
+}
+.ptabs .tabfold:hover{color:var(--text);background:var(--paper-3)}
 .acc{border-bottom:1px solid var(--paper-3)}
 .acc > .head{
   display:flex;align-items:center;gap:7px;padding:10px 13px;cursor:pointer;
@@ -380,6 +388,23 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 /* anchored to the plus that opened it, the way a task picker sits beside the
    node it will attach to */
+.panelfold{
+  background:none;border:none;color:#9AA6B4;font-size:13px;line-height:1;
+  padding:6px 8px;border-radius:5px;flex:none;
+}
+.panelfold:hover{color:var(--text);background:var(--paper-3)}
+.panelstrip{
+  flex:none;width:26px;display:flex;align-items:flex-start;justify-content:center;
+  padding-top:9px;background:var(--paper-2);
+}
+.panelstrip.left{border-right:1px solid var(--paper-3)}
+.panelstrip.right{border-left:1px solid var(--paper-3)}
+.panelstrip button{
+  background:none;border:1px solid transparent;color:#9AA6B4;font-size:13px;
+  line-height:1;padding:5px 4px;border-radius:5px;
+}
+.panelstrip button:hover{color:var(--text);border-color:var(--paper-3);background:#fff}
+
 .paltabs{display:flex;gap:2px;padding:7px 8px 6px;flex:1}
 .paltabs button{
   background:none;border:none;font-size:9.5px;font-weight:700;letter-spacing:.13em;
@@ -1201,7 +1226,8 @@ body.sizing{user-select:none}
     <button class="btn go" id="btnTrain">Train</button>
   </div>
 
-  <div class="toolbar">
+  <div class="toolbar" id="canvasTools">
+    <button id="zhome" title="Reset the view">&#8962;</button>
     <button id="zfit" title="Fit to view">&#8982;</button>
     <button id="zout" title="Zoom out">&minus;</button>
     <span class="zoomval" id="zoomVal">100%</span>
@@ -1247,12 +1273,16 @@ body.sizing{user-select:none}
 
   <section class="page on" id="pageDesign">
   <div id="mainRow">
+  <div class="panelstrip left" id="paletteStrip" style="display:none">
+    <button data-show="palette" title="Show the layers">&#187;</button>
+  </div>
   <aside class="panel" id="palette">
     <div class="panelhead">
       <div class="paltabs">
         <button data-pal="layers" class="on">Layers</button>
         <button data-pal="files">Files</button>
       </div>
+      <button class="panelfold" data-fold="palette" title="Hide the layers">&#171;</button>
       <span class="dockctl" data-panel="palette">
         <button data-dock="left" title="Dock left">&#9612;</button>
         <button data-dock="bottom" title="Dock bottom">&#9604;</button>
@@ -1306,14 +1336,19 @@ body.sizing{user-select:none}
   </main>
 
   <div class="splitter" data-panel="inspector" id="splitInspector"></div>
+  <div class="panelstrip right" id="inspectorStrip" style="display:none">
+    <button data-show="inspector" title="Show the panel">&#171;</button>
+  </div>
   <aside class="panel" id="inspector">
     <div class="panelhead"><h2 id="inspTitle">Panel</h2>
+      <button class="panelfold" data-fold="inspector" title="Hide the panel">&#187;</button>
       <span class="dockctl" data-panel="inspector">
         <button data-dock="left" title="Dock left">&#9612;</button>
         <button data-dock="bottom" title="Dock bottom">&#9604;</button>
         <button data-dock="right" title="Dock right">&#9616;</button>
       </span></div>
     <div class="ptabs">
+      <button class="tabfold" data-fold="inspector" title="Hide the panel">&#187;</button>
       <button data-side="layer" class="on">Layer</button>
       <button data-side="network">Network</button>
       <button data-side="code">Code</button>
@@ -1629,7 +1664,8 @@ const state = {
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
   layout:{ dock:{palette:"left", inspector:"right"},
-           sizes:{palette:212, inspector:390, bottom:260} }
+           sizes:{palette:212, inspector:390, bottom:260},
+           hidden:{palette:false, inspector:false} }
 };
 
 const $ = (id) => document.getElementById(id);
@@ -3196,9 +3232,9 @@ function setParam(node, key, value){
 
 /* ===================== the right panel's other tabs ===================== */
 
-document.querySelectorAll(".ptabs button").forEach(btn => {
+document.querySelectorAll(".ptabs button[data-side]").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".ptabs button").forEach(b =>
+    document.querySelectorAll(".ptabs button[data-side]").forEach(b =>
       b.classList.toggle("on", b === btn));
     state.sidePanel = btn.dataset.side;
     $("inspBody").style.display = state.sidePanel === "layer" ? "" : "none";
@@ -3858,7 +3894,8 @@ function applyLayout(){
     }
   });
 
-  const anyBottom = Object.values(dock).includes("bottom");
+  const anyBottom = Object.entries(dock)
+    .some(([name, side]) => side === "bottom" && !state.layout.hidden[name]);
   bottom.classList.toggle("on", anyBottom);
   bottom.style.height = anyBottom ? sizes.bottom + "px" : "";
   $("splitBottom").classList.toggle("hidden", !anyBottom);
@@ -3877,6 +3914,65 @@ function applyLayout(){
   render(); drawMinimap(); drawChart();
 }
 
+/* ---------- collapsing the side panels ---------- */
+
+/* Both panels fold away to a thin strip carrying the chevron that brings them
+   back, so the canvas can have the whole window without the controls becoming
+   unreachable. Which side the chevron points depends on where the panel is
+   docked, since a panel on the right folds the other way. */
+
+function collapseGlyph(name){
+  const side = state.layout.dock[name];
+  const hidden = state.layout.hidden[name];
+  if (side === "bottom") return hidden ? "\u25B2" : "\u25BC";
+  const pointsLeft = (side === "left") === !hidden;
+  return pointsLeft ? "\u00AB" : "\u00BB";
+}
+
+function applyCollapse(){
+  ["palette", "inspector"].forEach(name => {
+    const panel = $(name);
+    const strip = $(name + "Strip");
+    const hidden = !!state.layout.hidden[name];
+    panel.style.display = hidden ? "none" : "";
+    if (strip){
+      strip.style.display = hidden ? "" : "none";
+      strip.className = "panelstrip " + state.layout.dock[name];
+      const button = strip.querySelector("button");
+      if (button){
+        button.textContent = collapseGlyph(name);
+        button.title = `Show the ${name === "palette" ? "layers" : "panel"}`;
+      }
+    }
+    const splitter = $(name === "palette" ? "splitPalette" : "splitInspector");
+    if (splitter){
+      splitter.classList.toggle("hidden",
+        hidden || state.layout.dock[name] === "bottom");
+    }
+    const toggle = panel.querySelector(".panelfold");
+    if (toggle) toggle.textContent = collapseGlyph(name);
+  });
+
+  const bottom = $("bottomRow");
+  const anyBottom = ["palette", "inspector"].some(
+    n => state.layout.dock[n] === "bottom" && !state.layout.hidden[n]);
+  bottom.classList.toggle("on", anyBottom);
+  $("splitBottom").classList.toggle("hidden", !anyBottom);
+  render();
+  drawMinimap();
+}
+
+function toggleCollapse(name){
+  state.layout.hidden[name] = !state.layout.hidden[name];
+  applyCollapse();
+  saveLayout();
+}
+
+document.querySelectorAll(".panelfold, .tabfold").forEach(button =>
+  button.addEventListener("click", () => toggleCollapse(button.dataset.fold)));
+document.querySelectorAll(".panelstrip button").forEach(button =>
+  button.addEventListener("click", () => toggleCollapse(button.dataset.show)));
+
 let layoutSaveTimer = null;
 function saveLayout(){
   clearTimeout(layoutSaveTimer);
@@ -3894,6 +3990,8 @@ async function loadLayout(){
   state.layout = {
     dock: { ...DEFAULT_LAYOUT.dock, ...(saved.dock || {}) },
     sizes: { ...DEFAULT_LAYOUT.sizes, ...(saved.sizes || {}) },
+    hidden: { palette: false, inspector: false, ...(saved.hidden || {}) },
+    importDialog: saved.importDialog || null,
   };
   applyLayout();
 }
@@ -3985,7 +4083,7 @@ function showSide(side){
   state.sidePanel = side;
   const title = $("inspTitle");
   if (title) title.textContent = SIDE_TITLES[side] || "Panel";
-  document.querySelectorAll(".ptabs button").forEach(b =>
+  document.querySelectorAll(".ptabs button[data-side]").forEach(b =>
     b.classList.toggle("on", b.dataset.side === side));
   const map = { layer:"inspBody", network:"networkBody", needs:"needsBody",
                 code:"codeBody", train:"trainBody", guide:"guideBody",
@@ -4003,7 +4101,7 @@ function showSide(side){
   if (side === "math") renderMathPanel();
 }
 
-document.querySelectorAll(".ptabs button").forEach(btn =>
+document.querySelectorAll(".ptabs button[data-side]").forEach(btn =>
   btn.addEventListener("click", () => showSide(btn.dataset.side)));
 
 document.querySelectorAll("#rail button").forEach(btn => {
