@@ -2326,6 +2326,7 @@ const GLYPHS = {
   Language: "M4 5h11 M4 9h8 M4 13h6",
   "Vision blocks": "M3 6l6-3 6 3l-6 3z M3 11l6 3 6-3",
   "Game playing": "M4 7h10v5h-10z M6 9h2 M11 9h2",
+  Implicit: "M9 3a6 6 0 1 0 0 12a6 6 0 1 0 0-12 M9 7a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
   Pretrained: "M9 3l6 3v5l-6 4-6-4v-5z",
   Structure: "M4 3h7l4 4v8h-11z M11 3v4h4",
   Custom: "M9 5a4 4 0 1 0 0 8a4 4 0 1 0 0-8 M9 2v2 M9 14v2 M2 9h2 M14 9h2",
@@ -5596,7 +5597,34 @@ function mathDiagram(entry){
   if (kind === "dropout") return diagramDropout(entry);
   if (kind === "merge") return diagramMerge();
   if (kind === "reshape") return diagramReshape();
+  if (kind === "implicit") return diagramImplicit();
   return "";
+}
+
+/* An implicit layer does not step forward; it settles. The dot spirals into the
+   fixed point and stays there, which is what the theorem guarantees happens for
+   any positive rates. */
+function diagramImplicit(){
+  const cx = 150, cy = 62;
+  const spiral = [];
+  for (let t = 0; t <= 60; t++){
+    const a = t * 0.45;
+    const r = 46 * Math.exp(-t * 0.045);
+    spiral.push(`${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`);
+  }
+  return `<svg viewBox="0 0 300 124" class="mathart">
+    <circle cx="${cx}" cy="${cy}" r="52" class="ax" fill="none"
+            stroke-dasharray="3 4"></circle>
+    <polyline points="${spiral.join(" ")}" class="curve" fill="none"></polyline>
+    <circle cx="${cx}" cy="${cy}" r="4.5" class="dotfix"></circle>
+    <circle r="4" class="dot">
+      <animateMotion dur="4.2s" repeatCount="indefinite"
+                     path="M${spiral[0]} L${spiral.filter((_, i) => i % 3 === 0)
+                        .join(" L")}"></animateMotion>
+    </circle>
+    <text x="${cx + 9}" y="${cy + 4}" class="lab">x*</text>
+    <text x="14" y="116" class="lab">any starting point, one equilibrium</text>
+  </svg>`;
 }
 
 function grid(x, y, n, cell, cls){

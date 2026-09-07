@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.36.0
+
+**The Deficiency-Zero equilibrium layer is now a layer you can place**, under a
+new *Implicit* category, from work done separately and vendored unchanged as
+`crn_deq.py`.
+
+It does not compute its output; it solves for it. The input seeds a chemical
+reaction network and the layer returns where that network settles. What makes it
+worth having is where the guarantee comes from: most implicit layers need a
+constraint on the weights — a spectral norm, a monotonicity margin, a projection
+after every step — to be sure a fixed point exists and is unique. The Feinberg /
+Horn–Jackson Deficiency Zero Theorem gives it from the *topology of the graph*
+instead, so the rates train as `k = exp(θ)` with θ free over all of ℝ and no
+projection anywhere.
+
+- Shapes, parameter counts and generated code work as for any other layer:
+  a test builds a design containing one and confirms torch agrees with the
+  canvas exactly, and that the file runs.
+- **The Maths tab carries the theorem** with this graph's own integers:
+  `δ = m − l − s = 6 − 2 − 4 = 0`, and says whether the graph is weakly
+  reversible, since the guarantee needs both.
+- Setting deficiency to 1 keeps the parameter count and drops the guarantee,
+  which is what makes it a comparison rather than a smaller model.
+- **The Maths tab animates it** as a trajectory spiralling into its fixed point
+  from anywhere — the diagram the theorem describes.
+- **The Needs panel warns that this design must train in float64.** The solver
+  runs to 1e-10, which single precision cannot reach, so it is a property of the
+  layer rather than a preference — and without the warning the first batch fails
+  on a dtype mismatch with nothing to explain it.
+
+**A wrong number caught before shipping.** The maths panel first printed
+`δ = m − l − s = 6 − 2 − 6 = 0`, which does not add up: I had used the length of
+the stoichiometric basis, which is the number of species, where the rank was
+wanted. A test now checks the printed arithmetic actually holds across several
+graphs — a displayed equation that does not balance is worse than no equation.
+
 ## 1.35.0
 
 **An End to end tab**, beside Maths: a narrated walk through what happens to the

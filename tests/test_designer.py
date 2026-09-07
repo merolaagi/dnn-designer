@@ -838,6 +838,82 @@ def _():
         and 'shape: "hex"' in PAGE, "nodeBox does not assign all four shapes"
 
 
+@check("the equilibrium layer is a layer like any other")
+def _():
+    """A deficiency-zero implicit layer, vendored from separate work.
+
+    What it needs from the designer is what every layer needs: a shape it can
+    infer, a parameter count that matches what torch builds, and code that
+    runs. The guarantee it carries — a fixed point for any positive rates,
+    with no projection — is a property of the reaction graph, so the test
+    checks that the graph really has it.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    try:
+        import crn_deq
+    except ImportError:
+        print("        (crn_deq absent, skipped)")
+        return
+    import train as T
+
+    assert "EquilibriumCRN" in layers.REGISTRY, "the block did not install"
+
+    payload = build(
+        [("i", "Input", {"shape": [16]}),
+         ("c", "EquilibriumCRN", {"units": 8, "species": 6, "classes": 2,
+                                  "extra_edges": 0, "deficiency": "0",
+                                  "seed": 0, "tol": 1e-10, "max_iter": 200}),
+         ("l", "Linear", {"units": 3}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "c", 0), ("c", "l", 0), ("l", "o", 0)], "CRN")
+    g, rep = analyzed(payload)
+    assert rep["ok"], rep["errors"]
+
+    source = codegen.to_pytorch(g, rep)
+    assert "from crn_deq import" in source, "the generated file cannot find the layer"
+    model = T.build_model(source, codegen.model_class_name(g)).double()
+    real = sum(p.numel() for p in model.parameters())
+    assert real == rep["total_learnables"], \
+        f"canvas {rep['total_learnables']}, torch {real}"
+
+    import torch
+
+    with torch.no_grad():
+        out = model(torch.randn(2, 16, dtype=torch.float64))
+    assert tuple(out.shape) == (2, 3), out.shape
+
+    # the guarantee rests on these two facts about the graph
+    net = crn_deq.generate_network(6, [3, 3], extra_edges=0,
+                                   target_deficiency=0, seed=0)
+    assert net.deficiency() == 0, "the network is not deficiency zero"
+    assert net.is_weakly_reversible(), "the network is not weakly reversible"
+
+    # the maths panel's deficiency line must be arithmetic that holds
+    import re
+
+    import mathbook
+
+    for classes, seed in ((2, 0), (2, 3), (3, 1)):
+        entry = mathbook.explain(
+            "EquilibriumCRN",
+            {"units": 8, "species": 6, "classes": classes, "extra_edges": 0,
+             "deficiency": "0", "seed": seed}, [[16]], [8])
+        line = dict(entry["arithmetic"]).get("deficiency", "")
+        assert line, "the deficiency is not shown"
+        numbers = [int(x) for x in re.findall(r"-?\d+", line)]
+        m, l, rank, delta = numbers[-4:]
+        assert m - l - rank == delta, f"printed arithmetic does not hold: {line}"
+        assert delta == 0, f"a deficiency-zero graph reported {delta}"
+
+    # and the design says out loud what precision it needs
+    import needs
+
+    notes = " ".join(needs.requirements(g, rep)["notes"])
+    assert "float64" in notes, "nothing warns that this layer needs double precision"
+
+
 @check("the walkthrough narrates a real pass, not an idea of one")
 def _():
     if not HAVE_TORCH:

@@ -27,7 +27,9 @@ from typing import Any, Callable, Dict, List, Optional
 import layers
 
 
-TIMES = "\u00d7"          # ×
+TIMES = "\u00d7"
+DELTA = "\u03b4"
+MINUS = "\u2212"          # ×
 TIMES_SP = " \u00d7 "
 DASH = "\u2014"           # —
 
@@ -673,7 +675,97 @@ def sdpa(p, ins, out):
     }
 
 
+
+
+def equilibrium_crn(p, ins, out):
+    """The Deficiency Zero Theorem, with this graph's own integers in it."""
+    species = int(p.get("species", 6))
+    classes = max(1, int(p.get("classes", 2)))
+    width = int(p.get("units", 8))
+    d_in = ins[0][0] if ins and ins[0] else 0
+
+    complexes = edges = rank = None
+    delta = p.get("deficiency", "0")
+    try:
+        from crn_deq import generate_network
+
+        base = species // classes
+        sizes = [base] * classes
+        for i in range(species - base * classes):
+            sizes[i] += 1
+        sizes = [x for x in sizes if x >= 2] or [species]
+        net = generate_network(species, sizes,
+                               extra_edges=int(p.get("extra_edges", 0)),
+                               target_deficiency=int(delta),
+                               seed=int(p.get("seed", 0)))
+        from crn_deq import exact_rank
+
+        complexes, edges = net.m, net.n_edges
+        # the rank of the stoichiometric subspace, computed the same way the
+        # deficiency is — len(basis) is the number of species, not the rank,
+        # and using it printed an equation that did not add up
+        rank = exact_rank(net.YB)
+        classes = len(net.linkage_classes())
+        delta = net.deficiency()
+        reversible = net.is_weakly_reversible()
+    except Exception:  # noqa: BLE001 - the panel still explains without a graph
+        reversible = None
+
+    arithmetic = [
+        ("rates", f"one per reaction: {_fmt(edges)} trainable" if edges
+                  else "one per reaction"),
+        ("encoder", f"{_fmt(d_in)}{TIMES}{_fmt(species)} + {_fmt(species)}"
+                    if d_in else "into the species"),
+        ("decoder", f"{_fmt(species)}{TIMES}{_fmt(width)} + {_fmt(width)}"),
+    ]
+    if complexes is not None:
+        arithmetic.insert(0, (
+            "deficiency",
+            f"{DELTA} = m {MINUS} l {MINUS} s = {complexes} {MINUS} {classes} "
+            f"{MINUS} {rank} = {delta}"))
+
+    return {
+        "family": "implicit",
+        "title": "Equilibrium of a reaction network",
+        "equation": "x* solves  Y{DOT}B{DOT}v(x*) = 0,   v_r(x) = k_r {DOT} "
+                    "{PROD}_i x_i^(Y_ir),   k = exp({THETA})".format(
+                        DOT="\u00b7", PROD="\u220f", THETA="\u03b8"),
+        "shape": f"{_fmt(d_in)} \u2192 {_fmt(species)} species \u2192 {_fmt(width)}",
+        "symbols": [
+            ("x*", "the equilibrium the layer solves for; the output is log x*"),
+            ("k = exp(\u03b8)", "reaction rates, positive by construction, "
+                                "trained without any constraint"),
+            ("m, l, s", "complexes, linkage classes, and the rank of the "
+                        "stoichiometric subspace"),
+            (DELTA, "the deficiency: an integer property of the graph alone"),
+        ],
+        "arithmetic": arithmetic,
+        "freedom": [
+            "This layer does not compute its output; it solves for it. The "
+            "answer is where the reaction network settles.",
+            f"The Deficiency Zero Theorem: if the graph is weakly reversible "
+            f"and {DELTA} = 0, then for ANY positive rates there is exactly one "
+            f"positive equilibrium in each compatibility class, and it is "
+            f"stable."
+            + (f" This graph is {'both' if reversible else 'NOT'} — "
+               f"{DELTA} = {delta}, weakly reversible = {reversible}."
+               if reversible is not None else ""),
+            "That is why \u03b8 needs no projection, no spectral norm and no "
+            "monotonicity margin. Other implicit layers constrain the weights to "
+            "keep a fixed point; here the guarantee is in the topology, which is "
+            "fixed at design time and never trained.",
+            "Setting deficiency to 1 keeps the parameter count and drops the "
+            "guarantee, which is what makes it a fair comparison rather than a "
+            "smaller model.",
+            "Gradients come from the implicit function theorem rather than by "
+            "unrolling the solver, so the memory cost does not grow with the "
+            "number of iterations.",
+        ],
+    }
+
+
 ENTRIES: Dict[str, Callable] = {
+    "EquilibriumCRN": equilibrium_crn,
     "Transpose": transpose,
     "Split": split,
     "Attention": sdpa,

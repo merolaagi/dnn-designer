@@ -112,6 +112,13 @@ def requirements(g: Graph, report: Dict[str, Any]) -> Dict[str, Any]:
     if no_keras:
         notes.append(f"The Keras export will be incomplete: "
                      f"{', '.join(no_keras)} has no Keras form.")
+    if "EquilibriumCRN" in used:
+        # the equilibrium solver runs to 1e-10, which single precision cannot
+        # reach, so this is a property of the layer rather than a preference
+        notes.append("EquilibriumCRN solves to a tolerance single precision "
+                     "cannot reach, so it is built in float64. Set the training "
+                     "precision to double, or the first batch will fail on a "
+                     "dtype mismatch.")
 
     return {
         "blocks": blocks,

@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and twenty-two checks, with the torch-dependent ones skipping themselves when it is
+A hundred and twenty-three checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -329,6 +329,17 @@ proves, with the kernel verifying every one.
 This is the shape of neural theorem proving generally: the network is a policy,
 not an oracle. A confident wrong suggestion costs a search node and nothing
 else.
+
+## An implicit layer
+
+**EquilibriumCRN** solves a chemical reaction network to equilibrium rather than
+computing forward. Its fixed point is guaranteed by the topology of the graph —
+weakly reversible, deficiency zero — so the rates train unconstrained, with no
+projection or spectral norm anywhere. The mathematics is in `crn_deq.py`, and
+the Maths tab shows the theorem with the graph's own integers.
+
+It is built in float64, because the equilibrium solver runs to a tolerance
+single precision cannot reach; the Needs panel says so.
 
 ## End to end
 
@@ -668,4 +679,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.35.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.36.0 — see `CHANGELOG.md`.
