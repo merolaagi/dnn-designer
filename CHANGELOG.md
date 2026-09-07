@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.45.0
+
+**The six architectures that were missing are here.** All twenty-five on the
+chart can now be built from layers in the palette.
+
+- **GraphAttention** — attention over a node's neighbours, learned per pair
+  rather than fixed by the degree. Non-edges are masked before the softmax, so
+  it attends only where the adjacency allows; attention over a fully connected
+  graph would just be attention.
+- **MessagePassing** — the general form the others are instances of: build a
+  message from each connected pair, aggregate, update.
+- **CapsuleLayer** — dynamic routing by agreement, three rounds by default.
+- **SpikingDense** — leaky integrate-and-fire neurons over simulated time, with
+  a surrogate gradient, because a spike is not differentiable.
+- **RBM** — with `gibbs()` and `free_energy()`, so a recipe can do contrastive
+  divergence. Stacked these are a Deep Belief Network's body; the layer-wise
+  pretraining that makes it one is a training procedure and the block says so.
+- **Sampling** — the reparameterisation trick for a VAE. Random while training,
+  the mean when evaluating, and it owes the loss a KL term, which `kl()` gives.
+
+Each is tested for the behaviour that makes it that architecture, not only for
+producing a tensor of the right shape.
+
+**Two real defects found by testing behaviour rather than shape:**
+
+- **Capsule routing was inert.** At the initialisation I first wrote, the
+  predictions were so small that squash returned nearly zero and three rounds of
+  routing differed from one by 5.6e-6. Shapes were right, parameter count was
+  right, and the defining feature of the layer did nothing. Scaled by fan-in it
+  now moves the output by 0.41 and the capsule norms sit near 1 as squash
+  intends.
+- **A design named after a layer shadowed it.** Calling a design `ResidualBlock`
+  put a class of that name in the same file as the prelude defining the layer,
+  and the model silently shadowed it — surfacing as a TypeError about arguments
+  the model does not take. Reserved names now get `Net` appended, and the
+  emitter and the loader take the name from one function instead of two, which
+  is how they came to disagree.
+
 ## 1.44.0
 
 - **The launch pad is what opens.** The canvas is one click away and always was,

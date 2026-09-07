@@ -893,6 +893,170 @@ def _():
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
 
 
+@check("a design cannot shadow the layer it is named after")
+def _():
+    """Naming a design ResidualBlock put a class of that name in the same file
+    as the prelude defining the layer, and the model quietly shadowed it. The
+    symptom was a TypeError about arguments the model does not take."""
+    reserved = ["ResidualBlock", "CapsuleLayer", "Model", "GraphConv"]
+    for name in reserved:
+        g = G.parse({"name": name,
+                     "nodes": [{"id": "i", "type": "Input", "params": {"shape": [4]}},
+                               {"id": "o", "type": "Output", "params": {}}],
+                     "edges": [{"id": "e", "source": "i", "target": "o"}]})
+        cls = codegen.model_class_name(g)
+        assert cls not in layers.REGISTRY, f"{name} still generates class {cls}"
+        assert cls != "Model", "the model class collides with the default name"
+
+    # an ordinary name is left alone
+    g = G.parse({"name": "MyNet",
+                 "nodes": [{"id": "i", "type": "Input", "params": {"shape": [4]}},
+                           {"id": "o", "type": "Output", "params": {}}],
+                 "edges": [{"id": "e", "source": "i", "target": "o"}]})
+    assert codegen.model_class_name(g) == "MyNet"
+
+    # and the file that is written declares the class the loader looks for
+    if HAVE_TORCH:
+        import train as T
+
+        g, rep = analyzed({"name": "CapsuleLayer",
+                           "nodes": [{"id": "i", "type": "Input",
+                                      "params": {"shape": [4]}},
+                                     {"id": "l", "type": "Linear",
+                                      "params": {"units": 2}},
+                                     {"id": "o", "type": "Output", "params": {}}],
+                           "edges": [{"id": "e1", "source": "i", "target": "l"},
+                                     {"id": "e2", "source": "l", "target": "o"}]})
+        source = codegen.to_pytorch(g, rep)
+        name = codegen.model_class_name(g)
+        assert f"class {name}(" in source, \
+            "the emitter and the lookup disagree about the class name"
+        T.build_model(source, name)
+
+
+@check("the architectures that do not fit the mould still work")
+def _():
+    """Four layers whose oddness is contained in forward(): a routing loop, a
+    simulated time loop, an energy model, and a draw from a distribution.
+
+    Each is checked for the behaviour that makes it that architecture, not just
+    for producing a tensor of the right shape — a capsule layer whose routing
+    does nothing still returns the right shape.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
+    import train as T
+
+    for name in ("CapsuleLayer", "SpikingDense", "RBM", "Sampling",
+                 "GraphAttention", "MessagePassing"):
+        assert name in layers.REGISTRY, f"{name} did not install"
+
+    scope = {"torch": torch, "nn": nn, "F": F}
+    for name in ("CapsuleLayer", "SpikingDense", "RBM", "Sampling"):
+        exec(layers.REGISTRY[name].torch_prelude, scope)
+
+    torch.manual_seed(0)
+
+    # routing has to change the answer, or the loop is decorative
+    three = scope["CapsuleLayer"](16, 8, 6, 12, routes=3).eval()
+    one = scope["CapsuleLayer"](16, 8, 6, 12, routes=1).eval()
+    one.load_state_dict(three.state_dict())
+    x = torch.randn(2, 16, 8)
+    with torch.no_grad():
+        moved = float((three(x) - one(x)).abs().max())
+        norms = three(x).norm(dim=-1)
+    assert moved > 1e-3, f"routing changed the output by {moved:.2e}: it is inert"
+    assert float(norms.max()) < 1.0, "squash should keep capsule norms below 1"
+    assert float(norms.mean()) > 0.1, \
+        "capsule norms are near zero, so the initialisation is too small"
+
+    # spikes: bounded, quantised by the step count, and differentiable anyway
+    snn = scope["SpikingDense"](12, 6, steps=10)
+    x = torch.randn(4, 12, requires_grad=True)
+    rates = snn(x)
+    assert float(rates.min()) >= 0 and float(rates.max()) <= 1, "rates left [0,1]"
+    values = {round(v, 6) for v in rates.detach().flatten().tolist()}
+    assert len(values) <= 11, f"{len(values)} distinct rates from 10 steps"
+    rates.sum().backward()
+    assert x.grad is not None and float(x.grad.abs().sum()) > 0, \
+        "no gradient through the surrogate, so it cannot train"
+
+    # an RBM has an energy and a sampler, which is what makes it one
+    rbm = scope["RBM"](10, 5)
+    v = (torch.rand(3, 10) > 0.5).float()
+    assert rbm.free_energy(v).shape == (3,), "free energy is not per example"
+    assert rbm.gibbs(v, steps=2).shape == v.shape, "gibbs did not return a visible"
+
+    # the trick: random while training, the mean when measured, gradient to both
+    sampler = scope["Sampling"]()
+    mu = torch.zeros(4, 5, requires_grad=True)
+    logvar = torch.zeros(4, 5, requires_grad=True)
+    sampler.train()
+    assert not torch.equal(sampler(mu, logvar), sampler(mu, logvar)), \
+        "two training draws were identical, so nothing is being sampled"
+    sampler.eval()
+    assert torch.equal(sampler(mu, logvar), mu), \
+        "evaluation is not deterministic, so a measurement cannot be repeated"
+    sampler.train()
+    sampler(mu, logvar).sum().backward()
+    assert float(mu.grad.abs().sum()) > 0 and float(logvar.grad.abs().sum()) > 0, \
+        "the gradient does not reach both parameters"
+    assert abs(float(scope["Sampling"].kl(mu, logvar))) < 1e-6, \
+        "the KL of a standard normal should be zero"
+
+
+@check("every new layer builds, counts and runs on the canvas")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import torch
+
+    import train as T
+
+    cases = [
+        ("CapsuleLayer", [32, 8], {"capsules": 10, "dim": 16, "routes": 3}, 1),
+        ("SpikingDense", [64], {"units": 32, "steps": 8}, 1),
+        ("RBM", [64], {"units": 32}, 1),
+        ("Sampling", [16], {}, 2),
+        ("GraphAttention", [10, 16], {"units": 8, "heads": 2}, 2),
+        ("MessagePassing", [10, 16], {"units": 12, "hidden": 12}, 2),
+    ]
+    for name, shape, params, inputs in cases:
+        second = [10, 10] if name in ("GraphAttention", "MessagePassing") else shape
+        nodes = [{"id": "i", "type": "Input", "params": {"shape": shape}, "y": 0}]
+        edges = [{"id": "e1", "source": "i", "target": "c", "port": 0}]
+        if inputs == 2:
+            nodes.append({"id": "j", "type": "Input",
+                          "params": {"shape": second}, "y": 100})
+            edges.append({"id": "e2", "source": "j", "target": "c", "port": 1})
+        nodes += [{"id": "c", "type": name, "params": params, "y": 200},
+                  {"id": "o", "type": "Output", "params": {}, "y": 300}]
+        edges.append({"id": "e9", "source": "c", "target": "o"})
+
+        g, rep = analyzed({"name": name, "nodes": nodes, "edges": edges})
+        assert rep["ok"], f"{name}: {rep['errors'][:1]}"
+
+        model = T.build_model(codegen.to_pytorch(g, rep),
+                              codegen.model_class_name(g))
+        real = sum(q.numel() for q in model.parameters())
+        assert real == rep["total_learnables"], \
+            f"{name}: canvas {rep['total_learnables']}, torch {real}"
+
+        order = codegen.input_order(g, rep)
+        feed = {"i": torch.randn(3, *shape),
+                "j": (torch.rand(3, *second) > 0.5).float()
+                     if name in ("GraphAttention", "MessagePassing")
+                     else torch.randn(3, *second)}
+        with torch.no_grad():
+            model(*[feed[k] for k in order])
+
+
 @check("the domains page shows what each arm actually is")
 def _():
     """The facts come from the built layer describing itself, not from the spec

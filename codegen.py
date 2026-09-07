@@ -54,8 +54,21 @@ def input_order(g: Graph, report: Dict[str, Any]) -> List[str]:
 
 
 def model_class_name(g: Graph) -> str:
-    """The class the generated PyTorch file defines."""
-    return _class_name(g.name)
+    """The class the generated PyTorch file defines.
+
+    A design called ResidualBlock or CapsuleLayer would otherwise define a class
+    of that name in the same file as the block prelude that defines the layer,
+    and the model would silently shadow the layer it is built from. The failure
+    is a confusing TypeError about arguments the model does not take, so the
+    name gives way instead.
+    """
+    import layers as _layers
+
+    name = _class_name(g.name)
+    reserved = set(_layers.REGISTRY) | {"Model", "nn", "torch", "F"}
+    if name in reserved:
+        return name + "Net"
+    return name
 
 
 def _assign_names(g: Graph, order: List[str]) -> Dict[str, str]:
@@ -191,7 +204,7 @@ def to_pytorch(g: Graph, report: Dict[str, Any],
     if not input_args:
         input_args = ["x"]
 
-    cls = _class_name(g.name)
+    cls = model_class_name(g)
     imports = ["import math", "", "import torch", "import torch.nn as nn",
                "import torch.nn.functional as F"]
     imports += _custom_imports(g, order)

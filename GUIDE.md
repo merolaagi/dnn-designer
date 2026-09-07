@@ -42,7 +42,7 @@ second, and batch normalization made things slightly worse.
 
 ### Drawing
 
-- **55 layer types** across 18 categories, plus 13 plug-in blocks you can edit
+- **63 layer types** across 19 categories, plus 21 plug-in blocks you can edit
   as Python and reload without restarting.
 - Shapes propagate as you draw. An error is attached to the layer that caused it
   and phrased as a sentence, not a stack trace.
@@ -227,7 +227,7 @@ assistant has opinions, the study has measurements.
 
 ```
 main.py            the server and its 78 routes
-layers.py          55 layer definitions: shapes, code, parameter counts
+layers.py          layer definitions: shapes, code, parameter counts
 graph.py           shape propagation and error reporting
 codegen.py         PyTorch and Keras output
 workbook.py        multi-sheet designs and cross-sheet references
