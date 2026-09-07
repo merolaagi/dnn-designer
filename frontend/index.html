@@ -201,7 +201,8 @@ body.resizing-v{cursor:row-resize;user-select:none}
   display:flex;align-items:center;flex:none;border-bottom:1px solid var(--paper-3);
 }
 .panelhead h2{flex:none;border:none}
-#pageBuild, #pageRuns, #pageChat, #pageExtend{background:var(--paper)}
+#pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
+#pageAgents{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -1146,40 +1147,91 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
-.paperwrap{display:flex;gap:16px;align-items:flex-start}
-.papercol{flex:1;min-width:0}
-.paperstage{
-  font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98A6B8;
-  font-weight:700;margin-bottom:8px;
+.paperhead{padding:20px 24px 4px;max-width:1180px;margin:0 auto}
+.paperhead h3{margin:0 0 5px;font-size:19px;font-weight:600}
+.paperhead p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.6;
+  max-width:620px}
+.paperflow{
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(330px, 1fr));
+  gap:16px;padding:18px 24px 28px;max-width:1180px;margin:0 auto;
+  align-items:start;
 }
-.papernote{font-size:11px;color:var(--muted);line-height:1.55;margin:0 0 8px}
-#paperText{width:100%;min-height:90px;resize:vertical;font-size:11.5px;
-  padding:7px 9px;border:1px solid var(--paper-3);border-radius:6px}
+.stagecard{
+  background:#fff;border:1px solid var(--paper-3);border-radius:12px;
+  box-shadow:0 1px 2px rgba(22,32,46,.05), 0 6px 18px rgba(22,32,46,.05);
+  overflow:hidden;
+}
+.stagetop{
+  display:flex;gap:11px;padding:14px 16px;background:var(--paper-2);
+  border-bottom:1px solid var(--paper-3);
+}
+.stagetop i{
+  flex:none;width:22px;height:22px;border-radius:50%;background:#8A5CF6;color:#fff;
+  font-style:normal;font-size:11px;font-weight:700;display:flex;
+  align-items:center;justify-content:center;
+}
+.stagetop b{display:block;font-size:13px;font-weight:600;margin-bottom:2px}
+.stagetop span{display:block;font-size:11px;color:var(--muted);line-height:1.5}
+.stagebody{padding:14px 16px}
+.drop{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:22px 14px;border:1.5px dashed #C6D0DB;border-radius:9px;
+  background:#FBFCFD;cursor:pointer;text-align:center;
+}
+.drop:hover,.drop.over{border-color:var(--amber);background:#FFFDF7}
+.drop.has{border-style:solid;border-color:#9CCFA4;background:#F7FCF8}
+.drop b{font-size:12px;font-weight:600;word-break:break-all}
+.drop span{font-size:10.5px;color:var(--muted)}
+.orline{
+  display:flex;align-items:center;gap:9px;margin:13px 0 9px;
+  font-size:10px;color:var(--muted);
+}
+.orline::before,.orline::after{
+  content:"";flex:1;height:1px;background:var(--paper-3);
+}
+#paperText{
+  width:100%;min-height:104px;resize:vertical;font-size:11.5px;line-height:1.55;
+  padding:8px 10px;border:1px solid var(--paper-3);border-radius:7px;
+}
+.tin{
+  width:100%;margin-top:8px;padding:6px 10px;border:1px solid var(--paper-3);
+  border-radius:7px;font-size:12px;
+}
+.btn.wide{width:100%;justify-content:center;margin-top:10px}
+.paperbtns{display:flex;gap:8px}
+.paperbtns .btn{flex:1}
+.specbar{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.specbar .hint{font-size:10.5px;color:var(--muted);line-height:1.4}
 .speced{
-  width:100%;min-height:280px;resize:vertical;font-family:var(--mono);
-  font-size:10.5px;line-height:1.5;padding:9px 11px;border:1px solid var(--paper-3);
-  border-radius:7px;background:#FCFCFD;
+  width:100%;min-height:300px;resize:vertical;font-family:var(--mono);
+  font-size:10.5px;line-height:1.55;padding:10px 12px;
+  border:1px solid var(--paper-3);border-radius:8px;background:#FCFCFD;
 }
-.speced:focus,#paperText:focus{outline:none;border-color:var(--amber)}
-.paperbtns{display:flex;gap:7px;margin:9px 0}
-.paperfound{font-size:11.5px;color:var(--muted);margin:10px 0 8px;line-height:1.55}
+.speced:focus,#paperText:focus,.tin:focus{outline:none;border-color:var(--amber)}
+.specout{margin-top:11px}
+.specout .waiting{
+  font-size:11px;color:var(--muted);line-height:1.6;padding:10px 12px;
+  background:var(--paper-2);border-radius:7px;
+}
+.paperfound{font-size:11px;color:var(--muted);margin:11px 0 8px;line-height:1.55}
 .paperwarn{
   font-size:11.5px;line-height:1.6;padding:10px 12px;border-radius:7px;
-  background:#FFF8E9;border:1px solid #E8D9AE;color:#6B5418;margin:10px 0;
+  background:#FFF8E9;border:1px solid #E8D9AE;color:#6B5418;margin:9px 0;
 }
 .paperok{
   font-size:11.5px;line-height:1.6;padding:10px 12px;border-radius:7px;
-  background:#EFF8F1;border:1px solid #BFE0C8;color:#256B39;margin:10px 0;
+  background:#EFF8F1;border:1px solid #BFE0C8;color:#256B39;margin:9px 0;
 }
 .passage{
-  border:1px solid var(--paper-3);border-radius:7px;padding:9px 11px;
+  border:1px solid var(--paper-3);border-radius:8px;padding:9px 11px;
   margin-bottom:7px;background:#fff;
 }
 .pkind{
   font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#8A5CF6;
   font-weight:700;
 }
-.passage p{margin:4px 0 0;font-size:11.5px;line-height:1.55;color:#3C4B5F}
+.passage p{margin:4px 0 0;font-size:11px;line-height:1.55;color:#3C4B5F;
+  max-height:104px;overflow-y:auto}
 .verdict{
   margin-top:12px;padding:11px 13px;border-radius:8px;background:#F6F3FF;
   border:1px solid #DCD2F5;font-size:12px;line-height:1.6;color:#3C3358;
@@ -4442,38 +4494,83 @@ $("statusToggle").addEventListener("click", () => {
 async function renderPaperPage(){
   const host = $("paperMain");
   host.innerHTML = `
-    <div class="head">
-      <h4>Paper &rarr; spec</h4>
-      <p>A structural result becomes an implicit layer. Read the ranked
-      passages, write the spec, check it, save it — and it appears in the
-      ImplicitEquilibrium layer's domain list at once.</p>
+    <div class="paperhead">
+      <h3>Paper &rarr; spec</h3>
+      <p>A structural result becomes a layer you can place. Three stages, and
+      only the middle one involves judgment.</p>
     </div>
-    <div class="inner paperwrap">
-      <div class="papercol">
-        <div class="paperstage">1 &middot; read the paper</div>
-        <div class="kv" style="grid-template-columns:110px 1fr">
-          <b>PDF</b><span><input type="file" id="paperFile" accept=".pdf"></span>
-          <b>or text</b><span><textarea id="paperText" placeholder="Paste the theorem and the dynamics it describes"></textarea></span>
-          <b>title</b><span><input type="text" id="paperTitle" placeholder="what to call it"></span>
+
+    <div class="paperflow">
+      <div class="stagecard" id="stage1">
+        <div class="stagetop"><i>1</i>
+          <div><b>Read it</b><span>Ranks the passages that carry a result.
+            Decides nothing.</span></div>
         </div>
-        <button class="btn go" id="btnIngest">Read it</button>
-        <div id="paperOut"></div>
+        <div class="stagebody">
+          <label class="drop" id="paperDrop">
+            <input type="file" id="paperFile" accept=".pdf" hidden>
+            <b>Drop a PDF</b><span>or click to choose</span>
+          </label>
+          <div class="orline"><span>or paste the theorem</span></div>
+          <textarea id="paperText" placeholder="Theorem 2.2. Let f be a strongly convex potential&#10;with modulus alpha > 0. Then f has exactly one&#10;stationary point&#8230;"></textarea>
+          <input type="text" id="paperTitle" class="tin" placeholder="what to call it">
+          <button class="btn go wide" id="btnIngest">Read it</button>
+          <div id="paperOut"></div>
+        </div>
       </div>
-      <div class="papercol">
-        <div class="paperstage">2 &middot; the spec</div>
-        <p class="papernote">You write only the residual; the Jacobian is
-        differentiated from it, so the two cannot disagree. What is left to get
-        wrong is the physics, which is what the check is for.</p>
-        <textarea id="specText" class="speced" spellcheck="false"
-          placeholder="the spec, as JSON"></textarea>
-        <div class="paperbtns">
-          <button class="btn" id="btnPropose">Propose</button>
-          <button class="btn" id="btnCheckSpec">Check it</button>
-          <button class="btn go" id="btnSaveSpec">Save as a domain</button>
+
+      <div class="stagecard" id="stage2">
+        <div class="stagetop"><i>2</i>
+          <div><b>Write the spec</b><span>You write the residual; the Jacobian is
+            differentiated from it, so the two cannot disagree.</span></div>
         </div>
-        <div id="specOut"></div>
+        <div class="stagebody">
+          <div class="specbar">
+            <button class="btn" id="btnPropose">Propose one</button>
+            <span class="hint" id="proposeHint"></span>
+          </div>
+          <textarea id="specText" class="speced" spellcheck="false"
+            placeholder='{\n "key": "my_structure",\n "claim": "…",\n "n": 12,\n "residual": "x0 - alpha*x - …"\n}'></textarea>
+        </div>
+      </div>
+
+      <div class="stagecard" id="stage3">
+        <div class="stagetop"><i>3</i>
+          <div><b>Check it, then keep it</b><span>What is left to get wrong is
+            the physics. A spec that fails is not registered.</span></div>
+        </div>
+        <div class="stagebody">
+          <div class="paperbtns">
+            <button class="btn wide" id="btnCheckSpec">Check it</button>
+            <button class="btn go wide" id="btnSaveSpec">Check and save</button>
+          </div>
+          <div id="specOut" class="specout">
+            <div class="waiting">Nothing checked yet. A spec that fails loudly is
+            the point — the alternative is a plausible architecture that quietly
+            wastes a week.</div>
+          </div>
+        </div>
       </div>
     </div>`;
+
+  const file = $("paperFile");
+  const drop = $("paperDrop");
+  drop.addEventListener("click", () => file.click());
+  file.addEventListener("change", () => {
+    drop.classList.toggle("has", !!file.files[0]);
+    if (file.files[0])
+      drop.querySelector("b").textContent = file.files[0].name;
+  });
+  ["dragover", "dragleave", "drop"].forEach(kind =>
+    drop.addEventListener(kind, ev => {
+      ev.preventDefault();
+      drop.classList.toggle("over", kind === "dragover");
+      if (kind === "drop" && ev.dataTransfer.files[0]){
+        file.files = ev.dataTransfer.files;
+        drop.classList.add("has");
+        drop.querySelector("b").textContent = ev.dataTransfer.files[0].name;
+      }
+    }));
 
   $("btnIngest").addEventListener("click", ingestPaper);
   $("btnPropose").addEventListener("click", proposeSpec);

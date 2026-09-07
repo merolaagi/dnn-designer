@@ -893,6 +893,35 @@ def _():
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
 
 
+@check("every page paints its own background")
+def _():
+    """The page background is dark, so a page that does not paint one shows it.
+
+    This has now happened twice: once as a black canvas, once as a page of
+    dark-on-dark text. Both times the page itself was fine and simply had no
+    surface under it.
+    """
+    import re
+
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    painted = set()
+    for match in re.finditer(r"([^{}]*)\{([^}]*)\}", css):
+        if "background" not in match.group(2):
+            continue
+        for part in match.group(1).split(","):
+            part = part.strip()
+            if part.startswith("#page"):
+                painted.add(part.split(":")[0].split()[0])
+
+    pages = set(re.findall(r'<section class="page" id="(page\w+)"', PAGE))
+    assert pages, "no pages found at all"
+    unpainted = {p for p in pages if f"#{p}" not in painted}
+    # the design page is the canvas, which paints itself through #stage
+    unpainted.discard("pageDesign")
+    assert not unpainted, \
+        f"these pages let the dark page background through: {sorted(unpainted)}"
+
+
 @check("a paper becomes a spec becomes a layer")
 def _():
     """Three stages, and only one of them involves judgment.

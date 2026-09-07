@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.41.0
+
+**The Paper → spec page has a real design**, and the reason it looked like that
+was a one-word omission.
+
+- **Fixed: the page painted no background**, so the dark page surface showed
+  through and its heading was dark text on dark. Every other page sets one and
+  this one was simply never added to the list.
+- **A test now asserts every page paints its own background.** It immediately
+  found a second one — the Studies page had the same gap, less visibly. This is
+  the third time the dark surface has shown through something; it should be the
+  last.
+
+The page itself is now three numbered stages rather than two loose columns:
+
+1. **Read it** — a drop zone that takes a PDF by drag or click and names the
+   file once it has one, or a box for pasting the theorem.
+2. **Write the spec** — Propose beside the editor, with its answer, refusal
+   included, shown next to it rather than below the fold.
+3. **Check it, then keep it** — Check, or Check and save, with the result in
+   place. Before anything runs it says what the checking is for rather than
+   sitting empty.
+
+Every control was driven headlessly after the rewrite to confirm the handlers
+still attach, since all the element ids changed.
+
 ## 1.40.1
 
 **Fixed: the paper test failed on any install that has an account.**
