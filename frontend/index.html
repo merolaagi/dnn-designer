@@ -1147,38 +1147,139 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
+#dockTab{
+  position:fixed;right:18px;bottom:18px;z-index:120;display:flex;align-items:center;
+  gap:7px;padding:9px 15px;border-radius:22px;border:1px solid var(--paper-3);
+  background:#fff;color:var(--text);font-size:12.5px;cursor:pointer;
+  box-shadow:0 2px 4px rgba(22,32,46,.07), 0 10px 26px rgba(22,32,46,.12);
+}
+#dockTab:hover{border-color:#8A5CF6;color:#5B3BB5}
+#dockTab.on{background:#8A5CF6;border-color:#8A5CF6;color:#fff}
+#dockTab span{font-weight:600}
+.dock{
+  position:fixed;right:18px;bottom:70px;width:390px;max-width:calc(100vw - 36px);
+  max-height:min(560px, calc(100vh - 120px));z-index:121;display:flex;
+  flex-direction:column;background:#fff;border:1px solid var(--paper-3);
+  border-radius:13px;overflow:hidden;
+  box-shadow:0 2px 6px rgba(22,32,46,.08), 0 18px 44px rgba(22,32,46,.18);
+}
+.dock.hidden{display:none}
+.dockhead{
+  display:flex;align-items:center;gap:8px;padding:11px 13px;
+  border-bottom:1px solid var(--paper-3);background:var(--paper-2);
+}
+.dockhead b{font-size:12.5px;font-weight:600}
+.dockhead .grow{flex:1}
+.dockhead button{
+  background:none;border:none;color:#9AA6B4;font-size:14px;line-height:1;
+  padding:3px 6px;border-radius:5px;
+}
+.dockhead button:hover{color:var(--text);background:var(--paper-3)}
+.dockbody{flex:1;overflow-y:auto;padding:13px;min-height:150px}
+.dockintro p{margin:0 0 9px;font-size:12px;line-height:1.6;color:#3C4B5F}
+.dockintro .dockquiet{color:var(--muted);font-size:11.5px}
+.dockchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.dockchip{
+  background:#F4F1FE;border:1px solid #DCD2F5;color:#4C3A85;border-radius:14px;
+  padding:5px 11px;font-size:11px;cursor:pointer;
+}
+.dockchip:hover{background:#EAE3FC}
+.dockobs{margin:6px 0 10px}
+.dockobs .obs{
+  font-size:11px;line-height:1.55;padding:7px 10px;border-radius:7px;
+  margin-bottom:5px;background:var(--paper-2);color:#3C4B5F;
+}
+.dockobs .obs.warn{background:#FFF6E6;color:#7A5400}
+.dockobs .obs.good{background:#EFF8F1;color:#256B39}
+.dockfoot{
+  display:flex;gap:7px;padding:10px 12px;border-top:1px solid var(--paper-3);
+  background:var(--paper-2);
+}
+.dockfoot input{
+  flex:1;padding:8px 11px;border:1px solid var(--paper-3);border-radius:8px;
+  font-size:12px;
+}
+.dockfoot input:focus{outline:none;border-color:#8A5CF6}
+
 #rail .padlink{margin-bottom:4px}
-.padhead{padding:34px 26px 8px;max-width:1080px;margin:0 auto;text-align:center}
-.padhead h2{margin:0 0 8px;font-size:27px;font-weight:600;letter-spacing:-.01em}
-.padhead p{margin:0 auto;font-size:13px;color:var(--muted);line-height:1.65;
-  max-width:560px}
+.padwrap{max-width:1120px;margin:0 auto;padding:0 26px 40px}
+.padhead{padding:44px 0 6px;text-align:center}
+.padhead h2{margin:0 0 9px;font-size:31px;font-weight:600;letter-spacing:-.015em}
+.padhead p{margin:0 auto 22px;font-size:13.5px;color:var(--muted);line-height:1.65;
+  max-width:580px}
+.padsearch{max-width:640px;margin:0 auto}
+.padsearch input{
+  width:100%;padding:14px 18px;font-size:14px;border:1px solid var(--paper-3);
+  border-radius:12px;background:#fff;
+  box-shadow:0 1px 2px rgba(22,32,46,.04), 0 8px 24px rgba(22,32,46,.06);
+}
+.padsearch input:focus{outline:none;border-color:var(--amber)}
+.padmatches{max-width:640px;margin:9px auto 0;text-align:left}
+.matchrow{
+  display:block;width:100%;text-align:left;background:#fff;
+  border:1px solid var(--paper-3);border-radius:9px;padding:9px 13px;
+  margin-bottom:6px;cursor:pointer;
+}
+.matchrow:hover{border-color:var(--amber);background:#FFFDF7}
+.matchrow b{display:block;font-size:12.5px;font-weight:600}
+.matchrow span{display:block;font-size:11px;color:var(--muted);line-height:1.5;
+  margin:2px 0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.matchrow i{font-style:normal;font-size:9.5px;color:#98A6B8}
+.nomatch{font-size:11.5px;color:var(--muted);line-height:1.6;padding:9px 2px}
+.padsection{margin-top:38px}
+.padsection h4{
+  margin:0 0 13px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:#98A6B8;font-weight:700;text-align:center;
+}
+.padsechead{
+  display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:13px;
+}
+.padsechead h4{margin:0}
+.padtry{
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(290px, 1fr));gap:14px;
+}
+.trycard{
+  text-align:left;background:#fff;border:1px solid var(--paper-3);border-radius:12px;
+  padding:16px 17px 14px;cursor:pointer;display:flex;flex-direction:column;gap:7px;
+  transition:border-color .13s, box-shadow .13s, transform .13s;
+}
+.trycard:hover{
+  border-color:#C3D3E6;transform:translateY(-1px);
+  box-shadow:0 2px 4px rgba(22,32,46,.06), 0 10px 24px rgba(22,32,46,.07);
+}
+.tier{
+  align-self:flex-start;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
+  font-weight:700;padding:2px 7px;border-radius:5px;
+}
+.tier-starter{background:#E6F5EA;color:#256B39}
+.tier-working{background:#FFF4DE;color:#8A6314}
+.tier-involved{background:#FDECEC;color:#9B3030}
+.tier-other{background:var(--paper-2);color:var(--muted)}
+.trycard b{font-size:14px;font-weight:600}
+.trycard p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.6;flex:1;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.trysteps{font-size:9.5px;color:#98A6B8}
 .padgrid{
-  display:grid;grid-template-columns:repeat(auto-fit, minmax(272px, 1fr));
-  gap:14px;padding:26px 26px 8px;max-width:1080px;margin:0 auto;
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(258px, 1fr));gap:13px;
 }
 .padcard{
-  text-align:left;background:#fff;border:1px solid var(--paper-3);
-  border-radius:12px;padding:17px 18px 15px;cursor:pointer;
-  display:flex;flex-direction:column;gap:7px;
-  box-shadow:0 1px 2px rgba(22,32,46,.04);
+  text-align:left;background:#fff;border:1px solid var(--paper-3);border-radius:12px;
+  padding:16px 17px 14px;cursor:pointer;display:flex;flex-direction:column;gap:6px;
   transition:border-color .13s, box-shadow .13s, transform .13s;
 }
 .padcard:hover{
   border-color:#C3D3E6;transform:translateY(-1px);
   box-shadow:0 2px 4px rgba(22,32,46,.06), 0 10px 24px rgba(22,32,46,.07);
 }
-.padcard b{font-size:14.5px;font-weight:600}
-.padcard p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.6;flex:1}
-.padgo{font-size:11.5px;color:#2D7DD2;font-weight:600}
-.padopen{max-width:1080px;margin:0 auto;padding:18px 26px 34px}
-.padopenhead{display:flex;align-items:center;gap:12px;margin-bottom:11px}
-.padopenhead h4{margin:0;font-size:12.5px;font-weight:600}
-.padrecent{display:flex;flex-wrap:wrap;gap:8px}
+.padicon{font-size:15px;color:#8A5CF6;line-height:1}
+.padcard b{font-size:13.5px;font-weight:600}
+.padcard p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.6}
+.padrecent{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 .padrecent .waiting{font-size:11.5px;color:var(--muted);line-height:1.6;
-  max-width:520px}
+  max-width:520px;text-align:center}
 .padchip{
   text-align:left;background:#fff;border:1px solid var(--paper-3);
-  border-radius:9px;padding:8px 12px;cursor:pointer;
+  border-radius:9px;padding:8px 13px;cursor:pointer;
 }
 .padchip:hover{border-color:var(--amber);background:#FFFDF7}
 .padchip b{display:block;font-size:12px;font-weight:600}
@@ -1917,6 +2018,7 @@ cfg.n_embd = 128"></textarea>
   </div>
 </div>
 
+<button id="dockTab" title="Assistant">&#10022;<span>Assistant</span></button>
 <div id="ghost"></div>
 <div class="toast" id="toast"></div>
 
@@ -4525,71 +4627,207 @@ $("statusToggle").addEventListener("click", () => {
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
 
+/* ========================== assistant dock ========================== */
+
+/* The assistant already lives in a tab beside the canvas. That is the right
+   place while designing and the wrong place everywhere else — on the launch pad
+   or the projects list there is no canvas and no tab. So it also floats: same
+   assistant, same commands, reachable from anywhere.
+
+   It is deliberately not a chat that pretends to build anything you describe.
+   It edits the graph, it reviews it, and it says when it cannot do something. */
+
+function assistantDock(){
+  if ($("dock")) return;
+  const dock = document.createElement("div");
+  dock.id = "dock";
+  dock.className = "dock hidden";
+  dock.innerHTML = `
+    <div class="dockhead">
+      <b>Assistant</b>
+      <span class="grow"></span>
+      <button id="dockWide" title="Show it beside the canvas instead">&#9974;</button>
+      <button id="dockShut" title="Close">&times;</button>
+    </div>
+    <div class="dockbody" id="dockBody"></div>
+    <div class="dockfoot">
+      <input type="text" id="dockAsk" spellcheck="false"
+             placeholder="Ask about this design, or tell it to change one">
+      <button class="btn go" id="dockSend">Send</button>
+    </div>`;
+  document.body.appendChild(dock);
+
+  $("dockShut").addEventListener("click", () => toggleDock(false));
+  $("dockWide").addEventListener("click", () => {
+    toggleDock(false);
+    showPage("pageDesign");
+    showSide("ask");
+  });
+  $("dockSend").addEventListener("click", dockSend);
+  $("dockAsk").addEventListener("keydown", ev => {
+    if (ev.key === "Enter") dockSend();
+  });
+}
+
+function toggleDock(open){
+  assistantDock();
+  const dock = $("dock");
+  const want = open === undefined ? dock.classList.contains("hidden") : open;
+  dock.classList.toggle("hidden", !want);
+  $("dockTab").classList.toggle("on", want);
+  if (want){
+    if (!state.dockSeen) dockWelcome();
+    $("dockAsk").focus();
+  }
+}
+
+function dockWelcome(){
+  state.dockSeen = true;
+  const body = $("dockBody");
+  const has = (state.graph.nodes || []).length;
+  body.innerHTML = `
+    <div class="dockintro">
+      <p>I read the design on the canvas and can change it. I do not invent
+      networks from a description — what I am good for is the next edit and an
+      honest look at what is there.</p>
+      ${has ? `<p class="dockquiet">${has} layer${has === 1 ? "" : "s"} open.</p>`
+            : `<p class="dockquiet">Nothing on the canvas yet. Open a design or a
+               guided build first and I will have something to talk about.</p>`}
+    </div>
+    <div class="dockchips">
+      ${["review", "add dropout after the last layer",
+         "what would you change?", "add batchnorm before the activation"]
+        .map(t => `<button class="dockchip" data-say="${t}">${t}</button>`).join("")}
+    </div>`;
+  body.querySelectorAll("[data-say]").forEach(chip =>
+    chip.addEventListener("click", () => {
+      $("dockAsk").value = chip.dataset.say;
+      dockSend();
+    }));
+}
+
+async function dockSend(){
+  const box = $("dockAsk");
+  const said = (box.value || "").trim();
+  if (!said) return;
+  box.value = "";
+  const body = $("dockBody");
+  if (body.querySelector(".dockintro")) body.innerHTML = "";
+  body.insertAdjacentHTML("beforeend",
+    `<div class="bubble me">${said.replace(/</g, "&lt;")}</div>`);
+  body.insertAdjacentHTML("beforeend",
+    `<div class="bubble it" id="dockWait">thinking\u2026</div>`);
+  body.scrollTop = body.scrollHeight;
+
+  let d;
+  try{
+    d = await (await fetch(API + "/api/assistant", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: said, graph: state.graph }),
+    })).json();
+  } catch {
+    $("dockWait").textContent = "The server did not answer.";
+    return;
+  }
+  const wait = $("dockWait");
+  if (wait) wait.remove();
+
+  if (d.graph){
+    pushHistory();
+    state.graph = d.graph;
+    state.seq = (d.graph.nodes || []).length + (d.graph.edges || []).length + 900;
+    clearSelection();
+    render(); renderInspector(); analyze();
+  }
+  body.insertAdjacentHTML("beforeend",
+    `<div class="bubble it">${(d.reply || "Nothing to say.").replace(/</g, "&lt;")}</div>`);
+  if (d.observations && d.observations.length){
+    body.insertAdjacentHTML("beforeend", `<div class="dockobs">${
+      d.observations.map(o => `<div class="obs ${o.level || "note"}">${o.text}</div>`)
+        .join("")}</div>`);
+  }
+  body.scrollTop = body.scrollHeight;
+}
+
 /* ============================ launch pad ============================ */
 
-/* A door rather than a dashboard. Somebody arriving does not want a summary of
-   their account; they want to know what this can do and to be one click from
-   doing it. So: the routes in, each saying plainly what it is for, and what is
-   already in the workspace. */
+/* A door, and a wide one. Somebody arriving wants to know what this can do and
+   to be one click from doing it — so: say what you want and see what matches,
+   three worked things to try, the routes in, and what is already here.
+
+   The search is over the 101 guided builds rather than a generative box,
+   because that is what can actually be delivered. A box that promises to build
+   whatever you describe and then does not is worse than one that says it
+   searches. */
 
 const ROUTES = [
-  { key: "design", title: "Design a network",
-    body: "Draw it, and watch the shapes resolve as you go. Every layer's "
-        + "parameter count is checked against PyTorch rather than asserted.",
-    go: () => { showPage("pageDesign"); showPalette("layers"); },
-    cta: "Open the canvas" },
+  { key: "design", title: "Design a network", icon: "\u25A6",
+    body: "Draw it and watch the shapes resolve. Every parameter count is "
+        + "checked against PyTorch rather than asserted.",
+    go: () => { showPage("pageDesign"); showPalette("layers"); } },
 
-  { key: "learn", title: "Learn how one works",
-    body: "101 guided builds that explain why each layer, what you would use "
-        + "instead, and where it goes wrong. Built step by step beside the canvas.",
-    go: () => showPage("pageBuild"), cta: "Browse the projects" },
+  { key: "import", title: "Bring a model in", icon: "\u2913",
+    body: "From GitHub by name, a library on this machine, pasted code or a "
+        + "file. Read the source and try a class before importing it.",
+    go: () => { showPage("pageDesign"); openImportDialog(); } },
 
-  { key: "import", title: "Bring a model in",
-    body: "From GitHub by name, from a library installed on this machine, from "
-        + "pasted code, or a file. Read the source, try a class, then import it.",
-    go: () => { showPage("pageDesign"); openImportDialog(); },
-    cta: "Import something" },
+  { key: "understand", title: "See what it does", icon: "\u25B6",
+    body: "Walk one example through layer by layer with the mathematics and "
+        + "the real numbers, or run a batch and watch it execute.",
+    go: () => { showPage("pageDesign"); showSide("story"); } },
 
-  { key: "understand", title: "See what it actually does",
-    body: "Walk one example through, layer by layer, with the mathematics and "
-        + "the real numbers at every step. Or run a batch and watch it execute.",
-    go: () => { showPage("pageDesign"); showSide("story"); },
-    cta: "Walk it through" },
+  { key: "train", title: "Train and compare", icon: "\u2699",
+    body: "Sweeps, architecture search, and trying the assistant's suggestions "
+        + "to find out which of them actually helped.",
+    go: () => showPage("pageAgents") },
 
-  { key: "train", title: "Train and compare",
-    body: "Train it, then let a study argue with you: sweeps, architecture "
-        + "search, and trying the assistant's suggestions to see which helped.",
-    go: () => showPage("pageAgents"), cta: "Open studies" },
-
-  { key: "paper", title: "Turn a paper into a layer",
+  { key: "paper", title: "Turn a paper into a layer", icon: "\u25C8",
     body: "A structural theorem becomes an implicit layer you can place. You "
         + "write the residual; the Jacobian is differentiated from it.",
-    go: () => showPage("pagePaper"), cta: "Read a paper" },
+    go: () => showPage("pagePaper") },
+
+  { key: "extend", title: "Write your own layer", icon: "\u2732",
+    body: "Blocks are Python files. Edit one, save, and it reloads into the "
+        + "palette without restarting anything.",
+    go: () => showPage("pageExtend") },
 ];
 
 async function renderLaunchPad(){
   const host = $("padMain");
-  const who = state.account && state.account.user;
-
   host.innerHTML = `
-    <div class="padhead">
-      <h2>What would you like to build?</h2>
-      <p>A network drawn here generates real PyTorch, trains locally, and checks
-      its own arithmetic against the framework. Nothing leaves this machine.</p>
-    </div>
-    <div class="padgrid">${ROUTES.map(r => `
-      <button class="padcard" data-route="${r.key}">
-        <b>${r.title}</b>
-        <p>${r.body}</p>
-        <span class="padgo">${r.cta} &rarr;</span>
-      </button>`).join("")}</div>
-    <div class="padopen">
-      <div class="padopenhead">
-        <h4>Already here</h4>
-        <button class="btn" id="padOpen">Open a design</button>
+    <div class="padwrap">
+      <div class="padhead">
+        <h2>What would you like to build?</h2>
+        <p>Networks drawn here generate real PyTorch, train locally, and check
+        their own arithmetic against the framework. Nothing leaves this machine.</p>
+        <div class="padsearch">
+          <input type="text" id="padQuery" spellcheck="false"
+                 placeholder="Describe it — “classify images”, “generate text”, “detect anomalies”">
+        </div>
+        <div id="padMatches" class="padmatches"></div>
       </div>
-      <div id="padRecent" class="padrecent">
-        <span class="waiting">looking…</span>
+
+      <div class="padsection">
+        <h4>Try building something</h4>
+        <div id="padTry" class="padtry"><span class="waiting">loading…</span></div>
+      </div>
+
+      <div class="padsection">
+        <h4>Or go straight to it</h4>
+        <div class="padgrid">${ROUTES.map(r => `
+          <button class="padcard" data-route="${r.key}">
+            <span class="padicon">${r.icon}</span>
+            <b>${r.title}</b>
+            <p>${r.body}</p>
+          </button>`).join("")}</div>
+      </div>
+
+      <div class="padsection">
+        <div class="padsechead">
+          <h4>Already in this workspace</h4>
+          <button class="btn" id="padOpen">Open a design</button>
+        </div>
+        <div id="padRecent" class="padrecent"><span class="waiting">looking…</span></div>
       </div>
     </div>`;
 
@@ -4600,25 +4838,101 @@ async function renderLaunchPad(){
     }));
   $("padOpen").addEventListener("click", () => openPicker());
 
-  // what is in the workspace, fetched after the page is already usable
+  const box = $("padQuery");
+  box.addEventListener("input", () => padSearch(box.value));
+  box.addEventListener("keydown", ev => {
+    if (ev.key === "Enter"){
+      const first = $("padMatches").querySelector("[data-project]");
+      if (first) openProject(first.dataset.project);
+    }
+  });
+
+  padFill();
+}
+
+async function padFill(){
+  if (!state.padProjects){
+    try{
+      const d = await (await fetch(API + "/api/projects")).json();
+      state.padProjects = d.projects || [];
+    } catch { state.padProjects = []; }
+  }
+  const projects = state.padProjects;
+
+  const pick = level => projects.find(p => (p.difficulty || "") === level);
+  const shown = ["starter", "working", "involved"]
+    .map(pick).filter(Boolean);
+  const spare = projects.filter(p => !shown.includes(p)).slice(0, 3 - shown.length);
+  const trio = shown.concat(spare).slice(0, 3);
+
+  const tryHost = $("padTry");
+  if (tryHost){
+    tryHost.innerHTML = trio.length ? trio.map(p => `
+      <button class="trycard" data-project="${p.id}">
+        <span class="tier tier-${p.difficulty || "other"}">${p.difficulty || "build"}</span>
+        <b>${p.name}</b>
+        <p>${p.summary}</p>
+        <span class="trysteps">${p.steps} layers · ${p.category}</span>
+      </button>`).join("")
+      : `<span class="waiting">No guided builds found.</span>`;
+    tryHost.querySelectorAll("[data-project]").forEach(card =>
+      card.addEventListener("click", () => openProject(card.dataset.project)));
+  }
+
   let designs = [];
   try{
     designs = (await (await fetch(API + "/api/graphs")).json()).graphs || [];
-  } catch { /* the panel simply stays quiet */ }
+  } catch { /* the panel stays quiet */ }
   const recent = $("padRecent");
   if (!recent) return;
-  if (!designs.length){
-    recent.innerHTML = `<span class="waiting">No designs yet. Every workspace
-      starts with a few examples — if this one is empty, the Projects route is
-      the place to begin.</span>`;
-    return;
-  }
-  recent.innerHTML = designs.slice(0, 8).map(d => `
-    <button class="padchip" data-design="${d.name}">
-      <b>${d.name}</b><span>${d.versions} version${d.versions === 1 ? "" : "s"}</span>
-    </button>`).join("");
+  recent.innerHTML = designs.length
+    ? designs.slice(0, 10).map(d => `
+        <button class="padchip" data-design="${d.name}">
+          <b>${d.name}</b><span>${d.versions} version${
+            d.versions === 1 ? "" : "s"}</span></button>`).join("")
+    : `<span class="waiting">Nothing saved yet. Every workspace starts with a
+       few examples — if this one is empty, try a guided build above.</span>`;
   recent.querySelectorAll("[data-design]").forEach(chip =>
     chip.addEventListener("click", () => openDesign(chip.dataset.design)));
+}
+
+function padSearch(query){
+  const host = $("padMatches");
+  const term = (query || "").trim().toLowerCase();
+  if (!host) return;
+  if (term.length < 2){ host.innerHTML = ""; return; }
+
+  const words = term.split(/\s+/).filter(Boolean);
+  const scored = (state.padProjects || []).map(p => {
+    const hay = `${p.name} ${p.summary} ${p.tags} ${p.category}`.toLowerCase();
+    let score = 0;
+    words.forEach(w => {
+      if (p.name.toLowerCase().includes(w)) score += 3;
+      else if (hay.includes(w)) score += 1;
+    });
+    return { p, score };
+  }).filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
+
+  if (!scored.length){
+    host.innerHTML = `<div class="nomatch">Nothing among the guided builds
+      matches that. The canvas is empty and waiting either way —
+      <button class="linkbtn" id="padBlank">start from nothing</button>.</div>`;
+    const blank = $("padBlank");
+    if (blank) blank.addEventListener("click", () => {
+      showPage("pageDesign"); showPalette("layers");
+    });
+    return;
+  }
+  host.innerHTML = scored.map(({ p }) => `
+    <button class="matchrow" data-project="${p.id}">
+      <b>${p.name}</b>
+      <span>${p.summary}</span>
+      <i>${p.category} · ${p.steps} layers</i>
+    </button>`).join("");
+  host.querySelectorAll("[data-project]").forEach(row =>
+    row.addEventListener("click", () => openProject(row.dataset.project)));
 }
 
 /* ========================== paper to spec ========================== */
@@ -6805,6 +7119,7 @@ async function openImportDialog(){
 }
 
 $("btnImport").addEventListener("click", openImportDialog);
+$("dockTab").addEventListener("click", () => toggleDock());
 $("btnImportCancel").addEventListener("click", () => $("modal").classList.remove("on"));
 $("modal").addEventListener("click", e => {
   if (e.target.id === "modal") $("modal").classList.remove("on");

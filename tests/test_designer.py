@@ -893,6 +893,33 @@ def _():
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
 
 
+@check("the assistant dock talks to the assistant")
+def _():
+    """The dock posts to the same endpoint the panel does, and the endpoint
+    reads `message`. Sending `text` would have looked like it worked — a reply
+    comes back either way, just the wrong one."""
+    import inspect
+
+    import main
+
+    fields = set(main.AssistantPayload.model_fields)
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("async function dockSend"):]
+    body = body[: body.index("\n}\n")]
+    assert "message:" in body, \
+        "the dock does not send `message`, which is the field the endpoint reads"
+    assert "message" in fields, fields
+
+    for token in ('id="dockTab"', "function toggleDock", "function dockWelcome",
+                  "function assistantDock"):
+        assert token in PAGE, f"{token} is missing from the dock"
+
+    # it must be reachable from every page, not parented to the canvas
+    markup = PAGE[: PAGE.index("<script>")]
+    tab = markup[markup.index('id="dockTab"') - 200: markup.index('id="dockTab"')]
+    assert "<section" not in tab, "the launcher sits inside a page"
+
+
 @check("every launch pad route goes somewhere real")
 def _():
     """A door, not a dashboard — and a door with a dead handle is worse than
@@ -3592,6 +3619,8 @@ def _():
         "sendAsk", "askSay", "loadAssistant", "askObservations",
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
         "checkDomain",
+        "renderLaunchPad", "padFill", "padSearch", "assistantDock", "toggleDock",
+        "dockWelcome", "dockSend", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",
         "renderRunPanel", "runTrace", "animateTrace", "traceStateOf", "runTable",

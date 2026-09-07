@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.43.0
+
+**The launch pad is a full page now**, and the assistant follows you around.
+
+- **Say what you want and see what matches.** The box searches the 101 guided
+  builds and ranks them as you type. It searches rather than generates, because
+  searching is what can actually be delivered — a box that promises to build
+  whatever you describe and then does not is worse than one that says what it
+  does. When nothing matches it says so and offers the empty canvas.
+- **Three worked things to try**, one starter, one working, one involved, taken
+  from the guided builds rather than written out again.
+- **Six routes**, each saying what it is for.
+- **What is already in the workspace**, one click from opening.
+
+**An assistant dock.** The assistant already lived in a tab beside the canvas,
+which is the right place while designing and no place at all on the launch pad
+or the projects list. It now also floats, reachable from anywhere, with the same
+commands and a button to move it back beside the canvas.
+
+It opens by saying what it is for: it reads the design and can change it, and it
+does not invent networks from a description. Saying so up front is better than
+letting somebody find out by asking.
+
+**A bug the test caught before you did.** The dock posted `text` where the
+endpoint reads `message`. A reply comes back either way — the wrong one, the
+"ask me to change something" fallback — so it would have looked like a working
+assistant that never understood anything. The check now asserts the field the
+dock sends is the field the endpoint declares.
+
 ## 1.42.0
 
 **A launch pad**, first in the sidebar: six routes in, each saying plainly what
