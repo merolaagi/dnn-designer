@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.46.0
+
+**Search for the paper, from inside the app.** Paper → spec now opens with a
+question box: ask for the property or the system you want, and it searches
+Europe PMC and arXiv, follows the reference lists of what it finds, and returns
+a reading list you choose from.
+
+Results come in four groups, because they are found four different ways:
+
+- **Directly on the question** — matched the query itself.
+- **What the reviews point back at** — turned up repeatedly in the reference
+  lists of the well-cited reviews. This is usually where a modellable result
+  actually is; the paper that states the theorem is rarely the top hit.
+- **Reviews and surveys** — good for orientation, rarely the result.
+- **Preprints** — from arXiv, where the source is available so the equations
+  come through exactly rather than through a PDF.
+
+Each result shows who, when, how often cited, how many reference lists it
+recurred in, and why it was kept. **Read this one** pulls the full text and
+ranks its passages straight into the reading stage.
+
+- **A paper whose full text cannot be fetched offers no button.** Only the open
+  access subset has retrievable text; a PMCID is not enough. A button that can
+  only fail is worse than no button.
+- **A network failure is not reported as an empty result.** The search library
+  swallows an unreachable host and returns nothing, which reads as "no papers
+  matched" when the truth is "nothing was asked". Those are different answers
+  and the page now says which one it got, quoting the error.
+
+This is the only part of the app that reaches the internet, and it says so.
+
 ## 1.45.0
 
 **The six architectures that were missing are here.** All twenty-five on the

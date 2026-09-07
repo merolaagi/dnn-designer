@@ -344,6 +344,109 @@ def _spec_json(spec) -> Dict[str, Any]:
     return spec
 
 
+class Question(BaseModel):
+    question: str
+    hubs: int = 6
+    arxiv: bool = True
+
+
+def _hit_json(hit) -> Dict[str, Any]:
+    from dnn_bench import paper_to_spec as p2s
+
+    return {
+        "ref": hit.ref,
+        "source": hit.source,
+        "title": hit.title,
+        "authors": hit.authors,
+        "year": hit.year,
+        "journal": hit.journal,
+        "abstract": (hit.abstract or "")[:900],
+        "doi": hit.doi,
+        "cited_by": hit.cited_by,
+        "is_review": hit.is_review,
+        "fit": round(float(hit.fit), 2),
+        "topic": hit.topic,
+        "reasons": list(hit.reasons or []),
+        "recurrence": hit.recurrence,
+        # None when the text cannot actually be fetched. A button that can only
+        # fail is worse than no button, so the page hides it in that case.
+        "text_url": p2s.full_text(hit),
+    }
+
+
+@app.post("/api/paper/discover")
+def paper_discover(body: Question):
+    """A research question, and what the literature offers in reply.
+
+    Three passes: what matches the question, what the well-cited reviews on it
+    point back at, and what is on arXiv. The middle one is the useful one — a
+    result worth modelling is usually cited by the reviews rather than being the
+    top hit itself.
+
+    This reaches the internet. It is the only part of the app that does.
+    """
+    if not (body.question or "").strip():
+        raise HTTPException(400, detail={"message": "Ask it something."})
+    from dnn_bench import paper_to_spec as p2s
+
+    log: List[str] = []
+    try:
+        found = p2s.discover(body.question.strip(), n_hubs=max(1, min(12, body.hubs)),
+                             use_arxiv=bool(body.arxiv), log=lambda *a: log.append(" ".join(map(str, a))))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={
+            "message": f"The search did not complete: {type(exc).__name__}: {exc}. "
+                       f"This is the one part of the app that needs the internet."})
+    groups = []
+    for key, title, why in (
+        ("direct", "Directly on the question",
+         "Matched the question itself."),
+        ("foundational", "What the reviews point back at",
+         "Turned up repeatedly in the reference lists of the reviews. This is "
+         "usually where a modellable result is."),
+        ("hubs", "Reviews and surveys",
+         "Well cited and broad. Good for orientation, rarely the result itself."),
+        ("preprints", "Preprints",
+         "From arXiv. The source is available, so the equations come through exactly."),
+    ):
+        items = found.get(key) or []
+        if items:
+            groups.append({"key": key, "title": title, "why": why,
+                           "papers": [_hit_json(h) for h in items]})
+    # discover swallows a network failure and returns nothing, which reads as
+    # "no papers matched" when the truth is "nothing was asked". Those are
+    # different answers and the second one is not the searcher's fault.
+    unreachable = [line.strip() for line in log if "unavailable" in line]
+    return {"question": found.get("question", ""),
+            "terms": found.get("terms", []),
+            "groups": groups,
+            "reachable": not (unreachable and not groups),
+            "trouble": unreachable[:3],
+            "log": log[-40:]}
+
+
+class FetchPaper(BaseModel):
+    url: str
+    title: str = ""
+
+
+@app.post("/api/paper/fetch")
+def paper_fetch(body: FetchPaper):
+    """Pull one paper's text and rank its passages."""
+    if not body.url:
+        raise HTTPException(400, detail={
+            "message": "That paper's full text is not fetchable — only the open "
+                       "access subset has one. Try another, or paste the theorem."})
+    from dnn_bench import paper_to_spec as p2s
+
+    try:
+        paper = p2s.ingest(body.url, title=body.title)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={
+            "message": f"Could not read it: {type(exc).__name__}: {exc}"})
+    return _paper_json(paper)
+
+
 class PaperText(BaseModel):
     text: str = ""
     title: str = ""

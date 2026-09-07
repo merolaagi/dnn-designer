@@ -1337,6 +1337,50 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .padchip:hover{border-color:var(--amber);background:#FFFDF7}
 .padchip b{display:block;font-size:12px;font-weight:600}
 .padchip span{display:block;font-size:9.5px;color:var(--muted)}
+.findbar{
+  max-width:1180px;margin:0 auto;padding:16px 18px;background:#fff;
+  border:1px solid var(--paper-3);border-radius:12px;
+  box-shadow:0 1px 2px rgba(22,32,46,.05), 0 6px 18px rgba(22,32,46,.05);
+}
+.findrow{display:flex;gap:8px;margin-top:12px}
+.findrow input{
+  flex:1;padding:11px 14px;border:1px solid var(--paper-3);border-radius:9px;
+  font-size:13px;
+}
+.findrow input:focus{outline:none;border-color:var(--amber)}
+.finding{margin-top:12px;font-size:11.5px;color:var(--muted);line-height:1.6}
+.findterms{margin-top:13px;font-size:10.5px;color:var(--muted)}
+.findterms .term{
+  display:inline-block;background:var(--paper-2);border-radius:5px;
+  padding:2px 7px;margin:0 4px 4px 0;font-family:var(--mono);font-size:10px;
+}
+.findgroup{margin-top:16px}
+.findhead b{display:block;font-size:12.5px;font-weight:600}
+.findhead span{display:block;font-size:11px;color:var(--muted);line-height:1.55;
+  margin:2px 0 8px;max-width:640px}
+.paperhit{
+  border:1px solid var(--paper-3);border-radius:9px;padding:10px 12px;
+  margin-bottom:7px;background:#FCFCFD;
+}
+.hittop{display:flex;align-items:flex-start;gap:8px}
+.hittop b{font-size:12.5px;font-weight:600;line-height:1.45;flex:1}
+.hittag{
+  flex:none;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:700;background:#EEF2FF;color:#3B4E9B;border-radius:5px;padding:2px 6px;
+}
+.hitmeta{font-size:10.5px;color:var(--muted);margin-top:3px}
+.hitwhy{margin-top:6px;display:flex;flex-wrap:wrap;gap:5px}
+.hitwhy span{
+  font-size:9.5px;background:#F4F1FE;color:#4C3A85;border-radius:5px;padding:2px 7px;
+}
+.hitacts{display:flex;align-items:center;gap:10px;margin-top:8px}
+.hitnotext{font-size:10px;color:#B7C0CB}
+.hitabs{
+  display:none;margin-top:8px;font-size:11px;line-height:1.6;color:#3C4B5F;
+  padding:8px 10px;background:var(--paper-2);border-radius:7px;
+}
+.hitabs.open{display:block}
+
 .paperhead{padding:20px 24px 4px;max-width:1180px;margin:0 auto}
 .paperhead h3{margin:0 0 5px;font-size:19px;font-weight:600}
 .paperhead p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.6;
@@ -5163,6 +5207,20 @@ async function renderPaperPage(){
       only the middle one involves judgment.</p>
     </div>
 
+    <div class="findbar">
+      <div class="stagetop"><i>0</i>
+        <div><b>Find a paper</b><span>Ask a question and see what the literature
+          offers. Three passes: what matches the question, what the well-cited
+          reviews point back at, and what is on arXiv.</span></div>
+      </div>
+      <div class="findrow">
+        <input type="text" id="findQ" spellcheck="false"
+               placeholder="e.g. conditions for a unique stable steady state in a compartmental model">
+        <button class="btn go" id="btnFind">Search</button>
+      </div>
+      <div id="findOut"></div>
+    </div>
+
     <div class="paperflow">
       <div class="stagecard" id="stage1">
         <div class="stagetop"><i>1</i>
@@ -5235,10 +5293,133 @@ async function renderPaperPage(){
       }
     }));
 
+  $("btnFind").addEventListener("click", findPapers);
+  $("findQ").addEventListener("keydown", ev => {
+    if (ev.key === "Enter") findPapers();
+  });
   $("btnIngest").addEventListener("click", ingestPaper);
   $("btnPropose").addEventListener("click", proposeSpec);
   $("btnCheckSpec").addEventListener("click", () => checkSpec(false));
   $("btnSaveSpec").addEventListener("click", () => checkSpec(true));
+}
+
+/* The search reaches Europe PMC and arXiv. It is the only part of the app that
+   touches the internet, and it says so. */
+async function findPapers(){
+  const out = $("findOut");
+  const question = ($("findQ").value || "").trim();
+  if (!question){
+    out.innerHTML = `<div class="paperwarn">Ask it something first.</div>`;
+    return;
+  }
+  out.innerHTML = `<div class="finding">Searching Europe PMC and arXiv, then
+    following the reference lists of what it finds. Twenty seconds or so.</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/paper/discover", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, hubs: 6, arxiv: true }),
+    });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer from the server.</div>`; return; }
+  if (!r.ok){
+    out.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "The search failed"}</div>`;
+    return;
+  }
+  state.found = d;
+
+  if (d.reachable === false){
+    out.innerHTML = `<div class="paperwarn">
+      Nothing came back, and not because the literature is empty — the search
+      could not be reached: <span class="mono">${
+        (d.trouble || []).join("; ") || "no route out"}</span>.
+      That is a network problem rather than a result. Paste the theorem below
+      instead if you already know the paper.</div>`;
+    return;
+  }
+  if (!d.groups.length){
+    out.innerHTML = `<div class="paperwarn">Nothing on topic. The gate is
+      deliberate: a paper that scores well but is not about the question is not
+      an answer to it. Try naming the system rather than the property —
+      “compartmental glucose model” rather than “unique equilibrium”.</div>`;
+    return;
+  }
+
+  out.innerHTML = `<div class="findterms">Searched for
+    ${(d.terms || []).map(t => `<span class="term">${t}</span>`).join("")}</div>`
+    + d.groups.map(g => `
+      <div class="findgroup">
+        <div class="findhead"><b>${g.title}</b><span>${g.why}</span></div>
+        ${g.papers.map(p => paperRow(p)).join("")}
+      </div>`).join("");
+
+  out.querySelectorAll("[data-fetch]").forEach(btn =>
+    btn.addEventListener("click", () => fetchPaper(btn.dataset.fetch, btn.dataset.title)));
+  out.querySelectorAll("[data-abs]").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const box = btn.closest(".paperhit").querySelector(".hitabs");
+      box.classList.toggle("open");
+      btn.textContent = box.classList.contains("open") ? "hide abstract" : "abstract";
+    }));
+}
+
+function paperRow(p){
+  return `<div class="paperhit">
+    <div class="hittop">
+      <b>${p.title || "(untitled)"}</b>
+      ${p.is_review ? `<span class="hittag">review</span>` : ""}
+    </div>
+    <div class="hitmeta">${[p.authors, p.year, p.journal].filter(Boolean).join(" · ")}
+      ${p.cited_by ? ` · cited ${p.cited_by}` : ""}
+      ${p.recurrence > 1 ? ` · in ${p.recurrence} reference lists` : ""}</div>
+    ${p.reasons && p.reasons.length
+      ? `<div class="hitwhy">${p.reasons.map(x => `<span>${x}</span>`).join("")}</div>`
+      : ""}
+    <div class="hitacts">
+      ${p.text_url
+        ? `<button class="btn tiny" data-fetch="${p.text_url}"
+             data-title="${(p.title || "").replace(/"/g, "&quot;")}">Read this one</button>`
+        : `<span class="hitnotext">no fetchable full text</span>`}
+      ${p.abstract ? `<button class="linkbtn" data-abs="1">abstract</button>` : ""}
+      ${p.doi ? `<a class="linkbtn" href="https://doi.org/${p.doi}"
+                   target="_blank" rel="noreferrer">doi</a>` : ""}
+    </div>
+    ${p.abstract ? `<div class="hitabs">${p.abstract.replace(/</g, "&lt;")}</div>` : ""}
+  </div>`;
+}
+
+async function fetchPaper(url, title){
+  const out = $("paperOut");
+  $("paperTitle").value = title || "";
+  out.innerHTML = `<div class="empty" style="padding:11px">fetching the full text…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/paper/fetch", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, title }),
+    });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    out.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "Could not read it"}</div>`;
+    return;
+  }
+  state.paper = d;
+  showPaperPassages(d);
+}
+
+function showPaperPassages(d){
+  $("paperOut").innerHTML = `
+    <div class="paperfound">${d.passages.length} ranked passage${
+      d.passages.length === 1 ? "" : "s"}${
+      d.sections.length ? ` · ${d.sections.length} sections` : ""}${
+      d.equations && d.equations.length ? ` · ${d.equations.length} expressions` : ""}.
+      A result that never says “unique” will rank low and still be the right one.</div>
+    ${d.passages.map(p => `<div class="passage">
+       <span class="pkind">${p.kind}${p.label ? " · " + p.label : ""}</span>
+       <p>${p.text.replace(/</g, "&lt;")}</p></div>`).join("")}`;
 }
 
 async function ingestPaper(){
@@ -5266,14 +5447,7 @@ async function ingestPaper(){
     return;
   }
   state.paper = d;
-  out.innerHTML = `
-    <div class="paperfound">${d.passages.length} ranked passage${
-      d.passages.length === 1 ? "" : "s"}${
-      d.sections.length ? ` &middot; ${d.sections.length} sections` : ""}.
-      A result that never says “unique” will rank low and still be the right one.</div>
-    ${d.passages.map(p => `<div class="passage">
-       <span class="pkind">${p.kind}${p.label ? " · " + p.label : ""}</span>
-       <p>${p.text.replace(/</g, "&lt;")}</p></div>`).join("")}`;
+  showPaperPassages(d);
 }
 
 async function proposeSpec(){

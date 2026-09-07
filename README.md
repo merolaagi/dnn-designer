@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and thirty-eight checks, with the torch-dependent ones skipping themselves when it is
+A hundred and thirty-nine checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -381,6 +381,14 @@ steady-state costs rather than one-off kernel setup. Layers with no module of
 their own are listed as untimed rather than as taking zero.
 
 ## Paper to layer
+
+It starts with a question. Ask for the property or the system you want and it
+searches Europe PMC and arXiv, follows the reference lists of the reviews it
+finds, and returns a reading list — the result worth modelling is usually cited
+by the reviews rather than being the top hit. Pick one and its full text is
+pulled and its passages ranked.
+
+This is the only part of the app that reaches the internet.
 
 **Paper → spec** in the sidebar takes a PDF or pasted theorem, ranks the
 passages that carry a structural result, and helps you turn one into a spec: you
@@ -711,4 +719,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.45.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.46.0 — see `CHANGELOG.md`.

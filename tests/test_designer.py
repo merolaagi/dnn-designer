@@ -1203,6 +1203,52 @@ def _():
         f"these pages let the dark page background through: {sorted(unpainted)}"
 
 
+@check("a question can be turned into a reading list")
+def _():
+    """Search is the only part of the app that touches the internet, so it is
+    also the only part that can fail for reasons nothing here controls. What is
+    checked is the shaping and the honesty, not the network."""
+    try:
+        from dnn_bench import paper_to_spec as p2s
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import main
+
+    # a paywalled result offers no button, because a button that can only fail
+    # is worse than none
+    walled = p2s.Hit(source="MED", id="1", title="A minimal model",
+                     year="1979", cited_by=812, recurrence=4,
+                     reasons=["unique steady state"])
+    shaped = main._hit_json(walled)
+    assert shaped["text_url"] is None, "a paywalled paper claims fetchable text"
+    assert shaped["cited_by"] == 812 and shaped["recurrence"] == 4
+    assert shaped["reasons"] == ["unique steady state"]
+
+    # an arXiv paper offers its source, not the PDF: the equations are exact there
+    preprint = p2s.Hit(source="arxiv", id="2401.00001", title="Networks")
+    link = main._hit_json(preprint)["text_url"]
+    assert link and "e-print" in link, f"arXiv text_url is {link}"
+
+    # an empty question is refused rather than searched for
+    try:
+        main.paper_discover(main.Question(question="   "))
+        raise AssertionError("an empty question was accepted")
+    except Exception as exc:  # noqa: BLE001
+        assert "Ask it something" in str(exc), exc
+
+    # the page must tell a network failure apart from an empty result
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("async function findPapers"):]
+    body = body[: body.index("\nfunction paperRow")]
+    assert "reachable === false" in body, \
+        "the page cannot tell 'nothing matched' from 'nothing was asked'"
+    assert "could not be reached" in body, "a network failure reads as no results"
+    for token in ('id="findQ"', 'id="btnFind"', "function paperRow",
+                  "function fetchPaper"):
+        assert token in PAGE, f"{token} is missing from the search stage"
+
+
 @check("a paper becomes a spec becomes a layer")
 def _():
     """Three stages, and only one of them involves judgment.
@@ -1264,9 +1310,11 @@ def _():
     core.REGISTRY.pop("test_good_spec", None)
 
     # and the routes are guarded, which is why this test avoids them
-    guarded = [r.path for r in main.app.routes
-               if getattr(r, "path", "").startswith("/api/paper")]
-    assert len(guarded) == 4, guarded
+    guarded = {r.path for r in main.app.routes
+               if getattr(r, "path", "").startswith("/api/paper")}
+    for route in ("/api/paper/discover", "/api/paper/fetch", "/api/paper/ingest",
+                  "/api/paper/propose", "/api/paper/check", "/api/paper/save"):
+        assert route in guarded, f"{route} is missing"
 
 
 @check("an ablation runs the arms against this network")
@@ -3841,6 +3889,7 @@ def _():
         "checkDomain",
         "renderLaunchPad", "padFill", "padSearch", "assistantDock", "toggleDock",
         "renderDomainsPage", "domFill", "armCard", "placeDomain", "validateAllDomains",
+        "findPapers", "paperRow", "fetchPaper", "showPaperPassages",
         "dockWelcome", "dockSend", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",
