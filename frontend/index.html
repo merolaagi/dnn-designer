@@ -1141,6 +1141,15 @@ table.trials td{padding:8px;border-bottom:1px solid #EDF1F5;vertical-align:top}
 table.trials td b{font-weight:600}
 table.trials td span{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
 table.trials .num{text-align:right;font-family:var(--mono);font-size:10.5px}
+i.covered{
+  font-style:normal;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
+  background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
+  vertical-align:middle;
+}
+.verdict{
+  margin-top:12px;padding:11px 13px;border-radius:8px;background:#F6F3FF;
+  border:1px solid #DCD2F5;font-size:12px;line-height:1.6;color:#3C3358;
+}
 table.trials tr.best{background:#F1F8F3}
 table.trials tr.best td:first-child::after{content:" ★";color:var(--good)}
 table.trials td.st{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;
@@ -4388,10 +4397,13 @@ function agentRow(trial, index, study){
   const best = study.leader && study.leader.label === trial.label;
   const score = trial.score !== undefined && trial.score !== null
     ? trial.score.toFixed(5) : (trial.last !== undefined ? trial.last + "…" : "—");
-  const change = Object.values(trial.change || {})[0] || "";
+  const change = trial.note
+    || Object.values(trial.change || {})[0] || "";
+  const covered = trial.guarantee === true ? ` <i class="covered"
+    title="the theorem's conditions hold for this arm">covered</i>` : "";
   return `<tr class="${best ? "best" : ""}">
     <td class="st ${trial.status}">${trial.status}</td>
-    <td><b>${trial.label}</b><span>${change}</span></td>
+    <td><b>${trial.label}</b>${covered}<span>${change}</span></td>
     <td class="num">${(trial.learnables || 0).toLocaleString()}</td>
     <td class="num">${score}</td>
     <td>${trial.run ? `<button class="linkbtn" data-run="${trial.run}">run</button>` : ""}
@@ -4529,6 +4541,7 @@ async function openStudy(id, quiet){
         <th class="num">${s.objective}</th><th></th></tr></thead>
         <tbody>${(s.trials || []).map((t, i) => agentRow(t, i, s)).join("")}</tbody>
       </table>
+      ${s.verdict ? `<div class="verdict">${s.verdict}</div>` : ""}
       <div style="margin-top:13px;display:flex;gap:8px">
         ${running ? `<button class="btn stop" id="btnStudyStop">Stop</button>` : ""}
         <button class="btn" id="btnStudyNew">New study</button>

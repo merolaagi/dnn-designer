@@ -166,6 +166,33 @@ def pick_device(preference: str = "auto") -> str:
     return "cpu"
 
 
+def _match(x, double: bool):
+    """Send a batch in at the precision the model was built for.
+
+    torch is imported inside functions throughout this module, so it is
+    imported here too rather than assumed.
+    """
+    import torch
+
+    if double and hasattr(x, "dtype") and x.dtype == torch.float32:
+        return x.double()
+    return x
+
+
+def needs_double(model, cfg) -> bool:
+    """Whether this model must run in double precision.
+
+    Asked of the model rather than the configuration, because it is a property
+    of the layers: an equilibrium solved to 1e-10 is not reachable in float32,
+    so those layers are built double and everything feeding them must follow.
+    """
+    import torch
+
+    if str(cfg.get("precision", "auto")).startswith("float64"):
+        return True
+    return any(p.dtype == torch.float64 for p in model.parameters())
+
+
 def build_model(source: str, class_name: Optional[str] = None):
     """Compile the generated file and return an instance of its model class.
 
@@ -888,6 +915,7 @@ def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
     than move batches, aggregate whatever numbers come back, and checkpoint on
     the metric the recipe nominates.
     """
+    wants_double = needs_double(model, cfg)
     import recipeloader
     import recipes_sdk
     import torch
@@ -968,7 +996,7 @@ def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
                 if job.stop.is_set():
                     break
                 ctx.step_index = index
-                xs = [x.to(device) for x in xs]
+                xs = [_match(x.to(device), wants_double) for x in xs]
                 y = y.to(device) if hasattr(y, "to") else y
                 rows.append(recipe.step(ctx, xs, y) or {})
                 weights.append(xs[0].size(0))
@@ -983,7 +1011,7 @@ def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
             model.eval()
             with torch.no_grad():
                 for xs, y in val_loader:
-                    xs = [x.to(device) for x in xs]
+                    xs = [_match(x.to(device), wants_double) for x in xs]
                     y = y.to(device) if hasattr(y, "to") else y
                     val_rows.append(recipe.evaluate(ctx, xs, y) or {})
                     val_weights.append(xs[0].size(0))
@@ -1045,6 +1073,16 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
         device = pick_device(cfg.get("device", "auto"))
         job.device = device
         model = build_model(source, class_name).to(device)
+
+        # Some layers are built in double precision because their solver needs
+        # it — an equilibrium found to 1e-10 is not reachable in float32. When
+        # any parameter is double, the whole model and every batch follow, or
+        # the first matrix multiply fails on a dtype mismatch.
+        wants_double = needs_double(model, cfg)
+        if wants_double:
+            model = model.double()
+            job.emit("note", text="Training in float64: a layer in this design "
+                                  "requires it.")
         job.learnables = sum(p.numel() for p in model.parameters() if p.requires_grad)
         job.emit("ready", device=device, learnables=job.learnables,
                  inputs=len(in_shapes), outputs=len(tasks))
@@ -1127,7 +1165,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
             for step, (xs, yb) in enumerate(train_loader):
                 if job.stop.is_set():
                     break
-                xs = [x.to(device) for x in xs]
+                xs = [_match(x.to(device), wants_double) for x in xs]
                 yb = yb.to(device)
                 optimizer.zero_grad(set_to_none=True)
                 primary, loss = forward_loss(xs, yb)
@@ -1151,7 +1189,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
             v_loss, v_seen, v_correct = 0.0, 0, 0
             with torch.no_grad():
                 for xs, yb in val_loader:
-                    xs = [x.to(device) for x in xs]
+                    xs = [_match(x.to(device), wants_double) for x in xs]
                     yb = yb.to(device)
                     primary, loss = forward_loss(xs, yb)
                     bs = xs[0].size(0)

@@ -227,9 +227,80 @@ def _flatten_to_pool(graph: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-BUILDERS = {"sweep": sweep_trials, "search": search_trials, "repair": repair_trials}
+
+
+def ablation_trials(graph: Dict[str, Any], cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """One trial per arm of an implicit domain, on *this* network.
+
+    The bench compares arms on its own fixed model, which answers whether the
+    structure helps in general. Running the same comparison here answers a
+    different and often more useful question: whether it helps in the
+    architecture you actually have.
+
+    Every arm is the same design with one layer's variant swapped, so the
+    parameter counts match by construction — which is what makes a control a
+    control rather than a smaller model.
+    """
+    try:
+        from dnn_bench import core, domains  # noqa: F401
+    except ImportError:
+        return []
+
+    nodes = graph.get("nodes", [])
+    targets = [n for n in nodes if n.get("type") == "ImplicitEquilibrium"]
+    if not targets:
+        return []
+
+    which = str(cfg.get("layer") or targets[0]["id"])
+    target = next((n for n in targets if n["id"] == which), targets[0])
+    domain = str(cfg.get("domain")
+                 or (target.get("params") or {}).get("domain") or "crn")
+    try:
+        spec = core.get(domain)
+        arms = spec.variants(spec.defaults(), seed=int(cfg.get("seed", 0)))
+    except Exception:  # noqa: BLE001
+        return []
+
+    trials = []
+    for arm in arms:
+        variant = copy.deepcopy(graph)
+        for node in variant.get("nodes", []):
+            if node["id"] == target["id"]:
+                node.setdefault("params", {})["domain"] = domain
+                node["params"]["variant"] = arm.key
+        try:
+            report = G.analyze(G.parse(copy.deepcopy(variant)))
+            learnables = report["total_learnables"] if report["ok"] else None
+        except Exception:  # noqa: BLE001
+            learnables = None
+        holds = False
+        try:
+            holds = bool((arm.build().certificate() or {}).get("holds"))
+        except Exception:  # noqa: BLE001
+            pass
+        trials.append({
+            "label": f"{domain}/{arm.key}",
+            "graph": variant,
+            "change": {"domain": domain, "variant": arm.key},
+            "learnables": learnables,
+            "note": arm.label,
+            "structured": bool(arm.structured),
+            "guarantee": holds,
+        })
+    return trials
+
+
+BUILDERS = {"sweep": sweep_trials, "search": search_trials,
+            "repair": repair_trials, "ablation": ablation_trials}
 
 CATALOG = [
+    {"id": "ablation", "name": "Does the guarantee help?",
+     "doc": "Trains this network once per arm of an implicit layer's domain: "
+            "the arm the theorem covers, and the controls that break one of its "
+            "conditions at the same parameter count. Reports whether the "
+            "guarantee bought anything here.",
+     "params": [{"name": "epochs", "kind": "int", "default": 6},
+                {"name": "seed", "kind": "int", "default": 0}]},
     {"id": "sweep", "name": "Hyperparameter sweep",
      "doc": "Trains the same network several times with different learning rates, "
             "batch sizes or optimizers, and reports which settings won.",
@@ -282,7 +353,42 @@ class Agent:
             "objective": self.objective, "lower_is_better": self.lower_is_better,
             "trials": self.trials,
             "leader": ranked[0] if ranked else None,
+            "verdict": self._verdict(ranked),
         }
+
+    def _verdict(self, ranked) -> Optional[str]:
+        """For an ablation, what the ranking is and is not evidence for.
+
+        Beating one control is not beating the condition: whatever the other
+        control preserves may be what actually mattered. Saying so is the
+        difference between a comparison and a result.
+        """
+        if self.kind != "ablation":
+            return None
+        scored = [t for t in self.trials if t.get("score") is not None]
+        covered = [t for t in scored if t.get("guarantee")]
+        controls = [t for t in scored if not t.get("guarantee")]
+        if not covered or not controls:
+            return None
+        best = covered[0]
+        def wins(against) -> bool:
+            return (best["score"] < against["score"] if self.lower_is_better
+                    else best["score"] > against["score"])
+
+        beaten = [c for c in controls if wins(c)]
+        if len(beaten) == len(controls):
+            return (f"The covered arm beat every control on {self.objective}, at "
+                    f"the same parameter count. That is what the guarantee "
+                    f"buying something looks like — on this network, this task "
+                    f"and these seeds.")
+        if not beaten:
+            return (f"The covered arm beat no control on {self.objective}. The "
+                    f"guarantee cost nothing here, but it bought nothing either.")
+        kept = [c["label"] for c in controls if c not in beaten]
+        return (f"The covered arm beat {len(beaten)} of {len(controls)} controls "
+                f"on {self.objective}, but not {', '.join(kept)}. Beating one "
+                f"control is not beating the condition — whatever "
+                f"{kept[0]} preserves may be what actually matters.")
 
     def persist(self) -> None:
         try:

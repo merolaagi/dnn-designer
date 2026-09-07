@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.39.0
+
+**The ablation runs from Studies: "Does the guarantee help?"**
+
+The bench compares a domain's arms on its own fixed model, which answers whether
+the structure helps in general. Run here it answers a different and often more
+useful question: whether it helps in the architecture you actually have. Each
+arm is your design with one layer's variant swapped, so the parameter counts
+match by construction — every trial is an ordinary run, with its own history and
+checkpoints, and can be reopened on the canvas.
+
+- The covered arm is badged **covered** in the results table, and each row says
+  which condition it satisfies or breaks.
+- **A verdict that does not overclaim.** Beating every control reads as the
+  guarantee buying something. Beating none says it cost nothing and bought
+  nothing. Beating *some* says so and names the control it lost to: "beating one
+  control is not beating the condition — whatever that one preserves may be what
+  actually matters."
+
+On a first run of the convex domain the covered arm held at 0.693 while the
+`flat` control — the same layer with α set to zero, no longer strongly convex —
+diverged to 8e10. That is what losing a uniqueness guarantee looks like from the
+outside.
+
+**Training in double precision, which the above needed.**
+
+The study failed three times before it ran, and each failure was worth fixing
+rather than working around:
+
+- The model is now built in **float64 whenever any of its parameters are**, since
+  a layer whose solver runs to 1e-10 cannot be single precision. Warning about
+  it in the Needs panel was not enough — the study could not run at all.
+- Two helpers used `torch` at module level, where this file imports it inside
+  functions. A plain `NameError`, and a reminder that a convention in a file is
+  worth reading before adding to it.
+- **The validation batches were still float32** after the training batches were
+  fixed, so the first epoch trained and then died at evaluation. A test now
+  asserts no batch path is left unconverted, rather than trusting that I found
+  them all by eye.
+
 ## 1.38.0
 
 **The bench's own checks, from the Layer tab.** Select an ImplicitEquilibrium

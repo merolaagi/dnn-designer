@@ -892,6 +892,112 @@ def _():
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
 
 
+@check("an ablation runs the arms against this network")
+def _():
+    """The bench compares arms on its own fixed model. Run here, the same
+    comparison answers whether the structure helps in the architecture you
+    actually have — with the parameter counts matched by construction, since
+    every arm is the same design with one setting swapped."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    try:
+        from dnn_bench import core, domains  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import agents
+
+    assert any(a["id"] == "ablation" for a in agents.CATALOG), \
+        "the study is not offered"
+
+    graph = build(
+        [("i", "Input", {"shape": [4]}),
+         ("c", "ImplicitEquilibrium", {"units": 8, "domain": "convex",
+                                       "variant": "convex", "seed": 0}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "c", 0), ("c", "o", 0)], "Ablate")
+
+    trials = agents.ablation_trials(graph, {"seed": 0})
+    assert len(trials) == 3, f"{len(trials)} arms"
+    assert sum(1 for t in trials if t["guarantee"]) == 1, \
+        "there should be exactly one arm the theorem covers"
+    assert len({t["learnables"] for t in trials}) == 1, \
+        "the arms differ in size, so they are not a controlled comparison"
+    for trial in trials:
+        assert trial["note"], "an arm does not say which condition it satisfies"
+
+    # a design with no implicit layer has nothing to ablate, and says so by
+    # producing no trials rather than by failing
+    plain = build([("i", "Input", {"shape": [4]}),
+                   ("l", "Linear", {"units": 2}),
+                   ("o", "Output", {"task": "classification"})],
+                  [("i", "l", 0), ("l", "o", 0)], "Plain")
+    assert agents.ablation_trials(plain, {}) == []
+
+
+@check("the ablation verdict does not overclaim")
+def _():
+    """Beating one control is not beating the condition."""
+    import agents
+
+    def verdict(scores):
+        agent = agents.Agent(home=None, id="t", kind="ablation", design="d",
+                             trials=[
+            {"label": "d/covered", "score": scores[0], "guarantee": True},
+            {"label": "d/one", "score": scores[1], "guarantee": False},
+            {"label": "d/two", "score": scores[2], "guarantee": False}])
+        return agent.snapshot()["verdict"]
+
+    assert "beat every control" in verdict([0.1, 0.2, 0.3])
+    assert "beat no control" in verdict([0.9, 0.2, 0.3])
+
+    partial = verdict([0.25, 0.2, 0.3])
+    assert "1 of 2" in partial, partial
+    assert "not beating the condition" in partial, \
+        "a partial result is being reported as a win"
+    assert "d/one" in partial, "the control it failed against is not named"
+
+    # other study kinds get no verdict at all
+    other = agents.Agent(home=None, id="t", kind="sweep", design="d", trials=[])
+    assert other.snapshot()["verdict"] is None
+
+
+@check("a model built in double precision trains")
+def _():
+    """A layer whose solver needs float64 makes the whole model double, and
+    every batch has to follow — including the validation batches, which is
+    where this first failed."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import torch
+
+    import train as T
+
+    class Mixed(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = torch.nn.Linear(4, 4, dtype=torch.float64)
+
+        def forward(self, x):
+            return self.a(x)
+
+    model = Mixed()
+    assert T.needs_double(model, {}), "a double parameter was not noticed"
+    assert T.needs_double(torch.nn.Linear(2, 2), {"precision": "float64"}), \
+        "an explicit request was ignored"
+    assert not T.needs_double(torch.nn.Linear(2, 2), {}), \
+        "an ordinary model was forced to double"
+
+    # every batch path converts, not just the training one
+    source = (ROOT / "train.py").read_text()
+    unconverted = [line.strip() for line in source.split("\n")
+                   if ".to(device)" in line and "xs" in line
+                   and "_match" not in line]
+    assert not unconverted, f"these batches never convert: {unconverted}"
+
+
 @check("an implicit layer can check its own mathematics")
 def _():
     """Test layer asks whether the canvas agrees with torch. This asks whether
