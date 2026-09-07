@@ -1248,6 +1248,19 @@ def _():
                   "function fetchPaper"):
         assert token in PAGE, f"{token} is missing from the search stage"
 
+    # the result lands in the reading stage, which on a long results list is
+    # off screen — so the button has to report on itself too, or pressing it
+    # looks like nothing happening
+    fetch = script[script.index("async function fetchPaper"):]
+    fetch = fetch[: fetch.index("\nfunction showPaperPassages")]
+    assert "button.disabled = true" in fetch, "the button gives no sign it was pressed"
+    assert "fetchnote" in fetch, "no feedback appears beside the button"
+    assert "scrollIntoView" in fetch, "the reader is not brought into view"
+    for outcome in ("did not answer", "Could not read it"):
+        assert outcome in fetch, f"the {outcome!r} case is not reported"
+    assert fetch.count('button.textContent = "Read this one"') >= 2, \
+        "the button can be left saying 'reading…' after a failure"
+
 
 @check("a paper becomes a spec becomes a layer")
 def _():

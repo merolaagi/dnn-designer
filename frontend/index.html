@@ -1375,6 +1375,9 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 }
 .hitacts{display:flex;align-items:center;gap:10px;margin-top:8px}
 .hitnotext{font-size:10px;color:#B7C0CB}
+.fetchnote{font-size:10.5px;color:var(--muted)}
+.fetchnote.ok{color:#256B39}
+.fetchnote.bad{color:#8C2F27}
 .hitabs{
   display:none;margin-top:8px;font-size:11px;line-height:1.6;color:#3C4B5F;
   padding:8px 10px;background:var(--paper-2);border-radius:7px;
@@ -5355,7 +5358,7 @@ async function findPapers(){
       </div>`).join("");
 
   out.querySelectorAll("[data-fetch]").forEach(btn =>
-    btn.addEventListener("click", () => fetchPaper(btn.dataset.fetch, btn.dataset.title)));
+    btn.addEventListener("click", () => fetchPaper(btn.dataset.fetch, btn.dataset.title, btn)));
   out.querySelectorAll("[data-abs]").forEach(btn =>
     btn.addEventListener("click", () => {
       const box = btn.closest(".paperhit").querySelector(".hitabs");
@@ -5389,10 +5392,29 @@ function paperRow(p){
   </div>`;
 }
 
-async function fetchPaper(url, title){
+/* The result of pressing this lands in the reading stage, which on a long list
+   of search results is far below the fold — so the button must report on itself
+   as well, or pressing it looks like nothing happening. */
+async function fetchPaper(url, title, button){
   const out = $("paperOut");
+  const say = (text, cls) => {
+    if (!button) return;
+    let note = button.parentElement.querySelector(".fetchnote");
+    if (!note){
+      note = document.createElement("span");
+      note.className = "fetchnote";
+      button.parentElement.appendChild(note);
+    }
+    note.className = "fetchnote " + (cls || "");
+    note.textContent = text;
+  };
+
+  if (button){ button.disabled = true; button.textContent = "reading…"; }
+  say("fetching the full text…");
   $("paperTitle").value = title || "";
-  out.innerHTML = `<div class="empty" style="padding:11px">fetching the full text…</div>`;
+  out.innerHTML = `<div class="empty" style="padding:11px">fetching ${
+    (title || "the paper").replace(/</g, "&lt;")}…</div>`;
+
   let r, d;
   try{
     r = await fetch(API + "/api/paper/fetch", {
@@ -5400,14 +5422,26 @@ async function fetchPaper(url, title){
       body: JSON.stringify({ url, title }),
     });
     d = await r.json();
-  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  } catch {
+    out.innerHTML = `<div class="runfail">No answer.</div>`;
+    say("the server did not answer", "bad");
+    if (button){ button.disabled = false; button.textContent = "Read this one"; }
+    return;
+  }
+  if (button){ button.disabled = false; button.textContent = "Read this one"; }
   if (!r.ok){
-    out.innerHTML = `<div class="runfail">${
-      (d.detail && d.detail.message) || "Could not read it"}</div>`;
+    const why = (d.detail && d.detail.message) || "Could not read it";
+    out.innerHTML = `<div class="runfail">${why}</div>`;
+    // the reason belongs beside the button, not only where the result would be
+    say(why.length > 90 ? why.slice(0, 90) + "…" : why, "bad");
     return;
   }
   state.paper = d;
   showPaperPassages(d);
+  say(`${d.passages.length} passages — below`, "ok");
+  const stage = $("stage1");
+  if (stage && stage.scrollIntoView)
+    stage.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function showPaperPassages(d){

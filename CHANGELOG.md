@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.46.1
+
+**Fixed: pressing "Read this one" looked like it did nothing.**
+
+It was working — the passages were being fetched and ranked correctly. The
+trouble was where the answer appeared: in the reading stage, which sits below a
+results list that can run to thirty papers. Press a button, get no visible
+reaction, and it does not matter that something happened somewhere.
+
+- The button now says **reading…** while it works and goes back afterwards.
+- A note appears beside it: how many passages were found, or the reason it
+  failed. A paper outside the open access subset returns a 404 from the full
+  text service, and that sentence now lands next to the button rather than only
+  where the passages would have been.
+- The reading stage scrolls into view when the text arrives.
+- All three outcomes — read, refused, no answer — leave the button usable again.
+  The first version could strand it saying "reading…" after a failure.
+
 ## 1.46.0
 
 **Search for the paper, from inside the app.** Paper → spec now opens with a
