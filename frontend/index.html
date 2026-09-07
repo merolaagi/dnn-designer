@@ -1146,6 +1146,40 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
+.paperwrap{display:flex;gap:16px;align-items:flex-start}
+.papercol{flex:1;min-width:0}
+.paperstage{
+  font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98A6B8;
+  font-weight:700;margin-bottom:8px;
+}
+.papernote{font-size:11px;color:var(--muted);line-height:1.55;margin:0 0 8px}
+#paperText{width:100%;min-height:90px;resize:vertical;font-size:11.5px;
+  padding:7px 9px;border:1px solid var(--paper-3);border-radius:6px}
+.speced{
+  width:100%;min-height:280px;resize:vertical;font-family:var(--mono);
+  font-size:10.5px;line-height:1.5;padding:9px 11px;border:1px solid var(--paper-3);
+  border-radius:7px;background:#FCFCFD;
+}
+.speced:focus,#paperText:focus{outline:none;border-color:var(--amber)}
+.paperbtns{display:flex;gap:7px;margin:9px 0}
+.paperfound{font-size:11.5px;color:var(--muted);margin:10px 0 8px;line-height:1.55}
+.paperwarn{
+  font-size:11.5px;line-height:1.6;padding:10px 12px;border-radius:7px;
+  background:#FFF8E9;border:1px solid #E8D9AE;color:#6B5418;margin:10px 0;
+}
+.paperok{
+  font-size:11.5px;line-height:1.6;padding:10px 12px;border-radius:7px;
+  background:#EFF8F1;border:1px solid #BFE0C8;color:#256B39;margin:10px 0;
+}
+.passage{
+  border:1px solid var(--paper-3);border-radius:7px;padding:9px 11px;
+  margin-bottom:7px;background:#fff;
+}
+.pkind{
+  font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#8A5CF6;
+  font-weight:700;
+}
+.passage p{margin:4px 0 0;font-size:11.5px;line-height:1.55;color:#3C4B5F}
 .verdict{
   margin-top:12px;padding:11px 13px;border-radius:8px;background:#F6F3FF;
   border:1px solid #DCD2F5;font-size:12px;line-height:1.6;color:#3C3358;
@@ -1395,6 +1429,7 @@ body.sizing{user-select:none}
     <button data-page="pageDesign" data-side="math"><i>&#8747;</i>Maths</button>
     <button data-page="pageDesign" data-side="story"><i>&#9654;&#9654;</i>End to end</button>
     <button data-page="pageBuild"><i>&#9776;</i>Projects</button>
+    <button data-page="pagePaper"><i>&#128196;</i>Paper &rarr; spec</button>
     <button data-page="pageExtend"><i>&#9881;</i>Blocks &amp; recipes</button>
 
     <div class="group">Executions</div>
@@ -1639,7 +1674,11 @@ body.sizing{user-select:none}
       </div>
     </div>
   </section>
-  <section class="page" id="pageExtend">
+  <section class="page" id="pagePaper">
+  <div class="scroll" id="paperMain"></div>
+</section>
+
+<section class="page" id="pageExtend">
     <div class="blockwrap">
       <div class="blocklist" id="blockList"></div>
       <div class="blockedit">
@@ -4321,6 +4360,7 @@ dragSplitter($("splitBottom"), ev => {
 /* ======================= pages and side tabs ======================= */
 
 const PAGE_SETUP = {
+  pagePaper: renderPaperPage,
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
   pageAgents: () => refreshAgents(),
@@ -4390,6 +4430,171 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* ========================== paper to spec ========================== */
+
+/* Three stages, kept apart because only one of them involves judgment.
+   Ingestion ranks passages and decides nothing. Proposal is the judgment step
+   and the one to trust least — it is worth having only because the check can
+   reject it. The spec is the artifact, and a saved one becomes a layer you can
+   place without restarting anything. */
+
+async function renderPaperPage(){
+  const host = $("paperMain");
+  host.innerHTML = `
+    <div class="head">
+      <h4>Paper &rarr; spec</h4>
+      <p>A structural result becomes an implicit layer. Read the ranked
+      passages, write the spec, check it, save it — and it appears in the
+      ImplicitEquilibrium layer's domain list at once.</p>
+    </div>
+    <div class="inner paperwrap">
+      <div class="papercol">
+        <div class="paperstage">1 &middot; read the paper</div>
+        <div class="kv" style="grid-template-columns:110px 1fr">
+          <b>PDF</b><span><input type="file" id="paperFile" accept=".pdf"></span>
+          <b>or text</b><span><textarea id="paperText" placeholder="Paste the theorem and the dynamics it describes"></textarea></span>
+          <b>title</b><span><input type="text" id="paperTitle" placeholder="what to call it"></span>
+        </div>
+        <button class="btn go" id="btnIngest">Read it</button>
+        <div id="paperOut"></div>
+      </div>
+      <div class="papercol">
+        <div class="paperstage">2 &middot; the spec</div>
+        <p class="papernote">You write only the residual; the Jacobian is
+        differentiated from it, so the two cannot disagree. What is left to get
+        wrong is the physics, which is what the check is for.</p>
+        <textarea id="specText" class="speced" spellcheck="false"
+          placeholder="the spec, as JSON"></textarea>
+        <div class="paperbtns">
+          <button class="btn" id="btnPropose">Propose</button>
+          <button class="btn" id="btnCheckSpec">Check it</button>
+          <button class="btn go" id="btnSaveSpec">Save as a domain</button>
+        </div>
+        <div id="specOut"></div>
+      </div>
+    </div>`;
+
+  $("btnIngest").addEventListener("click", ingestPaper);
+  $("btnPropose").addEventListener("click", proposeSpec);
+  $("btnCheckSpec").addEventListener("click", () => checkSpec(false));
+  $("btnSaveSpec").addEventListener("click", () => checkSpec(true));
+}
+
+async function ingestPaper(){
+  const out = $("paperOut");
+  const file = $("paperFile").files[0];
+  const text = ($("paperText").value || "").trim();
+  if (!file && !text){
+    out.innerHTML = `<div class="runfail">Give it a PDF or some text.</div>`;
+    return;
+  }
+  out.innerHTML = `<div class="empty" style="padding:11px">reading…</div>`;
+  const body = new FormData();
+  if (file) body.append("file", file);
+  body.append("text", text);
+  body.append("title", $("paperTitle").value || "");
+
+  let r, d;
+  try{
+    r = await fetch(API + "/api/paper/ingest", { method: "POST", body });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    out.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "Could not read it"}</div>`;
+    return;
+  }
+  state.paper = d;
+  out.innerHTML = `
+    <div class="paperfound">${d.passages.length} ranked passage${
+      d.passages.length === 1 ? "" : "s"}${
+      d.sections.length ? ` &middot; ${d.sections.length} sections` : ""}.
+      A result that never says “unique” will rank low and still be the right one.</div>
+    ${d.passages.map(p => `<div class="passage">
+       <span class="pkind">${p.kind}${p.label ? " · " + p.label : ""}</span>
+       <p>${p.text.replace(/</g, "&lt;")}</p></div>`).join("")}`;
+}
+
+async function proposeSpec(){
+  const out = $("specOut");
+  if (!state.paper){
+    out.innerHTML = `<div class="runfail">Read a paper first.</div>`;
+    return;
+  }
+  out.innerHTML = `<div class="empty" style="padding:11px">asking…</div>`;
+  let d;
+  try{
+    d = await (await fetch(API + "/api/paper/propose", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: ($("paperText").value || ""),
+                             title: ($("paperTitle").value || "") }),
+    })).json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  $("specText").value = JSON.stringify(d.spec, null, 1);
+  out.innerHTML = d.proposed
+    ? `<div class="paperfound">A candidate spec. Trust it least of the three
+       stages — check it before believing it.</div>`
+    : `<div class="paperwarn">${d.reason}</div>`;
+}
+
+async function checkSpec(thenSave){
+  const out = $("specOut");
+  let spec;
+  try{
+    spec = JSON.parse($("specText").value || "{}");
+  } catch (e){
+    out.innerHTML = `<div class="runfail">That is not valid JSON: ${e.message}</div>`;
+    return;
+  }
+  out.innerHTML = `<div class="empty" style="padding:11px">checking… this
+    solves and differentiates repeatedly.</div>`;
+  let d;
+  try{
+    d = await (await fetch(API + "/api/paper/check", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec }),
+    })).json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+
+  if (!d.ok){
+    out.innerHTML = `<div class="runfail">
+      Rejected at the ${d.stage} stage: ${d.message || "it did not pass"}.
+      <br>A spec that fails loudly is the point — the alternative is a plausible
+      architecture that quietly wastes a week.</div>`
+      + (d.checks ? checkTable(d) : "");
+    return;
+  }
+  out.innerHTML = `<div class="paperok">Passed ${d.counts.pass} checks${
+    d.counts.skip ? `, ${d.counts.skip} skipped` : ""}.</div>` + checkTable(d);
+
+  if (thenSave){
+    let s;
+    try{
+      s = await (await fetch(API + "/api/paper/save", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spec }),
+      })).json();
+    } catch { return; }
+    if (s.key){
+      await loadCatalog();
+      out.innerHTML = `<div class="paperok">Saved as <b>${s.saved}</b>.
+        The ImplicitEquilibrium layer now offers
+        <span class="mono">${s.key}</span> — place one and pick it, no restart.</div>`
+        + checkTable(d);
+    }
+  }
+}
+
+function checkTable(d){
+  return `<table class="checktab">${(d.checks || []).map(c => `
+    <tr class="c-${c.status}">
+      <td class="mark">${c.status === "pass" ? "\u2713"
+        : c.status === "fail" ? "\u2717" : c.status === "warn" ? "!" : "\u2013"}</td>
+      <td class="what">${c.name}</td>
+      <td class="detail">${c.detail || ""}</td>
+    </tr>`).join("")}</table>`;
+}
 
 /* ============================ agents ============================ */
 

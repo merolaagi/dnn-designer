@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and twenty-nine checks, with the torch-dependent ones skipping themselves when it is
+A hundred and thirty checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -379,6 +379,14 @@ shows the same run as a Gantt, which makes a dominant layer obvious.
 Timings come from hooks on the generated model after a warm-up pass, so they are
 steady-state costs rather than one-off kernel setup. Layers with no module of
 their own are listed as untimed rather than as taking zero.
+
+## Paper to layer
+
+**Paper → spec** in the sidebar takes a PDF or pasted theorem, ranks the
+passages that carry a structural result, and helps you turn one into a spec: you
+write the residual, the Jacobian is differentiated from it. Check it and save
+it, and the ImplicitEquilibrium layer offers it as a domain at once. A spec that
+fails its checks is not registered.
 
 ## Does the guarantee help?
 
@@ -703,4 +711,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.39.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.40.1 — see `CHANGELOG.md`.

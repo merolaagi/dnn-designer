@@ -10,11 +10,13 @@ import json
 import os
 import re
 import sys
+import tempfile
+import uuid
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import (Depends, FastAPI, File, HTTPException, Request,
+from fastapi import (Depends, FastAPI, File, Form, HTTPException, Request,
                      Response, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
@@ -312,6 +314,170 @@ class TracePayload(BaseModel):
 class WalkPayload(BaseModel):
     graph: Dict[str, Any]
     batch: int = 1
+
+
+SPECS_DIR = HERE / "specs"
+
+
+def _paper_json(paper) -> Dict[str, Any]:
+    """The ranked passages, as data. Nothing here decides anything."""
+    return {
+        "title": getattr(paper, "title", ""),
+        "source": getattr(paper, "source", ""),
+        "brief": getattr(paper, "brief", ""),
+        "sections": sorted(getattr(paper, "sections", {}) or {}),
+        "equations": (getattr(paper, "equations", []) or [])[:12],
+        "passages": [{"kind": getattr(x, "kind", ""),
+                      "label": getattr(x, "label", ""),
+                      "text": getattr(x, "text", "")[:1200]}
+                     for x in (getattr(paper, "passages", []) or [])[:20]],
+    }
+
+
+def _spec_json(spec) -> Dict[str, Any]:
+    import dataclasses
+
+    if dataclasses.is_dataclass(spec):
+        return json.loads(json.dumps(dataclasses.asdict(spec), default=str))
+    if hasattr(spec, "__dict__"):
+        return json.loads(json.dumps(vars(spec), default=str))
+    return spec
+
+
+class PaperText(BaseModel):
+    text: str = ""
+    title: str = ""
+
+
+@app.post("/api/paper/ingest")
+async def paper_ingest(file: Optional[UploadFile] = File(None),
+                       text: str = Form(""), title: str = Form("")):
+    """Rank the passages that plausibly carry a structural result.
+
+    Mechanical: it decides nothing. It means reading fifteen ranked passages
+    instead of forty pages, and a result that never says "unique" will rank low
+    and still be the right one.
+    """
+    from dnn_bench import ingest
+
+    source = text
+    if file is not None:
+        blob = await file.read()
+        target = Path(tempfile.gettempdir()) / f"paper-{uuid.uuid4().hex[:8]}.pdf"
+        target.write_bytes(blob)
+        source = str(target)
+        title = title or file.filename or ""
+    if not source.strip():
+        raise HTTPException(400, detail={"message": "Give it a PDF or some text."})
+    try:
+        paper = ingest.ingest(source, title=title)
+    except RuntimeError as exc:
+        raise HTTPException(400, detail={
+            "message": _missing_package(exc) or str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={"message": f"{type(exc).__name__}: {exc}"})
+    return _paper_json(paper)
+
+
+@app.post("/api/paper/propose")
+def paper_propose(body: PaperText):
+    """Ask for a candidate spec. The step to trust least, and it can refuse."""
+    from dnn_bench import ingest, propose
+
+    paper = ingest.ingest(body.text or "", title=body.title)
+    if not propose.available():
+        return {"proposed": False,
+                "reason": "No ANTHROPIC_API_KEY in the server's environment, so "
+                          "there is no proposer. The blank template below is the "
+                          "same artifact by a slower route.",
+                "spec": _spec_json(propose.blank_spec(paper))}
+    try:
+        result = propose.propose(paper)
+    except Exception as exc:  # noqa: BLE001
+        return {"proposed": False, "reason": f"{type(exc).__name__}: {exc}",
+                "spec": _spec_json(propose.blank_spec(paper))}
+    if isinstance(result, dict) and result.get("usable") is False:
+        return {"proposed": False,
+                "reason": result.get("why")
+                          or "The proposer judged this paper to offer a narrative "
+                             "mechanism rather than a constraint. Refusing is the "
+                             "right answer more often than not.",
+                "spec": _spec_json(propose.blank_spec(paper))}
+    return {"proposed": True, "spec": _spec_json(result)}
+
+
+class SpecBody(BaseModel):
+    spec: Dict[str, Any]
+
+
+@app.post("/api/paper/check")
+def paper_check(body: SpecBody):
+    """Load the spec as a domain and run the bench's checks on it.
+
+    A spec supplies only the residual; the Jacobian is differentiated from it,
+    so the two cannot disagree. What is left to get wrong is the physics, which
+    is what this is for.
+    """
+    from dnn_bench import spec as specmod, validate
+
+    key = str(body.spec.get("key") or "").strip()
+    if not key:
+        raise HTTPException(400, detail={"message": "The spec needs a key."})
+    from dnn_bench import core
+
+    # Loading a spec registers it, and a spec that fails its checks must not be
+    # left in the registry offering itself as a layer. Anything that was not
+    # already there when we started is withdrawn unless it passes.
+    known = set(core.REGISTRY)
+    scratch = Path(tempfile.gettempdir()) / f"spec-{uuid.uuid4().hex[:8]}.json"
+    scratch.write_text(json.dumps(body.spec))
+
+    def withdraw():
+        for added in set(core.REGISTRY) - known:
+            core.REGISTRY.pop(added, None)
+
+    try:
+        specmod.load_spec_file(str(scratch))
+    except Exception as exc:  # noqa: BLE001
+        withdraw()
+        return {"ok": False, "stage": "load",
+                "message": f"{type(exc).__name__}: {exc}"}
+    finally:
+        scratch.unlink(missing_ok=True)
+    try:
+        result = validate.validate_domain(key, quick=True)
+    except Exception as exc:  # noqa: BLE001
+        withdraw()
+        return {"ok": False, "stage": "validate",
+                "message": f"{type(exc).__name__}: {exc}"}
+    if not result.get("ok"):
+        withdraw()
+    return {"ok": bool(result.get("ok")), "stage": "validate", **result}
+
+
+@app.post("/api/paper/save")
+def paper_save(body: SpecBody):
+    """Write the spec to specs/ and register it, so the layer offers it at once."""
+    key = re.sub(r"[^a-z0-9_]+", "_", str(body.spec.get("key") or "").lower()).strip("_")
+    if not key:
+        raise HTTPException(400, detail={"message": "The spec needs a key."})
+    SPECS_DIR.mkdir(parents=True, exist_ok=True)
+    path = SPECS_DIR / f"{key}.json"
+    saved = dict(body.spec, key=key)
+    path.write_text(json.dumps(saved, indent=1))
+    try:
+        from dnn_bench import spec as specmod
+
+        specmod.load_spec_file(str(path))
+        blockloader.load_all()          # the domain list is read when a block installs
+    except Exception as exc:  # noqa: BLE001
+        path.unlink(missing_ok=True)
+        raise HTTPException(400, detail={
+            "message": f"Saved nothing: {type(exc).__name__}: {exc}"})
+    from dnn_bench import core
+
+    return {"saved": str(path.name), "key": key,
+            "domains": [e["key"] for e in core.all_domains()]}
 
 
 class DomainCheck(BaseModel):

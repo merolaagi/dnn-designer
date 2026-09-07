@@ -9,6 +9,7 @@ worse than no designer.
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -890,6 +891,72 @@ def _():
     for domain, sizes in counts.items():
         assert len(sizes) == 1, \
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
+
+
+@check("a paper becomes a spec becomes a layer")
+def _():
+    """Three stages, and only one of them involves judgment.
+
+    Ingestion ranks passages and decides nothing. Proposal is the step to trust
+    least and is allowed to refuse. The check is what makes a proposal worth
+    having at all: a wrong extraction fails loudly instead of becoming a
+    plausible architecture that quietly wastes a week.
+
+    These go through the endpoint functions rather than HTTP. The routes require
+    a signed-in account once a workspace has any, and creating one here would
+    write into the user's own data to test something that is not about auth.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    try:
+        from dnn_bench import core, domains, ingest  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import json as _json
+
+    import main
+
+    text = ("Theorem 2.2. Let f be a strongly convex potential with modulus "
+            "alpha > 0. Then f has exactly one stationary point. The dynamics "
+            "are dx/dt = -grad f(x) + x0.")
+
+    paper = ingest.ingest(text, title="note")
+    ranked = main._paper_json(paper)
+    assert ranked["passages"], "nothing was ranked"
+    assert any(p["kind"] == "theorem" for p in ranked["passages"]), \
+        "the theorem was not recognised as one"
+
+    # with no key the proposer refuses and says why, rather than inventing one
+    proposed = main.paper_propose(
+        main.PaperText(text=text, title="note"))
+    assert "spec" in proposed, proposed
+    if not proposed["proposed"]:
+        assert proposed["reason"], "it refused without saying why"
+
+    source = _json.loads((ROOT / "specs" / "convex_ridge.json").read_text())
+    known = set(core.REGISTRY)
+
+    # a spec that does not work must fail loudly and leave nothing registered
+    broken = dict(source, key="test_broken_spec", residual="x0 - nonsense(x)")
+    result = main.paper_check(main.SpecBody(spec=broken))
+    assert not result["ok"], "a broken residual passed"
+    assert "test_broken_spec" not in core.REGISTRY, \
+        "a spec that failed its checks was left offering itself as a layer"
+    assert set(core.REGISTRY) == known, "the registry was left dirty"
+
+    # one that works passes and can be placed
+    good = dict(source, key="test_good_spec")
+    result = main.paper_check(main.SpecBody(spec=good))
+    assert result["ok"], result
+    assert result["counts"]["fail"] == 0
+    core.REGISTRY.pop("test_good_spec", None)
+
+    # and the routes are guarded, which is why this test avoids them
+    guarded = [r.path for r in main.app.routes
+               if getattr(r, "path", "").startswith("/api/paper")]
+    assert len(guarded) == 4, guarded
 
 
 @check("an ablation runs the arms against this network")

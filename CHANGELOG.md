@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.40.1
+
+**Fixed: the paper test failed on any install that has an account.**
+
+It drove the endpoints over HTTP, and those routes require a signed-in user once
+a workspace has one. My container had no accounts, so the test passed there and
+failed everywhere real — the same class of mistake as the release archive
+carrying my own state.
+
+The test now calls the endpoint functions directly. Signing in would have meant
+registering an account in the user's own data to test something that is not
+about authentication; the auth behaviour is covered by its own checks. The suite
+now passes both with accounts enabled and without, which is what I should have
+verified before shipping it.
+
+## 1.40.0
+
+**Paper → spec, in the sidebar.** The last piece of the bench that was not here.
+
+Drop a PDF or paste the theorem, read the ranked passages, write the spec, check
+it, save it — and the ImplicitEquilibrium layer offers it as a domain
+immediately, with no restart. A paper becomes a layer you can place on the
+canvas.
+
+The three stages are kept apart, because only one of them involves judgment:
+
+- **Reading** ranks the passages that plausibly carry a structural result. It
+  decides nothing; it means reading fifteen ranked passages instead of forty
+  pages. A result that never says "unique" will rank low and still be the right
+  one.
+- **Proposing** is the judgment step and the one to trust least. Without an
+  `ANTHROPIC_API_KEY` in the server's environment there is no proposer, and the
+  page says so and gives the blank template — the same artifact by a slower
+  route. A proposal that refuses is a correct output.
+- **Checking** is what makes a proposal worth having at all. You write only the
+  residual and the Jacobian is differentiated from it, so the two cannot
+  disagree; the rest is physics, which the checks are for.
+
+**A spec that fails is now withdrawn.** Loading a spec registers it, and the
+first version left a broken one in the registry offering itself as a layer even
+though its check had failed. Anything registered during a check is removed
+unless it passes, and a test asserts the registry is left exactly as it was
+found.
+
+With this, everything from the bench except its own server and `runs.db` is
+here: the domains as layers, the validation from the Layer tab, the ablation as
+a study, and now the paper loop.
+
 ## 1.39.0
 
 **The ablation runs from Studies: "Does the guarantee help?"**
