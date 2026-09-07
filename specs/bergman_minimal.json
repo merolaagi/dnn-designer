@@ -1,0 +1,62 @@
+{
+  "key": "bergman_minimal",
+  "title": "Glucose-insulin minimal model (Bergman)",
+  "paper": "Bergman, Phillips & Cobelli, J Clin Invest 1981; Bergman et al., Am J Physiol 1979",
+  "claim": "With positive rate constants the two-compartment glucose/remote-insulin system has a unique asymptotically stable steady state.",
+  "n": 2,
+  "consts": {
+    "Gb": 4.5,
+    "d2": 1.0
+  },
+  "params": {
+    "p1": {
+      "shape": [
+        1
+      ],
+      "init": "ones*0.03",
+      "transform": "softplus"
+    },
+    "p2": {
+      "shape": [
+        1
+      ],
+      "init": "ones*0.02",
+      "transform": "softplus"
+    },
+    "p3": {
+      "shape": [
+        1
+      ],
+      "init": "ones*0.05",
+      "transform": "softplus"
+    }
+  },
+  "residual": "cat([x0[:, 0:1] + p1*Gb - (p1 + x[:, 1:2])*x[:, 0:1], p3*x0[:, 1:2] - d2*p2*x[:, 1:2]], dim=1)",
+  "inject": "residual",
+  "positive": false,
+  "fixed_n": true,
+  "variants": [
+    {
+      "key": "positive_rates",
+      "label": "p1, p2 > 0 - decay in both compartments",
+      "structured": true
+    },
+    {
+      "key": "signed_decay",
+      "label": "p2 unconstrained - remote insulin decay can reverse",
+      "params": {
+        "p2": {
+          "transform": "free"
+        }
+      }
+    },
+    {
+      "key": "no_decay",
+      "label": "d2 = 0 - the X compartment loses its decay term entirely",
+      "consts": {
+        "d2": 0.0
+      }
+    }
+  ],
+  "notes": "State is x = [G, X]: plasma glucose and remote insulin action. Shows that a component-wise system is expressible without extending the spec language - slicing (x[:, 0:1]) and cat(..., dim=1) work in the residual sandbox, so the two equations need not share a form. Rate constants are learned; Gb is fixed."
+}

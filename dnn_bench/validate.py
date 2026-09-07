@@ -284,12 +284,26 @@ def validate_domain(key: str, cfg: Optional[dict] = None, seed: int = 0,
                             f'{len(structured)} arms marked structured; expected '
                             'exactly one'))
 
-    counts, certs, layers = {}, {}, {}
+    counts, certs, layers, broken = {}, {}, {}, {}
     for v in variants:
-        layer = v.build()
+        # A domain that cannot even be built is exactly what this tool exists to
+        # report. Raising here would take down whatever called it instead.
+        try:
+            layer = v.build()
+        except Exception as exc:
+            broken[v.key] = f"{type(exc).__name__}: {exc}"
+            checks.append(Check('build', FAIL, broken[v.key], scope=v.key))
+            continue
         layers[v.key] = layer
         counts[v.key] = sum(p.numel() for p in layer.parameters())
         certs[v.key] = layer.certificate()
+
+    variants = [v for v in variants if v.key in layers]
+    if not variants:
+        counts_by = {s: sum(1 for c in checks if c.status == s)
+                     for s in (PASS, WARN, FAIL, SKIP)}
+        return {'domain': key, 'title': d.title, 'seed': seed, 'ok': False,
+                'counts': counts_by, 'checks': [c.__dict__ for c in checks]}
 
     uniq = set(counts.values())
     checks.append(Check('matched parameters',

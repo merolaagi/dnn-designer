@@ -122,6 +122,7 @@ class StructureSpec:
     consts: Dict[str, float] = field(default_factory=dict)
     variants: List[dict] = field(default_factory=list)
     positive: bool = False          #: state confined to the open positive orthant
+    fixed_n: bool = False           #: refuse external overrides of `n`
     inject: str = 'residual'        #: 'residual' | 'state' -- how x0 enters
     readout: str = 'identity'       #: 'identity' | 'log'
     notes: str = ''
@@ -149,8 +150,23 @@ class StructureSpec:
         bad = []
         if not self.key or not re.match(r'^[a-z][a-z0-9_]*$', self.key):
             bad.append("key must be a lowercase identifier")
-        if not self.residual.strip():
+        res = self.residual.strip()
+        if not res:
             bad.append("residual expression is empty")
+        elif '<' in res and '>' in res:
+            bad.append("residual is still the placeholder from the blank "
+                       "template — write the expression before saving. The "
+                       "layer's output is the x where it equals zero; x0 is "
+                       "the input.")
+        else:
+            # Compile it here rather than at build time. A spec that cannot
+            # compile must never register: it loads fine, then takes down the
+            # next thing that touches it, far from the cause.
+            try:
+                compile(res, f'<residual:{self.key}>', 'eval')
+            except SyntaxError as exc:
+                bad.append(f"residual is not a valid expression: {exc.msg} "
+                           f"(at offset {exc.offset})")
         if not self.variants:
             bad.append("no variants: an ablation needs a structured arm and "
                        "at least one control")
@@ -172,6 +188,14 @@ class StructureSpec:
                 elif over.get('transform') not in (None, *TRANSFORMS):
                     bad.append(f"variant {v.get('key')!r}: unknown transform "
                                f"{over.get('transform')!r}")
+        for v in self.variants:
+            if '<' in str(v.get('label', '')) and '>' in str(v.get('label', '')):
+                bad.append(f"variant {v.get('key')!r} still has a placeholder "
+                           f"label — say what condition it breaks")
+        if not self.fixed_n and re.search(r'x0?\s*\[', self.residual):
+            bad.append("the residual slices the state, so it is written for a "
+                       "specific width — set \"fixed_n\": true or it will be "
+                       "resized by a caller and return the wrong shape")
         for pname, p in self.params.items():
             if 'shape' not in p:
                 bad.append(f"parameter {pname!r} has no shape")
@@ -281,7 +305,11 @@ class SpecDomain:
         return {'n_species': self.spec.n}
 
     def variants(self, cfg, seed):
-        n = cfg.get('n_species', self.spec.n)
+        # A component-wise residual -- one that slices x[:, 0:1] -- is written
+        # for a specific state width, so an external n_species must not silently
+        # resize it. Such a spec declares fixed_n.
+        n = (self.spec.n if self.spec.fixed_n
+             else cfg.get('n_species', self.spec.n))
         out = []
         for v in self.spec.variants:
             def build(v=v, n=n):

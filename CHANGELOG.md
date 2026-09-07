@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.42.0
+
+**A launch pad**, first in the sidebar: six routes in, each saying plainly what
+it is for — design a network, learn how one works, bring a model in, see what it
+actually does, train and compare, turn a paper into a layer. Below them, the
+designs already in the workspace.
+
+A door rather than a dashboard. Somebody arriving does not want a summary of
+their account; they want to know what this can do and to be one click from doing
+it.
+
+- **A test asserts every route goes somewhere real** — that the page exists, that
+  every function a route calls is defined, and that no route fakes a click on a
+  control it does not own. The import route did exactly that, so opening the
+  import dialog is now a function the app exposes rather than something that
+  happens to a button.
+
+**The bench is upgraded to 0.9.5.**
+
+- **The Bergman glucose–insulin minimal model is now a placeable layer** — a
+  1979 physiology paper, through the spec pipeline, into the palette. That is
+  the loop working end to end on something that was never about neural networks.
+- Twelve arms across five domains now, with `positive_rates`, `no_decay` and
+  `signed_decay` joining.
+- `paper_to_spec.py` comes with it: research question to candidate papers to
+  spec skeleton, searching Europe PMC and arXiv. The library is here; it is not
+  yet wired to the Paper page, which is the obvious next piece.
+
 ## 1.41.0
 
 **The Paper → spec page has a real design**, and the reason it looked like that

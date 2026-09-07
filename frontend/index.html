@@ -202,7 +202,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
-#pageAgents{background:var(--paper)}
+#pageAgents, #pagePad{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -1147,6 +1147,42 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
+#rail .padlink{margin-bottom:4px}
+.padhead{padding:34px 26px 8px;max-width:1080px;margin:0 auto;text-align:center}
+.padhead h2{margin:0 0 8px;font-size:27px;font-weight:600;letter-spacing:-.01em}
+.padhead p{margin:0 auto;font-size:13px;color:var(--muted);line-height:1.65;
+  max-width:560px}
+.padgrid{
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(272px, 1fr));
+  gap:14px;padding:26px 26px 8px;max-width:1080px;margin:0 auto;
+}
+.padcard{
+  text-align:left;background:#fff;border:1px solid var(--paper-3);
+  border-radius:12px;padding:17px 18px 15px;cursor:pointer;
+  display:flex;flex-direction:column;gap:7px;
+  box-shadow:0 1px 2px rgba(22,32,46,.04);
+  transition:border-color .13s, box-shadow .13s, transform .13s;
+}
+.padcard:hover{
+  border-color:#C3D3E6;transform:translateY(-1px);
+  box-shadow:0 2px 4px rgba(22,32,46,.06), 0 10px 24px rgba(22,32,46,.07);
+}
+.padcard b{font-size:14.5px;font-weight:600}
+.padcard p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.6;flex:1}
+.padgo{font-size:11.5px;color:#2D7DD2;font-weight:600}
+.padopen{max-width:1080px;margin:0 auto;padding:18px 26px 34px}
+.padopenhead{display:flex;align-items:center;gap:12px;margin-bottom:11px}
+.padopenhead h4{margin:0;font-size:12.5px;font-weight:600}
+.padrecent{display:flex;flex-wrap:wrap;gap:8px}
+.padrecent .waiting{font-size:11.5px;color:var(--muted);line-height:1.6;
+  max-width:520px}
+.padchip{
+  text-align:left;background:#fff;border:1px solid var(--paper-3);
+  border-radius:9px;padding:8px 12px;cursor:pointer;
+}
+.padchip:hover{border-color:var(--amber);background:#FFFDF7}
+.padchip b{display:block;font-size:12px;font-weight:600}
+.padchip span{display:block;font-size:9.5px;color:var(--muted)}
 .paperhead{padding:20px 24px 4px;max-width:1180px;margin:0 auto}
 .paperhead h3{margin:0 0 5px;font-size:19px;font-weight:600}
 .paperhead p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.6;
@@ -1471,6 +1507,7 @@ body.sizing{user-select:none}
 
 <div class="shell">
   <nav id="rail">
+    <button data-page="pagePad" class="padlink"><i>&#9673;</i>Launch pad</button>
     <div class="group">Definitions</div>
     <button data-page="pageDesign" class="on"><i>&#9634;</i>Canvas</button>
     <button class="railpal" data-pal="layers"><i>&#9776;</i>Layers
@@ -1726,7 +1763,11 @@ body.sizing{user-select:none}
       </div>
     </div>
   </section>
-  <section class="page" id="pagePaper">
+  <section class="page" id="pagePad">
+  <div class="scroll" id="padMain"></div>
+</section>
+
+<section class="page" id="pagePaper">
   <div class="scroll" id="paperMain"></div>
 </section>
 
@@ -4412,6 +4453,7 @@ dragSplitter($("splitBottom"), ev => {
 /* ======================= pages and side tabs ======================= */
 
 const PAGE_SETUP = {
+  pagePad: renderLaunchPad,
   pagePaper: renderPaperPage,
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
@@ -4482,6 +4524,102 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* ============================ launch pad ============================ */
+
+/* A door rather than a dashboard. Somebody arriving does not want a summary of
+   their account; they want to know what this can do and to be one click from
+   doing it. So: the routes in, each saying plainly what it is for, and what is
+   already in the workspace. */
+
+const ROUTES = [
+  { key: "design", title: "Design a network",
+    body: "Draw it, and watch the shapes resolve as you go. Every layer's "
+        + "parameter count is checked against PyTorch rather than asserted.",
+    go: () => { showPage("pageDesign"); showPalette("layers"); },
+    cta: "Open the canvas" },
+
+  { key: "learn", title: "Learn how one works",
+    body: "101 guided builds that explain why each layer, what you would use "
+        + "instead, and where it goes wrong. Built step by step beside the canvas.",
+    go: () => showPage("pageBuild"), cta: "Browse the projects" },
+
+  { key: "import", title: "Bring a model in",
+    body: "From GitHub by name, from a library installed on this machine, from "
+        + "pasted code, or a file. Read the source, try a class, then import it.",
+    go: () => { showPage("pageDesign"); openImportDialog(); },
+    cta: "Import something" },
+
+  { key: "understand", title: "See what it actually does",
+    body: "Walk one example through, layer by layer, with the mathematics and "
+        + "the real numbers at every step. Or run a batch and watch it execute.",
+    go: () => { showPage("pageDesign"); showSide("story"); },
+    cta: "Walk it through" },
+
+  { key: "train", title: "Train and compare",
+    body: "Train it, then let a study argue with you: sweeps, architecture "
+        + "search, and trying the assistant's suggestions to see which helped.",
+    go: () => showPage("pageAgents"), cta: "Open studies" },
+
+  { key: "paper", title: "Turn a paper into a layer",
+    body: "A structural theorem becomes an implicit layer you can place. You "
+        + "write the residual; the Jacobian is differentiated from it.",
+    go: () => showPage("pagePaper"), cta: "Read a paper" },
+];
+
+async function renderLaunchPad(){
+  const host = $("padMain");
+  const who = state.account && state.account.user;
+
+  host.innerHTML = `
+    <div class="padhead">
+      <h2>What would you like to build?</h2>
+      <p>A network drawn here generates real PyTorch, trains locally, and checks
+      its own arithmetic against the framework. Nothing leaves this machine.</p>
+    </div>
+    <div class="padgrid">${ROUTES.map(r => `
+      <button class="padcard" data-route="${r.key}">
+        <b>${r.title}</b>
+        <p>${r.body}</p>
+        <span class="padgo">${r.cta} &rarr;</span>
+      </button>`).join("")}</div>
+    <div class="padopen">
+      <div class="padopenhead">
+        <h4>Already here</h4>
+        <button class="btn" id="padOpen">Open a design</button>
+      </div>
+      <div id="padRecent" class="padrecent">
+        <span class="waiting">looking…</span>
+      </div>
+    </div>`;
+
+  host.querySelectorAll("[data-route]").forEach(card =>
+    card.addEventListener("click", () => {
+      const route = ROUTES.find(r => r.key === card.dataset.route);
+      if (route) route.go();
+    }));
+  $("padOpen").addEventListener("click", () => openPicker());
+
+  // what is in the workspace, fetched after the page is already usable
+  let designs = [];
+  try{
+    designs = (await (await fetch(API + "/api/graphs")).json()).graphs || [];
+  } catch { /* the panel simply stays quiet */ }
+  const recent = $("padRecent");
+  if (!recent) return;
+  if (!designs.length){
+    recent.innerHTML = `<span class="waiting">No designs yet. Every workspace
+      starts with a few examples — if this one is empty, the Projects route is
+      the place to begin.</span>`;
+    return;
+  }
+  recent.innerHTML = designs.slice(0, 8).map(d => `
+    <button class="padchip" data-design="${d.name}">
+      <b>${d.name}</b><span>${d.versions} version${d.versions === 1 ? "" : "s"}</span>
+    </button>`).join("");
+  recent.querySelectorAll("[data-design]").forEach(chip =>
+    chip.addEventListener("click", () => openDesign(chip.dataset.design)));
+}
 
 /* ========================== paper to spec ========================== */
 
@@ -6647,7 +6785,10 @@ $("ch_model").addEventListener("change", () => {
 
 /* ============================ import ============================ */
 
-$("btnImport").addEventListener("click", async () => {
+/* Opening the import dialog is a thing the app does, not a thing that happens
+   to a button — so the launch pad can call it rather than synthesising a click
+   on a control it does not own. */
+async function openImportDialog(){
   resetImportSize();
   const sel = $("im_arch");
   if (!sel.options.length){
@@ -6661,7 +6802,9 @@ $("btnImport").addEventListener("click", async () => {
   }
   $("importNote").innerHTML = "";
   $("modal").classList.add("on");
-});
+}
+
+$("btnImport").addEventListener("click", openImportDialog);
 $("btnImportCancel").addEventListener("click", () => $("modal").classList.remove("on"));
 $("modal").addEventListener("click", e => {
   if (e.target.id === "modal") $("modal").classList.remove("on");

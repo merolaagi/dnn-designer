@@ -893,6 +893,40 @@ def _():
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
 
 
+@check("every launch pad route goes somewhere real")
+def _():
+    """A door, not a dashboard — and a door with a dead handle is worse than
+    no door."""
+    script = PAGE[PAGE.index("<script>"):]
+    assert "const ROUTES" in script, "there are no routes"
+    block = script[script.index("const ROUTES"):]
+    block = block[: block.index("\n];")]
+
+    import re
+
+    pages = set(re.findall(r'<section class="page[^"]*" id="(page\w+)"', PAGE))
+    targets = set(re.findall(r'showPage\("(\w+)"\)', block))
+    assert targets, "no route opens a page"
+    missing = targets - pages
+    assert not missing, f"routes point at pages that do not exist: {sorted(missing)}"
+
+    # every function a route calls has to exist
+    called = set(re.findall(r"(\w+)\(", block)) - {"showPage", "if", "for"}
+    for name in called:
+        if name.startswith("$") or name in ("map", "join", "filter"):
+            continue
+        assert f"function {name}" in script or f"{name} =" in script, \
+            f"a route calls {name}, which is not defined"
+
+    # and a route must not fake a click on a control it does not own
+    assert '.click()' not in block, \
+        "a route synthesises a click rather than calling the function"
+
+    cards = len(re.findall(r'data-route="', PAGE))
+    keys = len(re.findall(r'key: "', block))
+    assert cards == 0 or keys > 0, "the cards and the routes disagree"
+
+
 @check("every page paints its own background")
 def _():
     """The page background is dark, so a page that does not paint one shows it.
@@ -913,7 +947,7 @@ def _():
             if part.startswith("#page"):
                 painted.add(part.split(":")[0].split()[0])
 
-    pages = set(re.findall(r'<section class="page" id="(page\w+)"', PAGE))
+    pages = set(re.findall(r'<section class="page[^"]*" id="(page\w+)"', PAGE))
     assert pages, "no pages found at all"
     unpainted = {p for p in pages if f"#{p}" not in painted}
     # the design page is the canvas, which paints itself through #stage

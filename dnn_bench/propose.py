@@ -123,12 +123,12 @@ def _parse(raw: str) -> dict:
     return json.loads(txt[start:end + 1])
 
 
-def propose(paper, extra: str = '') -> dict:
+def propose(paper, extra: str = '', only=None) -> dict:
     """Returns {'usable': bool, 'spec': StructureSpec|None, 'raw': dict,
     'problems': [str]}. `problems` is what spec.check() says about it -- a
     proposal that fails these is not silently repaired."""
     prompt = (f"PAPER: {paper.title}\nSOURCE: {paper.source}\n\n"
-              f"{paper.brief()}\n\n"
+              f"{paper.brief(only=only)}\n\n"
               + (f"OPERATOR NOTES:\n{extra}\n\n" if extra else '')
               + f"Return one JSON object in exactly this shape:\n{TEMPLATE}")
     raw = _parse(_call(prompt))
