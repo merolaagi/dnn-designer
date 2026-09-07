@@ -665,6 +665,17 @@ body.resizing-v{cursor:row-resize;user-select:none}
   text-transform:uppercase;color:var(--muted);padding:4px 9px;border-radius:5px;
 }
 .subtabs button.on{background:#E9F1FB;color:#1F6BBD}
+table.checktab{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:7px}
+table.checktab td{padding:4px 6px;border-bottom:1px solid #EDF1F5;vertical-align:top}
+table.checktab .mark{width:14px;text-align:center;font-weight:700}
+table.checktab .what{width:38%;font-weight:600}
+table.checktab .what span{display:block;font-weight:400;color:var(--muted);
+  font-size:9.5px}
+table.checktab .detail{color:var(--muted);font-family:var(--mono);font-size:9.5px}
+table.checktab tr.c-pass .mark{color:#3DA35D}
+table.checktab tr.c-fail .mark{color:#C0392B}
+table.checktab tr.c-warn .mark{color:#B7791F}
+table.checktab tr.c-skip .mark{color:#B7C0CB}
 .testout{
   margin:0 4px 12px;padding:9px 11px;border-radius:6px;font-size:11.5px;
   line-height:1.55;font-family:var(--mono);
@@ -3147,10 +3158,14 @@ function renderInspector(){
         ? `<a href="${spec.docs}" target="_blank" rel="noreferrer">Reference</a>` : "")
     + ((spec && spec.source === "block")
         ? `<button id="btnLayerSource">Source</button>` : "")
-    + `<button id="btnTestLayer">Test layer</button>`;
+    + `<button id="btnTestLayer">Test layer</button>`
+    + (n.type === "ImplicitEquilibrium"
+        ? `<button id="btnCheckDomain">Check the mathematics</button>` : "");
   body.appendChild(bar);
 
   bar.querySelector("#btnTestLayer").addEventListener("click", () => testLayer(n));
+  const checkBtn = bar.querySelector("#btnCheckDomain");
+  if (checkBtn) checkBtn.addEventListener("click", () => checkDomain(n));
   const srcBtn = bar.querySelector("#btnLayerSource");
   if (srcBtn) srcBtn.addEventListener("click", () => {
     const code = state.nodeCode && state.nodeCode[n.id];
@@ -3345,6 +3360,55 @@ function renderNodeSource(body, node){
 
 
 let paramTimer = null;
+/* Test layer asks whether the canvas's arithmetic matches torch. This asks
+   something different and harder: whether the layer's own mathematics is
+   consistent — the Jacobian against the residual it claims to differentiate,
+   the implicit gradients against finite differences, the equilibrium against
+   several starting points. A Jacobian with a sign error still converges, so the
+   only symptom otherwise is silently wrong gradients. */
+async function checkDomain(node){
+  const slot = $("testSlot");
+  if (!slot) return;
+  // a node holds only what has been changed from the default, so fall back the
+  // way the settings form does
+  const spec = state.specs[node.type] || { params: [] };
+  const settings = {};
+  (spec.params || []).forEach(q => {
+    settings[q.name] = node.params[q.name] !== undefined
+      ? node.params[q.name] : q.default;
+  });
+  slot.innerHTML = `<div class="testout">checking ${settings.domain}\u2026 this
+    solves and differentiates repeatedly, so give it a few seconds.</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/check-domain", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: settings.domain, seed: +settings.seed || 0,
+                             quick: true }),
+    });
+    d = await r.json();
+  } catch { slot.innerHTML = `<div class="testout bad">No answer.</div>`; return; }
+  if (!r.ok){
+    slot.innerHTML = `<div class="testout bad">${
+      (d.detail && d.detail.message) || "Check failed"}</div>`;
+    return;
+  }
+  const tone = d.counts.fail ? "bad" : (d.counts.warn ? "warn" : "good");
+  slot.innerHTML = `<div class="testout ${tone}">
+      <b>${d.title}</b> \u2014 ${d.counts.pass} passed${
+        d.counts.warn ? `, ${d.counts.warn} warned` : ""}${
+        d.counts.fail ? `, ${d.counts.fail} failed` : ""}${
+        d.counts.skip ? `, ${d.counts.skip} skipped` : ""}.
+    </div>
+    <table class="checktab">${d.checks.map(c => `
+      <tr class="c-${c.status}">
+        <td class="mark">${c.status === "pass" ? "\u2713"
+          : c.status === "fail" ? "\u2717" : c.status === "warn" ? "!" : "\u2013"}</td>
+        <td class="what">${c.name}${c.scope ? `<span>${c.scope}</span>` : ""}</td>
+        <td class="detail">${c.detail || ""}</td>
+      </tr>`).join("")}</table>`;
+}
+
 async function testLayer(node){
   const slot = $("testSlot");
   if (!slot) return;

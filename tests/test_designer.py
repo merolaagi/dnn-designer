@@ -892,6 +892,40 @@ def _():
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
 
 
+@check("an implicit layer can check its own mathematics")
+def _():
+    """Test layer asks whether the canvas agrees with torch. This asks whether
+    the layer's mathematics agrees with itself — a Jacobian with a sign error
+    still converges, so otherwise the only symptom is silently wrong gradients.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    try:
+        from dnn_bench import domains, validate  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+
+    result = validate.validate_domain("crn", seed=0, quick=True)
+    assert result["ok"], result["counts"]
+    assert result["counts"]["fail"] == 0, result["counts"]
+    names = {c["name"] for c in result["checks"]}
+    for wanted in ("jacobian", "matched parameters", "certificates"):
+        assert wanted in names, f"{wanted} is not among the checks: {sorted(names)}"
+
+    # the button exists and reads its settings the way the form does
+    assert 'id="btnCheckDomain"' in PAGE, "there is no way to run the checks"
+    assert "function checkDomain" in PAGE
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function checkDomain"):]
+    body = body[: body.index("\nasync function testLayer")]
+    assert "state.specs" in body and "q.default" in body, \
+        "the check does not fall back to defaults, so an untouched node sends undefined"
+    assert "resolvedParams" not in PAGE, \
+        "a helper that does not exist is being called"
+
+
 @check("a control arm is never a silent choice")
 def _():
     if not HAVE_TORCH:
@@ -3321,6 +3355,7 @@ def _():
         "classAround", "highlightInCode",
         "sendAsk", "askSay", "loadAssistant", "askObservations",
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
+        "checkDomain",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",
         "renderRunPanel", "runTrace", "animateTrace", "traceStateOf", "runTable",

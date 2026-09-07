@@ -314,6 +314,37 @@ class WalkPayload(BaseModel):
     batch: int = 1
 
 
+class DomainCheck(BaseModel):
+    domain: str
+    seed: int = 0
+    quick: bool = True
+
+
+@app.post("/api/check-domain")
+def check_domain(body: DomainCheck):
+    """Run the bench's own checks on an implicit domain.
+
+    This is the layer checking its mathematics rather than the canvas checking
+    its arithmetic: the Jacobian against the residual it claims to differentiate,
+    the implicit gradients against finite differences, the equilibrium against
+    several starting points. A Jacobian with a sign error still converges, so
+    without this the only symptom is silently wrong gradients.
+    """
+    try:
+        from dnn_bench import domains, validate  # noqa: F401
+    except ImportError:
+        raise HTTPException(400, detail={
+            "message": "dnn_bench is not installed beside the app."})
+    try:
+        return validate.validate_domain(body.domain, seed=int(body.seed),
+                                        quick=bool(body.quick))
+    except KeyError:
+        raise HTTPException(400, detail={
+            "message": f"No domain called {body.domain!r}."})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={"message": f"{type(exc).__name__}: {exc}"})
+
+
 @app.post("/api/walkthrough")
 def explain_pass(body: WalkPayload):
     """Step through the network with real values at every layer."""

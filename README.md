@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and twenty-five checks, with the torch-dependent ones skipping themselves when it is
+A hundred and twenty-six checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -339,6 +339,12 @@ constraint on the weights, or the convexity of a potential — and each ships
 *controls* with one condition broken at the same parameter count. The Maths tab
 names the theorem and says whether the arm you picked satisfies it; the Needs
 panel warns you when it does not.
+
+Selecting one and pressing **Check the mathematics** runs the bench's own
+validation: the analytic Jacobian against autograd, the implicit gradients
+against finite differences, the equilibrium from several starting points. A
+Jacobian with a sign error still converges, so without this the only symptom is
+silently wrong gradients.
 
 ## An older, narrower one
 
@@ -689,4 +695,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.37.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.38.0 — see `CHANGELOG.md`.

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.38.0
+
+**The bench's own checks, from the Layer tab.** Select an ImplicitEquilibrium
+and press **Check the mathematics**.
+
+*Test layer* asks whether the canvas's arithmetic matches torch. This asks
+something harder: whether the layer's mathematics agrees with itself. It runs
+the bench's `validate_domain` — the analytic Jacobian against autograd, the
+implicit gradients against finite differences, the equilibrium from several
+starting points, conservation, scale robustness, training stability — and shows
+every check with its measured number.
+
+On the reaction-network domain that is 21 checks, including the Jacobian
+matching autograd to 1.85e-17 and the solution staying in its compatibility
+class to 4.81e-16.
+
+This is worth having in the designer rather than only in the bench because a
+Jacobian with a sign error still converges. The solver looks fine, the loss goes
+down, and the gradients are quietly wrong — which the bench's own notes record
+as having happened once already.
+
+**What is and is not here.** The `dnn_bench` library is vendored whole,
+including `sweep`, `verdict` and `validate`. Its server, its browser UI and its
+`runs.db` are not: the standalone bench remains its own application, and the
+ablation sweep is not yet wired to Studies.
+
 ## 1.37.0
 
 **Every implicit domain is now a layer**, from the 0.7 bench, vendored as
