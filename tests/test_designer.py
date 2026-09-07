@@ -838,6 +838,99 @@ def _():
         and 'shape: "hex"' in PAGE, "nodeBox does not assign all four shapes"
 
 
+@check("every implicit domain and arm builds, counts and runs")
+def _():
+    """Each domain is a theorem; each arm is either covered by it or a control
+    that breaks one condition at the same parameter count. All of them have to
+    work as layers, and the matched counts are what make the comparison fair."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    try:
+        from dnn_bench import core, domains  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import torch
+
+    import train as T
+
+    assert "ImplicitEquilibrium" in layers.REGISTRY, "the block did not install"
+
+    counts: dict = {}
+    for entry in core.all_domains():
+        spec = core.get(entry["key"])
+        arms = spec.variants(spec.defaults(), seed=0)
+        assert any(v.structured for v in arms), \
+            f"{entry['key']} ships no arm the theorem covers"
+        assert any(not v.structured for v in arms), \
+            f"{entry['key']} ships no control, so nothing can be compared"
+
+        for arm in arms:
+            payload = build(
+                [("i", "Input", {"shape": [10]}),
+                 ("c", "ImplicitEquilibrium", {"units": 6, "domain": entry["key"],
+                                               "variant": arm.key, "seed": 0}),
+                 ("o", "Output", {"task": "classification"})],
+                [("i", "c", 0), ("c", "o", 0)], "Imp")
+            g, rep = analyzed(payload)
+            assert rep["ok"], f"{entry['key']}/{arm.key}: {rep['errors'][:1]}"
+
+            model = T.build_model(codegen.to_pytorch(g, rep),
+                                  codegen.model_class_name(g)).double()
+            real = sum(q.numel() for q in model.parameters())
+            assert real == rep["total_learnables"], \
+                f"{entry['key']}/{arm.key}: canvas {rep['total_learnables']}, torch {real}"
+            with torch.no_grad():
+                out = model(torch.randn(2, 10, dtype=torch.float64))
+            assert tuple(out.shape) == (2, 6)
+            counts.setdefault(entry["key"], set()).add(real)
+
+    # within a domain the arms must cost the same, or the ablation is confounded
+    for domain, sizes in counts.items():
+        assert len(sizes) == 1, \
+            f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
+
+
+@check("a control arm is never a silent choice")
+def _():
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    try:
+        from dnn_bench import core, domains  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import mathbook
+    import needs
+
+    def design(arm):
+        payload = build(
+            [("i", "Input", {"shape": [10]}),
+             ("c", "ImplicitEquilibrium", {"units": 6, "domain": "contraction",
+                                           "variant": arm, "seed": 0}),
+             ("o", "Output", {"task": "classification"})],
+            [("i", "c", 0), ("c", "o", 0)], "Imp")
+        return analyzed(payload)
+
+    g, rep = design("unconstrained")
+    notes = " ".join(needs.requirements(g, rep)["notes"])
+    assert "control arm" in notes, "a broken-condition arm passes without a word"
+
+    g, rep = design("monotone")
+    notes = " ".join(needs.requirements(g, rep)["notes"])
+    assert "control arm" not in notes, "the covered arm was called a control"
+
+    # and the maths panel says which case you are in either way
+    for arm, expected in (("monotone", "yes"), ("unconstrained", "no")):
+        entry = mathbook.explain("ImplicitEquilibrium",
+                                 {"units": 6, "domain": "contraction",
+                                  "variant": arm, "seed": 0}, [[10]], [6])
+        says = dict(entry["arithmetic"])["theorem applies"]
+        assert says.startswith(expected), f"{arm} reported {says!r}"
+
+
 @check("the equilibrium layer is a layer like any other")
 def _():
     """A deficiency-zero implicit layer, vendored from separate work.

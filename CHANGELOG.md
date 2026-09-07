@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.37.0
+
+**Every implicit domain is now a layer**, from the 0.7 bench, vendored as
+`dnn_bench/` with its `specs/`.
+
+One layer, **ImplicitEquilibrium**, offers each domain and each of its arms:
+
+| domain | where the guarantee comes from | covered arm | controls |
+|---|---|---|---|
+| `crn` | the topology of a reaction graph | weakly reversible, δ=0 | edge reversed; deficiency 1 |
+| `contraction` | a constraint on the weights (monDEQ) | margin 0.05 | margin 0; W free |
+| `convex` | the sign of a coefficient vector | coefficients ≥ 0, α>0 | α=0; coefficients free |
+| `convex_ridge` | the same, declared as a spec rather than coded | | |
+
+Three different mechanisms buying the same certificate, which is the point: if
+the structured arm only separates in one of them, the separation is about that
+mechanism rather than about having a guarantee at all.
+
+- All **twelve** domain-and-arm combinations were built through the designer:
+  shapes resolve, the canvas parameter count matches torch exactly, and the
+  generated file runs.
+- **A test asserts the arms within a domain cost the same.** Matched counts are
+  what make a control a control; if they drifted the comparison would be
+  confounded and nothing else would notice.
+- **The Maths tab names the theorem and says whether your arm satisfies it** —
+  "theorem applies: yes", or "no — this is a control", with the paper it came
+  from.
+- **The Needs panel warns when a control is selected**, naming the layer and the
+  arm. Choosing one is legitimate and is how you find out whether the guarantee
+  was buying anything; it should just never be an accident.
+- Domains declared as JSON in `specs/` register alongside the coded ones and
+  differentiate their Jacobian from their residual, so the two cannot disagree.
+
+The earlier `EquilibriumCRN` stays: it exposes the reaction graph's shape —
+species, linkage classes, extra edges — which the general layer does not.
+
 ## 1.36.0
 
 **The Deficiency-Zero equilibrium layer is now a layer you can place**, under a

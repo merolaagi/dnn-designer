@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and twenty-three checks, with the torch-dependent ones skipping themselves when it is
+A hundred and twenty-five checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -330,7 +330,17 @@ This is the shape of neural theorem proving generally: the network is a policy,
 not an oracle. A confident wrong suggestion costs a search node and nothing
 else.
 
-## An implicit layer
+## Implicit layers
+
+**ImplicitEquilibrium** solves a system to equilibrium rather than computing
+forward. Each *domain* is a published theorem guaranteeing that equilibrium
+exists, is unique and is stable — reaction-graph topology, a monotonicity
+constraint on the weights, or the convexity of a potential — and each ships
+*controls* with one condition broken at the same parameter count. The Maths tab
+names the theorem and says whether the arm you picked satisfies it; the Needs
+panel warns you when it does not.
+
+## An older, narrower one
 
 **EquilibriumCRN** solves a chemical reaction network to equilibrium rather than
 computing forward. Its fixed point is guaranteed by the topology of the graph —
@@ -679,4 +689,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.36.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.37.0 — see `CHANGELOG.md`.

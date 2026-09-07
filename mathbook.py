@@ -764,8 +764,92 @@ def equilibrium_crn(p, ins, out):
     }
 
 
+
+
+def implicit_equilibrium(p, ins, out):
+    """The theorem behind the chosen domain, and whether this arm satisfies it."""
+    d_in = ins[0][0] if ins and ins[0] else 0
+    width = int(p.get("units", 8))
+    domain = str(p.get("domain", "crn"))
+    arm = str(p.get("variant", ""))
+
+    title, claim, paper, label = domain, "", "", arm
+    holds, inner_n, inner_params = None, None, None
+    try:
+        from dnn_bench import core, domains  # noqa: F401
+
+        listed = {e["key"]: e for e in core.all_domains()}
+        meta = listed.get(domain, {})
+        title = meta.get("title", domain)
+        claim = meta.get("claim", "")
+        paper = meta.get("paper", "")
+        spec = core.get(domain)
+        arms = spec.variants(spec.defaults(), seed=int(p.get("seed", 0)))
+        chosen = next((v for v in arms if v.key == arm), arms[0])
+        label = chosen.label
+        layer = chosen.build()
+        holds = bool((layer.certificate() or {}).get("holds"))
+        inner_n = layer.n
+        inner_params = sum(q.numel() for q in layer.parameters())
+    except Exception:  # noqa: BLE001 - the panel still explains the idea
+        pass
+
+    arithmetic = []
+    if inner_params is not None:
+        arithmetic.append(("the solver", f"{_fmt(inner_params)} parameters over "
+                                         f"{_fmt(inner_n)} state variables"))
+    if d_in:
+        arithmetic.append(("encoder", f"{_fmt(d_in)}{TIMES}{_fmt(inner_n or 0)} "
+                                      f"+ {_fmt(inner_n or 0)}"))
+    arithmetic.append(("decoder", f"{_fmt(inner_n or 0)}{TIMES}{_fmt(width)} "
+                                  f"+ {_fmt(width)}"))
+    arithmetic.append(("this arm", label))
+    arithmetic.append(("theorem applies", "yes" if holds else
+                       "no — this is a control" if holds is False else "unknown"))
+
+    freedom = [
+        "This layer does not compute its output; it solves for it. The answer is "
+        "the equilibrium of the system the input seeds.",
+    ]
+    if claim:
+        freedom.append(f"{title}: {claim}")
+    if holds is True:
+        freedom.append("This arm satisfies the theorem's conditions, so the "
+                       "equilibrium exists, is unique and is stable for every "
+                       "setting of the parameters — no projection, no spectral "
+                       "norm, nothing to monitor during training.")
+    elif holds is False:
+        freedom.append("This arm breaks one of the theorem's conditions on "
+                       "purpose, at the same parameter count as the covered arm. "
+                       "Nothing guarantees a unique equilibrium here, and the "
+                       "solver may fail to converge. That is the point of a "
+                       "control: it is how you find out whether the guarantee "
+                       "was buying anything.")
+    freedom.append("Gradients come from the implicit function theorem rather "
+                   "than by unrolling the solver, so memory does not grow with "
+                   "the iteration count.")
+    if paper:
+        freedom.append(f"Source: {paper}")
+
+    return {
+        "family": "implicit",
+        "title": f"Equilibrium — {title}",
+        "equation": "x* solves  F(x*, x₀) = 0,   output = decode(x*)",
+        "shape": f"{_fmt(d_in)} → {_fmt(inner_n or 0)} state → {_fmt(width)}",
+        "symbols": [
+            ("x*", "the equilibrium the solver finds"),
+            ("F", "the residual whose zero defines it"),
+            ("x₀", "the input, injected into the system rather than "
+                       "transformed by it"),
+        ],
+        "arithmetic": arithmetic,
+        "freedom": freedom,
+    }
+
+
 ENTRIES: Dict[str, Callable] = {
     "EquilibriumCRN": equilibrium_crn,
+    "ImplicitEquilibrium": implicit_equilibrium,
     "Transpose": transpose,
     "Split": split,
     "Attention": sdpa,

@@ -112,6 +112,35 @@ def requirements(g: Graph, report: Dict[str, Any]) -> Dict[str, Any]:
     if no_keras:
         notes.append(f"The Keras export will be incomplete: "
                      f"{', '.join(no_keras)} has no Keras form.")
+    if "ImplicitEquilibrium" in used:
+        notes.append("ImplicitEquilibrium solves to a tolerance single precision "
+                     "cannot reach, so it is built in float64. Set the training "
+                     "precision to double.")
+        # a control arm is a deliberate choice, but it should never be a silent
+        # one: nothing guarantees the solver converges there
+        controls = []
+        for n in g.nodes:
+            if n.type != "ImplicitEquilibrium":
+                continue
+            params = resolved_params(n)
+            try:
+                from dnn_bench import core, domains  # noqa: F401
+
+                spec = core.get(str(params.get("domain", "")))
+                arms = spec.variants(spec.defaults(), seed=int(params.get("seed", 0)))
+                arm = next((v for v in arms
+                            if v.key == str(params.get("variant"))), None)
+                if arm is not None and not arm.build().certificate().get("holds"):
+                    controls.append(f"{n.label or n.type} ({params.get('domain')} "
+                                    f"/ {arm.key})")
+            except Exception:  # noqa: BLE001
+                continue
+        if controls:
+            notes.append(f"On a control arm: {', '.join(controls)}. One condition "
+                         f"of the theorem is broken on purpose, so nothing "
+                         f"guarantees a unique equilibrium and the solver may "
+                         f"not converge. That is deliberate for a comparison, "
+                         f"and wrong for a model you mean to keep.")
     if "EquilibriumCRN" in used:
         # the equilibrium solver runs to 1e-10, which single precision cannot
         # reach, so this is a property of the layer rather than a preference
