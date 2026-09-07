@@ -893,6 +893,62 @@ def _():
             f"{domain} arms differ in size ({sorted(sizes)}), so they are not comparable"
 
 
+@check("the domains page shows what each arm actually is")
+def _():
+    """The facts come from the built layer describing itself, not from the spec
+    that asked for it — so the page cannot claim a width or a parameter count
+    the layer does not have."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    try:
+        from dnn_bench import core, domains  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import main
+
+    listed = main.list_domains(seed=0)
+    assert listed["domains"], "no domains listed"
+
+    for entry in listed["domains"]:
+        arms = entry.get("arms") or []
+        assert arms, f"{entry['key']} lists no arms"
+        assert sum(1 for a in arms if a.get("structured")) == 1, \
+            f"{entry['key']} does not have exactly one covered arm"
+        sizes = {a["parameters"] for a in arms if "parameters" in a}
+        assert len(sizes) == 1, \
+            f"{entry['key']} arms differ in size {sorted(sizes)}, so the page " \
+            f"would be showing an unfair comparison"
+        for arm in arms:
+            assert arm.get("facts"), f"{entry['key']}/{arm['key']} describes nothing"
+            if arm.get("structured"):
+                assert arm["holds"], "the covered arm does not claim the guarantee"
+                assert arm["claim"], "the covered arm states no claim"
+            else:
+                assert not arm["holds"], "a control claims the guarantee"
+                assert arm["label"], "a control does not say what it breaks"
+
+    for token in ("function renderDomainsPage", "function armCard",
+                  "function placeDomain", 'id="pageDomains"'):
+        assert token in PAGE, f"{token} is missing from the domains page"
+
+
+@check("the launch pad is what opens")
+def _():
+    import re
+
+    on = re.findall(r'<section class="page on" id="(page\w+)"', PAGE)
+    assert on == ["pagePad"], f"the page that opens is {on}"
+    rail = PAGE[PAGE.index('<nav id="rail">'):PAGE.index("</nav>")]
+    lit = re.findall(r'<button data-page="(\w+)"[^>]*class="[^"]*\bon\b', rail)
+    assert lit == ["pagePad"], f"the rail says {lit} is open instead"
+
+    boot = PAGE[PAGE.index("async function boot"):]
+    boot = boot[: boot.index("\n}\n")]
+    assert "renderLaunchPad()" in boot, "boot never fills the launch pad"
+
+
 @check("the assistant dock talks to the assistant")
 def _():
     """The dock posts to the same endpoint the panel does, and the endpoint
@@ -3620,6 +3676,7 @@ def _():
         "openQuickAdd", "renderQuickAdd", "chooseQuickAdd", "closeQuickAdd", "glyphFor",
         "checkDomain",
         "renderLaunchPad", "padFill", "padSearch", "assistantDock", "toggleDock",
+        "renderDomainsPage", "domFill", "armCard", "placeDomain", "validateAllDomains",
         "dockWelcome", "dockSend", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",

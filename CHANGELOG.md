@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.44.0
+
+- **The launch pad is what opens.** The canvas is one click away and always was,
+  but arriving at an empty canvas tells you nothing about what this can do.
+- **The assistant dock is about two and a half times the size** — 620 wide, up
+  to 760 tall, with room to read a review rather than scroll one.
+- **An Implicit domains page**, which is the detail that was missing.
+
+Each domain is listed with its theorem and its source, and every arm gets a card
+showing what it actually is: state width, trainable parameters, whether the
+first parameter's transform is free or constrained, whether the state is
+confined to the positive orthant, the residual expression itself, and either
+*Guaranteed* with the claim or *No guarantee* with the condition that was
+broken.
+
+Three things worth saying about how it is built:
+
+- **The facts come from the built layer describing itself**, not from the spec
+  that asked for it. The page cannot claim a width or a parameter count the
+  layer does not have.
+- **The controls are shown as prominently as the covered arm.** They are the
+  same size, the same shape and one condition apart; seeing them side by side is
+  the whole point, because the guarantee is then the only difference.
+- **Place this on the canvas** puts the arm down as a layer, so reading about a
+  structure and using it are the same gesture.
+
+*Check them all* runs the bench's validation across every registered domain and
+reports each one's counts as it goes.
+
+A test asserts every domain has exactly one covered arm, that all its arms cost
+the same, and that each control says which condition it breaks — the page would
+otherwise be able to show an unfair comparison and look fine doing it.
+
 ## 1.43.0
 
 **The launch pad is a full page now**, and the assistant follows you around.

@@ -480,6 +480,52 @@ def paper_save(body: SpecBody):
             "domains": [e["key"] for e in core.all_domains()]}
 
 
+@app.get("/api/domains")
+def list_domains(seed: int = 0):
+    """Every implicit domain, its arms, and what each arm actually is.
+
+    The facts come from the layer describing itself after it is built, not from
+    the spec that asked for it — so what is shown is what exists.
+    """
+    try:
+        from dnn_bench import core, domains  # noqa: F401
+    except ImportError:
+        return {"domains": [], "reason": "dnn_bench is not installed beside the app."}
+
+    out = []
+    for entry in core.all_domains():
+        spec = core.get(entry["key"])
+        arms = []
+        try:
+            built = spec.variants(spec.defaults(), seed=int(seed))
+        except Exception as exc:  # noqa: BLE001
+            out.append({**entry, "arms": [], "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        for variant in built:
+            try:
+                layer = variant.build()
+                described = layer.describe() or {}
+                cert = layer.certificate() or {}
+            except Exception as exc:  # noqa: BLE001
+                arms.append({"key": variant.key, "label": variant.label,
+                             "structured": variant.structured,
+                             "error": f"{type(exc).__name__}: {exc}"})
+                continue
+            arms.append({
+                "key": variant.key,
+                "label": variant.label,
+                "structured": bool(variant.structured),
+                "summary": described.get("summary", ""),
+                "facts": described.get("facts", []),
+                "expression": described.get("expression", ""),
+                "holds": bool(cert.get("holds")),
+                "claim": cert.get("claim", ""),
+                "parameters": sum(q.numel() for q in layer.parameters()),
+            })
+        out.append({**entry, "arms": arms})
+    return {"domains": out, "seed": int(seed)}
+
+
 class DomainCheck(BaseModel):
     domain: str
     seed: int = 0
