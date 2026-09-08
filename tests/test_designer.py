@@ -3929,6 +3929,52 @@ def _():
         "the check runs in the training thread, too late to be shown"
 
 
+@check("a failed run says why, where the button was pressed")
+def _():
+    """The reason was written into the log strip at the bottom of the panel,
+    which is usually collapsed. What a failed run actually said, on screen, was
+    the word "error" in a corner."""
+    assert 'id="trainError"' in PAGE, "there is nowhere for the reason to appear"
+
+    script = PAGE[PAGE.index("<script>"):]
+    assert "function showTrainError" in script
+    assert "showTrainError(m.message)" in script, \
+        "the error message is still only logged"
+
+    # the banner sits above the button that starts a run, not below the fold.
+    # Positions are taken from the whole page: the first <script> tag comes
+    # before this markup, so slicing at it leaves nothing to search.
+    assert PAGE.index('id="trainError"') < PAGE.index('id="btnStart"'), \
+        "the reason appears after the button, out of sight"
+
+    # and a new run clears the last failure rather than leaving it to confuse
+    at = script.index('API + "/api/train"')
+    starter = script[at - 600: at + 600]
+    assert "clearTrainError()" in starter, \
+        "a previous failure is still showing when the next run starts"
+
+
+@check("the corpus hint changes the design rather than describing the change")
+def _():
+    """It said "set Embedding vocab and final Linear units to 48" and left you
+    to find the two layers. On GPT2 that mismatch is 77M parameters of
+    embedding table for a 48-symbol alphabet — worth acting on, and worth
+    acting on with one press."""
+    assert "function matchVocabulary" in PAGE, "the hint is still only a sentence"
+
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function matchVocabulary"):]
+    body = body[: body.index("\n}\n")]
+    assert "pushHistory()" in body, "the change cannot be undone"
+    assert "commitSheet()" in body, \
+        "a workbook would keep the old numbers, since the canvas is not the truth"
+    assert "analyze()" in body, "the parameter count would not be recomputed"
+    for called in ("describeCorpus", "toast"):
+        assert called in body, f"{called} is not called"
+        assert f"function {called}" in script or f"{called} =" in script, \
+            f"{called} does not exist"
+
+
 @check("a design with nothing to learn says so")
 def _():
     """An activation on its own is a fine layer and a useless model. torch's

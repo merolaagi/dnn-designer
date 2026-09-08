@@ -8780,6 +8780,8 @@ function buildTrainForm(){
       <select id="t_init"><option value="">random initialization</option></select>
       <div class="help">Matching tensors are copied; a resized head is reported and left fresh.</div></div>
 
+    <div id="trainError" class="trainerr" style="display:none"></div>
+
     <div class="field wide row" style="gap:8px">
       <button class="btn go" id="btnStart" style="flex:1">Start run</button>
       <button class="btn stop" id="btnStop" style="flex:1" disabled>Stop</button>
@@ -8953,8 +8955,39 @@ async function describeCorpus(name){
   const wrong = [];
   if (emb && emb.params.vocab !== d.vocab_size) wrong.push("Embedding vocab");
   if (head && head.params.units !== d.vocab_size) wrong.push("final Linear units");
-  if (wrong.length) note += `  ·  set ${wrong.join(" and ")} to ${d.vocab_size}`;
-  $("corpusInfo").textContent = note;
+  const host = $("corpusInfo");
+  host.textContent = note;
+
+  // Telling somebody to change two numbers and leaving them to find the layers
+  // is a worse answer than changing them. The mismatch is not fatal — a
+  // vocabulary larger than the corpus simply never trains those rows — but on
+  // GPT2 it is 77M parameters of embedding table for a 48-symbol alphabet.
+  if (wrong.length){
+    host.textContent = note + "  ·  ";
+    const fix = document.createElement("button");
+    fix.className = "linkbtn";
+    fix.textContent = `set ${wrong.join(" and ")} to ${d.vocab_size}`;
+    fix.addEventListener("click", () => matchVocabulary(d.vocab_size));
+    host.appendChild(fix);
+  }
+}
+
+/* Point the embedding and the head at the alphabet actually in the corpus. */
+function matchVocabulary(size){
+  pushHistory();
+  let changed = 0;
+  const head = state.graph.nodes.filter(n => n.type === "Linear").slice(-1)[0];
+  const emb = state.graph.nodes.find(n => n.type === "Embedding");
+  if (emb && emb.params.vocab !== size){ emb.params.vocab = size; changed++; }
+  if (head && head.params.units !== size){ head.params.units = size; changed++; }
+  if (!changed) return;
+
+  if (state.book) commitSheet();     // a workbook holds the truth, not the canvas
+  render(); renderInspector(); analyze();
+  const chosen = $("t_corpus");
+  if (chosen && chosen.value) describeCorpus(chosen.value);
+  toast(`Embedding and head set to ${size}. The design is smaller now — save it `
+        + `if you want to keep that.`);
 }
 
 async function refreshCheckpoints(){
@@ -9153,14 +9186,11 @@ async function startTraining(){
 
   let res, data;
   try{
+    clearTrainError();
     res = await fetch(API + "/api/train", {
       method:"POST", headers:{"Content-Type":"application/json"},
       // send the whole workbook when there is one: a sheet that refers to
       // another sheet's class cannot be generated on its own
-      // send the whole workbook when there is one: a sheet that refers to
-      // another sheet's class cannot be generated on its own. commitSheet
-      // writes the canvas back into the book and returns nothing, so the book
-      // is read after it rather than from it.
       body: JSON.stringify({ graph: state.graph, config, book: workbookForRun() })
     });
     data = await res.json();
@@ -9230,7 +9260,11 @@ async function startTraining(){
               + `val ${label} ${m.val_loss}${acc}${ppl}${extras}`);
       drawChart();
     } else if (m.kind === "error"){
+      // The log is a strip at the bottom that is often collapsed, so the word
+      // "error" in the corner was the whole of what a failed run said. The
+      // reason belongs above the button that started it.
       logLine(m.message, "e");
+      showTrainError(m.message);
       $("trainStatus").textContent = "error";
       finishTraining();
     } else if (m.kind === "finished"){
@@ -9241,6 +9275,19 @@ async function startTraining(){
     }
   };
   es.onerror = () => { finishTraining(); };
+}
+
+function showTrainError(message){
+  const host = $("trainError");
+  if (!host) return;
+  host.style.display = "";
+  host.innerHTML = `<b>The run stopped.</b><p>${
+    String(message || "No reason was given.").replace(/</g, "&lt;")}</p>`;
+}
+
+function clearTrainError(){
+  const host = $("trainError");
+  if (host){ host.style.display = "none"; host.innerHTML = ""; }
 }
 
 function finishTraining(){

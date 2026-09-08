@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.54.0
+
+**A failed run now says why, above the button that started it.**
+
+The reason was being written into the log strip along the bottom of the panel,
+which is usually collapsed. So what a failed run actually said, on screen, was
+the word *error* in a corner — which is how a question like "what is the error
+still" comes to be unanswerable from a screenshot. The message appears in the
+panel now, and a new run clears the last one.
+
+**The corpus hint changes the design instead of describing the change.**
+
+It read "set Embedding vocab and final Linear units to 48" and left you to find
+the two layers. It is a button now. On GPT2 that mismatch is 77M parameters of
+embedding table serving a 48-symbol alphabet — worth acting on, and worth acting
+on in one press. The change is undoable, and it writes back to the workbook
+rather than only the canvas, which a sheet-level edit would otherwise lose.
+
+Worth stating plainly: **the vocabulary mismatch is not itself an error.** A
+vocabulary larger than the corpus simply leaves those rows untrained, and the
+loss starts near log(50257) instead of log(48). It is waste rather than
+breakage, and the panel now treats it as such.
+
 ## 1.53.0
 
 **Fixed: training GPT2 did nothing, for two reasons at once.**
