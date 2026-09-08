@@ -2242,7 +2242,7 @@ const state = {
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
-  quant:null,
+  quant:null, needsFit:false,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -2533,6 +2533,17 @@ function fitView(){
   const ns = state.graph.nodes;
   if (!ns.length) return;
   const r = svg.getBoundingClientRect();
+
+  // A hidden page has no size, so this would centre the graph inside a zero
+  // box and leave it off screen. That is what happened after an import while
+  // the launch pad was in front: the design was there and nothing was where
+  // it could be seen. Remember the request and honour it when the canvas is
+  // actually on screen.
+  if (r.width < 2 || r.height < 2){
+    state.needsFit = true;
+    return;
+  }
+  state.needsFit = false;
   const x0 = Math.min(...ns.map(n=>n.x)) - 60,
         x1 = Math.max(...ns.map(n=>n.x + nodeWidth(n))) + 60;
   const y0 = Math.min(...ns.map(n=>n.y)) - 50,
@@ -4493,6 +4504,7 @@ async function openDesign(name, version){
   delete state.graph._latest;
   clearSelection();
   renderSheetTabs();
+  render(); showPage("pageDesign");
   render(); fitView(); analyze();
   refreshVersions($("gname").value, state.version);
 }
@@ -4761,7 +4773,12 @@ function showPage(pageId){
     p.classList.toggle("on", p.id === pageId));
   state.page = pageId;
   if (PAGE_SETUP[pageId]) PAGE_SETUP[pageId]();
-  if (pageId === "pageDesign"){ render(); drawMinimap(); }
+  if (pageId === "pageDesign"){
+    render();
+    drawMinimap();
+    // a fit asked for while this page was hidden could not be computed then
+    if (state.needsFit) fitView();
+  }
 }
 
 const SIDE_TITLES = { layer:"Layer settings", network:"Network", needs:"Needs",
@@ -6199,6 +6216,7 @@ async function openRun(id){
     $("gname").value = state.graph.name || r.design;
     state.version = r.version;
     clearSelection();
+    render(); showPage("pageDesign");
     render(); fitView(); analyze();
     refreshVersions($("gname").value, r.version);
     toast("Opened the design this run used");
@@ -8444,6 +8462,7 @@ async function importFolderPicks(){
   note.innerHTML = bits.join(" ");
 
   clearSelection();
+  showPage("pageDesign");          // the point of importing is to look at it
   renderSheetTabs();
   render(); renderInspector(); analyze();
   fitView();

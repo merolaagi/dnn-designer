@@ -1098,6 +1098,39 @@ def _():
         assert token in PAGE, f"{token} is missing from the domains page"
 
 
+@check("a design opened from elsewhere arrives on the canvas, in view")
+def _():
+    """Two faults that only appeared once the launch pad opened first.
+
+    Importing left you on the launch pad with no sign anything had happened.
+    And the fit ran while the canvas was hidden, where the SVG reports zero
+    size — so the graph was centred inside a zero box and ended up off screen.
+    Clicking Canvas then showed an empty-looking canvas with the design
+    somewhere outside it.
+    """
+    script = PAGE[PAGE.index("<script>"):]
+
+    fit = script[script.index("function fitView"):]
+    fit = fit[: fit.index("\n}\n")]
+    assert "r.width < 2" in fit, \
+        "fitView computes a view from a hidden canvas, which has no size"
+    assert "state.needsFit = true" in fit, "a deferred fit is not remembered"
+
+    show = script[script.index("function showPage"):]
+    show = show[: show.index("\n}\n")]
+    assert "state.needsFit" in show, \
+        "a fit deferred while hidden is never honoured"
+
+    # anything that loads a whole design has to land you where you can see it
+    for name in ("openDesign", "openRun", "importFolderPicks", "buildFromDomain"):
+        body = script[script.index(f"function {name}("):]
+        body = body[: body.index("\n}\n")]
+        if "fitView()" not in body:
+            continue
+        assert 'showPage("pageDesign")' in body, \
+            f"{name} loads a design without bringing the canvas up"
+
+
 @check("the launch pad is what opens")
 def _():
     import re

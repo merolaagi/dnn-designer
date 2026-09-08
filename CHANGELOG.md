@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.51.1
+
+**Fixed: after importing, the design was nowhere to be seen.**
+
+Two faults, both of which only appeared once the launch pad became the page that
+opens — a regression I introduced in 1.42 and did not go back and check.
+
+- **Importing left you on the launch pad.** The design loaded correctly and
+  nothing said so. Anything that loads a whole design — an import, opening a
+  saved one, opening a past run, building from a domain — now brings the canvas
+  up, which is the point of doing it.
+- **The fit was computed against a hidden canvas.** A hidden page has no size,
+  so the graph was centred inside a zero box and placed off screen. Pressing
+  Canvas afterwards showed an empty-looking canvas with the design outside it.
+  A fit asked for while the canvas is hidden is now remembered and performed
+  when it appears.
+
+A test holds both: that `fitView` refuses to compute from a zero-sized canvas,
+that the deferred request is honoured, and that every route loading a design
+reaches the canvas.
+
 ## 1.51.0
 
 **The assistant advises now, and it advises about your design.**
