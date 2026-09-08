@@ -667,7 +667,7 @@
      "id": "out",
      "type": "Output",
      "params": {
-      "task": "classification"
+      "task": "language_modeling"
      },
      "label": "next token",
      "x": 0,

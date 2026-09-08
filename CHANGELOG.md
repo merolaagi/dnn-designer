@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.55.0
+
+**Fixed: a model that predicts at every position could not train.**
+
+`RuntimeError: Expected target size [64, 50257], got [64, 64]` — which describes
+the tensors and not the mistake. The mistake was mine, in two places, and the
+same one both times: the training loop decided how to compute the loss from the
+Output layer's **label** rather than from the shapes in front of it.
+
+A design that emits a distribution at every position of a sequence is a language
+model whatever its Output layer says. Both the loss and the accuracy now follow
+the tensors — and the accuracy check was the second place, producing a different
+error from the same cause, which is why fixing the loss alone only moved the
+failure.
+
+- **The shipped GPT2 example was mislabelled.** Its Output said
+  `classification`; it is `language_modeling`, and now says so.
+- **A design still labelled wrongly now trains anyway**, and says once that it
+  is being treated as a language model and which setting would make that
+  explicit.
+- The note fires once. My first version guarded it with `not job.notes`, and
+  `emit("note")` appends nothing to that list — so it would have printed on
+  every batch.
+
+Verified on a per-position model labelled `classification`: loss 3.17 → 2.32
+over three epochs with accuracy climbing, where before it did not start.
+
 ## 1.54.1
 
 **Fixed: "blocked" was as silent as "error" had been.**

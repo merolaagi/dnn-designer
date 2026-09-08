@@ -1209,14 +1209,36 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
         patience = int(cfg.get("early_stop", 0))
         stale = 0
 
+        # emit("note") does not record anything on the job, so "have I said
+        # this yet" needs somewhere of its own — otherwise the note fires once
+        # per batch.
+        said_lm = [False]
+
         def forward_loss(xs, yb):
             out = model(*xs)
             outs = list(out) if isinstance(out, (tuple, list)) else [out]
             total = None
             for o, crit, task, w in zip(outs, criteria, tasks, weights):
-                if task == "language_modeling":
-                    # one prediction per position: flatten the batch and the
-                    # sequence together so cross entropy sees a flat problem
+                per_position = (task == "language_modeling"
+                                or (o.dim() == 3 and yb.dim() == 2
+                                    and o.shape[:2] == yb.shape))
+                if per_position:
+                    # One prediction per position: flatten the batch and the
+                    # sequence together so cross entropy sees a flat problem.
+                    #
+                    # The shape is checked as well as the task, because a
+                    # design that scores every position IS a language model
+                    # whatever its Output layer is labelled. Trusting the label
+                    # alone gave "Expected target size [64, 50257], got
+                    # [64, 64]" — which describes the tensors and not the
+                    # mistake.
+                    if task != "language_modeling" and not said_lm[0]:
+                        said_lm[0] = True
+                        job.emit("note", text=(
+                            "This design predicts at every position, so it is "
+                            "being trained as a language model. Set the Output "
+                            "layer's task to language modelling to make that "
+                            "explicit."))
                     term = crit(o.reshape(-1, o.size(-1)), yb.reshape(-1))
                 else:
                     term = crit(o, _shape_target(yb, task, o.size(0)))
@@ -1245,7 +1267,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                 bs = xs[0].size(0)
                 run_loss += loss.item() * bs
                 seen += bs
-                if is_lm:
+                if is_lm or (primary.dim() == 3 and yb.dim() == 2):
                     correct += (primary.argmax(-1) == yb).float().mean().item() * bs
                 elif primary_is_class:
                     correct += (primary.argmax(1) == yb).sum().item()
@@ -1263,7 +1285,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                     bs = xs[0].size(0)
                     v_loss += loss.item() * bs
                     v_seen += bs
-                    if is_lm:
+                    if is_lm or (primary.dim() == 3 and yb.dim() == 2):
                         v_correct += (primary.argmax(-1) == yb).float().mean().item() * bs
                     elif primary_is_class:
                         v_correct += (primary.argmax(1) == yb).sum().item()

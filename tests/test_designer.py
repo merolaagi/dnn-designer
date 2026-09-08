@@ -3993,6 +3993,51 @@ def _():
             f"{called} does not exist"
 
 
+@check("a model that predicts at every position trains")
+def _():
+    """A design scoring every position IS a language model, whatever its
+    Output layer is labelled.
+
+    Trusting the label gave "Expected target size [64, 50257], got [64, 64]" —
+    which describes the tensors and not the mistake. And the same label check
+    appeared twice: once for the loss and once for accuracy, where it produced
+    a different error from the same cause.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import inspect
+
+    import train as T
+
+    body = inspect.getsource(T._run)
+
+    # both the loss and the accuracy have to follow the tensors
+    assert "o.dim() == 3 and yb.dim() == 2" in body, \
+        "the loss still trusts the Output layer's label alone"
+    per_position = body.count("primary.dim() == 3 and yb.dim() == 2")
+    assert per_position >= 2, \
+        f"accuracy follows the tensors in {per_position} of the two places"
+
+    # the note about it must be said once, not once per batch
+    assert "said_lm = [False]" in body, \
+        "nothing tracks whether the note has been said"
+    assert "not job.notes" not in body, \
+        "the guard reads a list that emit() never appends to, so it always fires"
+
+    # and the shipped example should not need the inference in the first place
+    import json as _json
+
+    example = ROOT / "examples" / "GPT2.json"
+    if example.exists():
+        book = _json.loads(example.read_text())
+        main_sheet = next(sh for sh in book["sheets"]
+                          if sh["name"] == book.get("main"))
+        out = next(n for n in main_sheet["nodes"] if n["type"] == "Output")
+        assert out["params"]["task"] == "language_modeling", \
+            f"GPT2's output is labelled {out['params']['task']}, which is wrong"
+
+
 @check("a design with nothing to learn says so")
 def _():
     """An activation on its own is a fine layer and a useless model. torch's
