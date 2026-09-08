@@ -129,7 +129,7 @@ the tests fail, because a tagged commit that does not pass is worse than no tag.
 python tests/test_designer.py
 ```
 
-A hundred and forty-three checks, with the torch-dependent ones skipping themselves when it is
+A hundred and forty-four checks, with the torch-dependent ones skipping themselves when it is
 absent. They cover what would make the tool untrustworthy rather than merely
 broken: that generated code runs, that predicted shapes match what PyTorch
 produces, that the inspector text is byte-identical to the export, that the
@@ -368,6 +368,13 @@ The closing step reads the output the way the task means it: classes for a
 classifier, the next token for a model that scores every position in a sequence,
 plain numbers for a regression head. That comes from the Output layer, so it
 suits whatever design is open.
+
+## What it costs at lower precision
+
+The **Precision** view reads the weights at float16, bfloat16, 8-bit and 4-bit
+and measures how far the output moves — the transformation behind a quantized
+release, with nothing retrained. It also quantizes each layer on its own to find
+the one that cannot take it, which is rarely the biggest.
 
 ## Watching a run
 
@@ -719,4 +726,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.49.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.50.1 — see `CHANGELOG.md`.

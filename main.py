@@ -35,6 +35,7 @@ import recipeloader
 import recipes_sdk
 import graph as G
 import workbook
+import quantize as quant
 import tracer
 import train as T
 import walkthrough as walk
@@ -722,6 +723,23 @@ def explain_pass(body: WalkPayload):
     """Step through the network with real values at every layer."""
     try:
         return walk.walkthrough(body.graph, batch=max(1, min(8, body.batch)))
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={
+            "message": _missing_package(exc) or f"{type(exc).__name__}: {exc}"})
+
+
+class QuantPayload(BaseModel):
+    graph: Dict[str, Any]
+    batch: int = 32
+
+
+@app.post("/api/quantize")
+def quantize_design(body: QuantPayload):
+    """What the design costs at lower precision, and which layer objects."""
+    try:
+        return quant.quantize_report(body.graph, batch=max(1, min(128, body.batch)))
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
     except Exception as exc:  # noqa: BLE001

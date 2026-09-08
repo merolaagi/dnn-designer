@@ -2212,6 +2212,7 @@ const state = {
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
+  quant:null,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -6915,9 +6916,12 @@ function renderRunPanel(){
     <div class="runtabs">
       <button data-run="layers" class="${state.runView !== "timeline" ? "on" : ""}">Layers</button>
       <button data-run="timeline" class="${state.runView === "timeline" ? "on" : ""}">Timeline</button>
+      <button data-run="precision" class="${state.runView === "precision" ? "on" : ""}">Precision</button>
     </div>`
-    + (state.runView === "timeline" ? runTimeline(trace) : runTable(trace))
-    + runSummary(trace);
+    + (state.runView === "timeline" ? runTimeline(trace)
+       : state.runView === "precision" ? runPrecision()
+       : runTable(trace))
+    + (state.runView === "precision" ? "" : runSummary(trace));
 
   host.querySelectorAll("[data-run]").forEach(b =>
     b.addEventListener("click", () => { state.runView = b.dataset.run; renderRunPanel(); }));
@@ -6936,6 +6940,8 @@ function wireRun(){
   if (go) go.addEventListener("click", runTrace);
   const again = $("btnReplay");
   if (again) again.addEventListener("click", () => animateTrace(state.trace));
+  const quant = $("btnQuant");
+  if (quant) quant.addEventListener("click", measurePrecision);
   const batch = $("traceBatch");
   if (batch) batch.addEventListener("input", () => {
     state.traceBatch = Math.max(1, Math.min(64, +batch.value || 1));
@@ -6985,6 +6991,77 @@ function runTimeline(trace){
       </span></div>`;
   }).join("")}
   <div class="lanescale"><span>0</span><span>${span.toFixed(2)} ms</span></div></div>`;
+}
+
+/* A release like NVFP4 is the same architecture and the same weights read at
+   fewer bits. What it saves is arithmetic; what it costs has to be measured. */
+function runPrecision(){
+  const q = state.quant;
+  if (!q){
+    return `<div class="empty" style="padding:14px">
+      Reads the weights at lower precision and measures how far the output
+      moves. Nothing is retrained — this is the transformation behind a 4-bit
+      release, and it takes seconds.
+      <div style="margin-top:10px"><button class="btn go" id="btnQuant">Measure it</button></div>
+    </div>`;
+  }
+  if (q.error) return `<div class="runfail">${q.error}</div>`;
+
+  const worst = q.layers.length ? q.layers[0] : null;
+  const share = worst && q.parameters
+    ? (worst.parameters / q.parameters * 100) : 0;
+
+  return `<table class="runtable">
+      <thead><tr><th>scheme</th><th class="num">size</th>
+        <th class="num">saved</th><th class="num">drift</th></tr></thead>
+      <tbody>${q.schemes.map(s => s.ok ? `
+        <tr><td><b>${s.label}</b><span>${s.note}</span></td>
+          <td class="num mono">${formatBytes(s.bytes)}</td>
+          <td class="num">${(s.saving * 100).toFixed(0)}%</td>
+          <td class="num">${s.drift.toFixed(4)}</td></tr>`
+        : `<tr><td><b>${s.label}</b><span>${s.why}</span></td>
+             <td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`
+      ).join("")}</tbody></table>
+    <div class="mathsec">which layer objects, at four bits</div>
+    <table class="runtable">
+      <thead><tr><th>layer</th><th class="num">parameters</th>
+        <th class="num">drift alone</th></tr></thead>
+      <tbody>${q.layers.map(l => `
+        <tr data-layer="${l.id}"><td><b>${l.var}</b></td>
+          <td class="num mono">${l.parameters.toLocaleString()}</td>
+          <td class="num">${l.drift.toFixed(4)}</td></tr>`).join("")}</tbody>
+    </table>
+    ${worst ? `<p class="mathnote"><b>${worst.var}</b> moves the output most and
+      holds ${share.toFixed(1)}% of the weights. A mixed-precision release is
+      this list acted on: the layers that tolerate four bits go to four bits and
+      the one or two that do not are left alone. Which layer that is depends on
+      the network, which is why it is measured rather than assumed.</p>` : ""}
+    <p class="mathnote">Drift is the mean absolute change in the output, relative
+    to its own scale, on ${q.batch} untrained examples. On trained weights the
+    numbers differ; the ordering rarely does.</p>
+    <div style="padding:0 13px 13px"><button class="btn" id="btnQuant">Measure again</button></div>`;
+}
+
+async function measurePrecision(){
+  const host = $("runBody");
+  state.quant = null;
+  renderRunPanel();
+  const slot = $("btnQuant");
+  if (slot){ slot.disabled = true; slot.textContent = "measuring…"; }
+  let r, d;
+  try{
+    r = await fetch(API + "/api/quantize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ graph: state.graph, batch: 32 }),
+    });
+    d = await r.json();
+  } catch {
+    state.quant = { error: "The server did not respond." };
+    renderRunPanel(); return;
+  }
+  state.quant = r.ok ? d
+    : { error: (d.detail && d.detail.message) || "Could not measure it" };
+  renderRunPanel();
 }
 
 function runSummary(trace){

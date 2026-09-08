@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.50.1
+
+**Fixed: the 8-bit row did not run on Apple silicon.**
+
+It used torch's dynamic quantization, which needs a quantized backend — and
+which backends exist differs by machine. On x86 there are four; on Apple silicon
+there is qnnpack, and the path this took was not available. So the row reported
+"unavailable" for a scheme that is perfectly measurable, and the test asserted
+its presence and failed.
+
+Both integer schemes now go on the grid the same way, with no backend involved.
+That removes the platform dependency, and it also makes the two rows comparable
+— which matters more than using the vendor kernel for one of them. The test now
+asserts every scheme runs rather than assuming it: a measurement that depends on
+the machine's kernels is not the same measurement everywhere.
+
+## 1.50.0
+
+**A Precision view, in the Run tab.** Reads the design's weights at lower
+precision and measures how far the output moves. Nothing is retrained.
+
+This is the transformation behind a release like NVIDIA-Nemotron-…-NVFP4: same
+architecture, same training, same weights read at fewer bits. What it saves is
+arithmetic and knowable in advance; what it costs can only be run.
+
+- **float16, bfloat16, 8-bit integers, and 4-bit in groups of 64** — the last
+  being the shape of an NVFP4 or AWQ release. Size is computed including the
+  scale each group carries; drift is measured by pushing the same batch through
+  both models.
+- **Which layer objects.** Every layer is quantized on its own, with the rest
+  left alone, and the results are ordered worst first. On a small convolutional
+  network the **head, at 1,280 parameters, moves the output more than the
+  802,816-parameter hidden layer**. That is the "keep the last layer in higher
+  precision" rule of thumb, arrived at by measurement rather than by repetition —
+  and which layer it is depends on the network, which is why it is worth
+  measuring.
+
+A mixed-precision release is that list acted on: the layers that tolerate four
+bits go to four bits, and the one or two that do not are left alone.
+
+The 4-bit numbers come from putting the weights on the grid a 4-bit format would
+use and reading them back as floats. The arithmetic error is therefore exactly
+right and the size is calculated rather than observed — reporting a measured
+error and a computed size is honest; reporting a measured size for a format
+torch cannot store would not be.
+
 ## 1.49.0
 
 **Fixed: "Check and save" saved, and said nothing.** The checks passed, the file

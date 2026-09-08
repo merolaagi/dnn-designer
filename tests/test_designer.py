@@ -1790,6 +1790,68 @@ def _():
     assert "not a score" in closing["note"], closing["note"]
 
 
+@check("quantization is measured, not asserted")
+def _():
+    """A 4-bit release is the same architecture and the same weights read at
+    fewer bits. What it saves is arithmetic; what it costs has to be run.
+
+    The per-layer pass is the useful half: it finds the layer that cannot take
+    the reduction, which is rarely the biggest one.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import quantize
+
+    payload = build(
+        [("i", "Input", {"shape": [64]}),
+         ("a", "Linear", {"units": 128}),
+         ("r", "Activation", {"kind": "relu"}),
+         ("h", "Linear", {"units": 8}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "a", 0), ("a", "r", 0), ("r", "h", 0), ("h", "o", 0)], "Quant")
+
+    result = quantize.quantize_report(payload, batch=16)
+    assert result["ok"]
+    working = [s for s in result["schemes"] if s.get("ok")]
+    assert len(working) >= 3, [s.get("why") for s in result["schemes"]]
+
+    by_key = {s["key"]: s for s in working}
+
+    # Every scheme should run everywhere: measuring them all the same way is
+    # what makes that true, and what makes the rows comparable. torch's dynamic
+    # int8 needs a quantized backend, and which exists differs by machine — it
+    # is absent on Apple silicon, where this once reported a scheme unavailable
+    # that is perfectly measurable.
+    missing = [s["key"] for s in result["schemes"] if not s.get("ok")]
+    assert not missing, (
+        f"these schemes did not run: {missing}. A measurement that depends on "
+        f"the machine's kernels is not the same measurement everywhere.")
+
+    # fewer bits must cost more, or the measurement is not measuring
+    assert by_key["float16"]["drift"] < by_key["int4"]["drift"], \
+        f"4-bit drifted less than 16-bit: {by_key}"
+    assert by_key["float16"]["saving"] == 0.5, by_key["float16"]["saving"]
+    assert by_key["int4"]["saving"] > by_key["int8"]["saving"] > 0.5
+
+    # a scheme reporting no drift has not been applied at all
+    for key in ("int8", "int4"):
+        assert by_key[key]["drift"] > 0, f"{key} changed nothing at all"
+
+    # the per-layer pass names layers that exist and is ordered worst first
+    ids = {n["id"] for n in payload["nodes"]}
+    assert result["layers"], "no per-layer sensitivity was measured"
+    for row in result["layers"]:
+        assert row["id"] in ids, f"{row['id']} is not a node in the design"
+        assert row["parameters"] > 0
+    drifts = [row["drift"] for row in result["layers"]]
+    assert drifts == sorted(drifts, reverse=True), "not ordered worst first"
+
+    # quantizing one layer must hurt less than quantizing all of them
+    assert max(drifts) <= by_key["int4"]["drift"] * 1.5, \
+        "a single layer drifted more than the whole model, which cannot be"
+
+
 @check("a forward pass is traced layer by layer")
 def _():
     """A workflow shows tasks going green because they run one at a time. A
@@ -4075,6 +4137,7 @@ def _():
         "dockWelcome", "dockSend", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",
+        "runPrecision", "measurePrecision",
         "renderRunPanel", "runTrace", "animateTrace", "traceStateOf", "runTable",
         "runTimeline", "runSummary", "formatBytes",
         "refreshAgents", "renderAgentForm", "startStudy", "openStudy", "openTrial",
