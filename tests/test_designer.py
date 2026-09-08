@@ -1886,6 +1886,41 @@ def _():
     assert "not a score" in closing["note"], closing["note"]
 
 
+@check("precision can be measured on trained weights")
+def _():
+    """Drift on random weights describes the shapes, not the model — a trained
+    network and a random one of the same size are not equally sensitive to
+    losing precision, which is measurable and was measured: 0.112 against 0.131
+    at four bits on the same design."""
+    import main
+
+    assert "weights" in main.QuantPayload.model_fields, \
+        "the endpoint cannot be pointed at a checkpoint"
+
+    # weights that belong to another design must be refused, not half-loaded
+    import inspect
+
+    import quantize
+
+    body = inspect.getsource(quantize.quantize_report)
+    assert "strict=False" in body, "a partial match would raise instead of loading"
+    assert "every tensor was" in body, \
+        "weights from a different network would load nothing and say nothing"
+
+    # a name that is not there is refused before anything is built
+    try:
+        main.quantize_design(main.QuantPayload(
+            graph={"nodes": [], "edges": []}, weights="not-a-real-file.pt"))
+        raise AssertionError("a missing checkpoint was accepted")
+    except Exception as exc:  # noqa: BLE001
+        assert "No saved weights" in str(exc), exc
+
+    # and the panel says which weights a number came from
+    assert 'id="quantWeights"' in PAGE, "there is no way to choose the weights"
+    assert "measured on untrained weights" in PAGE, \
+        "an untrained measurement does not say that it is one"
+
+
 @check("quantization is measured, not asserted")
 def _():
     """A 4-bit release is the same architecture and the same weights read at
@@ -4012,12 +4047,23 @@ def _():
 
     body = inspect.getsource(T._run)
 
-    # both the loss and the accuracy have to follow the tensors
+    # The question is asked once and the answer used everywhere. Five separate
+    # label checks is how the loss came to be fixed while the accuracy, the
+    # perplexity and the sampling still disagreed with it.
     assert "o.dim() == 3 and yb.dim() == 2" in body, \
         "the loss still trusts the Output layer's label alone"
-    per_position = body.count("primary.dim() == 3 and yb.dim() == 2")
-    assert per_position >= 2, \
-        f"accuracy follows the tensors in {per_position} of the two places"
+    assert "lm_like = [" in body, "there is no single determination"
+    assert "is_lm" not in body, \
+        "the old label-only flag is still being consulted somewhere"
+
+    # everything downstream reads that one flag. The anchors are code, not
+    # prose: searching for "perplexity" found the comment above explaining the
+    # change and passed on that.
+    for feature in ('row["perplexity"]', "_sample_text(", "argmax(-1)"):
+        at = body.index(feature)
+        window = body[max(0, at - 400): at]
+        assert "lm_like[0]" in window, \
+            f"{feature} decides for itself rather than reading the flag"
 
     # the note about it must be said once, not once per batch
     assert "said_lm = [False]" in body, \

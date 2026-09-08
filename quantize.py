@@ -90,7 +90,17 @@ def quantize_report(payload: Dict[str, Any], batch: int = 32,
     name = codegen.model_class_name(g)
     model = T.build_model(source, name).eval()
     if weights:
-        model.load_state_dict(torch.load(weights, map_location="cpu"), strict=False)
+        # A checkpoint is a record of a run, not a bare state dict: it carries
+        # the design and the epoch alongside the tensors.
+        blob = torch.load(weights, map_location="cpu", weights_only=False)
+        state = blob.get("model") if isinstance(blob, dict) else blob
+        if state is None and isinstance(blob, dict):
+            state = blob.get("state_dict", blob)
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        if len(missing) == len(list(model.state_dict())):
+            raise ValueError(
+                "Those weights do not fit this design — every tensor was "
+                "missing. They were probably saved from a different network.")
 
     ids = codegen.input_order(g, report)
     nodes = g.by_id()

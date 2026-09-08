@@ -757,13 +757,26 @@ def explain_pass(body: WalkPayload):
 class QuantPayload(BaseModel):
     graph: Dict[str, Any]
     batch: int = 32
+    weights: str = ""        # a saved checkpoint, so the drift means something
 
 
 @app.post("/api/quantize")
 def quantize_design(body: QuantPayload):
     """What the design costs at lower precision, and which layer objects."""
+    # Drift measured on random weights is a property of the shapes, not of the
+    # model — a trained network and an untrained one of the same shape are not
+    # equally sensitive to losing precision. Measuring a checkpoint is the
+    # question anyone actually has.
+    path = ""
+    if body.weights:
+        target = T.CHECKPOINTS / Path(body.weights).name
+        if not target.exists():
+            raise HTTPException(400, detail={
+                "message": f"No saved weights called {body.weights}."})
+        path = str(target)
     try:
-        return quant.quantize_report(body.graph, batch=max(1, min(128, body.batch)))
+        return quant.quantize_report(body.graph, batch=max(1, min(128, body.batch)),
+                                     weights=path or None)
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
     except Exception as exc:  # noqa: BLE001

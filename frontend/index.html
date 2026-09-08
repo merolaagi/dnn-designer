@@ -1009,6 +1009,12 @@ pre#code .ln.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
   border-radius:6px;
 }
 .runtabs button.on{background:#E9F1FB;color:#1F6BBD;font-weight:600}
+.quantbar{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
+.quantpick{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.quantpick select{
+  max-width:220px;padding:4px 7px;border:1px solid var(--paper-3);
+  border-radius:6px;font-size:11px;
+}
 table.runtable{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:8px}
 table.runtable th{
   text-align:left;font-size:9px;letter-spacing:.11em;text-transform:uppercase;
@@ -2246,7 +2252,7 @@ const state = {
   account:null, signInMode:"login", viewingFile:null, lockedOut:false,
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
-  quant:null, needsFit:false,
+  quant:null, quantWeights:"", needsFit:false,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -7057,6 +7063,10 @@ function wireRun(){
   if (again) again.addEventListener("click", () => animateTrace(state.trace));
   const quant = $("btnQuant");
   if (quant) quant.addEventListener("click", measurePrecision);
+  const picked = $("quantWeights");
+  if (picked) picked.addEventListener("change", () => {
+    state.quantWeights = picked.value;
+  });
   const batch = $("traceBatch");
   if (batch) batch.addEventListener("input", () => {
     state.traceBatch = Math.max(1, Math.min(64, +batch.value || 1));
@@ -7112,12 +7122,25 @@ function runTimeline(trace){
    fewer bits. What it saves is arithmetic; what it costs has to be measured. */
 function runPrecision(){
   const q = state.quant;
+  const saved = (state.checkpoints || []);
+  const picker = `<label class="quantpick">weights
+      <select id="quantWeights">
+        <option value="">as designed (untrained)</option>
+        ${saved.map(k => `<option value="${k.file}"${
+          state.quantWeights === k.file ? " selected" : ""}>${k.file}</option>`).join("")}
+      </select></label>`;
+
   if (!q){
     return `<div class="empty" style="padding:14px">
       Reads the weights at lower precision and measures how far the output
       moves. Nothing is retrained — this is the transformation behind a 4-bit
       release, and it takes seconds.
-      <div style="margin-top:10px"><button class="btn go" id="btnQuant">Measure it</button></div>
+      <p style="margin:9px 0 0">Measured on untrained weights this describes the
+      shapes rather than the model: a trained network and a random one of the
+      same size are not equally sensitive to losing precision. Point it at a
+      checkpoint for the number that matters.</p>
+      <div class="quantbar">${picker}
+        <button class="btn go" id="btnQuant">Measure it</button></div>
     </div>`;
   }
   if (q.error) return `<div class="runfail">${q.error}</div>`;
@@ -7152,9 +7175,12 @@ function runPrecision(){
       the one or two that do not are left alone. Which layer that is depends on
       the network, which is why it is measured rather than assumed.</p>` : ""}
     <p class="mathnote">Drift is the mean absolute change in the output, relative
-    to its own scale, on ${q.batch} untrained examples. On trained weights the
-    numbers differ; the ordering rarely does.</p>
-    <div style="padding:0 13px 13px"><button class="btn" id="btnQuant">Measure again</button></div>`;
+    to its own scale, over ${q.batch} examples${state.quantWeights
+      ? ", measured on <b>" + state.quantWeights + "</b>"
+      : ", measured on untrained weights — which describes the shapes more than "
+        + "the model"}.</p>
+    <div class="quantbar" style="padding:0 13px 13px">${picker}
+      <button class="btn" id="btnQuant">Measure again</button></div>`;
 }
 
 async function measurePrecision(){
@@ -7167,7 +7193,8 @@ async function measurePrecision(){
   try{
     r = await fetch(API + "/api/quantize", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ graph: state.graph, batch: 32 }),
+      body: JSON.stringify({ graph: state.graph, batch: 32,
+                             weights: state.quantWeights || "" }),
     });
     d = await r.json();
   } catch {

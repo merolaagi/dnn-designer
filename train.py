@@ -1201,7 +1201,12 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
         job.epochs = int(cfg.get("epochs", 5))
         job.status = "running"
         primary_is_class = tasks[0] in ("classification", "language_modeling")
-        is_lm = tasks[0] == "language_modeling"
+        # One determination, made once and used everywhere. It starts from the
+        # Output layer's label and is corrected by the first batch, because the
+        # shapes are the fact and the label is a claim about it. Keeping the
+        # question in five places is how the loss came to be fixed while the
+        # accuracy, the perplexity and the sampling still disagreed with it.
+        lm_like = [tasks[0] == "language_modeling"]
         graph_blob = cfg.get("graph") or {}
         name_hint = graph_blob.get("name") or "model"
         save_every = bool(cfg.get("save_checkpoints", True))
@@ -1222,6 +1227,8 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                 per_position = (task == "language_modeling"
                                 or (o.dim() == 3 and yb.dim() == 2
                                     and o.shape[:2] == yb.shape))
+                if per_position and o is outs[0]:
+                    lm_like[0] = True
                 if per_position:
                     # One prediction per position: flatten the batch and the
                     # sequence together so cross entropy sees a flat problem.
@@ -1267,7 +1274,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                 bs = xs[0].size(0)
                 run_loss += loss.item() * bs
                 seen += bs
-                if is_lm or (primary.dim() == 3 and yb.dim() == 2):
+                if lm_like[0]:
                     correct += (primary.argmax(-1) == yb).float().mean().item() * bs
                 elif primary_is_class:
                     correct += (primary.argmax(1) == yb).sum().item()
@@ -1285,7 +1292,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                     bs = xs[0].size(0)
                     v_loss += loss.item() * bs
                     v_seen += bs
-                    if is_lm or (primary.dim() == 3 and yb.dim() == 2):
+                    if lm_like[0]:
                         v_correct += (primary.argmax(-1) == yb).float().mean().item() * bs
                     elif primary_is_class:
                         v_correct += (primary.argmax(1) == yb).sum().item()
@@ -1298,12 +1305,12 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
             if primary_is_class:
                 row["train_acc"] = round(correct / max(seen, 1), 4)
                 row["val_acc"] = round(v_correct / max(v_seen, 1), 4)
-            if is_lm:
+            if lm_like[0]:
                 row["perplexity"] = round(float(math.exp(min(row["val_loss"], 20))), 2)
             job.history.append(row)
             job.emit("epoch", **row)
 
-            if is_lm and meta.get("vocab"):
+            if lm_like[0] and meta.get("vocab"):
                 sample = _sample_text(model, meta, device,
                                       cfg.get("sample_prompt", "\n"),
                                       int(cfg.get("sample_tokens", 180)))

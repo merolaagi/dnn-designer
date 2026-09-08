@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.56.0
+
+**One determination, used everywhere.** Last version I made the loss follow the
+tensors instead of the Output layer's label, and left four other places still
+asking the label: the training accuracy, the validation accuracy, the perplexity
+and the sampled continuation. So a design labelled `classification` trained
+correctly and then reported no perplexity and produced no sample — which is why
+a run that worked still looked like it had not.
+
+The question is now asked once, at the first batch, and the answer read
+everywhere. Verified on a deliberately mislabelled model: samples after each
+epoch, perplexity 11.55 → 9.69, accuracy climbing.
+
+**Precision can be measured on trained weights.**
+
+Drift on untrained weights describes the shapes rather than the model, and the
+difference is real: on the same design, 4-bit drift was 0.131 untrained against
+0.112 trained. The Precision view now takes a checkpoint, says which weights a
+number came from, and says plainly when the answer is about the shapes instead.
+Weights from a different network are refused rather than half-loaded.
+
+**A correction to something I said.** I suggested the validation loss sitting
+below the training loss might mean the text split was leaking. It is not: the
+loader splits the corpus at 90% and takes disjoint halves. The gap is that the
+training figure is an average over the epoch while validation is measured after
+it — on a repetitive corpus that alone accounts for it. I should have read the
+loader before offering the theory.
+
 ## 1.55.0
 
 **Fixed: a model that predicts at every position could not train.**
