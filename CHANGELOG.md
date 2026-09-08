@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.53.0
+
+**Fixed: training GPT2 did nothing, for two reasons at once.**
+
+**A workbook was being trained one sheet at a time.** GPT2's model sheet places
+twelve `Subgraph` nodes standing for a class the `block` sheet defines. Only the
+open sheet was sent, so the generated file named a class it did not contain and
+the run died with *"NameError: name 'Block' is not defined"* — true, and no help
+at all. The page now sends the whole workbook when there is one, and the whole
+workbook is generated.
+
+**And GPT2 was pointed at MNIST.** A language model reads token indices; MNIST
+hands out images. There is no sensible reading of a picture as a sentence, and
+the failure was not polite about it: the image loader, asked to resize a picture
+into a token sequence, aborted the process. The pairing is now refused before
+anything is built, in the endpoint where the message reaches the form:
+
+> *This design reads token indices — its Input is a sequence of 64 whole
+> numbers, which an Embedding turns into vectors. MNIST digits hands out images.
+> There is no sensible way to read a picture as a sentence…*
+
+The reverse is refused too, and the pairings that do work are untouched.
+
+**Caught by my own test while fixing it:** the new message used a backslash
+inside an f-string expression, which Python 3.11 rejects. The same fault as
+`mathbook` in 1.22.1, found the same way.
+
 ## 1.52.0
 
 Three faults from one session with minGPT, all of them fair.

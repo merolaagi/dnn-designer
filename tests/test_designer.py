@@ -3843,6 +3843,92 @@ def _():
             f"selecting a layer would still throw you out of the {tab} tab"
 
 
+@check("a workbook trains as a whole, not a sheet at a time")
+def _():
+    """GPT2's model sheet places twelve Subgraph nodes that stand for a class
+    the block sheet defines. Generating the model sheet alone produces a file
+    naming a class that is not in it, and training it fails with
+    "NameError: name 'Block' is not defined" — true, and no help at all.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import json as _json
+
+    import main
+    import workbook as wb
+
+    example = ROOT / "examples" / "GPT2.json"
+    if not example.exists():
+        print("        (GPT2 absent, skipped)")
+        return
+    book = _json.loads(example.read_text())
+    assert len(book["sheets"]) > 1, "this test needs a multi-sheet design"
+
+    sheet = wb.sheet_graph(book, book.get("main"))
+    g, rep = analyzed(sheet)
+    alone = codegen.to_pytorch(g, rep)
+    assert "Block()" in alone, "the sheet does not reference another sheet"
+    assert "class Block" not in alone, \
+        "the sheet already carries the class, so this test proves nothing"
+
+    whole = wb.to_pytorch(book, wb.analyze(book))
+    assert "class Block" in whole, "the workbook does not define the class"
+
+    # the endpoint has to be told about the book, and the page has to send it
+    assert "book" in main.TrainPayload.model_fields, \
+        "the training endpoint cannot receive a workbook"
+    assert "function workbookForRun" in PAGE, \
+        "the page never sends the workbook"
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function workbookForRun"):]
+    body = body[: body.index("\n}\n")]
+    assert "commitSheet()" in body, \
+        "the canvas is not written back before the book is sent"
+
+
+@check("a dataset that cannot fit the design is refused before the run")
+def _():
+    """A language model asked to read MNIST does not fail politely: the image
+    loader is asked to resize a picture into a token sequence, and on one
+    machine that aborted the process outright."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import train as T
+
+    tokens = {"nodes": [{"id": "i", "type": "Input",
+                         "params": {"shape": [64], "dtype": "long"}}]}
+    pixels = {"nodes": [{"id": "i", "type": "Input",
+                         "params": {"shape": [1, 28, 28]}}]}
+
+    for dataset in ("mnist", "cifar10"):
+        try:
+            T.check_dataset_fits({"dataset": dataset, "graph": tokens}, [[64]])
+            raise AssertionError(f"{dataset} was allowed for a token model")
+        except T.DataError as exc:
+            assert "token indices" in str(exc), exc
+
+    try:
+        T.check_dataset_fits({"dataset": "text", "graph": pixels}, [[1, 28, 28]])
+        raise AssertionError("text was allowed for an image model")
+    except T.DataError as exc:
+        assert "whole numbers" in str(exc), exc
+
+    # and the pairings that do work are not disturbed
+    T.check_dataset_fits({"dataset": "mnist", "graph": pixels}, [[1, 28, 28]])
+    T.check_dataset_fits({"dataset": "text", "graph": tokens}, [[64]])
+    T.check_dataset_fits({"dataset": "synthetic", "graph": tokens}, [[64]])
+
+    # the check runs in the endpoint, where the message reaches the form
+    import inspect
+
+    import main
+
+    assert "check_dataset_fits" in inspect.getsource(main.post_train), \
+        "the check runs in the training thread, too late to be shown"
+
+
 @check("a design with nothing to learn says so")
 def _():
     """An activation on its own is a fine layer and a useless model. torch's

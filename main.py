@@ -111,6 +111,7 @@ class BlockPayload(BaseModel):
 class TrainPayload(BaseModel):
     graph: Dict[str, Any]
     config: Dict[str, Any] = {}
+    book: Optional[Dict[str, Any]] = None    # the whole workbook, if there is one
 
 
 def _analyze(payload: Dict[str, Any]):
@@ -901,6 +902,9 @@ def post_train(body: TrainPayload):
     # Fail on the obvious mismatches here, where the message can reach the form,
     # rather than a few seconds later inside the training thread.
     try:
+        # before the loaders, because an image loader asked for a token
+        # sequence does not fail politely — it takes the process with it
+        T.check_dataset_fits(cfg, in_shapes)
         T._make_loaders  # noqa: B018 - presence check only
         if cfg.get("dataset") == "csv":
             if not cfg.get("csv_file"):
@@ -917,12 +921,30 @@ def post_train(body: TrainPayload):
         raise HTTPException(400, detail={"message": str(exc)})
 
     try:
-        source = codegen.to_pytorch(g, report)
+        # A sheet of a workbook cannot be generated on its own: the model sheet
+        # refers to classes defined by the others, and the file that comes out
+        # names a class that is not in it. GPT2 fails with
+        # "NameError: name 'Block' is not defined", which is true and unhelpful.
+        if body.book and len(body.book.get("sheets") or []) > 1:
+            analysis = workbook.analyze(body.book)
+            if not analysis["ok"]:
+                bad = [f"{name}: {rep['errors'][0]}"
+                       for name, rep in analysis["sheets"].items()
+                       if rep.get("errors")]
+                raise HTTPException(400, detail={
+                    "message": "Fix the sheets before training.", "errors": bad})
+            source = workbook.to_pytorch(body.book, analysis)
+            class_name = codegen.model_class_name(
+                G.parse(workbook.sheet_graph(body.book, body.book.get("main"))))
+        else:
+            source = codegen.to_pytorch(g, report)
+            class_name = codegen.model_class_name(g)
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(400, detail={"message": f"Code generation failed: {exc}"})
 
-    job = T.start(source, cfg, in_shapes, in_ids, out_shape, tasks,
-                  codegen.model_class_name(g))
+    job = T.start(source, cfg, in_shapes, in_ids, out_shape, tasks, class_name)
     return {"job": job.snapshot(), "source": source,
             "inputs": [{"id": i, "shape": s} for i, s in zip(in_ids, in_shapes)]}
 

@@ -7634,6 +7634,13 @@ function activeSheet(){
 }
 
 /* keep the book's record of the active sheet pointing at the live arrays */
+/* The book to train, or nothing when this design is a single sheet. */
+function workbookForRun(){
+  if (!state.book || (state.book.sheets || []).length < 2) return null;
+  commitSheet();
+  return state.book;
+}
+
 function commitSheet(){
   const sheet = activeSheet();
   sheet.nodes = state.graph.nodes;
@@ -9148,7 +9155,13 @@ async function startTraining(){
   try{
     res = await fetch(API + "/api/train", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ graph: state.graph, config })
+      // send the whole workbook when there is one: a sheet that refers to
+      // another sheet's class cannot be generated on its own
+      // send the whole workbook when there is one: a sheet that refers to
+      // another sheet's class cannot be generated on its own. commitSheet
+      // writes the canvas back into the book and returns nothing, so the book
+      // is read after it rather than from it.
+      body: JSON.stringify({ graph: state.graph, config, book: workbookForRun() })
     });
     data = await res.json();
   } catch(err){

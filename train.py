@@ -179,6 +179,59 @@ def _match(x, double: bool):
     return x
 
 
+#: which datasets hand out images, and which hand out integer indices
+IMAGE_SETS = {"mnist", "fashion_mnist", "cifar10", "folder"}
+INDEX_SETS = {"text", "microlean"}
+
+
+def check_dataset_fits(cfg, in_shapes) -> None:
+    """Refuse a pairing that cannot work, before anything is built.
+
+    A language model asked to read MNIST does not fail in a way that names the
+    problem: the embedding gets floats where it wanted indices, or the image
+    loader is asked to resize a picture into a one-dimensional token sequence.
+    Both produce something obscure several layers down, and one of them takes
+    the process with it.
+
+    Cheap to check and specific to say, so it is said here.
+    """
+    dataset = str(cfg.get("dataset", "synthetic"))
+    blob = cfg.get("graph") or {}
+    wants_indices = any(
+        str((n.get("params") or {}).get("dtype", "float")).startswith("long")
+        for n in blob.get("nodes", []) if n.get("type") == "Input")
+    first = list(in_shapes[0]) if in_shapes and in_shapes[0] else []
+
+    if wants_indices and dataset in IMAGE_SETS:
+        raise DataError(
+            f"This design reads token indices — its Input is a sequence of "
+            f"{first[0] if first else 'n'} whole numbers, which an Embedding "
+            f"turns into vectors. {BUILTIN_DATASETS.get(dataset, {}).get('label', dataset)} "
+            f"hands out images. There is no sensible way to read a picture as "
+            f"a sentence, so nothing further would mean anything. Use the "
+            f"text dataset for a language model, or open a design whose Input "
+            f"is an image.")
+
+    if not wants_indices and dataset in INDEX_SETS:
+        raise DataError(
+            f"{BUILTIN_DATASETS.get(dataset, {}).get('label', dataset)} hands "
+            f"out sequences of whole numbers, and this design's Input expects "
+            f"real values. Set the Input layer's dtype to long and put an "
+            f"Embedding after it, or choose a dataset of images or numbers.")
+
+    times = "\u00d7"          # named, because 3.11 rejects a backslash in an
+                              # f-string expression and this is inside one
+    known = BUILTIN_DATASETS.get(dataset, {}).get("shape")
+    if known and first and len(first) != len(known) and dataset in IMAGE_SETS:
+        raise DataError(
+            f"{BUILTIN_DATASETS.get(dataset, {}).get('label', dataset)} gives "
+            f"{times.join(str(d) for d in known)} images, and this design's "
+            f"Input is {times.join(str(d) for d in first)}. Images are "
+            f"resized to match an Input of the same rank, but a "
+            f"{len(known)}-dimensional picture cannot be read as a "
+            f"{len(first)}-dimensional one.")
+
+
 def needs_double(model, cfg) -> bool:
     """Whether this model must run in double precision.
 
@@ -1078,6 +1131,8 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
         # it — an equilibrium found to 1e-10 is not reachable in float32. When
         # any parameter is double, the whole model and every batch follow, or
         # the first matrix multiply fails on a dtype mismatch.
+        check_dataset_fits(cfg, in_shapes)
+
         # An activation on its own is a perfectly good layer and a useless
         # model: there is nothing for an optimizer to update. Torch's own
         # message for this is "optimizer got an empty parameter list", which
