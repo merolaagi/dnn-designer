@@ -3953,6 +3953,24 @@ def _():
     assert "clearTrainError()" in starter, \
         "a previous failure is still showing when the next run starts"
 
+    # Every way a run can fail has to say so. Fixing one branch and leaving its
+    # sibling is how "error" became "blocked" and stayed just as silent.
+    import re
+
+    for match in re.finditer(r'\$\("trainStatus"\)\.textContent\s*=\s*([^;]+);',
+                             script):
+        setting = match.group(1).strip().strip('"')
+        if setting in ("blocked", "error", "disconnected"):
+            window = script[max(0, match.start() - 900): match.end() + 400]
+            assert "showTrainError(" in window, \
+                f"the {setting!r} state gives no reason in the panel"
+
+    # a dropped stream is not the same as a finished run
+    dropped = script[script.index("es.onerror"):]
+    dropped = dropped[: dropped.index("\n  };") + 5]
+    assert "showTrainError(" in dropped, \
+        "losing the connection ends the run in silence"
+
 
 @check("the corpus hint changes the design rather than describing the change")
 def _():

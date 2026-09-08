@@ -9199,9 +9199,15 @@ async function startTraining(){
     $("btnStart").disabled = false; return;
   }
   if (!res.ok){
+    // The sibling of the error branch, and it had the same fault: the reason
+    // went to the log strip and the panel showed one word. Fixing one and not
+    // the other is how "error" became "blocked" and stayed just as silent.
     const d = data.detail || {};
-    logLine((d.message || "Training could not start"), "e");
+    const message = d.message || "Training could not start.";
+    logLine(message, "e");
     (d.errors || []).forEach(e => logLine("· " + e, "e"));
+    showTrainError(message + ((d.errors || []).length
+      ? "\n\n" + d.errors.map(e => "· " + e).join("\n") : ""));
     $("btnStart").disabled = false;
     $("trainStatus").textContent = "blocked";
     return;
@@ -9274,7 +9280,19 @@ async function startTraining(){
       finishTraining();
     }
   };
-  es.onerror = () => { finishTraining(); };
+  es.onerror = () => {
+    // A dropped stream used to end the run in silence, which looks identical
+    // to a run that finished. It is not the same thing and should not read as
+    // one: the job may still be going on the server.
+    if (state.job && $("trainStatus").textContent !== "done"){
+      showTrainError(
+        "The connection to the run was lost. That does not necessarily mean "
+        + "the run stopped \u2014 it may still be going on the server. Run "
+        + "history will show how it ended.");
+      $("trainStatus").textContent = "disconnected";
+    }
+    finishTraining();
+  };
 }
 
 function showTrainError(message){

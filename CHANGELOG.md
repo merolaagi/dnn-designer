@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.54.1
+
+**Fixed: "blocked" was as silent as "error" had been.**
+
+Last version I made a failed run explain itself and fixed exactly one of the two
+branches that can fail. The other — a run the server refuses before it starts —
+still wrote its reason to the collapsed log and put one word in the corner. So
+"error" became "blocked" and told you no more than before. That is a poor way to
+fix something, and the fix now covers every way a run can end badly:
+
+- **Refused before starting**: the reason and every listed problem appear in the
+  panel.
+- **Failed while running**: unchanged from 1.54.0.
+- **The connection dropped**: previously ended the run in silence, which looks
+  exactly like a run that finished. It now says the stream was lost and that the
+  job may still be going on the server, and shows *disconnected* rather than a
+  status that implies it stopped.
+
+A test now walks every place the training status is set and requires the failure
+states to explain themselves. Verified by silencing one branch and watching it
+fail — which is what I should have done when I wrote the first half of this.
+
 ## 1.54.0
 
 **A failed run now says why, above the button that started it.**
