@@ -542,6 +542,34 @@ class SpecBody(BaseModel):
     spec: Dict[str, Any]
 
 
+@app.get("/api/paper/examples")
+def spec_examples():
+    """The specs that already work, to start from.
+
+    Writing a residual from a blank template is the hardest step in the whole
+    pipeline, and nothing in the app was helping with it. A working spec of the
+    same shape is far more use than a description of the fields: a paper about a
+    compartmental system wants the Bergman one, and editing three lines of it is
+    a different task from inventing the file.
+    """
+    out = []
+    for path in sorted(SPECS_DIR.glob("*.json")):
+        try:
+            blob = json.loads(path.read_text())
+        except Exception:  # noqa: BLE001
+            continue
+        out.append({
+            "key": blob.get("key", path.stem),
+            "title": blob.get("title", path.stem),
+            "claim": blob.get("claim", ""),
+            "shape": ("a compartmental system of ordinary differential equations"
+                      if "cat(" in str(blob.get("residual", ""))
+                      else "a potential whose gradient vanishes at the answer"),
+            "spec": blob,
+        })
+    return {"examples": out}
+
+
 @app.post("/api/paper/check")
 def paper_check(body: SpecBody):
     """Load the spec as a domain and run the bench's checks on it.

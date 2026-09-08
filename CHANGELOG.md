@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.48.0
+
+**Start from a spec that works.** The check was right to reject a template with
+its placeholder residual still in it — but being told the residual is missing
+does not help you write one, and nothing in the app was helping.
+
+- **Two working specs are offered beside the editor**, with their residuals
+  shown: the Bergman one for a compartmental system of differential equations,
+  the convex-ridge one for a potential whose gradient vanishes at the answer.
+  Load whichever matches your paper's shape and edit it.
+- **A rejection now appears beside the editor**, where it gets fixed, rather
+  than only in the stage that reports it — and it is split into the separate
+  things it names instead of one paragraph. Three problems read as three edits.
+- The editor scrolls into view when a check fails.
+
+**Two layout faults fixed:**
+
+- The tick bar above the passages was a rigid row, so the sentence squeezed the
+  button until both clipped. It stacks now.
+- The three stages were equal columns, so the reading column ran to several
+  screens while the other two sat empty at the top. The reader scrolls within
+  itself and the other two stay in view beside it.
+
 ## 1.47.0
 
 **The bridge from reading a paper to having a spec.** Until now the passages

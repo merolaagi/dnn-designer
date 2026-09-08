@@ -1262,6 +1262,41 @@ def _():
         "the button can be left saying 'reading…' after a failure"
 
 
+@check("the editor offers a spec that already works")
+def _():
+    """Writing a residual from a blank template is the hardest step in the
+    pipeline, and nothing was helping with it. Editing three lines of a working
+    spec is a different task from inventing the file."""
+    import main
+
+    served = main.spec_examples()["examples"]
+    assert served, "no starting points are offered"
+    for example in served:
+        spec = example["spec"]
+        assert spec.get("residual"), f"{example['key']} has no residual"
+        assert not str(spec["residual"]).startswith("<"), \
+            f"{example['key']} offers a placeholder as a starting point"
+        assert spec.get("variants"), f"{example['key']} has no arms"
+        assert example["claim"], f"{example['key']} states no claim"
+
+    # the two shipped ones cover the two shapes a paper tends to have
+    shapes = {e["shape"] for e in served}
+    assert len(shapes) >= 2, f"every example is the same shape: {shapes}"
+
+    for token in ("function loadStarters", 'id="specStarters"',
+                  'id="specProblems"'):
+        assert token in PAGE, f"{token} is missing"
+
+    # a rejection has to appear where the fix happens, not only in stage three
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("async function checkSpec"):]
+    body = body[: body.index("\nfunction checkTable")]
+    assert 'specProblems' in body, \
+        "the reasons appear only in the stage that reports them, not where they are fixed"
+    assert "whylist" in body, "the reasons are shown as one wall of prose"
+    assert "scrollIntoView" in body, "the editor is not brought into view"
+
+
 @check("the reader's chosen passages are what the draft is built from")
 def _():
     """Choosing the passages is the judgment that carries.
@@ -3960,6 +3995,7 @@ def _():
         "renderLaunchPad", "padFill", "padSearch", "assistantDock", "toggleDock",
         "renderDomainsPage", "domFill", "armCard", "placeDomain", "validateAllDomains",
         "findPapers", "paperRow", "fetchPaper", "showPaperPassages", "draftSpec",
+        "loadStarters",
         "dockWelcome", "dockSend", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",

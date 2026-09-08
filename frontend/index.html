@@ -1376,13 +1376,32 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .hitacts{display:flex;align-items:center;gap:10px;margin-top:8px}
 .hitnotext{font-size:10px;color:#B7C0CB}
 .pickbar{
-  display:flex;align-items:flex-start;gap:12px;margin:10px 0 12px;padding:10px 12px;
+  display:flex;flex-direction:column;align-items:stretch;gap:9px;
+  margin:10px 0 12px;padding:11px 13px;
   background:#F4F1FE;border:1px solid #DCD2F5;border-radius:9px;
 }
-.pickbar span{flex:1;font-size:11px;line-height:1.6;color:#4C3A85}
-.pickbar .btn{flex:none}
+.pickbar span{font-size:11px;line-height:1.6;color:#4C3A85}
+.pickbar .btn{align-self:flex-start}
 .ptick{display:flex;align-items:center;gap:7px;cursor:pointer}
 .draftnotes{margin-top:10px}
+.starters{margin-bottom:11px}
+.startlead{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px}
+.starter{
+  display:block;width:100%;text-align:left;background:#fff;
+  border:1px solid var(--paper-3);border-radius:9px;padding:9px 11px;
+  margin-bottom:6px;cursor:pointer;
+}
+.starter:hover{border-color:var(--amber);background:#FFFDF7}
+.starter b{display:block;font-size:12px;font-weight:600}
+.starter span{display:block;font-size:10.5px;color:var(--muted);margin:1px 0 5px}
+.starter code{
+  display:block;font-family:var(--mono);font-size:9.5px;line-height:1.45;
+  color:#3C4453;background:var(--paper-2);border-radius:5px;padding:5px 7px;
+  white-space:pre-wrap;word-break:break-word;
+}
+.whylist{margin:6px 0 8px;padding-left:18px}
+.whylist li{font-size:11.5px;line-height:1.6;margin-bottom:4px}
+.paperwarn .whylist li{color:#6B5418}
 .draftnotes b{display:block;font-size:10px;letter-spacing:.09em;
   text-transform:uppercase;color:#98A6B8;margin-bottom:6px}
 .draftnotes pre{
@@ -1404,10 +1423,13 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .paperhead p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.6;
   max-width:620px}
 .paperflow{
-  display:grid;grid-template-columns:repeat(auto-fit, minmax(330px, 1fr));
-  gap:16px;padding:18px 24px 28px;max-width:1180px;margin:0 auto;
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));
+  gap:16px;padding:18px 24px 28px;max-width:1320px;margin:0 auto;
   align-items:start;
 }
+/* the reading column scrolls rather than running the page to a mile long */
+#stage1 .stagebody{max-height:74vh;overflow-y:auto}
+#stage2 .stagebody,#stage3 .stagebody{position:sticky;top:12px}
 .stagecard{
   background:#fff;border:1px solid var(--paper-3);border-radius:12px;
   box-shadow:0 1px 2px rgba(22,32,46,.05), 0 6px 18px rgba(22,32,46,.05);
@@ -1455,7 +1477,7 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .specbar{display:flex;align-items:center;gap:9px;margin-bottom:9px}
 .specbar .hint{font-size:10.5px;color:var(--muted);line-height:1.4}
 .speced{
-  width:100%;min-height:300px;resize:vertical;font-family:var(--mono);
+  width:100%;min-height:260px;max-height:52vh;resize:vertical;font-family:var(--mono);
   font-size:10.5px;line-height:1.55;padding:10px 12px;
   border:1px solid var(--paper-3);border-radius:8px;background:#FCFCFD;
 }
@@ -5266,8 +5288,10 @@ async function renderPaperPage(){
         <div class="stagebody">
           <div class="specbar">
             <button class="btn" id="btnPropose">Propose one</button>
-            <span class="hint" id="proposeHint"></span>
+            <span class="hint">or start from one that works &darr;</span>
           </div>
+          <div id="specStarters" class="starters"></div>
+          <div id="specProblems"></div>
           <textarea id="specText" class="speced" spellcheck="false"
             placeholder='{\n "key": "my_structure",\n "claim": "…",\n "n": 12,\n "residual": "x0 - alpha*x - …"\n}'></textarea>
         </div>
@@ -5311,6 +5335,7 @@ async function renderPaperPage(){
       }
     }));
 
+  loadStarters();
   $("btnFind").addEventListener("click", findPapers);
   $("findQ").addEventListener("keydown", ev => {
     if (ev.key === "Enter") findPapers();
@@ -5323,6 +5348,37 @@ async function renderPaperPage(){
 
 /* The search reaches Europe PMC and arXiv. It is the only part of the app that
    touches the internet, and it says so. */
+/* Writing a residual from a blank template is the hardest step here, and the
+   editor was offering no help with it. A working spec of the same shape is
+   worth more than any description of the fields. */
+async function loadStarters(){
+  const host = $("specStarters");
+  if (!host) return;
+  let d;
+  try{
+    d = await (await fetch(API + "/api/paper/examples")).json();
+  } catch { return; }
+  if (!d.examples || !d.examples.length) return;
+  host.innerHTML = `<div class="startlead">Two that already work. Load the one
+    whose shape matches your paper and edit it — three lines changed is a
+    different task from an empty file.</div>`
+    + d.examples.map((e, i) => `
+      <button class="starter" data-start="${i}">
+        <b>${e.title}</b>
+        <span>${e.shape}</span>
+        <code>${(e.spec.residual || "").replace(/</g, "&lt;").slice(0, 130)}</code>
+      </button>`).join("");
+  host.querySelectorAll("[data-start]").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const chosen = d.examples[+btn.dataset.start];
+      const spec = { ...chosen.spec, key: "my_" + chosen.spec.key };
+      $("specText").value = JSON.stringify(spec, null, 1);
+      $("specProblems").innerHTML = `<div class="paperfound">Loaded
+        <b>${chosen.title}</b>. It passes as it stands — change the key, the
+        claim, and the residual to match your paper, then check it.</div>`;
+    }));
+}
+
 async function findPapers(){
   const out = $("findOut");
   const question = ($("findQ").value || "").trim();
@@ -5606,15 +5662,35 @@ async function checkSpec(thenSave){
   } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
 
   if (!d.ok){
-    out.innerHTML = `<div class="runfail">
-      Rejected at the ${d.stage} stage: ${d.message || "it did not pass"}.
-      <br>A spec that fails loudly is the point — the alternative is a plausible
+    // Split "a - b - c" into the separate things they are: each one is a
+    // separate edit, and a wall of prose reads as a single wall.
+    const parts = String(d.message || "it did not pass")
+      .split(/\s+-\s+/).map(x => x.trim()).filter(Boolean);
+    const head = parts.shift() || "";
+    const list = parts.length
+      ? `<ul class="whylist">${parts.map(x => `<li>${x}</li>`).join("")}</ul>` : "";
+
+    out.innerHTML = `<div class="runfail">Rejected at the ${d.stage} stage.
+      ${head}${list}
+      A spec that fails loudly is the point — the alternative is a plausible
       architecture that quietly wastes a week.</div>`
       + (d.checks ? checkTable(d) : "");
+
+    // and beside the editor, which is where they get fixed
+    const near = $("specProblems");
+    if (near){
+      near.innerHTML = `<div class="paperwarn"><b>${parts.length || 1} thing${
+        parts.length === 1 ? "" : "s"} to fix</b>${list || `<p>${head}</p>`}</div>`;
+      const stage = $("stage2");
+      if (stage && stage.scrollIntoView)
+        stage.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     return;
   }
   out.innerHTML = `<div class="paperok">Passed ${d.counts.pass} checks${
     d.counts.skip ? `, ${d.counts.skip} skipped` : ""}.</div>` + checkTable(d);
+  const near = $("specProblems");
+  if (near) near.innerHTML = "";
 
   if (thenSave){
     let s;
