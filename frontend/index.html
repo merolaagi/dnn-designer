@@ -1375,13 +1375,16 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 }
 .hitacts{display:flex;align-items:center;gap:10px;margin-top:8px}
 .hitnotext{font-size:10px;color:#B7C0CB}
-.pickbar{
+/* Named .choosebar, not .pickbar: that was already the 13px progress bar in
+   the walkthrough's prediction list, complete with overflow:hidden, which
+   clipped this to a single cut-off line. */
+.choosebar{
   display:flex;flex-direction:column;align-items:stretch;gap:9px;
   margin:10px 0 12px;padding:11px 13px;
   background:#F4F1FE;border:1px solid #DCD2F5;border-radius:9px;
 }
-.pickbar span{font-size:11px;line-height:1.6;color:#4C3A85}
-.pickbar .btn{align-self:flex-start}
+.choosebar span{font-size:11px;line-height:1.6;color:#4C3A85}
+.choosebar .btn{align-self:flex-start}
 .ptick{display:flex;align-items:center;gap:7px;cursor:pointer}
 .draftnotes{margin-top:10px}
 .starters{margin-bottom:11px}
@@ -5523,7 +5526,7 @@ function showPaperPassages(d){
       d.sections.length ? ` · ${d.sections.length} sections` : ""}${
       d.equations && d.equations.length ? ` · ${d.equations.length} expressions` : ""}.
       A result that never says “unique” will rank low and still be the right one.</div>
-    <div class="pickbar">
+    <div class="choosebar">
       <span>Tick the passages that carry the result, then draft from them. The
       top-ranked one is not always the load-bearing one, and a spec drafted from
       the wrong theorem will model the wrong thing confidently.</span>
@@ -6769,7 +6772,7 @@ function storyClosing(story){
       <div class="pick${i === 0 ? " best" : ""}">
         <span class="pickid">${c.task === "regression" ? "value " + p.index
                                                        : "#" + p.index}</span>
-        <span class="pickbar"><i style="width:${
+        <span class="choosebar"><i style="width:${
           (Math.abs(p.p) / most * 100).toFixed(1)}%"></i></span>
         <span class="pickp">${c.task === "regression"
           ? p.p : (p.p * 100).toFixed(1) + "%"}</span>

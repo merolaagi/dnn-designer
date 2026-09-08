@@ -1,0 +1,59 @@
+{
+ "key": "my_convex_ridge",
+ "title": "Convex ridge potential (spec)",
+ "paper": "Convex ridge regularisers / input-convex energies",
+ "claim": "A strongly convex potential has exactly one stationary point, and it is the global minimum.",
+ "n": 12,
+ "consts": {
+  "K": 16,
+  "alpha": 0.5
+ },
+ "params": {
+  "Wr": {
+   "shape": [
+    "K",
+    "n"
+   ],
+   "init": "randn/sqrt(n)"
+  },
+  "b": {
+   "shape": [
+    "K"
+   ],
+   "init": "zeros"
+  },
+  "s": {
+   "shape": [
+    "K"
+   ],
+   "init": "randn*0.3",
+   "transform": "softplus"
+  }
+ },
+ "residual": "x0 - alpha*x - (sigmoid(x @ Wr.T + b) * s) @ Wr",
+ "inject": "residual",
+ "variants": [
+  {
+   "key": "convex",
+   "label": "coefficients >= 0, alpha > 0 - strongly convex",
+   "structured": true
+  },
+  {
+   "key": "flat",
+   "label": "alpha = 0 - convex, not strongly",
+   "consts": {
+    "alpha": 0
+   }
+  },
+  {
+   "key": "signed",
+   "label": "coefficients free - convexity broken",
+   "params": {
+    "s": {
+     "transform": "free"
+    }
+   }
+  }
+ ],
+ "notes": "Mirrors the hand-written `convex` domain. Kept as the reference example for the spec format, and as a regression test that a declared domain reproduces a coded one."
+}

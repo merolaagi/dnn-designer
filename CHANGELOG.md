@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.48.1
+
+**Fixed: the tick bar was still clipped, and stacking it did not help.**
+
+The cause was a name collision. `.pickbar` was already the 13px progress bar in
+the walkthrough's prediction list, with `overflow:hidden` — so the panel was
+being clipped to one cut-off line by a rule written for something else
+entirely. Everything about my own rule was correct, which is why changing it
+twice changed nothing.
+
+The panel is `.choosebar` now.
+
+**A test for the whole class of bug.** CSS does not replace a repeated rule, it
+merges with it, which is worse than replacing. The check flags a class that is
+both a fixed clipped box and a container, since whichever is meant will come out
+clipped. Two rules that simply add to each other are left alone — that is normal
+and there were two such pairs already, correctly ignored. Verified by putting
+the collision back: it reports `.pickbar`.
+
+This is the second time a name reused for two things has cost a version. The
+first was two functions called `scanFolder`, where the later definition silently
+replaced the earlier.
+
 ## 1.48.0
 
 **Start from a spec that works.** The check was right to reject a template with

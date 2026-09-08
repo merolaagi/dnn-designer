@@ -3940,6 +3940,48 @@ def _():
     assert "placeStep(" in guided[:600], "the stepper no longer shares placeStep"
 
 
+@check("no class name is styled as two different things")
+def _():
+    """A second CSS rule does not replace the first, it merges with it, which is
+    worse than replacing.
+
+    Two rules adding to each other is normal and fine. What is not fine is one
+    rule constraining a name to a fixed height with the overflow hidden while
+    another treats the same name as a container to lay things out in — that is
+    what `.pickbar` was, a 13px progress bar and a panel, and the panel came out
+    clipped to a single cut-off line while everything else about it looked
+    correct.
+    """
+    import re
+    from collections import defaultdict
+
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+    rules = defaultdict(list)
+    for match in re.finditer(r"([^{}]+)\{([^}]*)\}", css):
+        body = match.group(2).replace(" ", "").replace("\n", "")
+        for selector in match.group(1).split(","):
+            selector = selector.strip()
+            if re.fullmatch(r"\.[\w-]+", selector):
+                rules[selector].append(body)
+
+    clashes = []
+    for name, bodies in rules.items():
+        if len(bodies) < 2:
+            continue
+        boxed = any(re.search(r"height:\d", b) and "overflow:hidden" in b
+                    for b in bodies)
+        container = any("display:flex" in b or "display:grid" in b
+                        or "padding:" in b for b in bodies)
+        if boxed and container:
+            clashes.append(name)
+
+    assert not clashes, (
+        "these names are both a fixed clipped box and a container, so whichever "
+        "is meant will come out clipped: " + ", ".join(sorted(clashes)))
+
+
 @check("no two functions on the page share a name")
 def _():
     """A later definition silently replaces an earlier one.
