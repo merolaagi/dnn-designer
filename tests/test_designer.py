@@ -4028,6 +4028,54 @@ def _():
             f"{called} does not exist"
 
 
+@check("a run says how much data there is per parameter")
+def _():
+    """Two numbers that explain most disappointing runs and were on screen
+    nowhere: parameters per training value, and how many passes over the data
+    the run will make. A GPT-2 on a 470k-character corpus is 346 parameters per
+    character seeing it 1.09 times, and neither figure was visible."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import train as T
+
+    body = inspect.getsource(T._report_capacity)
+    assert "per value" in body, "the density is not reported"
+    assert "passes" in body, "how much of the data will be seen is not reported"
+
+    # it must be called where the loader exists, not before it
+    run = inspect.getsource(T._run)
+    at = run.index("_report_capacity(")
+    before = run[:at]
+    assert "train_loader, val_loader, meta = _make_loaders(" in before, \
+        "the report runs before the loaders exist, which is an UnboundLocalError"
+
+    # and it must not refuse anything: plenty of useful work happens at
+    # ratios like these deliberately
+    assert "raise" not in body, "the report blocks a run instead of describing it"
+
+    class Stub:
+        learnables = 2_000_000
+        notes: list = []
+
+        def emit(self, kind, **payload):
+            self.notes.append((kind, payload.get("message", "")))
+
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+
+    loader = DataLoader(TensorDataset(torch.zeros(64, 16, dtype=torch.long),
+                                      torch.zeros(64, 16, dtype=torch.long)),
+                        batch_size=8)
+    job = Stub()
+    T._report_capacity(job, {"epochs": 1}, loader, [[16]])
+    kinds = [k for k, _ in job.notes]
+    assert "warning" in kinds, "nothing was reported at all"
+    said = " ".join(m for _, m in job.notes)
+    assert "per value" in said and "memorise" in said, said
+    assert "1.0 time" in said, said
+
+
 @check("sampling works whatever the prompt's length")
 def _():
     """A model written with explicit reshapes has its context length baked

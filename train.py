@@ -184,6 +184,49 @@ IMAGE_SETS = {"mnist", "fashion_mnist", "cifar10", "folder"}
 INDEX_SETS = {"text", "microlean"}
 
 
+def _report_capacity(job: Job, cfg, train_loader, in_shapes) -> None:
+    """Say how much data there is per parameter, and how much will be seen.
+
+    These two numbers explain most disappointing runs and neither is on screen
+    anywhere: a network with hundreds of parameters per training example will
+    memorise if trained long enough, and one that sees its data barely once
+    cannot have learned much yet. Both are arithmetic, so they are stated
+    rather than guessed at, and neither is a reason to refuse — plenty of
+    useful work happens at ratios like these on purpose.
+    """
+    params = job.learnables or 0
+    if not params:
+        return
+    try:
+        batches = len(train_loader)
+        sample = next(iter(train_loader))[0]
+        first = sample[0] if isinstance(sample, (list, tuple)) else sample
+        per_batch = int(first.numel() // max(1, first.size(0)))
+        examples = batches * int(first.size(0))
+    except Exception:  # noqa: BLE001 - a loader that cannot be sized says nothing
+        return
+
+    values = examples * max(1, per_batch)
+    if values <= 0:
+        return
+    density = params / values
+    seen = values * max(1, int(cfg.get("epochs", 1)))
+
+    lines = [f"{params:,} parameters against {values:,} training values — "
+             f"{density:.0f} per value."]
+    if density > 20:
+        lines.append("A network with that many parameters per value can "
+                     "memorise the set rather than learn from it. Falling "
+                     "validation loss is the thing to watch; if it turns while "
+                     "training loss keeps dropping, that is what happened.")
+    passes = seen / values
+    if passes < 3:
+        lines.append(f"This run will see the data about {passes:.1f} time"
+                     f"{'' if abs(passes - 1) < 0.05 else 's'} over. Little of "
+                     f"what a model can learn is learned in one pass.")
+    job.emit("warning", message=" ".join(lines))
+
+
 def check_dataset_fits(cfg, in_shapes) -> None:
     """Refuse a pairing that cannot work, before anything is built.
 
@@ -1197,6 +1240,8 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                     message=(f"The target has {wanted} classes but the last layer outputs "
                              f"{have} units. Set it to {wanted} or training will fight you."),
                 )
+
+        _report_capacity(job, cfg, train_loader, in_shapes)
 
         criteria = [_criterion(t) for t in tasks]
         aux = float(cfg.get("aux_weight", 0.3))

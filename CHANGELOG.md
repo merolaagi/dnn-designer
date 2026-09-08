@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.57.0
+
+**A run now says how much data there is per parameter, and how much of it will
+be seen.**
+
+Two numbers that explain most disappointing runs, and neither was on screen
+anywhere. A GPT-2 trained on a 470,937-character corpus is **346 parameters per
+character**, seeing the corpus **1.09 times** in five epochs of 1,600 crops.
+Both are arithmetic, so they are stated rather than guessed at:
+
+> *163,037,184 parameters against 470,937 training values — 346 per value. A
+> network with that many parameters per value can memorise the set rather than
+> learn from it. Falling validation loss is the thing to watch; if it turns
+> while training loss keeps dropping, that is what happened. This run will see
+> the data about 1.1 times over. Little of what a model can learn is learned in
+> one pass.*
+
+Neither figure refuses anything. Plenty of useful work happens at ratios like
+these deliberately, and a tool that blocked it would be wrong more often than
+the ratio is. But it should not be invisible, and it was.
+
+Fixed while writing it: the first version called the report before the data
+loaders existed, which is an `UnboundLocalError` rather than a report. The test
+now pins where it is called as well as what it says.
+
 ## 1.56.1
 
 **Fixed: sampling failed on any prompt shorter than the context length.**
