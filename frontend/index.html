@@ -1231,6 +1231,36 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .dockbody{flex:1;overflow-y:auto;padding:16px 18px;min-height:340px}
 .dockintro p{margin:0 0 10px;font-size:13px;line-height:1.65;color:#3C4B5F}
 .dockintro .dockquiet{color:var(--muted);font-size:11.5px}
+.advlayer{
+  border:1px solid var(--paper-3);border-radius:9px;padding:11px 13px;
+  margin-bottom:12px;background:var(--paper-2);
+}
+.advhead{display:flex;align-items:baseline;gap:8px}
+.advhead b{font-size:14px;font-weight:600}
+.advhead span{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.advshape{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+.advshape i{font-style:normal;color:#8A5CF6}
+.advmeta{font-size:11px;color:var(--muted);margin-top:3px}
+.advdoc{margin:7px 0 0;font-size:11.5px;line-height:1.6;color:#3C4B5F}
+.advknobs{margin-top:9px;display:flex;flex-direction:column;gap:6px}
+.knob{font-size:11px;line-height:1.55}
+.knob b{font-weight:600}
+.knob span{color:var(--muted)}
+.knob p{margin:1px 0 0;color:var(--muted)}
+.advsec{
+  font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98A6B8;
+  font-weight:700;margin:14px 0 8px;
+}
+.advidea{
+  border:1px solid var(--paper-3);border-radius:9px;padding:10px 12px;
+  margin-bottom:7px;background:#fff;
+}
+.advidea b{display:block;font-size:12.5px;font-weight:600;margin-bottom:3px}
+.advidea p{margin:0 0 6px;font-size:11.5px;line-height:1.6;color:#3C4B5F}
+.advcost{
+  font-size:10px;color:#7A5400;background:#FFF6E6;border-radius:5px;
+  padding:2px 7px;margin-right:7px;
+}
 .dockchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
 .dockchip{
   background:#F4F1FE;border:1px solid #DCD2F5;color:#4C3A85;border-radius:14px;
@@ -4985,34 +5015,93 @@ function toggleDock(open){
   dock.classList.toggle("hidden", !want);
   $("dockTab").classList.toggle("on", want);
   if (want){
-    if (!state.dockSeen) dockWelcome();
+    state.dockSeen = true;
+    dockAdvice();
     $("dockAsk").focus();
   }
 }
 
-function dockWelcome(){
-  state.dockSeen = true;
+/* The dock opens on what is actually in front of you: what the selected layer
+   is doing, and what this particular graph invites next. A list of general
+   advice would be the same list for every network, which is the same as no
+   advice. */
+async function dockAdvice(){
   const body = $("dockBody");
+  body.innerHTML = `<div class="dockintro"><p class="dockquiet">reading the design…</p></div>`;
+  let d;
+  try{
+    d = await (await fetch(API + "/api/assistant/advise", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ graph: state.graph, selected: state.sel || "" }),
+    })).json();
+  } catch {
+    body.innerHTML = `<div class="dockintro"><p>The server did not answer.</p></div>`;
+    return;
+  }
+  state.advice = d;
+
   const has = (state.graph.nodes || []).length;
+  if (!has){
+    body.innerHTML = `<div class="dockintro">
+      <p>Nothing on the canvas yet. Open a design or a guided build and I will
+      have something to say about it — I read the graph rather than guessing.</p>
+    </div>`;
+    return;
+  }
+
+  const layer = d.layer;
   body.innerHTML = `
-    <div class="dockintro">
-      <p>I read the design on the canvas and can change it. I do not invent
-      networks from a description — what I am good for is the next edit and an
-      honest look at what is there.</p>
-      ${has ? `<p class="dockquiet">${has} layer${has === 1 ? "" : "s"} open.</p>`
-            : `<p class="dockquiet">Nothing on the canvas yet. Open a design or a
-               guided build first and I will have something to talk about.</p>`}
-    </div>
+    ${layer ? `<div class="advlayer">
+      <div class="advhead"><b>${layer.name}</b><span>${layer.type}</span></div>
+      <div class="advshape">${
+        (layer.in_shapes || []).filter(Boolean).map(x => x.join("×")).join(" + ")
+        || "—"} <i>→</i> ${(layer.out_shape || []).join("×")}</div>
+      ${layer.parameters ? `<div class="advmeta">${
+        layer.parameters.toLocaleString()} parameters${
+        layer.share ? ` · ${layer.share}` : ""}</div>` : ""}
+      ${layer.doc ? `<p class="advdoc">${layer.doc}</p>` : ""}
+      ${layer.knobs && layer.knobs.length ? `<div class="advknobs">${
+        layer.knobs.filter(k => k.effect).map(k => `
+          <div class="knob"><b>${k.name}</b> <span class="mono">${k.value}</span>
+            <p>${k.effect}</p></div>`).join("")}</div>` : ""}
+    </div>` : `<div class="dockintro"><p class="dockquiet">Select a layer to see
+      what it is doing and what can be changed about it.</p></div>`}
+
+    ${(d.ideas || []).length ? `<div class="advsec">what this design invites</div>
+      ${d.ideas.map((idea, i) => `
+        <div class="advidea">
+          <b>${idea.title}</b>
+          <p>${idea.why}</p>
+          ${idea.cost ? `<span class="advcost">${idea.cost}</span>` : ""}
+          ${idea.action ? `<button class="btn tiny" data-do="${i}">Do it</button>` : ""}
+        </div>`).join("")}`
+      : `<div class="advsec">nothing pressing</div>
+         <p class="dockquiet" style="padding:0 2px">Nothing structural stands out.
+         That is not praise — it means the next question is empirical, which is
+         what the Studies tab is for.</p>`}
+
     <div class="dockchips">
-      ${["review", "add dropout after the last layer",
-         "what would you change?", "add batchnorm before the activation"]
+      ${["review", "what would you change?"]
         .map(t => `<button class="dockchip" data-say="${t}">${t}</button>`).join("")}
     </div>`;
+
+  body.querySelectorAll("[data-do]").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const idea = d.ideas[+btn.dataset.do];
+      if (!idea || !idea.action) return;
+      $("dockAsk").value = idea.action;
+      dockSend();
+    }));
   body.querySelectorAll("[data-say]").forEach(chip =>
     chip.addEventListener("click", () => {
       $("dockAsk").value = chip.dataset.say;
       dockSend();
     }));
+}
+
+function dockWelcome(){
+  state.dockSeen = true;
+  dockAdvice();
 }
 
 async function dockSend(){

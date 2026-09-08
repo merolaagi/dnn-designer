@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.51.0
+
+**The assistant advises now, and it advises about your design.**
+
+Opening the dock reads the graph and answers two questions: what the selected
+layer is doing, and what this particular network invites next. A list of general
+advice is the same list for every network, which is the same as no advice — so
+nothing is suggested that the graph does not actually ask for.
+
+**The selected layer**: its shapes in and out, its parameter count and share of
+the whole, what it is for, and what each of its settings does in the terms that
+matter — *"5×5 is 2.8× a 3×3; two stacked 3×3 see as far as one 5×5 for fewer
+weights"*, *"more heads is free — the width is split, not multiplied"*.
+
+**What the design invites**, worst first, each with what it would cost:
+
+- Two dense layers with nothing between them, which compose to one dense layer.
+- A convolution with no normalization after it.
+- A `Flatten` handing 65,536 numbers to a dense layer — with the arithmetic:
+  *"that one layer is 33,554,432 weights on its own; pooling first would save
+  about 25 million."*
+- Attention over embeddings with no positions, so word order is invisible.
+- Four convolutions deep with nothing carrying the gradient back.
+- The layer holding most of the parameters, named.
+
+Each suggestion has a **Do it** button that runs the edit. A clean design is told
+so plainly: *"nothing structural stands out — that is not praise, it means the
+next question is empirical, which is what Studies is for."*
+
+Nothing here predicts that a change will help. Whether it helps is what a study
+measures; this says what is worth measuring.
+
 ## 1.50.1
 
 **Fixed: the 8-bit row did not run on Apple silicon.**

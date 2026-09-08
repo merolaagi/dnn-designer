@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, Streamin
 from pydantic import BaseModel
 
 import agents
+import advisor
 import assistant
 import auth
 import blockloader
@@ -266,6 +267,28 @@ def ask_assistant(body: AssistantPayload):
         return assistant.handle(json.loads(json.dumps(body.graph)), body.message)
     except Exception as exc:  # noqa: BLE001 - never let a phrasing crash the panel
         return {"reply": f"That went wrong on my side: {type(exc).__name__}: {exc}"}
+
+
+class AdvicePayload(BaseModel):
+    graph: Dict[str, Any]
+    selected: str = ""
+
+
+@app.post("/api/assistant/advise")
+def assistant_advise(body: AdvicePayload):
+    """What is worth trying here, and what the selected layer is doing.
+
+    Grounded in the graph: nothing is suggested that this design does not
+    actually invite. Whether a change helps is what a study measures; this only
+    says what is worth measuring.
+    """
+    try:
+        g = G.parse(json.loads(json.dumps(body.graph)))
+        report = G.analyze(g)
+        return advisor.advise(g, report, body.selected or None)
+    except Exception as exc:  # noqa: BLE001
+        return {"ideas": [], "layer": None,
+                "error": f"{type(exc).__name__}: {exc}"}
 
 
 @app.get("/api/assistant/review")

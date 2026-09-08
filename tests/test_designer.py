@@ -1113,6 +1113,68 @@ def _():
     assert "renderLaunchPad()" in boot, "boot never fills the launch pad"
 
 
+@check("the advice is about this design, not about designs in general")
+def _():
+    """A list of general advice is the same list for every network, which is
+    the same as no advice. Every suggestion here has to be one this particular
+    graph invites, and has to carry what it would cost."""
+    import advisor
+
+    # a design with real faults: no norm after the conv, two dense layers with
+    # nothing between them, and a flatten handing over a fortune
+    g, rep = analyzed(build(
+        [("i", "Input", {"shape": [3, 32, 32]}),
+         ("c", "Conv2d", {"filters": 64, "kernel": 5}),
+         ("f", "Flatten", {}),
+         ("d", "Linear", {"units": 512}),
+         ("h", "Linear", {"units": 10}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "c", 0), ("c", "f", 0), ("f", "d", 0), ("d", "h", 0), ("h", "o", 0)],
+        "Faulty"))
+    out = advisor.advise(g, rep, selected="c")
+    titles = " ".join(i["title"].lower() for i in out["ideas"])
+    assert "activation" in titles, "two dense layers in a row went unremarked"
+    assert "normaliz" in titles, "an unnormalized convolution went unremarked"
+    assert "pool" in titles, "a flatten over 65k values went unremarked"
+    for idea in out["ideas"]:
+        assert idea["why"], f"{idea['title']} gives no reason"
+        assert idea["cost"], f"{idea['title']} does not say what it costs"
+
+    # and a clean design must not be given the same advice anyway
+    clean, rep2 = analyzed(build(
+        [("i", "Input", {"shape": [3, 32, 32]}),
+         ("c", "Conv2d", {"filters": 16, "kernel": 3}),
+         ("n", "BatchNorm2d", {}),
+         ("a", "Activation", {"kind": "relu"}),
+         ("g", "GlobalAvgPool", {}),
+         ("h", "Linear", {"units": 10}),
+         ("o", "Output", {"task": "classification"})],
+        [("i", "c", 0), ("c", "n", 0), ("n", "a", 0), ("a", "g", 0),
+         ("g", "h", 0), ("h", "o", 0)], "Clean"))
+    tidy = " ".join(i["title"].lower() for i in advisor.advise(clean, rep2)["ideas"])
+    assert "normaliz" not in tidy, "advised normalizing a layer that is normalized"
+    assert "activation" not in tidy, "advised an activation where there is one"
+
+    # the selected layer is described from the graph, with its real numbers
+    layer = out["layer"]
+    assert layer["out_shape"] == [64, 32, 32], layer["out_shape"]
+    assert layer["parameters"] == 3 * 5 * 5 * 64 + 64, layer["parameters"]
+    kernel = next(k for k in layer["knobs"] if k["name"] == "kernel")
+    assert "\u00d7" in kernel["effect"], "the effect text has an unrendered escape"
+    assert "5\u00d75" in kernel["effect"], kernel["effect"]
+
+    # an unparseable graph must not take the panel down
+    broken = advisor.advise.__module__  # keep the import used
+    import main
+
+    answer = main.assistant_advise(
+        main.AdvicePayload(graph={"nodes": [{"bad": True}], "edges": []}))
+    assert "ideas" in answer, answer
+
+    for token in ("function dockAdvice", "advidea", "data-do="):
+        assert token in PAGE, f"{token} is missing from the dock"
+
+
 @check("the assistant dock talks to the assistant")
 def _():
     """The dock posts to the same endpoint the panel does, and the endpoint
@@ -4134,7 +4196,7 @@ def _():
         "renderDomainsPage", "domFill", "armCard", "placeDomain", "validateAllDomains",
         "findPapers", "paperRow", "fetchPaper", "showPaperPassages", "draftSpec",
         "loadStarters", "buildFromDomain",
-        "dockWelcome", "dockSend", "openImportDialog",
+        "dockWelcome", "dockSend", "dockAdvice", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",
         "runPrecision", "measurePrecision",
