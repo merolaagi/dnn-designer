@@ -1078,6 +1078,19 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
         # it — an equilibrium found to 1e-10 is not reachable in float32. When
         # any parameter is double, the whole model and every batch follow, or
         # the first matrix multiply fails on a dtype mismatch.
+        # An activation on its own is a perfectly good layer and a useless
+        # model: there is nothing for an optimizer to update. Torch's own
+        # message for this is "optimizer got an empty parameter list", which
+        # says what broke and not why.
+        if not any(p.requires_grad for p in model.parameters()):
+            raise DataError(
+                "This design has no trainable parameters, so there is nothing "
+                "to train. It is arithmetic on the input — an activation or a "
+                "few elementwise operations with no weights anywhere. Add a "
+                "layer that learns something (Linear, Conv2d, Embedding) "
+                "between the input and the output, or import a class that has "
+                "weights of its own.")
+
         wants_double = needs_double(model, cfg)
         if wants_double:
             model = model.double()

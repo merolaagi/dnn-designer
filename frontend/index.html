@@ -1714,7 +1714,7 @@ body.sizing{user-select:none}
    have to match it to win — otherwise every box stretches to the full row and
    squashes the class name it sits beside */
 .field input[type=text].scanargs, .scanargs{
-  width:168px;font-family:var(--mono);font-size:10px;padding:3px 6px;
+  width:190px;font-family:var(--mono);font-size:10px;padding:3px 6px;
   border:1px solid var(--paper-3);border-radius:5px;flex:none;
 }
 .field input[type=text]#scanFilter{flex:1;width:auto}
@@ -1723,6 +1723,10 @@ body.sizing{user-select:none}
   border-color:#E0C48A;background:#FFFCF3;
 }
 .scanargs.none{border:none;color:#B7C0CB;font-size:9.5px;text-align:right}
+.argnote{
+  font-size:10.5px;line-height:1.6;color:#6B5418;background:#FFF8E9;
+  border:1px solid #E8D9AE;border-radius:7px;padding:8px 10px;margin-top:8px;
+}
 .scanrow em{font-style:normal;font-size:9.5px;white-space:nowrap;flex:none}
 .v-ok{color:#256B39}
 .v-no{color:#8C2F27}
@@ -3561,9 +3565,13 @@ function renderInspector(){
     const entry = state.nodeCode && state.nodeCode[state.sel];
     if (entry && entry.var) highlightInCode(entry.var);
   }
-  if (state.sidePanel !== "layer" && state.sidePanel !== "guide"
-      && state.sidePanel !== "ask" && state.sidePanel !== "math"
-      && state.sidePanel !== "run" && state.sidePanel !== "story"
+  // Selecting a layer used to switch the panel to Layer unless the open tab
+  // was on a list of exceptions — a list that grew with every new tab and was
+  // missing Code, so reading a layer's line threw you out of the file you were
+  // reading. Only two tabs are useless without a selection, so name those
+  // instead: the list to maintain is the short one.
+  const NEEDS_NOTHING_SELECTED = new Set(["network", "needs"]);
+  if (NEEDS_NOTHING_SELECTED.has(state.sidePanel)
       && (state.sel || state.selEdge) && state.page === "pageDesign"){
     showSide("layer");
   }
@@ -8263,6 +8271,12 @@ function renderScanResults(){
      </div>
      ${scan.repo ? `<div class="repoline">from <b>${scan.repo}</b> at
         <span class="mono">${scan.ref}</span></div>` : ""}
+     ${scan.models.some(m => m.arguments > 0)
+       ? `<div class="argnote">Some of these take a constructor argument — the
+          box on the row is what to pass, not how many. Build it in
+          <b>Setup</b> below and name it here. For a class taking a config that
+          is usually one line in Setup and <span class="mono">cfg</span> in the
+          box.</div>` : ""}
      <div class="scannote">Read ${scan.files} files.
        ${scan.skipped.length ? `<span class="scanskip">${scan.skipped.length}
          skipped for syntax errors.</span>` : ""}
@@ -8335,7 +8349,9 @@ function scanRow(model, scan){
     ${model.arguments > 0
       ? `<input type="text" class="scanargs${
              (scan.args[key] || "").trim() ? "" : " wanting"}" data-args="${key}"
-           placeholder="${model.arguments} argument${model.arguments > 1 ? "s" : ""} needed"
+           title="What to pass this class. Define it in Setup first, then name it here — for minGPT that is cfg."
+           placeholder="${(scan.signature || "").split(",")[0].trim()
+                          || "what to pass"}"
            value="${(scan.args[key] || "").replace(/"/g, "&quot;")}">`
       : `<span class="scanargs none">no args</span>`}
     ${badge}
@@ -8364,6 +8380,7 @@ async function peekAt(key){
     })).json();
   } catch { return; }
   state.peekCache[key] = d;
+  if (d && d.signature) state.scan.signature = d.signature;
   if (state.peekKey === key) paintPeek(model, d);
 }
 

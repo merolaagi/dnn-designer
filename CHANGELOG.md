@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.52.0
+
+Three faults from one session with minGPT, all of them fair.
+
+**The Code tab threw you out when you clicked a layer.** Selecting a layer
+switched the panel to Layer unless the open tab was on a list of exceptions —
+a list that had grown with every new tab and never gained Code. So clicking a
+layer to find its line closed the file you were reading it in. Only two tabs are
+useless without a selection, so those are named instead: a list that stays short
+rather than one that goes stale.
+
+**The argument box looked like it wanted a count.** It said "1 argument needed",
+the box was too narrow to show it, and what survived was "1" — which reads as a
+value. It now shows the name from the class's own signature, `config` for
+minGPT's three, and a line above the list says plainly that the box is *what to
+pass*, not how many: build it in Setup and name it here.
+
+**Training a design with no weights failed with torch's message, not ours.**
+Importing `NewGELU` gives exactly that: an elementwise power, an add, a tanh and
+a multiply, with nothing learnable anywhere. The optimizer then says "optimizer
+got an empty parameter list", which reports what broke and not why. It now says
+there is nothing to train, and which kinds of layer would give it something —
+before the run starts rather than inside it.
+
 ## 1.51.1
 
 **Fixed: after importing, the design was nowhere to be seen.**

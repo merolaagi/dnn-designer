@@ -8,6 +8,7 @@ worse than no designer.
 """
 
 import json
+import inspect
 import sys
 import uuid
 from pathlib import Path
@@ -3815,6 +3816,58 @@ def _():
                              "set kernel to 3 on linear")
     assert not reply.get("changed"), "it should not invent a setting"
     assert "no setting called kernel" in reply["reply"], reply
+
+
+@check("selecting a layer leaves the open tab alone")
+def _():
+    """The panel used to jump to Layer unless the open tab was on a list of
+    exceptions — a list that grew with every new tab and had never gained Code,
+    so clicking a layer to find its line threw you out of the file.
+
+    Only two tabs are useless without a selection. Naming those is a list that
+    stays short; naming the others is one that goes stale.
+    """
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function renderInspector"):]
+    body = body[: body.index("\n}\n")]
+
+    assert "NEEDS_NOTHING_SELECTED" in body, \
+        "the panel still decides by listing the tabs it must not disturb"
+    assert 'state.sidePanel !== "code"' not in body, \
+        "the old exception list is still there"
+
+    listed = body[body.index("NEEDS_NOTHING_SELECTED"):]
+    listed = listed[: listed.index("]")]
+    for tab in ("code", "math", "run", "story", "train", "ask", "guide"):
+        assert f'"{tab}"' not in listed, \
+            f"selecting a layer would still throw you out of the {tab} tab"
+
+
+@check("a design with nothing to learn says so")
+def _():
+    """An activation on its own is a fine layer and a useless model. torch's
+    own message is "optimizer got an empty parameter list", which says what
+    broke and not why — and the import of minGPT's NewGELU produces exactly
+    this design."""
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import train as T
+
+    guard = inspect.getsource(T._run)
+    assert "no trainable parameters" in guard, \
+        "nothing checks whether there is anything to train"
+    assert "requires_grad" in guard, "the check does not look at the parameters"
+
+    # the message has to say what to do about it
+    start = guard.index("no trainable parameters")
+    message = guard[start: start + 600]
+    for hint in ("Linear", "Conv2d", "Embedding"):
+        assert hint in message, f"the message does not suggest {hint}"
+
+    # and the exception raised has to be one that exists and is caught
+    assert "raise DataError(" in guard[start - 200: start], \
+        "raises an exception the module does not define"
 
 
 @check("selecting a layer finds it in the generated file")
