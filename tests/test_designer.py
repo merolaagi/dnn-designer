@@ -1262,6 +1262,40 @@ def _():
         "the button can be left saying 'reading…' after a failure"
 
 
+@check("every outcome of saving a spec reports itself")
+def _():
+    """Pressing "Check and save" showed the checks passing and then nothing at
+    all, which reads as a save that worked.
+
+    Two faults, both mine. The failure path was a bare `return`, and the
+    success path refreshed the palette *before* writing the confirmation — so
+    an exception there swallowed the only sign that anything had been saved.
+    """
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("async function checkSpec"):]
+    body = body[: body.index("\n/* The point of the whole pipeline")]
+
+    save = body[body.index("if (thenSave){"):]
+    assert "catch { return; }" not in save, \
+        "a failed save still returns without saying anything"
+    for outcome in ("got no answer", "saving failed", "Saved as"):
+        assert outcome in save, f"the {outcome!r} case is not reported"
+
+    # the confirmation must not depend on the palette refresh succeeding
+    refresh = save[save.index("loadCatalog"):]
+    refresh = refresh[: refresh.index("Saved as")]
+    assert "catch" in refresh, \
+        "an exception refreshing the palette will swallow the confirmation"
+
+    # and a saved domain has to lead somewhere
+    assert "function buildFromDomain" in PAGE, \
+        "nothing turns the saved domain into a network"
+    build = script[script.index("async function buildFromDomain"):]
+    build = build[: build.index("\nfunction checkTable")]
+    assert "ImplicitEquilibrium" in build, "the built network does not use the layer"
+    assert "showPage(\"pageDesign\")" in build, "it never reaches the canvas"
+
+
 @check("the editor offers a spec that already works")
 def _():
     """Writing a residual from a blank template is the hardest step in the
@@ -4037,7 +4071,7 @@ def _():
         "renderLaunchPad", "padFill", "padSearch", "assistantDock", "toggleDock",
         "renderDomainsPage", "domFill", "armCard", "placeDomain", "validateAllDomains",
         "findPapers", "paperRow", "fetchPaper", "showPaperPassages", "draftSpec",
-        "loadStarters",
+        "loadStarters", "buildFromDomain",
         "dockWelcome", "dockSend", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",

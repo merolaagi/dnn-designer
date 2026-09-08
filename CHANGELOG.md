@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.49.0
+
+**Fixed: "Check and save" saved, and said nothing.** The checks passed, the file
+was written, the domain registered — and the page showed only the check results,
+which reads as a save that did not happen.
+
+Two faults, both mine:
+
+- The failure path was a bare `return`. A save that was refused, or that got no
+  answer, produced no message at all.
+- The success path refreshed the layer palette *before* writing the
+  confirmation, so an exception in that refresh swallowed the only sign that
+  anything had been saved. The refresh is now guarded and the confirmation does
+  not depend on it.
+
+All four outcomes — saved, refused, no answer, refresh failed — now say so.
+
+**And the step that was missing: "Put it on the canvas."**
+
+Saving a spec registers a domain, which is a file. A saved domain now offers to
+build the smallest network that runs it — an input, the layer on its covered
+arm, an output — and opens it on the canvas with the Maths tab showing the
+theorem it came from. That is the moment a paper becomes a model, and until now
+nothing told you it had arrived or how to reach it.
+
+Also: two saved specs can share a title, so the starter list shows each one's
+key beside it.
+
 ## 1.48.1
 
 **Fixed: the tick bar was still clipped, and stacking it did not help.**

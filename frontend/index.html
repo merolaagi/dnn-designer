@@ -1389,6 +1389,16 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .draftnotes{margin-top:10px}
 .starters{margin-bottom:11px}
 .startlead{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px}
+.startkey{
+  font-style:normal;font-family:var(--mono);font-size:9.5px;color:#98A6B8;
+  margin-left:6px;
+}
+.nextup{
+  margin:11px 0;padding:12px 14px;border-radius:9px;background:#F4F1FE;
+  border:1px solid #DCD2F5;
+}
+.nextup b{display:block;font-size:12.5px;font-weight:600;color:#3C3358}
+.nextup p{margin:5px 0 10px;font-size:11.5px;line-height:1.6;color:#4C3A85}
 .starter{
   display:block;width:100%;text-align:left;background:#fff;
   border:1px solid var(--paper-3);border-radius:9px;padding:9px 11px;
@@ -5367,7 +5377,7 @@ async function loadStarters(){
     different task from an empty file.</div>`
     + d.examples.map((e, i) => `
       <button class="starter" data-start="${i}">
-        <b>${e.title}</b>
+        <b>${e.title}</b> <em class="startkey">${e.key}</em>
         <span>${e.shape}</span>
         <code>${(e.spec.residual || "").replace(/</g, "&lt;").slice(0, 130)}</code>
       </button>`).join("");
@@ -5696,21 +5706,101 @@ async function checkSpec(thenSave){
   if (near) near.innerHTML = "";
 
   if (thenSave){
-    let s;
+    // Every branch here reports. The first version returned silently on a
+    // failed save, so pressing "Check and save" showed the checks passing and
+    // then nothing at all — which reads as a save that worked.
+    let r2, s;
     try{
-      s = await (await fetch(API + "/api/paper/save", {
+      r2 = await fetch(API + "/api/paper/save", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ spec }),
-      })).json();
-    } catch { return; }
+      });
+      s = await r2.json();
+    } catch {
+      out.insertAdjacentHTML("afterbegin",
+        `<div class="runfail">The checks passed, but the save got no answer
+         from the server. Nothing was registered.</div>`);
+      return;
+    }
+    if (!r2.ok || !s.key){
+      out.insertAdjacentHTML("afterbegin",
+        `<div class="runfail">The checks passed, but saving failed:
+         ${(s && s.detail && s.detail.message) || "no reason given"}.
+         Nothing was registered.</div>`);
+      return;
+    }
     if (s.key){
-      await loadCatalog();
-      out.innerHTML = `<div class="paperok">Saved as <b>${s.saved}</b>.
-        The ImplicitEquilibrium layer now offers
-        <span class="mono">${s.key}</span> — place one and pick it, no restart.</div>`
-        + checkTable(d);
+      // Refresh the palette so the new domain appears in the dropdown, but
+      // never let that step decide whether the confirmation is shown: the save
+      // has already happened, and an exception here previously swallowed the
+      // only sign of it.
+      try{
+        await loadCatalog();
+      } catch (err){
+        console.warn("catalog refresh failed after save", err);
+      }
+      out.innerHTML = `<div class="paperok">
+          <b>Saved as ${s.saved}.</b> It is a domain now: the
+          ImplicitEquilibrium layer offers
+          <span class="mono">${s.key}</span> in its dropdown, with no restart.
+        </div>
+        <div class="nextup">
+          <b>Now build something with it</b>
+          <p>This puts an input, the layer on its covered arm, and an output on
+          the canvas — the smallest network that actually runs it. From there
+          it is an ordinary design: widen it, train it, or run the ablation to
+          find out whether the guarantee is buying anything.</p>
+          <button class="btn go" id="btnBuildIt">Put it on the canvas</button>
+        </div>` + checkTable(d);
+      const build = $("btnBuildIt");
+      if (build) build.addEventListener("click", () => buildFromDomain(s.key));
     }
   }
+}
+
+/* The point of the whole pipeline: a paper became a layer, and here is the
+   smallest network that runs it. Anything less and the spec is a file rather
+   than a model. */
+async function buildFromDomain(key){
+  let arm = "structured";
+  try{
+    const listed = (await (await fetch(API + "/api/domains?seed=0")).json()).domains || [];
+    const found = listed.find(d => d.key === key);
+    const covered = found && (found.arms || []).find(a => a.structured);
+    if (covered) arm = covered.key;
+  } catch { /* fall back to the conventional name */ }
+
+  pushHistory();
+  state.graph = {
+    name: key,
+    nodes: [
+      { id: "in", type: "Input", params: { shape: [16] }, label: "input",
+        x: 0, y: 0 },
+      { id: "eq", type: "ImplicitEquilibrium",
+        params: { units: 8, domain: key, variant: arm, seed: 0 },
+        label: key, x: 0, y: 150 },
+      { id: "out", type: "Output", params: { task: "classification" },
+        label: "output", x: 0, y: 300 },
+    ],
+    edges: [
+      { id: "e1", source: "in", target: "eq", port: 0 },
+      { id: "e2", source: "eq", target: "out", port: 0 },
+    ],
+  };
+  state.book = null;
+  state.sheet = "main";
+  state.seq = 900;
+  state.version = null;
+  $("gname").value = key;
+  showPage("pageDesign");
+  clearSelection();
+  state.sel = "eq";
+  state.selection = new Set(["eq"]);
+  renderSheetTabs();
+  render(); renderInspector(); analyze();
+  fitView();
+  showSide("math");
+  toast(`${key} is on the canvas. The Maths tab has its theorem.`);
 }
 
 function checkTable(d){
