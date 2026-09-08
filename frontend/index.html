@@ -1375,6 +1375,21 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 }
 .hitacts{display:flex;align-items:center;gap:10px;margin-top:8px}
 .hitnotext{font-size:10px;color:#B7C0CB}
+.pickbar{
+  display:flex;align-items:flex-start;gap:12px;margin:10px 0 12px;padding:10px 12px;
+  background:#F4F1FE;border:1px solid #DCD2F5;border-radius:9px;
+}
+.pickbar span{flex:1;font-size:11px;line-height:1.6;color:#4C3A85}
+.pickbar .btn{flex:none}
+.ptick{display:flex;align-items:center;gap:7px;cursor:pointer}
+.draftnotes{margin-top:10px}
+.draftnotes b{display:block;font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;color:#98A6B8;margin-bottom:6px}
+.draftnotes pre{
+  margin:0 0 6px;padding:8px 10px;background:var(--paper-2);border-radius:7px;
+  font-size:10.5px;line-height:1.55;white-space:pre-wrap;color:#3C4453;
+  max-height:150px;overflow-y:auto;
+}
 .fetchnote{font-size:10.5px;color:var(--muted)}
 .fetchnote.ok{color:#256B39}
 .fetchnote.bad{color:#8C2F27}
@@ -5445,15 +5460,80 @@ async function fetchPaper(url, title, button){
 }
 
 function showPaperPassages(d){
+  state.picked = new Set();
   $("paperOut").innerHTML = `
     <div class="paperfound">${d.passages.length} ranked passage${
       d.passages.length === 1 ? "" : "s"}${
       d.sections.length ? ` · ${d.sections.length} sections` : ""}${
       d.equations && d.equations.length ? ` · ${d.equations.length} expressions` : ""}.
       A result that never says “unique” will rank low and still be the right one.</div>
-    ${d.passages.map(p => `<div class="passage">
-       <span class="pkind">${p.kind}${p.label ? " · " + p.label : ""}</span>
-       <p>${p.text.replace(/</g, "&lt;")}</p></div>`).join("")}`;
+    <div class="pickbar">
+      <span>Tick the passages that carry the result, then draft from them. The
+      top-ranked one is not always the load-bearing one, and a spec drafted from
+      the wrong theorem will model the wrong thing confidently.</span>
+      <button class="btn go" id="btnDraft" disabled>Draft a spec from these</button>
+    </div>
+    ${d.passages.map((p, i) => `<div class="passage">
+       <label class="ptick"><input type="checkbox" data-pick="${i}">
+         <span class="pkind">${p.kind}${p.label ? " · " + p.label : ""}</span></label>
+       <p>${p.text.replace(/</g, "&lt;")}</p></div>`).join("")}
+    ${d.equations && d.equations.length ? `<div class="paperfound">Displayed
+      expressions found: <span class="mono">${d.equations.slice(0, 6)
+        .map(e => e.replace(/</g, "&lt;")).join("</span> · <span class='mono'>")
+        }</span></div>` : ""}`;
+
+  $("paperOut").querySelectorAll("[data-pick]").forEach(box =>
+    box.addEventListener("change", () => {
+      const i = +box.dataset.pick;
+      if (box.checked) state.picked.add(i); else state.picked.delete(i);
+      $("btnDraft").disabled = state.picked.size === 0;
+    }));
+  $("btnDraft").addEventListener("click", draftSpec);
+}
+
+/* The bridge from reading to the spec. With a proposer it drafts one; without,
+   it fills the skeleton with what is actually known — the title, the source,
+   the passages you chose, the expressions found — and leaves the residual
+   blank, because that is the part nothing here can honestly guess. */
+async function draftSpec(){
+  const out = $("specOut");
+  const only = [...(state.picked || [])].sort((a, b) => a - b);
+  out.innerHTML = `<div class="empty" style="padding:11px">drafting from ${
+    only.length} passage${only.length === 1 ? "" : "s"}…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/paper/propose", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: (state.paper && state.paper.source) || "",
+        text: ($("paperText").value || ""),
+        title: ($("paperTitle").value || ""),
+        only,
+      }),
+    });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    out.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "Could not draft one"}</div>`;
+    return;
+  }
+  const spec = { ...d.spec };
+  const notes = [];
+  if (spec._passages){ notes.push(...spec._passages); delete spec._passages; }
+  if (spec._equations){ notes.push(...spec._equations); delete spec._equations; }
+  $("specText").value = JSON.stringify(spec, null, 1);
+
+  out.innerHTML = (d.proposed
+    ? `<div class="paperfound">A candidate spec from the passages you chose.
+       Trust it least of the three stages — check it before believing it.</div>`
+    : `<div class="paperwarn">${d.reason}</div>`)
+    + (notes.length ? `<div class="draftnotes"><b>What you chose, to write the
+        residual from</b>${notes.map(t =>
+        `<pre>${t.replace(/</g, "&lt;")}</pre>`).join("")}</div>` : "");
+  const stage = $("stage2");
+  if (stage && stage.scrollIntoView)
+    stage.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function ingestPaper(){

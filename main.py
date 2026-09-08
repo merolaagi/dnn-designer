@@ -450,6 +450,8 @@ def paper_fetch(body: FetchPaper):
 class PaperText(BaseModel):
     text: str = ""
     title: str = ""
+    url: str = ""
+    only: List[int] = []          # passage indices the reader chose
 
 
 @app.post("/api/paper/ingest")
@@ -484,18 +486,45 @@ async def paper_ingest(file: Optional[UploadFile] = File(None),
 
 @app.post("/api/paper/propose")
 def paper_propose(body: PaperText):
-    """Ask for a candidate spec. The step to trust least, and it can refuse."""
+    """Ask for a candidate spec. The step to trust least, and it can refuse.
+
+    `only` is the passages the reader ticked. It matters more than it looks:
+    the top-ranked passage is not always the load-bearing one, and a proposer
+    fed the wrong theorem will confidently model the wrong thing. Choosing the
+    passages is the reader's judgment, and it is the judgment that carries.
+    """
     from dnn_bench import ingest, propose
 
-    paper = ingest.ingest(body.text or "", title=body.title)
+    source = body.url or body.text or ""
+    if not source.strip():
+        raise HTTPException(400, detail={"message": "Read a paper first."})
+    try:
+        paper = ingest.ingest(source, title=body.title)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={
+            "message": f"Could not re-read it: {type(exc).__name__}: {exc}"})
+    chosen = [i for i in body.only if 0 <= i < len(paper.passages)] or None
     if not propose.available():
+        # Without a proposer, hand back a skeleton carrying what is actually
+        # known: the title, the source, and the chosen passages as the claim to
+        # be turned into a residual. Everything invented is left as a blank to
+        # fill rather than a plausible guess to correct.
+        blank = _spec_json(propose.blank_spec(paper))
+        if chosen:
+            picked = [paper.passages[i] for i in chosen]
+            blank["claim"] = (getattr(picked[0], "text", "") or "")[:300]
+            blank["_passages"] = [getattr(p, "text", "")[:600] for p in picked]
+        if paper.equations:
+            blank["_equations"] = paper.equations[:12]
         return {"proposed": False,
                 "reason": "No ANTHROPIC_API_KEY in the server's environment, so "
-                          "there is no proposer. The blank template below is the "
-                          "same artifact by a slower route.",
-                "spec": _spec_json(propose.blank_spec(paper))}
+                          "there is no proposer. Below is the skeleton with what "
+                          "is known filled in — the title, the source, your "
+                          "chosen passages and any displayed expressions. The "
+                          "residual is the part that needs a person.",
+                "spec": blank}
     try:
-        result = propose.propose(paper)
+        result = propose.propose(paper, only=chosen)
     except Exception as exc:  # noqa: BLE001
         return {"proposed": False, "reason": f"{type(exc).__name__}: {exc}",
                 "spec": _spec_json(propose.blank_spec(paper))}

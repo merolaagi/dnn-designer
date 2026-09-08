@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.47.0
+
+**The bridge from reading a paper to having a spec.** Until now the passages
+appeared and then you were on your own with an empty editor, which is a gap I
+should have closed when I built the search.
+
+- **Tick the passages that carry the result**, then *Draft a spec from these*.
+  The choice matters more than it looks: the top-ranked passage is not always
+  the load-bearing one, and a draft made from the wrong theorem models the wrong
+  thing confidently. So the choice is the reader's and it is carried through —
+  `propose` takes the chosen indices rather than the whole paper.
+- **With a proposer** (`ANTHROPIC_API_KEY` set) it drafts a candidate spec from
+  those passages alone.
+- **Without one** it fills the skeleton with what is actually known — the title,
+  the source, your chosen passages, and any displayed expressions found — and
+  leaves the residual blank. That is the part nothing here can honestly guess,
+  and a plausible guess to correct is worse than a blank to fill.
+- The passages you chose are shown beside the editor while you write, so the
+  theorem is in front of you rather than scrolled away.
+
 ## 1.46.1
 
 **Fixed: pressing "Read this one" looked like it did nothing.**

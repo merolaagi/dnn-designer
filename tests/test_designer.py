@@ -1262,6 +1262,63 @@ def _():
         "the button can be left saying 'reading…' after a failure"
 
 
+@check("the reader's chosen passages are what the draft is built from")
+def _():
+    """Choosing the passages is the judgment that carries.
+
+    The top-ranked passage is not always the load-bearing one, and a draft made
+    from the wrong theorem models the wrong thing confidently. So the choice is
+    the reader's, it is carried through, and what cannot be known — the residual
+    — is left blank rather than guessed.
+    """
+    try:
+        from dnn_bench import ingest, propose  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import main
+
+    text = ("Introduction. Many models exist.\n\n"
+            "Theorem 3.1. For positive rate constants the two-compartment "
+            "system has a unique asymptotically stable steady state.\n\n"
+            "Discussion. It fits the data.")
+    paper = ingest.ingest(text, title="A minimal model")
+    ranked = main._paper_json(paper)
+    assert len(ranked["passages"]) >= 2
+
+    theorem = next(i for i, p in enumerate(ranked["passages"])
+                   if p["kind"] == "theorem")
+    drafted = main.paper_propose(main.PaperText(text=text, title="A minimal model",
+                                                only=[theorem]))
+    spec = drafted["spec"]
+    assert spec["title"] == "A minimal model", spec["title"]
+
+    if not drafted["proposed"]:
+        # no proposer: the skeleton must carry what is known and nothing else
+        assert "Theorem 3.1" in spec["claim"], \
+            "the chosen passage did not become the claim"
+        assert spec.get("_passages"), "the chosen passages were not carried through"
+        assert spec["residual"].startswith("<"), \
+            "the residual was guessed at instead of left to a person"
+        assert drafted["reason"], "it gave no reason for not proposing"
+
+    # an empty request is refused rather than answered with an empty skeleton
+    try:
+        main.paper_propose(main.PaperText())
+        raise AssertionError("drafting from nothing was allowed")
+    except Exception as exc:  # noqa: BLE001
+        assert "Read a paper first" in str(exc), exc
+
+    # the page ties the two together
+    for token in ("function draftSpec", 'id="btnDraft"', "data-pick="):
+        assert token in PAGE, f"{token} is missing from the bridge"
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("async function draftSpec"):]
+    body = body[: body.index("\n}\n")]
+    assert "only" in body, "the chosen passages are not sent"
+    assert "_passages" in body, "the chosen text is not shown beside the editor"
+
+
 @check("a paper becomes a spec becomes a layer")
 def _():
     """Three stages, and only one of them involves judgment.
@@ -3902,7 +3959,7 @@ def _():
         "checkDomain",
         "renderLaunchPad", "padFill", "padSearch", "assistantDock", "toggleDock",
         "renderDomainsPage", "domFill", "armCard", "placeDomain", "validateAllDomains",
-        "findPapers", "paperRow", "fetchPaper", "showPaperPassages",
+        "findPapers", "paperRow", "fetchPaper", "showPaperPassages", "draftSpec",
         "dockWelcome", "dockSend", "openImportDialog",
         "renderStoryPanel", "loadStory", "paintStory", "stepStory", "playStory",
         "storyOpening", "storyStep", "storyClosing",
