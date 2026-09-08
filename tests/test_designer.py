@@ -4028,6 +4028,54 @@ def _():
             f"{called} does not exist"
 
 
+@check("sampling works whatever the prompt's length")
+def _():
+    """A model written with explicit reshapes has its context length baked
+    into its arithmetic.
+
+    The imported GPT-2 block reshapes to [B, 64, 12, 64], so a twenty-character
+    prompt produced "shape '[1, 64, 12, 64]' is invalid for input of size
+    15360" — which is arithmetic, not an explanation. The window is padded to
+    the full context now.
+    """
+    if not HAVE_TORCH:
+        print("        (torch absent, skipped)")
+        return
+    import json as _json
+
+    import torch
+
+    import train as T
+    import workbook as wb
+
+    body = inspect.getsource(T.generate_text)
+    assert "used < block" in body, "the window is not padded to the context length"
+    assert "new_zeros" in body, "nothing pads a short prompt"
+
+    example = ROOT / "examples" / "GPT2.json"
+    if not example.exists():
+        print("        (GPT2 absent, skipped)")
+        return
+    book = _json.loads(example.read_text())
+    # shrink it so this stays a test rather than a training run
+    for sheet in book["sheets"]:
+        for node in sheet["nodes"]:
+            if node["type"] == "Embedding":
+                node["params"]["vocab"] = 48
+            if node["type"] == "Linear" and node.get("label") == "lm_head":
+                node["params"]["units"] = 48
+    analysis = wb.analyze(book)
+    assert analysis["ok"], "the shrunk book does not resolve"
+    model = T.build_model(wb.to_pytorch(book, analysis), "Model").eval()
+
+    vocab = [chr(97 + (i % 26)) for i in range(48)]
+    for prompt in ("user: how do I add a", "", "z" * 200):
+        out = T.generate_text(model, vocab, 64, prompt, max_new_tokens=3)
+        assert out["continuation"], f"nothing was generated from {len(prompt)} chars"
+        assert out["prompt"] == prompt or not prompt, \
+            "the prompt was not returned as given"
+
+
 @check("a model that predicts at every position trains")
 def _():
     """A design scoring every position IS a language model, whatever its

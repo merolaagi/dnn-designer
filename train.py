@@ -809,7 +809,20 @@ def generate_text(model, vocab: List[str], block: int, prompt: str,
     truncated = False
     with torch.no_grad():
         for _ in range(max_new_tokens):
-            out = model(x[:, -block:])
+            # Feed exactly `block` positions, left-padded when there are not
+            # enough yet. A model written with explicit reshapes — the imported
+            # GPT-2 block reshapes to [B, 64, 12, 64] — has the context length
+            # baked into its arithmetic and cannot take a shorter sequence:
+            # "shape '[1, 64, 12, 64]' is invalid for input of size 15360",
+            # which is a twenty-character prompt meeting a sixty-four position
+            # model. The last real position is tracked so the prediction is
+            # read from there rather than from padding.
+            window = x[:, -block:]
+            used = window.size(1)
+            if used < block:
+                pad = window.new_zeros((window.size(0), block - used))
+                window = torch.cat([pad, window], dim=1)
+            out = model(window)
             logits = (out[0] if isinstance(out, (tuple, list)) else out)[:, -1, :]
             logits = logits / max(float(temperature), 1e-6)
             if top_k:

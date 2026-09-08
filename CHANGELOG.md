@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.56.1
+
+**Fixed: sampling failed on any prompt shorter than the context length.**
+
+`RuntimeError: shape '[1, 64, 12, 64]' is invalid for input of size 15360` —
+which is a twenty-character prompt meeting a sixty-four position model. 15360 is
+20 × 768.
+
+A model written with explicit reshapes has its context length baked into its
+arithmetic: the imported GPT-2 block reshapes to `[B, 64, 12, 64]`, so it cannot
+take a shorter sequence at all. The sampler was passing the prompt at whatever
+length it happened to be. It now pads the window to the full context and reads
+the prediction from the last real position.
+
+Short prompts, an empty prompt and an over-long one are all tested.
+
+This one only surfaced because 1.56.0 made sampling actually run for a design
+labelled `classification`. Three versions of fixes each uncovered the next
+thing, which is what it looks like when a path has never been exercised end to
+end rather than when something has regressed.
+
 ## 1.56.0
 
 **One determination, used everywhere.** Last version I made the loss follow the
