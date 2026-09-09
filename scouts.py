@@ -508,10 +508,20 @@ def _scout_papers(scout: Scout, config: Dict[str, Any],
                 "why_group": why,
                 "doi": hit.doi,
                 "text_url": text_url,
-                # a paper that cannot be read here cannot become a layer here,
-                # however good it is
-                "score": (3 if text_url else 0) + len(hit.reasons or [])
-                         + min(hit.recurrence or 0, 5),
+                "fit": round(float(getattr(hit, "fit", 0) or 0), 2),
+                "topic": int(getattr(hit, "topic", 0) or 0),
+                # The library works out how well a paper matches the question
+                # (topic) and how much mathematics it names (fit), and my
+                # first version threw both away — ranking on fetchability and
+                # citation recurrence alone. On "differential diagnosis from
+                # chest Xrays" that put a paper about ribosome abundance
+                # control at the top, which is not a near miss but a different
+                # subject. Topical match has to dominate; being readable here
+                # is a convenience and belongs last.
+                "score": (int(getattr(hit, "topic", 0) or 0) * 6
+                          + float(getattr(hit, "fit", 0) or 0) * 2
+                          + min(hit.recurrence or 0, 4)
+                          + (1 if text_url else 0)),
             })
 
     if not scout.findings:
@@ -522,8 +532,16 @@ def _scout_papers(scout: Scout, config: Dict[str, Any],
 
     scout.findings.sort(key=lambda f: -f["score"])
     readable = sum(1 for f in scout.findings if f["text_url"])
-    scout.say(f"{len(scout.findings)} papers, {readable} with fetchable text",
+    on_topic = sum(1 for f in scout.findings if f["topic"] > 0)
+    scout.say(f"{len(scout.findings)} papers, {on_topic} matching the question, "
+              f"{readable} with fetchable text",
               scout.findings[0]["title"][:120])
+    if not on_topic:
+        scout.say("None of them actually match the question.",
+                  "They were kept for naming a mathematical object, which is "
+                  "the other half of the test. Ranking them would be ranking "
+                  "the wrong papers, so the order below means little — try "
+                  "naming the system you want modelled rather than the task.")
 
 
 # --------------------------------------------------------------------------

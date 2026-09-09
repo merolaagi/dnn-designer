@@ -1564,6 +1564,95 @@ def _():
         f"these pages let the dark page background through: {sorted(unpainted)}"
 
 
+@check("papers are ranked by whether they answer the question")
+def _():
+    """On "differential diagnosis from chest Xrays" the top result was a paper
+    about ribosome abundance control.
+
+    The library works out how well a paper matches the question and how much
+    mathematics it names, and my first ranking threw both away — scoring on
+    fetchability and citation recurrence alone. Being readable here is a
+    convenience; it cannot outweigh being about something else.
+    """
+    try:
+        from dnn_bench import paper_to_spec as p2s
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import scouts
+
+    source = inspect.getsource(scouts._scout_papers)
+    assert 'getattr(hit, "topic", 0)' in source, \
+        "the topical match is still not part of the score"
+    assert "* 6" in source, "topical match does not dominate"
+
+    off = p2s.Hit(source="MED", id="1", title="Ribosome abundance control",
+                  pmcid="PMC1", open_access=True, in_epmc=True,
+                  fit=4.0, topic=0, recurrence=3,
+                  reasons=["differential equation", "steady state"])
+    on = p2s.Hit(source="MED", id="2", title="A compartmental model of opacity",
+                 fit=1.0, topic=3, recurrence=0, reasons=["compartment model"])
+
+    def scored(hit):
+        return (int(getattr(hit, "topic", 0) or 0) * 6
+                + float(getattr(hit, "fit", 0) or 0) * 2
+                + min(hit.recurrence or 0, 4)
+                + (1 if p2s.full_text(hit) else 0))
+
+    assert scored(on) > scored(off), \
+        f"an off-topic paper still outranks an on-topic one: {scored(off)} vs {scored(on)}"
+
+    # a search where nothing matches has to say so rather than rank the wrong
+    # papers silently
+    assert "None of them actually match the question" in source
+
+    # and the card shows it, so the order can be disagreed with
+    assert "does not match the question" in PAGE
+
+
+@check("europe pmc is not asked faster than it answers")
+def _():
+    """Following the reference lists of six reviews is six requests in a row,
+    which Europe PMC answers with 503 — and that is the stage that finds the
+    paper worth modelling, so it collapsed silently to "0 distinct
+    references"."""
+    try:
+        from dnn_bench import paper_to_spec as p2s
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+
+    body = inspect.getsource(p2s._get)
+    assert "_MIN_GAP" in body, "requests are not paced"
+    assert "429, 500, 502, 503, 504" in body, \
+        "a temporary refusal is not retried"
+    assert "attempt == attempts - 1" in body, "it would retry for ever"
+
+    # a permanent failure must not be retried four times
+    calls = []
+
+    class Boom(Exception):
+        pass
+
+    import urllib.error
+
+    original = p2s.urllib.request.urlopen
+
+    def refuse(req, timeout=0):
+        calls.append(1)
+        raise urllib.error.HTTPError(req.full_url, 404, "gone", {}, None)
+
+    p2s.urllib.request.urlopen = refuse
+    try:
+        try:
+            p2s._get("https://example.invalid/x")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        assert len(calls) == 1, f"a 404 was retried {len(calls)} times"
+    finally:
+        p2s.urllib.request.urlopen = original
+
+
 @check("a question can be turned into a reading list")
 def _():
     """Search is the only part of the app that touches the internet, so it is

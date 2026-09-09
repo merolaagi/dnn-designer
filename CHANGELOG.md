@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.62.0
+
+**Two real gaps in the papers scout, both mine.**
+
+**It was ranking papers by the wrong thing.** On "differential diagnosis from
+chest Xrays" the top result was *Effect of transcriptional delay on ribosome
+abundance control* — not a near miss but a different subject. The library works
+out how well a paper matches the question and how much mathematics it names, and
+my first ranking threw both away, scoring on fetchability and citation
+recurrence alone. Under that rule the ribosome paper scored 8 against an
+on-topic paper's 1; it now scores 12 against 20. Being readable here is a
+convenience and cannot outweigh being about something else.
+
+Each card now says whether the paper matches the question at all, and a search
+where none of them do says so rather than ranking the wrong papers quietly.
+
+**Following the reference lists collapsed under 503s.** Six reviews means six
+requests in a row, which is a burst, and Europe PMC answers a burst with
+*Service Unavailable*. Every one failed and the stage reported "0 distinct
+references" — and that is the stage that finds the paper actually worth
+modelling, so losing it lost the best half of the search. Requests are paced to
+about three a second and temporary refusals are retried with backoff. A 404 is
+not retried, because it means never rather than later.
+
+The fetching itself was working, incidentally: that run did return 12 papers with
+5 fetchable. What failed was the part that would have found better ones.
+
 ## 1.61.0
 
 **The missing step was real, and it was my rule that was wrong.**

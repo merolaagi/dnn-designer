@@ -1,0 +1,280 @@
+{
+ "id": "a53d9e1be43b",
+ "kind": "papers",
+ "goal": "differential diagnosis from chest Xrays",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Searching the literature for \u201cdifferential diagnosis from chest Xrays\u201d",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "  terms: differential, diagnosis, chest, xrays",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "  query: (TITLE_ABS:\"differential diagnosis\" OR TITLE_ABS:\"diagnosis chest\" OR TITLE_ABS:\"chest xrays\" OR TITLE_ABS:\"differential\u2026",
+   "detail": ""
+  },
+  {
+   "at": 5.0,
+   "text": "  75 results, 75 on topic",
+   "detail": ""
+  },
+  {
+   "at": 5.0,
+   "text": "  stage 1 \u2014 6 hubs",
+   "detail": ""
+  },
+  {
+   "at": 5.0,
+   "text": "  stage 2 \u2014 following their reference lists",
+   "detail": ""
+  },
+  {
+   "at": 5.5,
+   "text": "    MED:17060945: reference fetch FAILED \u2014 HTTP Error 503: Service Unavailable",
+   "detail": ""
+  },
+  {
+   "at": 6.1,
+   "text": "    MED:10535437: reference fetch FAILED \u2014 HTTP Error 503: Service Unavailable",
+   "detail": ""
+  },
+  {
+   "at": 6.7,
+   "text": "    MED:26462967: reference fetch FAILED \u2014 HTTP Error 503: Service Unavailable",
+   "detail": ""
+  },
+  {
+   "at": 7.3,
+   "text": "    MED:34185076: reference fetch FAILED \u2014 HTTP Error 503: Service Unavailable",
+   "detail": ""
+  },
+  {
+   "at": 7.8,
+   "text": "    MED:18650914: reference fetch FAILED \u2014 HTTP Error 503: Service Unavailable",
+   "detail": ""
+  },
+  {
+   "at": 8.4,
+   "text": "    MED:29653606: reference fetch FAILED \u2014 HTTP Error 503: Service Unavailable",
+   "detail": ""
+  },
+  {
+   "at": 8.4,
+   "text": "  0 distinct references",
+   "detail": ""
+  },
+  {
+   "at": 9.2,
+   "text": "12 papers, 5 with fetchable text",
+   "detail": "Effect of transcriptional delay on ribosome abundance control."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "paper",
+   "title": "Effect of transcriptional delay on ribosome abundance control.",
+   "authors": "Perera PC, Pilyugin SS, Davis L, Gedeon T.",
+   "year": "2026",
+   "journal": "Journal of mathematical biology",
+   "cited_by": 0,
+   "recurrence": 0,
+   "reasons": [
+    "maths: differential equation, ordinary differential, bifurcation",
+    "supporting: steady state, equilibri, feedback loop"
+   ],
+   "why_group": "matched the question",
+   "doi": "10.1007/s00285-026-02420-3",
+   "text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13263304/fullTextXML",
+   "score": 5
+  },
+  {
+   "kind": "paper",
+   "title": "Lie symmetry approach to the dynamical behavior and conservation laws of actin filament electrical models.",
+   "authors": "Beenish, Samreen M, Alshammari FS.",
+   "year": "2025",
+   "journal": "PloS one",
+   "cited_by": 0,
+   "recurrence": 0,
+   "reasons": [
+    "maths: differential equation, dynamical system, stability analysis",
+    "supporting: nonlinear, conservation"
+   ],
+   "why_group": "matched the question",
+   "doi": "10.1371/journal.pone.0331243",
+   "text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12419668/fullTextXML",
+   "score": 5
+  },
+  {
+   "kind": "paper",
+   "title": "2015 American Thyroid Association Management Guidelines for Adult Patients with Thyroid Nodules and Differentiated Thyroid Cancer: The American Thyroid Association Guidelines Task Force on Thyroid Nodules and Differentiated Thyroid Cancer.",
+   "authors": "Haugen BR, Alexander EK, Bible KC, Doherty GM, Mandel SJ, Nikiforov YE, Pacini F, Randolph GW, Sawka AM, Schlumberger M, Schuff KG, Sherman SI, Sosa JA, Steward DL, Tuttle RM, Wartofsky L.",
+   "year": "2016",
+   "journal": "Thyroid : official journal of the American Thyroid Association",
+   "cited_by": 10412,
+   "recurrence": 0,
+   "reasons": [
+    "no mathematical object named \u2014 soft vocabulary alone does not count"
+   ],
+   "why_group": "a review",
+   "doi": "10.1089/thy.2015.0020",
+   "text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC4739132/fullTextXML",
+   "score": 4
+  },
+  {
+   "kind": "paper",
+   "title": "The 2021 WHO Classification of Tumors of the Central Nervous System: a summary.",
+   "authors": "Louis DN, Perry A, Wesseling P, Brat DJ, Cree IA, Figarella-Branger D, Hawkins C, Ng HK, Pfister SM, Reifenberger G, Soffietti R, von Deimling A, Ellison DW.",
+   "year": "2021",
+   "journal": "Neuro-oncology",
+   "cited_by": 8765,
+   "recurrence": 0,
+   "reasons": [
+    "no mathematical object named \u2014 soft vocabulary alone does not count"
+   ],
+   "why_group": "a review",
+   "doi": "10.1093/neuonc/noab106",
+   "text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC8328013/fullTextXML",
+   "score": 4
+  },
+  {
+   "kind": "paper",
+   "title": "NIA-AA Research Framework: Toward a biological definition of Alzheimer's disease.",
+   "authors": "Jack CR, Bennett DA, Blennow K, Carrillo MC, Dunn B, Haeberlein SB, Holtzman DM, Jagust W, Jessen F, Karlawish J, Liu E, Molinuevo JL, Montine T, Phelps C, Rankin KP, Rowe CC, Scheltens P, Siemers E, Snyder HM, Sperling R, Contributors.",
+   "year": "2018",
+   "journal": "Alzheimer's & dementia : the journal of the Alzheimer's Association",
+   "cited_by": 8429,
+   "recurrence": 0,
+   "reasons": [
+    "no mathematical object named \u2014 soft vocabulary alone does not count"
+   ],
+   "why_group": "a review",
+   "doi": "10.1016/j.jalz.2018.02.018",
+   "text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5958625/fullTextXML",
+   "score": 4
+  },
+  {
+   "kind": "paper",
+   "title": "Generative modeling of clinical time series via latent stochastic differential equations.",
+   "authors": "Aslanimoghanloo M, ElGazzar A, van Gerven M.",
+   "year": "2026",
+   "journal": "Journal of biomedical informatics",
+   "cited_by": 1,
+   "recurrence": 0,
+   "reasons": [
+    "maths: differential equation, ordinary differential, dynamical system",
+    "supporting: nonlinear"
+   ],
+   "why_group": "matched the question",
+   "doi": "10.1016/j.jbi.2026.105043",
+   "text_url": null,
+   "score": 2
+  },
+  {
+   "kind": "paper",
+   "title": "A practical introduction to ODE modelling in Stan for biological systems.",
+   "authors": "Hamis S, Forslund J, Gu CC, Cochrane JA.",
+   "year": "2026",
+   "journal": "Mathematical biosciences",
+   "cited_by": 0,
+   "recurrence": 0,
+   "reasons": [
+    "maths: differential equation, ordinary differential, dynamical system",
+    "supporting: nonlinear"
+   ],
+   "why_group": "matched the question",
+   "doi": "10.1016/j.mbs.2026.109774",
+   "text_url": null,
+   "score": 2
+  },
+  {
+   "kind": "paper",
+   "title": "Kinetic Modeling of Target-Amplification-Free CRISPR-Cas-Based Autocatalysis Reactions",
+   "authors": "Wester M, Lim J, Van AB, Koprowski K, Valera E, Bashir R.",
+   "year": "2026",
+   "journal": "",
+   "cited_by": 0,
+   "recurrence": 0,
+   "reasons": [
+    "maths: differential equation, ordinary differential, kinetic model",
+    "supporting: equilibri, kinetics"
+   ],
+   "why_group": "matched the question",
+   "doi": "10.64898/2026.03.03.709462",
+   "text_url": null,
+   "score": 2
+  },
+  {
+   "kind": "paper",
+   "title": "Fractional Stochastic Dynamics and Stability Analysis of Drone Swarms in Random Urban Environments",
+   "authors": "BOUDREF M.",
+   "year": "2026",
+   "journal": "",
+   "cited_by": 0,
+   "recurrence": 0,
+   "reasons": [
+    "maths: differential equation, lyapunov, stochastic differential"
+   ],
+   "why_group": "matched the question",
+   "doi": "10.21203/rs.3.rs-9420195/v1",
+   "text_url": null,
+   "score": 1
+  },
+  {
+   "kind": "paper",
+   "title": "MicroRNA signatures in human cancers.",
+   "authors": "Calin GA, Croce CM.",
+   "year": "2006",
+   "journal": "Nature reviews. Cancer",
+   "cited_by": 6035,
+   "recurrence": 0,
+   "reasons": [
+    "no mathematical object named \u2014 soft vocabulary alone does not count"
+   ],
+   "why_group": "a review",
+   "doi": "10.1038/nrc1997",
+   "text_url": null,
+   "score": 1
+  },
+  {
+   "kind": "paper",
+   "title": "Why don't physicians follow clinical practice guidelines? A framework for improvement.",
+   "authors": "Cabana MD, Rand CS, Powe NR, Wu AW, Wilson MH, Abboud PA, Rubin HR.",
+   "year": "1999",
+   "journal": "JAMA",
+   "cited_by": 4554,
+   "recurrence": 0,
+   "reasons": [
+    "no mathematical object named \u2014 soft vocabulary alone does not count"
+   ],
+   "why_group": "a review",
+   "doi": "10.1001/jama.282.15.1458",
+   "text_url": null,
+   "score": 1
+  },
+  {
+   "kind": "paper",
+   "title": "Cancer-related inflammation.",
+   "authors": "Mantovani A, Allavena P, Sica A, Balkwill F.",
+   "year": "2008",
+   "journal": "Nature",
+   "cited_by": 8578,
+   "recurrence": 0,
+   "reasons": [
+    "no mathematical object named \u2014 soft vocabulary alone does not count"
+   ],
+   "why_group": "a review",
+   "doi": "10.1038/nature07205",
+   "text_url": null,
+   "score": 1
+  }
+ ],
+ "error": "",
+ "seconds": 9.2,
+ "kept_at": 1788991900.397532
+}

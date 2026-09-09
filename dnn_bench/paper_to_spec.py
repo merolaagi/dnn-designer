@@ -34,9 +34,11 @@ WHAT IT DOES NOT DO
 from __future__ import annotations
 
 import json
+import time
 import re
 import sys
 import urllib.parse
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -258,10 +260,37 @@ def build_queries(question: str) -> Dict[str, str]:
     }
 
 
-def _get(url: str, timeout: int = 30) -> dict:
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
+#: Europe PMC answers 503 to a burst. Following the reference lists of six
+#: reviews is six requests in a row, which is exactly a burst, so that whole
+#: stage used to collapse — and it is the stage that finds the paper actually
+#: worth modelling. Pace the requests and retry the refusals.
+_LAST_CALL = [0.0]
+_MIN_GAP = 0.34          # about three a second, which EPMC tolerates
+
+
+def _get(url: str, timeout: int = 30, attempts: int = 4) -> dict:
+    import random
+
+    delay = 0.8
+    for attempt in range(attempts):
+        gap = _MIN_GAP - (time.time() - _LAST_CALL[0])
+        if gap > 0:
+            time.sleep(gap)
+        _LAST_CALL[0] = time.time()
+        req = urllib.request.Request(url, headers=UA)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as exc:
+            # 503 and 429 mean "later"; a 404 means never, so do not retry it
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == attempts - 1:
+                raise
+        except urllib.error.URLError:
+            if attempt == attempts - 1:
+                raise
+        time.sleep(delay + random.random() * 0.4)
+        delay *= 2
+    raise RuntimeError("unreachable")
 
 
 def _parse_epmc(payload: dict) -> List[Hit]:

@@ -1500,6 +1500,8 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 }
 .hitacts{display:flex;align-items:center;gap:10px;margin-top:8px}
 .hitnotext{font-size:10px;color:#B7C0CB}
+.hitfit{font-size:10px;color:var(--muted);margin-top:3px}
+.hitfit b{color:#8C2F27;font-weight:600}
 /* Named .choosebar, not .pickbar: that was already the 13px progress bar in
    the walkthrough's prediction list, complete with overflow:hidden, which
    clipped this to a single cut-off line. */
@@ -5215,6 +5217,10 @@ function scoutCard(f, i){
       <div class="foundtop"><b>${f.title}</b></div>
       <div class="hitmeta">${[f.authors, f.year, f.journal].filter(Boolean).join(" · ")}
         ${f.cited_by ? ` · cited ${f.cited_by}` : ""} · ${f.why_group}</div>
+      <div class="hitfit">${f.topic > 0
+        ? `matches the question in ${f.topic} place${f.topic === 1 ? "" : "s"}`
+        : `<b>does not match the question</b> — kept only for naming a
+           mathematical object`}${f.fit ? ` · maths score ${f.fit}` : ""}</div>
       ${(f.reasons || []).length
         ? `<div class="hitwhy">${f.reasons.map(x => `<span>${x}</span>`).join("")}</div>`
         : ""}

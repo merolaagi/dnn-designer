@@ -1,0 +1,22 @@
+{
+ "id": "0e30e80abfcc",
+ "kind": "code",
+ "goal": "differential diagnosis from chest Xrays",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Searching GitHub for \u201cdifferential diagnosis from chest Xrays\u201d",
+   "detail": ""
+  },
+  {
+   "at": 0.1,
+   "text": "Nothing matched.",
+   "detail": "Try naming the architecture rather than the task."
+  }
+ ],
+ "findings": [],
+ "error": "",
+ "seconds": 0.1,
+ "kept_at": 1788991872.4616861
+}
