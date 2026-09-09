@@ -1159,7 +1159,17 @@ def _():
     import scouts
 
     ids = {entry["id"] for entry in scouts.CATALOG}
-    assert ids == {"code", "papers", "maths"}, ids
+    assert ids == {"code", "papers", "draft", "maths"}, ids
+
+    # A drafted design must be checked before it is offered: assembled,
+    # counted against torch, and run. Putting an unverified one on the canvas
+    # would look exactly like an answer.
+    drafted = inspect.getsource(scouts._verify)
+    assert "real != counted" in drafted, "the count is not checked against torch"
+    assert "model(*[" in drafted, "no batch is put through it"
+    for failure in ("the shapes do not resolve", "it assembled but would not run",
+                    "the parameter counts disagree"):
+        assert failure in drafted, f"the {failure!r} case is not distinguished"
 
     source = inspect.getsource(scouts)
     # the ranking must be built from what was verified, not from popularity
@@ -1197,6 +1207,27 @@ def _():
     # an unknown kind is refused rather than started
     bad = scouts.start("nonsense", "x", {}, {})
     assert bad.status == "error" and "nonsense" in bad.error
+
+    # the two fitting boxes exist and are read when the button is pressed
+    assert 'id="draftShape"' in PAGE and 'id="draftClasses"' in PAGE
+    sender = PAGE[PAGE.index('const config = {};'):]
+    sender = sender[: sender.index("sendScout(")]
+    assert "config.shape" in sender and "config.classes" in sender, \
+        "the shape and class boxes are shown but never sent"
+
+    # placing one must refuse anything unverified, not merely hide the button
+    place = PAGE[PAGE.index("function placeDraft"):]
+    place = place[: place.index("\n}\n")]
+    assert "!f.ok" in place, \
+        "placeDraft trusts the button rather than checking the finding"
+
+    # a drafted design is only placeable once verified
+    card = PAGE[PAGE.index("function scoutCard"):]
+    draft_part = card[card.index('f.kind === "draft"'):]
+    draft_part = draft_part[: draft_part.index('f.kind === "paper"')]
+    assert "f.ok\n        ? `<button" in draft_part or "${f.ok" in draft_part, \
+        "an unverified draft can be placed"
+    assert "data-draft=" in draft_part
 
     # and the page distinguishes the three verdicts. The class names are built
     # by interpolation, so the literal strings never appear — check the

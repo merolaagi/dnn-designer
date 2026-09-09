@@ -1173,6 +1173,12 @@ i.covered{
 }
 .scoutgoal:focus{outline:none;border-color:var(--amber)}
 .scoutcard .btn{align-self:flex-start}
+.draftfit{display:flex;gap:7px}
+.draftfit input{
+  flex:1;min-width:0;padding:7px 10px;border:1px solid var(--paper-3);
+  border-radius:8px;font-size:11.5px;
+}
+.draftfit input:focus{outline:none;border-color:var(--amber)}
 .scoutlive{margin-top:24px}
 .scoutstatus{display:flex;align-items:center;gap:11px;margin-bottom:11px}
 .scoutstatus b{font-size:14px;font-weight:600}
@@ -4955,7 +4961,14 @@ async function renderScoutsPage(){
         <input type="text" class="scoutgoal" data-goal="${entry.id}"
                placeholder="${entry.id === "code"
                  ? "e.g. depthwise separable convolution"
+                 : entry.id === "draft"
+                 ? "e.g. classify small colour images"
                  : "e.g. unique steady state in a compartmental model"}">`}
+      ${entry.id === "draft" ? `
+        <div class="draftfit">
+          <input type="text" id="draftShape" placeholder="input shape, e.g. 3,32,32">
+          <input type="number" id="draftClasses" placeholder="classes" min="0">
+        </div>` : ""}
       <button class="btn go" data-send="${entry.id}">Send it out</button>
     </div>`).join("");
 
@@ -4963,13 +4976,19 @@ async function renderScoutsPage(){
     btn.addEventListener("click", () => {
       const kind = btn.dataset.send;
       const box = $("scoutPick").querySelector(`[data-goal="${kind}"]`);
-      sendScout(kind, box ? box.value : "");
+      const config = {};
+      if (kind === "draft"){
+        const shape = $("draftShape"), classes = $("draftClasses");
+        if (shape && shape.value) config.shape = shape.value;
+        if (classes && classes.value) config.classes = +classes.value;
+      }
+      sendScout(kind, box ? box.value : "", config);
     }));
 
   if ((d.running || []).length) await followScout(d.running[0].id);
 }
 
-async function sendScout(kind, goal){
+async function sendScout(kind, goal, config){
   const live = $("scoutLive");
   live.innerHTML = `<div class="empty" style="padding:12px">sending…</div>`;
   let r, d;
@@ -4977,7 +4996,7 @@ async function sendScout(kind, goal){
     r = await fetch(API + "/api/scouts", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind, goal, graph: state.graph,
-                             config: {} }),
+                             config: config || {} }),
     });
     d = await r.json();
   } catch {
@@ -5045,6 +5064,8 @@ function paintScout(d){
   live.querySelectorAll("[data-open]").forEach(btn =>
     btn.addEventListener("click", () => openScoutFind(+btn.dataset.open,
                                                      +btn.dataset.tried)));
+  live.querySelectorAll("[data-draft]").forEach(btn =>
+    btn.addEventListener("click", () => placeDraft(+btn.dataset.draft)));
 }
 
 function scoutCard(f, i){
@@ -5062,6 +5083,21 @@ function scoutCard(f, i){
             ? `<button class="btn tiny" data-open="${i}" data-tried="${j}">
                  Open on the canvas</button>` : ""}
         </div>`).join("")}</div>
+    </div>`;
+  }
+  if (f.kind === "draft"){
+    return `<div class="foundcard">
+      <div class="foundtop"><b>${f.name}</b>
+        <span>${f.layers} layers${f.parameters
+          ? ` · ${f.parameters.toLocaleString()} parameters` : ""}</span></div>
+      ${f.summary_text ? "" : ""}
+      <p>${f.summary}</p>
+      ${(f.fitted || []).length
+        ? `<div class="hitwhy">${f.fitted.map(x =>
+            `<span>${x}</span>`).join("")}</div>` : ""}
+      ${f.ok
+        ? `<button class="btn tiny" data-draft="${i}">Put it on the canvas</button>`
+        : `<div class="tried no"><span>${f.summary}</span><em>${f.why || ""}</em></div>`}
     </div>`;
   }
   if (f.kind === "paper"){
@@ -5092,6 +5128,26 @@ function scoutCard(f, i){
          </table>` : ""}
     ${f.missing ? `<p class="hitnotext">No write-up for this layer yet.</p>` : ""}
   </div>`;
+}
+
+/* A drafted design is placeable for the same reason a found class is: it was
+   assembled, counted against torch and run before it appeared on the list. */
+function placeDraft(index){
+  const f = (state.scout && state.scout.findings || [])[index];
+  if (!f || !f.ok || !f.graph) return;
+  pushHistory();
+  state.graph = f.graph;
+  state.book = null;
+  state.version = null;
+  state.seq = (f.graph.nodes || []).length + (f.graph.edges || []).length + 900;
+  state.graph.name = f.name;
+  $("gname").value = f.name;
+  clearSelection();
+  showPage("pageDesign");
+  renderSheetTabs();
+  render(); renderInspector(); analyze();
+  fitView();
+  toast(`${f.name} — ${f.parameters.toLocaleString()} parameters, already checked.`);
 }
 
 /* A finding is openable because it was already built once to earn its place. */

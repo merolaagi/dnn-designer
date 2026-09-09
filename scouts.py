@@ -86,6 +86,16 @@ CATALOG = [
             "Reports which papers have fetchable text, because one that does "
             "not cannot be read here.",
      "params": [{"name": "hubs", "kind": "int", "default": 6}]},
+    {"id": "draft", "name": "Draft a design for me",
+     "doc": "Finds the guided build closest to what you describe, assembles "
+            "the whole thing, fits it to your input shape and number of "
+            "classes, and checks it before putting it on the canvas: shapes "
+            "resolve, the parameter count matches PyTorch, and a batch goes "
+            "through. It assembles from patterns that exist rather than "
+            "inventing an architecture, which is why the result can be "
+            "checked at all.",
+     "params": [{"name": "shape", "kind": "text", "default": ""},
+                {"name": "classes", "kind": "int", "default": 0}]},
     {"id": "maths", "name": "Explain this design",
      "doc": "Walks the design on the canvas layer by layer: the equation with "
             "this network's own numbers substituted, where the parameters are, "
@@ -99,7 +109,7 @@ def start(kind: str, goal: str, config: Dict[str, Any],
     scout = Scout(id=uuid.uuid4().hex[:12], kind=kind, goal=goal)
     SCOUTS[scout.id] = scout
     runner = {"code": _scout_code, "papers": _scout_papers,
-              "maths": _scout_maths}.get(kind)
+              "draft": _scout_draft, "maths": _scout_maths}.get(kind)
     if runner is None:
         scout.status = "error"
         scout.error = f"No scout called {kind!r}."
@@ -340,6 +350,169 @@ def _scout_papers(scout: Scout, config: Dict[str, Any],
     readable = sum(1 for f in scout.findings if f["text_url"])
     scout.say(f"{len(scout.findings)} papers, {readable} with fetchable text",
               scout.findings[0]["title"][:120])
+
+
+# --------------------------------------------------------------------------
+# draft
+# --------------------------------------------------------------------------
+
+def assemble(plan: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Turn a guided build's plan into one graph.
+
+    The plan is a chain: each step's nodes follow the last node of the step
+    before. The frontend has always walked this a step at a time; nothing did
+    it in one go, which is what a scout needs.
+    """
+    nodes: List[Dict[str, Any]] = []
+    edges: List[Dict[str, Any]] = []
+    previous: Optional[str] = None
+    for step in plan:
+        for spec in step.get("nodes") or []:
+            nid = f"n{len(nodes) + 1}"
+            nodes.append({
+                "id": nid,
+                "type": spec["type"],
+                "params": dict(spec.get("params") or {}),
+                "label": spec.get("label") or "",
+                "x": 0,
+                "y": len(nodes) * 130,
+            })
+            if previous:
+                edges.append({"id": f"e{len(edges) + 1}", "source": previous,
+                              "target": nid, "port": 0})
+            previous = nid
+    return {"name": "draft", "nodes": nodes, "edges": edges}
+
+
+def _fit_to(graph: Dict[str, Any], shape: Optional[List[int]],
+            classes: int) -> List[str]:
+    """Point the input and the head at what was asked for."""
+    changed = []
+    if shape:
+        for node in graph["nodes"]:
+            if node["type"] == "Input":
+                if list(node["params"].get("shape") or []) != shape:
+                    node["params"]["shape"] = shape
+                    changed.append("input shape set to "
+                                   + "\u00d7".join(str(d) for d in shape))
+                break
+    if classes:
+        dense = [n for n in graph["nodes"] if n["type"] == "Linear"]
+        if dense and int(dense[-1]["params"].get("units", 0)) != classes:
+            dense[-1]["params"]["units"] = classes
+            changed.append(f"head set to {classes} classes")
+    return changed
+
+
+def _scout_draft(scout: Scout, config: Dict[str, Any],
+                 graph: Dict[str, Any]) -> None:
+    import projectloader
+
+    # The catalog is loaded on demand: a scout runs in its own thread and
+    # cannot assume the pages that usually load it have been opened.
+    if not projectloader.catalog():
+        projectloader.load_all()
+
+    shape = None
+    raw = str(config.get("shape") or "").strip()
+    if raw:
+        try:
+            shape = [int(x) for x in raw.replace("x", ",").split(",") if x.strip()]
+        except ValueError:
+            scout.say(f"Could not read “{raw}” as a shape", "Ignoring it.")
+    classes = int(config.get("classes") or 0)
+
+    scout.say(f"Looking for a build like “{scout.goal}”")
+    # suggest returns the query it understood alongside the matches, which is
+    # worth saying: a search that read the words differently explains a
+    # surprising shortlist better than the shortlist does.
+    found = projectloader.suggest(scout.goal, limit=4)
+    matches = found.get("matches") or []
+    if found.get("terms"):
+        scout.say("Read that as: " + ", ".join(found["terms"]))
+    if not matches:
+        scout.say("Nothing matched.",
+                  "This assembles from the guided builds rather than inventing "
+                  "an architecture, so a topic none of them covers has no "
+                  "honest answer here.")
+        return
+    scout.say(f"{len(matches)} candidates",
+              ", ".join(m["name"] for m in matches))
+
+    for match in matches:
+        if scout.stop.is_set():
+            return
+        project = projectloader.get(match["id"])
+        if not project:
+            continue
+        built = assemble(project.get("plan") or [])
+        if not built["nodes"]:
+            continue
+        built["name"] = project["name"]
+        fitted = _fit_to(built, shape, classes)
+        scout.say(f"Assembling {project['name']}",
+                  f"{len(built['nodes'])} layers"
+                  + (f"; {', '.join(fitted)}" if fitted else ""))
+
+        verdict = _verify(built)
+        scout.say(f"   {verdict['summary']}")
+        scout.findings.append({
+            "kind": "draft",
+            "name": project["name"],
+            "project": project["id"],
+            "summary": project.get("summary", ""),
+            "category": project.get("category", ""),
+            "layers": len(built["nodes"]),
+            "fitted": fitted,
+            "graph": built,
+            **verdict,
+        })
+
+    scout.findings.sort(key=lambda f: (not f["ok"], -f.get("parameters", 0)))
+    good = [f for f in scout.findings if f["ok"]]
+    if good:
+        scout.say(f"{len(good)} of {len(scout.findings)} assembled and ran",
+                  good[0]["name"])
+    else:
+        scout.say("None of them survived the check.",
+                  "Each card says what went wrong. An unverified design is not "
+                  "offered, because putting one on the canvas would look like "
+                  "an answer.")
+
+
+def _verify(built: Dict[str, Any]) -> Dict[str, Any]:
+    """Shapes resolve, the count matches torch, and a batch goes through."""
+    import codegen
+
+    report = G.analyze(G.parse(built))
+    if not report.get("ok"):
+        return {"ok": False, "why": (report.get("errors") or ["it does not resolve"])[0],
+                "summary": "the shapes do not resolve"}
+    counted = report.get("total_learnables", 0)
+    try:
+        import torch
+
+        import train as T
+
+        g = G.parse(built)
+        model = T.build_model(codegen.to_pytorch(g, report),
+                              codegen.model_class_name(g))
+        real = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        shapes = [report["nodes"][i]["out_shape"]
+                  for i in codegen.input_order(g, report)]
+        with torch.no_grad():
+            model(*[torch.randn(2, *map(int, s)) for s in shapes])
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "parameters": counted,
+                "why": f"{type(exc).__name__}: {exc}"[:300],
+                "summary": "it assembled but would not run"}
+    if real != counted:
+        return {"ok": False, "parameters": counted, "torch": real,
+                "why": f"the canvas counts {counted:,} and torch {real:,}",
+                "summary": "the parameter counts disagree"}
+    return {"ok": True, "parameters": counted, "torch": real,
+            "summary": f"{counted:,} parameters, matching torch, and a batch "
+                       f"went through"}
 
 
 # --------------------------------------------------------------------------

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.59.0
+
+**A fourth scout: "Draft a design for me."** Yes — it puts a network on the
+canvas.
+
+Describe what you want, optionally give it an input shape and a number of
+classes, and it finds the guided builds closest to the description, assembles
+each one whole, refits it to your shape and head, and **checks it before
+offering it**: shapes resolve, the parameter count matches PyTorch, and a batch
+goes through. Only then is it placeable, in one press.
+
+A real run on "classify small colour images" with `3,32,32` and 10 classes
+returned four candidates, all four assembled and ran — 60,554 parameters each
+for the convolutional ones, with the input shape and head refitted and both
+changes listed on the card.
+
+It assembles from patterns that exist rather than inventing an architecture, and
+that is the reason the result can be checked at all. A drafted design that fails
+any of the three checks is shown with what went wrong and cannot be placed;
+`placeDraft` re-checks the finding rather than trusting that the button was
+hidden.
+
+Also added: `assemble()`, which turns a guided build's plan into one graph. The
+frontend had always walked those a step at a time and nothing did it in one go,
+which is what a scout needs.
+
 ## 1.58.0
 
 **Scouts.** Three errands that go and look, and then check what they found.
