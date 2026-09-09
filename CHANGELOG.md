@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.60.0
+
+Three things from using the scouts in anger, all fair.
+
+**Errands are kept.** Forty seconds of searching the internet should not be lost
+by clicking away, and two searches for the same thing return slightly different
+repositories — worth comparing rather than only regretting. Finished scouts are
+written to `scouts/`, listed under *already sent out*, and reopened with their
+findings intact. This also fixes the vanishing results from 1.59.1 at the other
+end: uvicorn reloading emptied the register, and now the errand outlives it.
+
+Found while testing: **the status was set before the file was written**, so a
+client that saw "done" and immediately asked for the history could find nothing
+there. The errand is now on disk before it is called finished.
+
+**"Explain this design" says which design.** It reads whatever is on the canvas,
+which was left to be inferred. The card now names it — *"It will read GPT2 — 18
+layers on the canvas now"* — and says plainly when the canvas is empty rather
+than offering to explain nothing.
+
+**A design placed by a scout says so, on the canvas.** A badge above the
+flowchart reads *"drafted by a scout · Small CNN"* with a link straight back to
+the results it came from. That answers the real question — whether the thing you
+are looking at is the candidate you chose — and going back no longer costs the
+results, since they are kept now. The badge disappears when the canvas holds
+something else, so it can never claim a design it did not put there.
+
 ## 1.59.1
 
 **The blank panel was a bug. The "refused" lines were not.**

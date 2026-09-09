@@ -55,6 +55,8 @@ class Scout:
     started: float = field(default_factory=time.time)
     finished: Optional[float] = None
     stop: threading.Event = field(default_factory=threading.Event)
+    #: set once the errand is finished *and* written down
+    settled: threading.Event = field(default_factory=threading.Event)
 
     def say(self, text: str, detail: str = "") -> None:
         self.steps.append({"at": round(time.time() - self.started, 1),
@@ -70,6 +72,63 @@ class Scout:
 
 
 SCOUTS: Dict[str, Scout] = {}
+
+#: Finished scouts are written here. An errand that took forty seconds and
+#: reached the internet should survive leaving the page — and two searches for
+#: the same thing return slightly different repositories, which is worth being
+#: able to compare rather than only regret.
+HISTORY = Path(__file__).resolve().parent / "scouts"
+
+
+def _keep(scout: "Scout") -> None:
+    try:
+        HISTORY.mkdir(parents=True, exist_ok=True)
+        blob = scout.snapshot()
+        blob["kept_at"] = time.time()
+        (HISTORY / f"{scout.id}.json").write_text(json.dumps(blob, indent=1))
+    except Exception:  # noqa: BLE001 - never let bookkeeping end a scout badly
+        pass
+
+
+def history(limit: int = 40) -> List[Dict[str, Any]]:
+    """Past errands, newest first, without their findings."""
+    out = []
+    if not HISTORY.exists():
+        return out
+    for path in sorted(HISTORY.glob("*.json"),
+                       key=lambda p: -p.stat().st_mtime)[:limit]:
+        try:
+            blob = json.loads(path.read_text())
+        except Exception:  # noqa: BLE001
+            continue
+        out.append({"id": blob.get("id", path.stem), "kind": blob.get("kind", ""),
+                    "goal": blob.get("goal", ""), "status": blob.get("status", ""),
+                    "seconds": blob.get("seconds", 0),
+                    "findings": len(blob.get("findings") or []),
+                    "kept_at": blob.get("kept_at", path.stat().st_mtime)})
+    return out
+
+
+def recall(scout_id: str) -> Optional[Dict[str, Any]]:
+    """A past errand in full, findings and all."""
+    live = SCOUTS.get(scout_id)
+    if live:
+        return live.snapshot()
+    path = HISTORY / f"{scout_id}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def forget(scout_id: str) -> bool:
+    path = HISTORY / f"{scout_id}.json"
+    if path.exists():
+        path.unlink()
+        return True
+    return False
 
 CATALOG = [
     {"id": "code", "name": "Find code worth importing",
@@ -116,14 +175,21 @@ def start(kind: str, goal: str, config: Dict[str, Any],
         return scout
 
     def work():
+        # The status is set last, after the errand is on disk. A client that
+        # sees "done" and immediately asks for the history has to find it
+        # there — flipping the status first leaves a window where a finished
+        # scout does not exist yet.
+        outcome, message = "done", ""
         try:
             runner(scout, config or {}, graph or {})
-            scout.status = "stopped" if scout.stop.is_set() else "done"
+            outcome = "stopped" if scout.stop.is_set() else "done"
         except Exception as exc:  # noqa: BLE001 - a scout must not take the app with it
-            scout.status = "error"
-            scout.error = f"{type(exc).__name__}: {exc}"
-        finally:
-            scout.finished = time.time()
+            outcome, message = "error", f"{type(exc).__name__}: {exc}"
+        scout.finished = time.time()
+        scout.error = message
+        scout.status = outcome
+        _keep(scout)
+        scout.settled.set()
 
     threading.Thread(target=work, daemon=True).start()
     return scout

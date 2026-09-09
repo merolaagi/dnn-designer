@@ -811,12 +811,24 @@ def scout_start(body: ScoutPayload):
     return scout.snapshot()
 
 
+@app.get("/api/scouts/history")
+def scout_history():
+    return {"history": scouts.history()}
+
+
 @app.get("/api/scouts/{scout_id}")
 def scout_state(scout_id: str):
-    scout = scouts.SCOUTS.get(scout_id)
-    if not scout:
+    # Live first, then what was kept: a scout that finished before the server
+    # last reloaded is still worth reading, and losing it was the complaint.
+    blob = scouts.recall(scout_id)
+    if not blob:
         raise HTTPException(404, detail="No such scout.")
-    return scout.snapshot()
+    return blob
+
+
+@app.delete("/api/scouts/{scout_id}")
+def scout_forget(scout_id: str):
+    return {"forgotten": scouts.forget(scout_id)}
 
 
 @app.post("/api/scouts/{scout_id}/stop")

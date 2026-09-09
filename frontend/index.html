@@ -1173,6 +1173,20 @@ i.covered{
 }
 .scoutgoal:focus{outline:none;border-color:var(--amber)}
 .scoutcard .btn{align-self:flex-start}
+.scoutsubject{
+  font-size:10.5px;line-height:1.55;color:#4C3A85;background:#F4F1FE;
+  border-radius:7px;padding:7px 9px;
+}
+.scoutsubject b{font-weight:600}
+.pastrow{display:flex;flex-wrap:wrap;gap:7px}
+.pastchip{
+  text-align:left;background:#fff;border:1px solid var(--paper-3);
+  border-radius:9px;padding:7px 11px;cursor:pointer;max-width:280px;
+}
+.pastchip:hover{border-color:var(--amber);background:#FFFDF7}
+.pastchip b{display:block;font-size:11.5px;font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pastchip span{display:block;font-size:9.5px;color:var(--muted)}
 .draftfit{display:flex;gap:7px}
 .draftfit input{
   flex:1;min-width:0;padding:7px 10px;border:1px solid var(--paper-3);
@@ -1270,6 +1284,13 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .domrow.warn{background:#FFF6E6}
 .domrow.bad{background:#FDECEC}
 
+.provenance{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:40;
+  display:flex;align-items:center;gap:10px;padding:6px 13px;border-radius:18px;
+  background:#F4F1FE;border:1px solid #DCD2F5;color:#4C3A85;font-size:11px;
+  box-shadow:0 1px 2px rgba(22,32,46,.05);
+}
+.provenance b{font-weight:600}
 #dockTab{
   position:fixed;right:18px;bottom:18px;z-index:120;display:flex;align-items:center;
   gap:7px;padding:9px 15px;border-radius:22px;border:1px solid var(--paper-3);
@@ -2282,6 +2303,7 @@ cfg.n_embd = 128"></textarea>
   </div>
 </div>
 
+<div id="provenance" class="provenance" style="display:none"></div>
 <button id="dockTab" title="Assistant">&#10022;<span>Assistant</span></button>
 <div id="ghost"></div>
 <div class="toast" id="toast"></div>
@@ -4861,6 +4883,7 @@ function showPage(pageId){
   if (pageId === "pageDesign"){
     render();
     drawMinimap();
+    paintProvenance();
     // a fit asked for while this page was hidden could not be computed then
     if (state.needsFit) fitView();
   }
@@ -4941,6 +4964,7 @@ async function renderScoutsPage(){
       reason it refused is on its card.</p>
     </div>
     <div id="scoutPick" class="scoutpick"><span class="waiting">loading…</span></div>
+    <div id="scoutPast"></div>
     <div id="scoutLive"></div>
   </div>`;
 
@@ -4957,6 +4981,11 @@ async function renderScoutsPage(){
     <div class="scoutcard">
       <b>${entry.name}</b>
       <p>${entry.doc}</p>
+      ${entry.id === "maths" ? `<div class="scoutsubject">${
+        (state.graph.nodes || []).length
+          ? `It will read <b>${state.graph.name || "the unsaved design"}</b> —
+             ${state.graph.nodes.length} layers on the canvas now.`
+          : `Nothing is on the canvas, so there is nothing to read yet.`}</div>` : ""}
       ${entry.id === "maths" ? "" : `
         <input type="text" class="scoutgoal" data-goal="${entry.id}"
                placeholder="${entry.id === "code"
@@ -4985,8 +5014,32 @@ async function renderScoutsPage(){
       sendScout(kind, box ? box.value : "", config);
     }));
 
+  await paintPast();
   if ((d.running || []).length) await followScout(d.running[0].id);
 }
+
+/* Errands already run. Two searches for the same thing return slightly
+   different repositories, so keeping them is what makes comparing possible. */
+async function paintPast(){
+  const host = $("scoutPast");
+  if (!host) return;
+  let d;
+  try{
+    d = await (await fetch(API + "/api/scouts/history")).json();
+  } catch { return; }
+  const past = d.history || [];
+  if (!past.length){ host.innerHTML = ""; return; }
+  host.innerHTML = `<div class="scoutsec">already sent out</div>
+    <div class="pastrow">${past.map(h => `
+      <button class="pastchip" data-past="${h.id}">
+        <b>${h.goal || KINDS[h.kind] || h.kind}</b>
+        <span>${KINDS[h.kind] || h.kind} · ${h.findings} found · ${h.seconds}s</span>
+      </button>`).join("")}</div>`;
+  host.querySelectorAll("[data-past]").forEach(chip =>
+    chip.addEventListener("click", () => followScout(chip.dataset.past)));
+}
+
+const KINDS = { code: "code", papers: "papers", draft: "drafted", maths: "explained" };
 
 async function sendScout(kind, goal, config){
   const live = $("scoutLive");
@@ -5040,6 +5093,7 @@ async function followScout(id){
     if (d.status !== "running"){
       clearInterval(state.scoutTimer);
       state.scoutTimer = null;
+      paintPast();          // it has just joined the list
     }
   };
   await tick();
@@ -5162,7 +5216,9 @@ function placeDraft(index){
   renderSheetTabs();
   render(); renderInspector(); analyze();
   fitView();
-  toast(`${f.name} — ${f.parameters.toLocaleString()} parameters, already checked.`);
+  state.cameFrom = { how: "drafted", what: f.name, scout: state.scout.id };
+  toast(`${f.name} is on the canvas — ${f.parameters.toLocaleString()} `
+        + `parameters, already checked. Scouts remembers where it came from.`);
 }
 
 /* A finding is openable because it was already built once to earn its place. */
@@ -5182,7 +5238,10 @@ function openScoutFind(findingIndex, triedIndex){
   renderSheetTabs();
   render(); renderInspector(); analyze();
   fitView();
-  toast(`${t.cls} from ${f.name} — ${t.parameters.toLocaleString()} parameters.`);
+  state.cameFrom = { how: "imported", what: `${t.cls} from ${f.name}`,
+                     scout: state.scout.id };
+  toast(`${t.cls} is on the canvas — ${t.parameters.toLocaleString()} `
+        + `parameters, from ${f.name}.`);
 }
 
 /* ============================= domains ============================= */
@@ -8081,6 +8140,28 @@ function setMainSheet(name){
   ensureBook().main = name;
   renderSheetTabs();
   analyze();
+}
+
+/* Where the design on the canvas came from, if a scout put it there. Without
+   this the canvas is just a flowchart and you have to remember which of four
+   candidates it was — and going back to Scouts to check used to mean losing
+   the results. */
+function paintProvenance(){
+  const bar = $("provenance");
+  if (!bar) return;
+  const from = state.cameFrom;
+  if (!from || state.graph.name !== (from.what || "").split(" from ")[0]
+      && state.graph.name !== from.what){
+    bar.style.display = "none";
+    return;
+  }
+  bar.style.display = "";
+  bar.innerHTML = `<span>${from.how} by a scout · <b>${from.what}</b></span>
+    <button class="linkbtn" id="backToScout">back to the results</button>`;
+  $("backToScout").addEventListener("click", () => {
+    showPage("pageScouts");
+    if (from.scout) followScout(from.scout);
+  });
 }
 
 function renderSheetTabs(){

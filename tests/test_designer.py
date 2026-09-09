@@ -1148,6 +1148,67 @@ def _():
     assert "renderLaunchPad()" in boot, "boot never fills the launch pad"
 
 
+@check("an errand survives leaving the page")
+def _():
+    """Forty seconds of searching the internet should not be lost by clicking
+    away, and two searches for the same thing return slightly different
+    repositories — which is worth comparing rather than only regretting.
+
+    It also fixes the reload case: uvicorn restarting on a saved file emptied
+    the register, which is what made results vanish at random.
+    """
+    import scouts
+
+    g = build([("i", "Input", {"shape": [3, 32, 32]}),
+               ("c", "Conv2d", {"filters": 8, "kernel": 3}),
+               ("o", "Output", {"task": "classification"})],
+              [("i", "c", 0), ("c", "o", 0)], "Kept")
+    scout = scouts.start("maths", "", {}, g)
+    # wait for settled, not for the status: the status is set before the file
+    # is written, and a client that raced that window found nothing
+    assert scout.settled.wait(timeout=20), "the errand never settled"
+    assert scout.status == "done", scout.error
+
+    kept = scouts.HISTORY / f"{scout.id}.json"
+    assert kept.exists(), "a finished errand was not written down"
+
+    # and it is readable after the register is emptied, which is what a
+    # server restart does
+    scouts.SCOUTS.clear()
+    back = scouts.recall(scout.id)
+    assert back and back["findings"], "the errand did not survive a restart"
+    assert scout.id in {h["id"] for h in scouts.history()}
+
+    import main
+
+    assert main.scout_state(scout.id)["findings"], \
+        "the endpoint reads only live scouts"
+
+    # the page offers them and says what each one found
+    assert "function paintPast" in PAGE and "data-past=" in PAGE
+    assert "already sent out" in PAGE
+
+    # "Explain this design" must name the design, or "this" is a guess
+    assert "scoutsubject" in PAGE, "the maths scout does not say what it will read"
+    # anchored on the template, not the first mention: the CSS rule of the same
+    # name comes earlier in the file
+    subject = PAGE[PAGE.index('<div class="scoutsubject">'):]
+    subject = subject[: subject.index("</div>`")]
+    assert "state.graph.name" in subject, "it does not name the design"
+    assert "Nothing is on the canvas" in subject, \
+        "with an empty canvas it still claims it will read something"
+
+    # a placed design says where it came from, and only when it is that design
+    assert "function paintProvenance" in PAGE
+    prov = PAGE[PAGE.index("function paintProvenance"):]
+    prov = prov[: prov.index("\nfunction renderSheetTabs")]
+    assert 'bar.style.display = "none"' in prov, \
+        "the badge would stay on a design that did not come from a scout"
+    assert "followScout(from.scout)" in prov, "there is no way back to the results"
+
+    scouts.forget(scout.id)
+
+
 @check("a scout verifies what it finds rather than describing it")
 def _():
     """The useful thing about a scout here is not that it can search — anyone
