@@ -187,8 +187,14 @@ def _scout_code(scout: Scout, config: Dict[str, Any],
         if not models:
             continue
 
-        # the ones that take no arguments first: they can be tried without
-        # guessing at a config, and a guess would make the evidence worthless
+        # Test files, examples and benchmarks first get set aside: a class
+        # defined in tests/test_linear4bit.py is a stub for exercising
+        # something else, and importing it teaches nothing about the
+        # repository. They are still counted, so the totals stay honest.
+        models = [m for m in models if not _is_scaffolding(m["file"])] or models
+
+        # then the ones taking no arguments, which can be tried without
+        # guessing at a config — and a guess would make the evidence worthless
         models.sort(key=lambda m: (m.get("arguments", 0), m["cls"]))
         tried = []
         for model in models[:per_repo]:
@@ -226,11 +232,52 @@ def _scout_code(scout: Scout, config: Dict[str, Any],
     if best:
         scout.say(f"{len(best)} of {len(scout.findings)} repositories offered a "
                   f"class that imports", best[0]["name"])
+        return
+
+    # A list of identical refusals is a conclusion nobody has drawn yet. Say
+    # which kind of refusal dominated, because the three kinds have different
+    # answers and only one of them is a dead end.
+    every = [t for f in scout.findings for t in f["tried"]]
+    wanting = [t for t in every if t.get("arguments", 0) > 0]
+    missing = [t for t in every if "did not import" in (t.get("why") or "")]
+    untraceable = [t for t in every if "cannot be traced" in (t.get("why") or "")]
+
+    if wanting and len(wanting) >= len(every) / 2:
+        names = ", ".join(sorted({t["cls"] for t in wanting})[:4])
+        scout.say(f"{len(wanting)} of {len(every)} classes want a constructor "
+                  f"argument.",
+                  f"That is the shape of most language model code: one config "
+                  f"object built once and passed everywhere ({names}). None of "
+                  f"it is out of reach — Import can take a Setup block that "
+                  f"builds the config, and then these classes import like any "
+                  f"other. A scout cannot write that block, because guessing "
+                  f"the values would make every number it reported meaningless.")
+    elif missing and len(missing) >= len(every) / 2:
+        scout.say(f"{len(missing)} of {len(every)} classes need packages that "
+                  f"are not installed here.",
+                  "Their repositories import something at module level that "
+                  "this machine does not have. Installing it into the same "
+                  "environment as the app would let them through.")
+    elif untraceable:
+        scout.say(f"{len(untraceable)} of {len(every)} could not be traced.",
+                  "Their forward() branches on tensor values, which no single "
+                  "static graph can represent. That one is a real dead end for "
+                  "importing, though the source is still readable.")
     else:
         scout.say("Nothing imported cleanly.",
-                  "Every candidate refused, and each reason is on its card. "
-                  "This is common: most published code branches on tensor "
-                  "values somewhere.")
+                  "Each reason is on its card.")
+
+
+SCAFFOLDING = ("test", "tests", "testing", "benchmark", "benchmarks",
+               "example", "examples", "conftest", "setup")
+
+
+def _is_scaffolding(path: str) -> bool:
+    """Files that hold classes nobody wants to import."""
+    parts = [p.lower() for p in Path(path).parts]
+    stem = Path(path).stem.lower()
+    return (any(p in SCAFFOLDING for p in parts)
+            or stem.startswith("test_") or stem.endswith("_test"))
 
 
 def _try_class(root: str, model: Dict[str, Any],

@@ -1221,6 +1221,32 @@ def _():
     assert "!f.ok" in place, \
         "placeDraft trusts the button rather than checking the finding"
 
+    # test files and examples are set aside: a class in tests/test_x.py is a
+    # stub for exercising something else and teaches nothing about the repo
+    assert scouts._is_scaffolding("tests/test_parametrize.py")
+    assert scouts._is_scaffolding("examples/demo.py")
+    assert scouts._is_scaffolding("a/b/model_test.py")
+    assert not scouts._is_scaffolding("lit_llama/model.py")
+    assert not scouts._is_scaffolding("bitsandbytes/nn/modules.py")
+
+    # a list of identical refusals is a conclusion nobody has drawn yet
+    code = inspect.getsource(scouts._scout_code)
+    # matched on fragments: these strings are split across source lines, so
+    # the whole sentence never appears in the file
+    for conclusion in ("want a constructor", "are not installed here",
+                       "could not be traced"):
+        assert conclusion in code, f"the {conclusion!r} pattern is not summarised"
+    assert "guessing" in code and "meaningless" in code, \
+        "it does not say why it will not write the config itself"
+
+    # a scout the server has forgotten must say so, not paint a blank panel
+    poll = PAGE[PAGE.index("const tick = async"):]
+    poll = poll[: poll.index("await tick();")]
+    assert "!r.ok || !d || !d.status" in poll, \
+        "a 404 is painted as a snapshot, giving 'undefined · undefineds'"
+    assert "no longer has this scout" in PAGE, \
+        "a vanished scout gives no explanation"
+
     # a drafted design is only placeable once verified
     card = PAGE[PAGE.index("function scoutCard"):]
     draft_part = card[card.index('f.kind === "draft"'):]

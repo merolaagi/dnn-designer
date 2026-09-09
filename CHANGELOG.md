@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.59.1
+
+**The blank panel was a bug. The "refused" lines were not.**
+
+- **Fixed: a scout the server had forgotten painted an empty panel** headed
+  *"undefined · undefineds"*. The poll was rendering a 404 body as if it were a
+  snapshot. The usual cause is uvicorn reloading on a saved file, which empties
+  the register while the scout is out — it now says exactly that, and to send it
+  again.
+- **It was trying test files.** `tests/test_parametrize.py` and
+  `test_linear4bit.py` hold stubs for exercising something else, and importing
+  them teaches nothing about the repository. Tests, examples and benchmarks are
+  set aside now, so the classes it tries come from `lit_llama/model.py` and
+  `bitsandbytes/nn/modules.py` instead. They are still counted, so the totals
+  stay honest.
+- **Four identical refusals are now one conclusion.** The three kinds have
+  different answers and only one is a dead end: classes wanting a config
+  (Import can supply one — a scout cannot, because guessing the values would
+  make every number it reported meaningless), classes needing packages this
+  machine lacks (install them), and classes that cannot be traced at all
+  (a real dead end for importing, though the source is still readable).
+
+The refusals themselves are the feature working. `GGMLLayer` needs the `gguf`
+package; NVIDIA's `Discriminator` branches on tensor values; lit-llama's four
+classes all take a config. Each of those is true, checked by running it, and
+more useful than a confident guess would have been.
+
 ## 1.59.0
 
 **A fourth scout: "Draft a design for me."** Yes — it puts a network on the

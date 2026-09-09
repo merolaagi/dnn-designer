@@ -5016,10 +5016,25 @@ async function sendScout(kind, goal, config){
 async function followScout(id){
   if (state.scoutTimer) clearInterval(state.scoutTimer);
   const tick = async () => {
-    let d;
+    let r, d;
     try{
-      d = await (await fetch(API + "/api/scouts/" + id)).json();
+      r = await fetch(API + "/api/scouts/" + id);
+      d = await r.json();
     } catch { return; }
+    // A scout the server no longer knows about — the usual cause is uvicorn
+    // reloading on a file change, which empties the register. Painting the
+    // 404 body as if it were a snapshot gave "undefined · undefineds" and an
+    // empty panel, which reads as a scout that found nothing.
+    if (!r.ok || !d || !d.status){
+      clearInterval(state.scoutTimer);
+      state.scoutTimer = null;
+      $("scoutLive").innerHTML = `<div class="paperwarn">
+        The server no longer has this scout. That normally means it restarted
+        while the scout was out — a saved file will do it when the server is
+        running with <span class="mono">--reload</span>. Nothing was lost that
+        was not going to be repeated; send it out again.</div>`;
+      return;
+    }
     state.scout = d;
     paintScout(d);
     if (d.status !== "running"){
