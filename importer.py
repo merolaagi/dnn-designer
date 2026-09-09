@@ -762,16 +762,21 @@ def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
             init = next((f for f in node.body
                          if isinstance(f, ast.FunctionDef) and f.name == "__init__"), None)
             required = 0
+            wants: List[str] = []
             if init:
                 args = init.args
                 positional = [a.arg for a in args.args][1:]   # drop self
                 required = max(0, len(positional) - len(args.defaults))
+                # The names matter, not just the count: "nin, nout" can be
+                # worked out from the input shape, where "config" cannot.
+                wants = positional[:required]
             found.append({
                 "file": str(path.relative_to(base)),
                 "cls": node.name,
                 "line": node.lineno,
                 "bases": bases,
                 "arguments": required,
+                "wants": wants,
                 "forward": any(isinstance(f, ast.FunctionDef) and f.name == "forward"
                                for f in node.body),
             })

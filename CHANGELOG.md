@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.61.0
+
+**The missing step was real, and it was my rule that was wrong.**
+
+The code scout refused to supply any constructor argument, on the grounds that
+guessing makes the evidence meaningless. That is true of an *unverified* guess
+and wrong about a verified one. `depthwise_separable_conv(nin, nout)` is plainly
+two channel counts; if the class builds at exactly PyTorch's parameter count and
+a batch goes through it, the hypothesis has passed. My rule left whole
+repositories unreachable for want of the number 3.
+
+The scan now records the *names* of the required arguments, not just how many.
+A numeric one is inferred from its name and the input shape, then built, counted
+and run — and reported, so it can be corrected. On the same search that returned
+nothing before:
+
+- `depthwise_separable_conv` — 4 layers, **123 parameters, matching torch
+  exactly**, built with `nin=3, nout=32`
+- `SeparableConv2d` — 99 parameters, matching exactly
+- `Xception` — 170 layers, **22,855,952 parameters, matching exactly**
+
+**A structural argument is still refused**, and the distinction is the point.
+`Block` wants `in_filters, out_filters, reps`, and `reps` is a design decision
+rather than a number derivable from a shape. Inventing it would make every
+figure reported about the result meaningless. It says so, and names which
+argument defeated it.
+
+**And a paper now leads somewhere.** The papers scout found papers and stopped.
+Findings with fetchable text open in *Paper → spec*, and the results say plainly
+that a paper does not go on the canvas directly — it becomes a residual, the
+residual is checked, and the result becomes a placeable layer. That is the route
+the Bergman glucose model took, and it is now one press from a search result.
+
 ## 1.60.1
 
 **Why nothing reached the canvas: none of those results had imported.**

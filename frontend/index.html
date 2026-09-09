@@ -5120,6 +5120,13 @@ function paintScout(d){
       <div class="scoutsteps">${(d.steps || []).slice(-12).map(s => `
         <div class="scoutstep"><i>${s.at}s</i><span>${s.text}</span>
           ${s.detail ? `<em>${s.detail}</em>` : ""}</div>`).join("")}</div>
+      ${d.kind === "papers" && (d.findings || []).length
+        ? `<div class="scoutsec">the road from here</div>
+           <div class="paperok">A paper does not go on the canvas directly. The
+           ones with fetchable text can be read in <b>Paper &rarr; spec</b>,
+           where a theorem becomes a residual, the residual is checked, and the
+           result becomes a layer the canvas can place — the same route the
+           Bergman glucose model took.</div>` : ""}
       ${(d.findings || []).length
         ? `<div class="scoutsec">what it verified</div>
            ${openableCount(d) === 0 && d.kind !== "maths" && d.kind !== "papers"
@@ -5148,6 +5155,13 @@ function paintScout(d){
                                                      +btn.dataset.tried)));
   live.querySelectorAll("[data-draft]").forEach(btn =>
     btn.addEventListener("click", () => placeDraft(+btn.dataset.draft)));
+  live.querySelectorAll("[data-paper]").forEach(btn =>
+    btn.addEventListener("click", async () => {
+      // hand it to the pipeline that already turns a theorem into a layer,
+      // rather than describing the pipeline and leaving them at the doorstep
+      showPage("pagePaper");
+      await fetchPaper(btn.dataset.paper, btn.dataset.title);
+    }));
 }
 
 /* How many findings could actually reach the canvas. Zero is a fact about the
@@ -5205,7 +5219,9 @@ function scoutCard(f, i){
         ? `<div class="hitwhy">${f.reasons.map(x => `<span>${x}</span>`).join("")}</div>`
         : ""}
       <div class="hitacts">${f.text_url
-        ? `<span class="fetchnote ok">full text available</span>`
+        ? `<button class="btn tiny" data-paper="${f.text_url}"
+             data-title="${(f.title || "").replace(/"/g, "&quot;")}">
+             Read it in Paper &rarr; spec</button>`
         : `<span class="hitnotext">no fetchable full text</span>`}
         ${f.doi ? `<a class="linkbtn" href="https://doi.org/${f.doi}"
              target="_blank" rel="noreferrer">doi</a>` : ""}</div>

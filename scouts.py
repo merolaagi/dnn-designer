@@ -334,6 +334,54 @@ def _scout_code(scout: Scout, config: Dict[str, Any],
                   "Each reason is on its card.")
 
 
+#: What a parameter's name suggests it wants. A guess, but a guess that is
+#: then built, counted against torch and run — and reported, so it can be
+#: corrected. My first version refused to guess at all, on the grounds that a
+#: guess makes the evidence meaningless. That is true of an *unverified* guess
+#: and wrong about a verified one: "nin, nout" is plainly two channel counts,
+#: and if the class builds at exactly torch's parameter count and a batch goes
+#: through, the hypothesis has passed. Refusing left whole repositories
+#: unreachable for want of the number 3.
+GUESSES: List[tuple] = [
+    (("in_channel", "in_channels", "in_ch", "nin", "input_channels", "in_dim",
+      "input_dim", "in_features", "channels", "c_in"), "channels"),
+    (("out_channel", "out_channels", "out_ch", "nout", "output_channels",
+      "out_dim", "output_dim", "out_features", "c_out", "cnn_channels",
+      "hidden", "hidden_dim", "dim", "width", "planes"), 32),
+    (("num_classes", "n_classes", "nb_classes", "classes", "num_class"), 10),
+    (("kernel_size", "kernel", "k", "ksize"), 3),
+    (("stride", "s"), 1),
+    (("padding", "pad", "p"), 1),
+    (("dilation", "d"), 1),
+    (("dropout", "drop", "p_dropout", "cnn_dropout"), 0.25),
+    (("num_layers", "n_layers", "depth", "blocks", "num_blocks"), 2),
+    (("heads", "num_heads", "n_heads", "nhead"), 4),
+    (("bias",), True),
+]
+
+
+def _guess_arguments(wants: List[str], shape: List[int]) -> Optional[List[Any]]:
+    """Propose a value for every required argument, or give up.
+
+    Giving up matters: a name nothing recognises means the class is asking for
+    something structural — a config, a list of layer widths — and inventing
+    that would be the meaningless kind of guess.
+    """
+    channels = int(shape[0]) if shape else 3
+    values: List[Any] = []
+    for name in wants:
+        lowered = name.lower().strip("_")
+        picked = None
+        for names, value in GUESSES:
+            if lowered in names:
+                picked = channels if value == "channels" else value
+                break
+        if picked is None:
+            return None
+        values.append(picked)
+    return values
+
+
 SCAFFOLDING = ("test", "tests", "testing", "benchmark", "benchmarks",
                "example", "examples", "conftest", "setup")
 
@@ -353,17 +401,27 @@ def _try_class(root: str, model: Dict[str, Any],
     import layers  # noqa: F401 - registry must be loaded
 
     entry = {"cls": model["cls"], "file": model["file"],
-             "arguments": model.get("arguments", 0), "imported": False}
+             "arguments": model.get("arguments", 0), "imported": False,
+             "wants": list(model.get("wants") or [])}
+
+    guessed: Optional[List[Any]] = None
     if model.get("arguments", 0) > 0:
-        entry["summary"] = (f"needs {model['arguments']} constructor argument"
-                            f"{'s' if model['arguments'] > 1 else ''}, so it "
-                            f"was not guessed at")
-        entry["why"] = ("A class taking a config can only be built once "
-                        "somebody supplies one. Guessing would make any result "
-                        "meaningless.")
-        return entry
+        guessed = _guess_arguments(entry["wants"], shape)
+        if guessed is None:
+            named = ", ".join(entry["wants"]) or f"{model['arguments']} arguments"
+            entry["summary"] = f"wants {named}, which cannot be worked out"
+            entry["why"] = (
+                f"Those are structural — a config object, or a list of widths. "
+                f"A number can be inferred from the input shape; a design "
+                f"decision cannot, and inventing one would make every figure "
+                f"reported about it meaningless. Import can take a Setup block "
+                f"that builds it.")
+            return entry
+        entry["guessed"] = dict(zip(entry["wants"], guessed))
+    args = ", ".join(repr(v) for v in guessed) if guessed else ""
+
     try:
-        built = importer.from_folder(root, model["file"], model["cls"], shape, "")
+        built = importer.from_folder(root, model["file"], model["cls"], shape, args)
     except Exception as exc:  # noqa: BLE001
         entry["summary"] = "refused"
         entry["why"] = str(exc)[:300]
@@ -389,12 +447,15 @@ def _try_class(root: str, model: Dict[str, Any],
         "graph": built,
         "notes": notes[:4],
     })
+    tried_with = (", built with "
+                  + ", ".join(f"{k}={v!r}" for k, v in entry["guessed"].items())
+                  if entry.get("guessed") else "")
     entry["summary"] = (
         f"{len(nodes)} layers, {counted:,} parameters"
         + (", matching torch exactly" if entry["exact"] else
            f" but torch says {expected:,} — the graph is not the model"
            if expected else "")
-        + (f", {opaque} opaque" if opaque else ""))
+        + (f", {opaque} opaque" if opaque else "") + tried_with)
     if expected and not entry["exact"]:
         entry["why"] = (
             f"The traced graph has {counted:,} parameters and the class has "

@@ -1192,6 +1192,19 @@ def _():
     # and per repository, so a card with no openable class says why
     assert "Nothing from this repository can be" in PAGE
 
+    # A paper cannot go on the canvas directly, and saying so is not the same
+    # as leaving somebody at the doorstep: the route that turns a theorem into
+    # a layer exists, so the finding opens it.
+    assert "the road from here" in PAGE, \
+        "the papers scout does not say what happens next"
+    assert "data-paper=" in PAGE, "a paper finding leads nowhere"
+    handler = PAGE[PAGE.index('data-paper=') :]
+    assert "Paper" in handler[:200], "the button does not name where it goes"
+    opener = PAGE[PAGE.index('querySelectorAll("[data-paper]")'):]
+    opener = opener[: opener.index("}));")]
+    assert 'showPage("pagePaper")' in opener and "fetchPaper(" in opener, \
+        "it opens the page without fetching the paper"
+
 
 @check("an errand survives leaving the page")
 def _():
@@ -1285,9 +1298,27 @@ def _():
     assert "the graph is not the model" in source, \
         "an inexact import does not say what is wrong with it"
 
-    # a class needing arguments must not be guessed at: a guess would make the
-    # evidence worthless, which is worse than no evidence
-    assert "was not guessed at" in source, "constructor arguments are invented"
+    # A numeric argument may be guessed from its name, because the guess is
+    # then built, counted against torch and run — a verified hypothesis is not
+    # the same as an invention. A structural one may not: "reps" or "config"
+    # is a design decision and inferring it would make every figure about the
+    # result meaningless.
+    assert "_guess_arguments" in source, "nothing infers a numeric argument"
+    assert "cannot be worked out" in source, \
+        "a structural argument is invented rather than refused"
+    guesser = inspect.getsource(scouts._guess_arguments)
+    assert "return None" in guesser, "it never gives up on an unknown name"
+
+    assert scouts._guess_arguments(["nin", "nout"], [3, 32, 32]) == [3, 32]
+    assert scouts._guess_arguments(["in_channels", "out_channels", "kernel_size"],
+                                   [1, 28, 28]) == [1, 32, 3]
+    assert scouts._guess_arguments(["config"], [3, 32, 32]) is None
+    assert scouts._guess_arguments(["in_filters", "out_filters", "reps"],
+                                   [3, 32, 32]) is None, \
+        "a structural argument was invented"
+
+    # and what it passed has to be reported, so it can be corrected
+    assert "built with " in source, "the arguments used are not shown"
 
     # the maths scout runs on the canvas alone, so it can be checked here
     g = build([("i", "Input", {"shape": [3, 32, 32]}),
