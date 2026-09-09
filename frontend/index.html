@@ -1502,6 +1502,15 @@ table.armfacts .k{color:var(--muted);line-height:1.45}
 .hitnotext{font-size:10px;color:#B7C0CB}
 .hitfit{font-size:10px;color:var(--muted);margin-top:3px}
 .hitfit b{color:#8C2F27;font-weight:600}
+.hitclaim{
+  margin-top:8px;padding:9px 11px;border-radius:8px;background:#EFF8F1;
+  border:1px solid #BFE0C8;font-size:11px;line-height:1.6;color:#256B39;
+}
+.hitclaim b{font-weight:600}
+.hitclaim pre{
+  margin:6px 0 0;font-size:10.5px;line-height:1.55;white-space:pre-wrap;
+  color:#2F4A38;max-height:120px;overflow-y:auto;
+}
 /* Named .choosebar, not .pickbar: that was already the 13px progress bar in
    the walkthrough's prediction list, complete with overflow:hidden, which
    clipped this to a single cut-off line. */
@@ -5124,8 +5133,10 @@ function paintScout(d){
           ${s.detail ? `<em>${s.detail}</em>` : ""}</div>`).join("")}</div>
       ${d.kind === "papers" && (d.findings || []).length
         ? `<div class="scoutsec">the road from here</div>
-           <div class="paperok">A paper does not go on the canvas directly. The
-           ones with fetchable text can be read in <b>Paper &rarr; spec</b>,
+           <div class="paperok">Every paper below was fetched and read, and
+           kept only because a passage in it states that something is unique,
+           stable or conserved. A paper does not go on the canvas directly —
+           read one in <b>Paper &rarr; spec</b>,
            where a theorem becomes a residual, the residual is checked, and the
            result becomes a layer the canvas can place — the same route the
            Bergman glucose model took.</div>` : ""}
@@ -5217,6 +5228,13 @@ function scoutCard(f, i){
       <div class="foundtop"><b>${f.title}</b></div>
       <div class="hitmeta">${[f.authors, f.year, f.journal].filter(Boolean).join(" · ")}
         ${f.cited_by ? ` · cited ${f.cited_by}` : ""} · ${f.why_group}</div>
+      ${f.claims ? `<div class="hitclaim">
+        <b>Read it: ${f.claims} passage${f.claims === 1 ? "" : "s"} state a
+        result</b>${f.equations ? ` · ${f.equations} displayed equations` : ""}
+        ${f.found_by && f.found_by !== "as asked"
+          ? ` · found by ${f.found_by}` : ""}
+        ${f.best ? `<pre>${f.best.replace(/</g, "&lt;")}</pre>` : ""}
+      </div>` : ""}
       <div class="hitfit">${f.topic > 0
         ? `matches the question in ${f.topic} place${f.topic === 1 ? "" : "s"}`
         : `<b>does not match the question</b> — kept only for naming a

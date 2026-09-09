@@ -726,4 +726,4 @@ run on your own machine and not something to expose publicly.
 
 ## Licence
 
-MIT. See `LICENSE`. Version 1.62.0 — see `CHANGELOG.md`.
+MIT. See `LICENSE`. Version 1.63.0 — see `CHANGELOG.md`.

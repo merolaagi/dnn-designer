@@ -186,7 +186,10 @@ def start(kind: str, goal: str, config: Dict[str, Any],
         except Exception as exc:  # noqa: BLE001 - a scout must not take the app with it
             outcome, message = "error", f"{type(exc).__name__}: {exc}"
         scout.finished = time.time()
-        scout.error = message
+        # A runner that finished normally may still have something to report —
+        # an unreachable search is not an exception but it is the reason there
+        # is nothing to show. Do not wipe it with the empty string.
+        scout.error = message or scout.error
         scout.status = outcome
         _keep(scout)
         scout.settled.set()
@@ -478,70 +481,159 @@ def _input_shape(graph: Dict[str, Any]) -> Optional[List[int]]:
 # papers
 # --------------------------------------------------------------------------
 
-def _scout_papers(scout: Scout, config: Dict[str, Any],
-                  graph: Dict[str, Any]) -> None:
+#: Ways to ask again when a question returns nothing modellable. Each one is a
+#: different hypothesis about why it failed, and they are tried in order of how
+#: little they change the question.
+def _reformulations(question: str) -> List[tuple]:
+    words = [w for w in question.replace(",", " ").split() if len(w) > 2]
+    kept = " ".join(w for w in words
+                    if w.lower() not in ("from", "with", "using", "based",
+                                         "detection", "diagnosis", "prediction",
+                                         "classification", "recognition"))
+    return [
+        (question, "as asked"),
+        (f"{kept} mathematical model", "asking for a model of it"),
+        (f"{kept} dynamical system stability",
+         "asking for the dynamics rather than the task"),
+        (f"{kept} compartmental model steady state",
+         "asking for a compartmental description"),
+        (f"{kept} differential equation existence uniqueness",
+         "asking straight for a well-posedness result"),
+    ]
+
+
+def _reads_as_modellable(hit, text_url: str, scout: Scout) -> Dict[str, Any]:
+    """Open the paper and see whether it actually states a result.
+
+    Matching the question and naming mathematics are both cheap tests that a
+    title can pass. The expensive one is reading the thing: a paper worth
+    modelling has a passage that claims something is unique, stable, or
+    conserved. Nothing else is evidence.
+    """
     from dnn_bench import paper_to_spec as p2s
 
-    scout.say(f"Searching the literature for “{scout.goal}”")
-    found = p2s.discover(scout.goal, n_hubs=max(1, min(12, int(config.get("hubs", 6)))),
-                         use_arxiv=True,
-                         log=lambda *a: scout.say(" ".join(str(x) for x in a)[:200]))
+    out = {"claims": 0, "best": "", "read": False}
+    if not text_url:
+        return out
+    try:
+        paper = p2s.ingest(text_url, title=hit.title)
+    except Exception as exc:  # noqa: BLE001
+        out["why"] = f"could not be read: {type(exc).__name__}"
+        return out
+    out["read"] = True
+    carriers = [p for p in paper.passages
+                if p.kind in ("theorem", "assumption")
+                or any(w in (p.text or "").lower() for w in p2s.CLAIM_WORDS)]
+    out["claims"] = len(carriers)
+    out["passages"] = len(paper.passages)
+    out["equations"] = len(paper.equations or [])
+    if carriers:
+        out["best"] = (carriers[0].text or "")[:400]
+    return out
 
-    groups = [("foundational", "cited by the reviews"),
-              ("direct", "matched the question"),
-              ("preprints", "on arXiv"),
-              ("hubs", "a review")]
-    for key, why in groups:
-        for hit in (found.get(key) or [])[:6]:
-            if scout.stop.is_set():
-                return
+
+def _scout_papers(scout: Scout, config: Dict[str, Any],
+                  graph: Dict[str, Any]) -> None:
+    """Keep asking until something is actually modellable, or say why not.
+
+    A round that returns nothing usable is not an answer, it is a failed
+    attempt — and leaving it on screen serves no purpose. So the scout asks
+    again, differently, and only stops when it has papers it has read and found
+    a claim in, or when it has run out of ways to ask.
+    """
+    from dnn_bench import paper_to_spec as p2s
+
+    hubs = max(1, min(12, int(config.get("hubs", 6))))
+    want = max(1, min(6, int(config.get("want", 3))))
+    seen: set = set()
+    keepers: List[Dict[str, Any]] = []
+
+    for attempt, (query, why) in enumerate(_reformulations(scout.goal), start=1):
+        if scout.stop.is_set() or len(keepers) >= want:
+            break
+        scout.say(f"Round {attempt}: {why}", query)
+        # discover swallows an unreachable host and returns nothing, which
+        # looks exactly like a question with no answer. Asking the same
+        # question five more ways is pointless when the phone is off the hook.
+        chatter: List[str] = []
+        try:
+            found = p2s.discover(query, n_hubs=hubs, use_arxiv=True,
+                                 log=lambda *a: chatter.append(
+                                     " ".join(str(x) for x in a)))
+        except Exception as exc:  # noqa: BLE001
+            scout.say(f"   the search failed: {exc}")
+            continue
+        unreachable = [c.strip() for c in chatter if "unavailable" in c]
+        if unreachable and not any(found.get(k) for k in
+                                   ("direct", "foundational", "hubs", "preprints")):
+            scout.say("   the search could not be reached", unreachable[0][:160])
+            scout.error = ("The literature search is unreachable from this "
+                           "machine: " + unreachable[0][:200] + ". Nothing is "
+                           "wrong with the question; asking it another way "
+                           "would fail the same way, so I stopped.")
+            return
+
+        pool = []
+        for key, group in (("foundational", "cited by the reviews"),
+                           ("direct", "matched the question"),
+                           ("preprints", "on arXiv"),
+                           ("hubs", "a review")):
+            for hit in (found.get(key) or []):
+                if hit.ref in seen:
+                    continue
+                seen.add(hit.ref)
+                pool.append((hit, group))
+
+        # read the most promising first: on topic, then mathematical
+        pool.sort(key=lambda pair: -(int(getattr(pair[0], "topic", 0) or 0) * 6
+                                     + float(getattr(pair[0], "fit", 0) or 0) * 2))
+        scout.say(f"   {len(pool)} new papers; reading the most promising")
+
+        for hit, group in pool[:8]:
+            if scout.stop.is_set() or len(keepers) >= want:
+                break
             text_url = p2s.full_text(hit)
-            scout.findings.append({
-                "kind": "paper",
-                "title": hit.title,
-                "authors": hit.authors,
-                "year": hit.year,
-                "journal": hit.journal,
-                "cited_by": hit.cited_by,
-                "recurrence": hit.recurrence,
-                "reasons": list(hit.reasons or []),
-                "why_group": why,
-                "doi": hit.doi,
-                "text_url": text_url,
+            if not text_url:
+                continue
+            verdict = _reads_as_modellable(hit, text_url, scout)
+            if not verdict["read"]:
+                continue
+            if not verdict["claims"]:
+                scout.say(f"   read “{hit.title[:54]}” — no claim in it")
+                continue
+            scout.say(f"   kept “{hit.title[:54]}” — {verdict['claims']} passages "
+                      f"stating a result")
+            keepers.append({
+                "kind": "paper", "title": hit.title, "authors": hit.authors,
+                "year": hit.year, "journal": hit.journal,
+                "cited_by": hit.cited_by, "recurrence": hit.recurrence,
+                "reasons": list(hit.reasons or []), "why_group": group,
+                "doi": hit.doi, "text_url": text_url,
                 "fit": round(float(getattr(hit, "fit", 0) or 0), 2),
                 "topic": int(getattr(hit, "topic", 0) or 0),
-                # The library works out how well a paper matches the question
-                # (topic) and how much mathematics it names (fit), and my
-                # first version threw both away — ranking on fetchability and
-                # citation recurrence alone. On "differential diagnosis from
-                # chest Xrays" that put a paper about ribosome abundance
-                # control at the top, which is not a near miss but a different
-                # subject. Topical match has to dominate; being readable here
-                # is a convenience and belongs last.
-                "score": (int(getattr(hit, "topic", 0) or 0) * 6
-                          + float(getattr(hit, "fit", 0) or 0) * 2
-                          + min(hit.recurrence or 0, 4)
-                          + (1 if text_url else 0)),
+                "found_by": why, "query": query,
+                "claims": verdict["claims"],
+                "passages": verdict.get("passages", 0),
+                "equations": verdict.get("equations", 0),
+                "best": verdict["best"],
+                "score": verdict["claims"] * 4
+                         + int(getattr(hit, "topic", 0) or 0) * 6
+                         + float(getattr(hit, "fit", 0) or 0) * 2,
             })
 
-    if not scout.findings:
-        scout.say("Nothing on topic.",
-                  "The gate is deliberate: a paper that scores well but is not "
-                  "about the question is not an answer to it.")
+    scout.findings = sorted(keepers, key=lambda f: -f["score"])
+    if scout.findings:
+        scout.say(f"{len(scout.findings)} papers read and found to state a "
+                  f"result", scout.findings[0]["title"][:110])
         return
 
-    scout.findings.sort(key=lambda f: -f["score"])
-    readable = sum(1 for f in scout.findings if f["text_url"])
-    on_topic = sum(1 for f in scout.findings if f["topic"] > 0)
-    scout.say(f"{len(scout.findings)} papers, {on_topic} matching the question, "
-              f"{readable} with fetchable text",
-              scout.findings[0]["title"][:120])
-    if not on_topic:
-        scout.say("None of them actually match the question.",
-                  "They were kept for naming a mathematical object, which is "
-                  "the other half of the test. Ranking them would be ranking "
-                  "the wrong papers, so the order below means little — try "
-                  "naming the system you want modelled rather than the task.")
+    scout.say("Nothing modellable, after every way I know of asking.",
+              "Papers were found and read; none of them state that something "
+              "is unique, stable or conserved, which is what this pipeline "
+              "turns into a layer. That is usually true of a subject rather "
+              "than of the search: a task like classifying images has no such "
+              "theorem to find. The code scout and Draft a design are the "
+              "tools for those.")
 
 
 # --------------------------------------------------------------------------

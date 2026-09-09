@@ -1564,6 +1564,61 @@ def _():
         f"these pages let the dark page background through: {sorted(unpainted)}"
 
 
+@check("the papers scout keeps asking until something is modellable")
+def _():
+    """A round that returns nothing usable is a failed attempt, not an answer,
+    and leaving it on screen serves no purpose.
+
+    The test of "modellable" is reading the paper, not matching its title: a
+    paper worth turning into a layer has a passage claiming something is
+    unique, stable or conserved. Everything else is a cheap test a title can
+    pass.
+    """
+    try:
+        from dnn_bench import paper_to_spec  # noqa: F401
+    except ImportError:
+        print("        (dnn_bench absent, skipped)")
+        return
+    import scouts
+
+    # it asks more than once, and differently each time
+    plans = scouts._reformulations("differential diagnosis from chest Xrays")
+    assert len(plans) >= 4, "it gives up after one way of asking"
+    assert plans[0][0] == "differential diagnosis from chest Xrays", \
+        "the question as asked is not tried first"
+    assert len({q for q, _ in plans}) == len(plans), "two rounds ask the same thing"
+    for query, why in plans[1:]:
+        assert why and query, "a round does not say why it is different"
+
+    # the verdict comes from the text, not the metadata
+    class Fake:
+        title = "x"
+
+    theorem = ("Theorem 3.1. For positive rate constants the two-compartment "
+               "system has a unique asymptotically stable steady state.")
+    results = ("Methods. A convolutional network was trained.\n\n"
+               "Results. Accuracy was 91.2% on the held-out set.")
+    good = scouts._reads_as_modellable(Fake(), theorem, None)
+    bad = scouts._reads_as_modellable(Fake(), results, None)
+    assert good["read"] and good["claims"] >= 1, good
+    assert good["best"], "it keeps a paper without quoting what convinced it"
+    assert bad["read"] and bad["claims"] == 0, \
+        "a paper reporting accuracy was taken for a theorem"
+    assert not scouts._reads_as_modellable(Fake(), "", None)["read"], \
+        "a paper with no fetchable text was read anyway"
+
+    body = inspect.getsource(scouts._scout_papers)
+    assert "len(keepers) >= want" in body, "it does not stop once it has enough"
+    assert "the search could not be reached" in body, \
+        "an unreachable search sends it round the loop five more times"
+    assert "no claim in it" in body, "a paper read and rejected is not reported"
+
+    # a runner's own explanation must survive the wrapper
+    runner = inspect.getsource(scouts.start)
+    assert "message or scout.error" in runner, \
+        "the wrapper wipes what the scout explained"
+
+
 @check("papers are ranked by whether they answer the question")
 def _():
     """On "differential diagnosis from chest Xrays" the top result was a paper
@@ -1602,9 +1657,13 @@ def _():
     assert scored(on) > scored(off), \
         f"an off-topic paper still outranks an on-topic one: {scored(off)} vs {scored(on)}"
 
-    # a search where nothing matches has to say so rather than rank the wrong
-    # papers silently
-    assert "None of them actually match the question" in source
+    # A search that finds nothing modellable has to say so, and say it about
+    # the subject rather than the search. The scout now reads every candidate
+    # before keeping it, so this replaced the earlier "none of them match"
+    # message: it can make the stronger statement.
+    assert "Nothing modellable, after every way I know of asking" in source
+    assert "has no such" in source, \
+        "it does not say that some subjects have no result to find"
 
     # and the card shows it, so the order can be disagreed with
     assert "does not match the question" in PAGE

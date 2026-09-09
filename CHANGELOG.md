@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.63.0
+
+**The papers scout keeps going, and proves the papers it keeps.**
+
+A round that returns nothing usable is a failed attempt, not an answer, and
+leaving it on screen serves no purpose. So the scout now asks up to five times,
+each a different hypothesis about why the last one failed:
+
+    as asked
+    asking for a model of it
+    asking for the dynamics rather than the task
+    asking for a compartmental description
+    asking straight for a well-posedness result
+
+**And the test for "modellable" is now reading the paper.** Matching a question
+and naming mathematics are cheap tests a title can pass. The scout fetches each
+promising candidate, ingests it, and keeps it only if a passage claims something
+is unique, stable or conserved — quoting the passage that convinced it. A paper
+reporting 91.2% accuracy is read and rejected; one stating a theorem about a
+two-compartment system is kept. It stops as soon as it has enough.
+
+- **Papers read and rejected are reported**, so the rounds are legible rather
+  than a silence.
+- **An unreachable search stops the loop immediately** instead of asking the
+  same question five more ways. Nothing is wrong with the question when the
+  phone is off the hook, and it says which host refused.
+- Fixed while testing: the wrapper that finishes a scout wiped the explanation
+  the scout had written, because it assigned the empty string over it.
+
+When every round comes back empty it says so about the subject rather than the
+search: a task like classifying images has no uniqueness theorem to find, and
+the code scout and Draft a design are the tools for those.
+
 ## 1.62.0
 
 **Two real gaps in the papers scout, both mine.**
