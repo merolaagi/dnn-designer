@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.58.0
+
+**Scouts.** Three errands that go and look, and then check what they found.
+
+The useful thing about a scout here is not that it can search — anyone can
+search — but that this application can *verify*. So every finding ends with
+evidence produced by running it, and the shortlist is ranked on that rather than
+on stars or citations.
+
+- **Find code worth importing.** Searches GitHub, downloads each repository,
+  scans it, and tries to import the classes it finds. Reports which imported and
+  at what size, and the specific reason the rest refused. A real run on
+  "residual network cifar" found `GoogleNet` importing as 225 layers with
+  6,402,564 parameters matching torch exactly — and `BasicBlock` refusing
+  because it takes two constructor arguments, which were not guessed at, since
+  a guess would make the evidence worthless.
+- **Find a structural result.** Searches Europe PMC and arXiv, follows the
+  reference lists of the reviews, and ranks by whether the text can actually be
+  fetched — a paper that cannot be read here cannot become a layer here,
+  however good it is.
+- **Explain this design.** Walks the canvas layer by layer: the equation with
+  this network's own numbers, where the parameters are, what each setting does.
+  Needs no internet.
+
+**An inexact import is not a success.** One class traced to 6,040,456 parameters
+where torch says 6,789,408. The graph is not the model, so every number taken
+from it afterwards — size, precision, ablation — would be about a different
+network. Those are marked, scored below the ones that refused outright, and
+cannot be opened on the canvas.
+
+An exact one can, in one press, because it was already built once to earn its
+place on the list.
+
+Also fixed: the Python 3.11 parse check was walking the repositories the scouts
+download, and failing on somebody else's Python 2. It now covers our own code
+only.
+
 ## 1.57.0
 
 **A run now says how much data there is per parameter, and how much of it will

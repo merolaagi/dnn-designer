@@ -37,6 +37,7 @@ import recipes_sdk
 import graph as G
 import workbook
 import quantize as quant
+import scouts
 import tracer
 import train as T
 import walkthrough as walk
@@ -782,6 +783,49 @@ def quantize_design(body: QuantPayload):
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(400, detail={
             "message": _missing_package(exc) or f"{type(exc).__name__}: {exc}"})
+
+
+class ScoutPayload(BaseModel):
+    kind: str
+    goal: str = ""
+    config: Dict[str, Any] = {}
+    graph: Dict[str, Any] = {}
+
+
+@app.get("/api/scouts")
+def scout_catalog():
+    return {"catalog": scouts.CATALOG,
+            "running": [s.snapshot() for s in scouts.SCOUTS.values()
+                        if s.status == "running"]}
+
+
+@app.post("/api/scouts")
+def scout_start(body: ScoutPayload):
+    """Send a scout out. It reports as it goes and verifies what it finds."""
+    if body.kind != "maths" and not (body.goal or "").strip():
+        raise HTTPException(400, detail={"message": "Give it something to look for."})
+    scout = scouts.start(body.kind, (body.goal or "").strip(),
+                         body.config or {}, body.graph or {})
+    if scout.status == "error":
+        raise HTTPException(400, detail={"message": scout.error})
+    return scout.snapshot()
+
+
+@app.get("/api/scouts/{scout_id}")
+def scout_state(scout_id: str):
+    scout = scouts.SCOUTS.get(scout_id)
+    if not scout:
+        raise HTTPException(404, detail="No such scout.")
+    return scout.snapshot()
+
+
+@app.post("/api/scouts/{scout_id}/stop")
+def scout_stop(scout_id: str):
+    scout = scouts.SCOUTS.get(scout_id)
+    if not scout:
+        raise HTTPException(404, detail="No such scout.")
+    scout.stop.set()
+    return {"stopping": True}
 
 
 @app.post("/api/trace")

@@ -9,6 +9,7 @@ worse than no designer.
 
 import json
 import inspect
+import time
 import sys
 import uuid
 from pathlib import Path
@@ -1145,6 +1146,76 @@ def _():
     boot = PAGE[PAGE.index("async function boot"):]
     boot = boot[: boot.index("\n}\n")]
     assert "renderLaunchPad()" in boot, "boot never fills the launch pad"
+
+
+@check("a scout verifies what it finds rather than describing it")
+def _():
+    """The useful thing about a scout here is not that it can search — anyone
+    can search — but that this application can check. So every finding has to
+    carry evidence produced by running it, and an import whose parameter count
+    disagrees with torch is not a success: the graph is not the model, and
+    every number taken from it afterwards would be about something else.
+    """
+    import scouts
+
+    ids = {entry["id"] for entry in scouts.CATALOG}
+    assert ids == {"code", "papers", "maths"}, ids
+
+    source = inspect.getsource(scouts)
+    # the ranking must be built from what was verified, not from popularity
+    assert "len(worked) * 10" in source, "the shortlist is not ranked on evidence"
+    assert 'if t["imported"] and t.get("exact", True)' in source, \
+        "an inexact import counts as a success"
+    assert "the graph is not the model" in source, \
+        "an inexact import does not say what is wrong with it"
+
+    # a class needing arguments must not be guessed at: a guess would make the
+    # evidence worthless, which is worse than no evidence
+    assert "was not guessed at" in source, "constructor arguments are invented"
+
+    # the maths scout runs on the canvas alone, so it can be checked here
+    g = build([("i", "Input", {"shape": [3, 32, 32]}),
+               ("c", "Conv2d", {"filters": 32, "kernel": 3}),
+               ("g", "GlobalAvgPool", {}),
+               ("h", "Linear", {"units": 10}),
+               ("o", "Output", {"task": "classification"})],
+              [("i", "c", 0), ("c", "g", 0), ("g", "h", 0), ("h", "o", 0)],
+              "Explain")
+    scout = scouts.start("maths", "", {}, g)
+    for _ in range(80):
+        if scout.status != "running":
+            break
+        time.sleep(0.1)
+    assert scout.status == "done", f"{scout.status}: {scout.error}"
+    assert len(scout.findings) == 5, len(scout.findings)
+
+    conv = next(f for f in scout.findings if f["type"] == "Conv2d")
+    assert conv["equation"], "the convolution has no equation"
+    assert conv["parameters"] == 3 * 3 * 3 * 32 + 32, conv["parameters"]
+    assert conv["share"] > 50, "the share of parameters is not reported"
+
+    # an unknown kind is refused rather than started
+    bad = scouts.start("nonsense", "x", {}, {})
+    assert bad.status == "error" and "nonsense" in bad.error
+
+    # and the page distinguishes the three verdicts. The class names are built
+    # by interpolation, so the literal strings never appear — check the
+    # expression that produces them and the styles that render them.
+    assert 't.exact === false ? "warn" : "ok"' in PAGE, \
+        "the page does not tell an inexact import from an exact one"
+    assert "function openScoutFind" in PAGE
+    for style in (".tried.ok{", ".tried.warn{", ".tried.no{"):
+        assert style in PAGE, f"{style} is not styled, so the verdicts look alike"
+
+    # Only an exact import may be opened: opening an unfaithful graph would
+    # quietly hand back a different network. Anchored inside scoutCard —
+    # data-open is also the design picker's attribute, and searching the whole
+    # page found that one instead.
+    card = PAGE[PAGE.index("function scoutCard"):]
+    card = card[: card.index("\nfunction openScoutFind")]
+    at = card.index("data-open=")
+    assert "t.exact !== false" in card[max(0, at - 200): at], \
+        "an inexact import can be opened on the canvas"
 
 
 @check("the advice is about this design, not about designs in general")
@@ -2585,7 +2656,11 @@ def _():
 
     offenders = []
     for path in sorted(ROOT.rglob("*.py")):
-        if "__pycache__" in str(path):
+        # Only our own code. data/ holds repositories the scouts downloaded,
+        # and whether somebody else's file parses under 3.11 is not this
+        # project's business — nor is it a reason to fail the suite.
+        parts = set(path.parts)
+        if "__pycache__" in parts or "data" in parts or ".venv" in parts:
             continue
         source = path.read_text()
         try:

@@ -202,7 +202,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
-#pageAgents, #pagePad, #pageDomains{background:var(--paper)}
+#pageAgents, #pagePad, #pageDomains, #pageScouts{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -1153,6 +1153,64 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
+.scoutwrap{max-width:1180px;margin:0 auto;padding:24px 26px 40px}
+.scouthead h3{margin:0 0 6px;font-size:20px;font-weight:600}
+.scouthead p{margin:0 0 18px;font-size:12.5px;color:var(--muted);line-height:1.65;
+  max-width:640px}
+.scoutpick{
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:14px;
+}
+.scoutcard{
+  background:#fff;border:1px solid var(--paper-3);border-radius:12px;
+  padding:16px 17px 14px;display:flex;flex-direction:column;gap:8px;
+  box-shadow:0 1px 2px rgba(22,32,46,.04);
+}
+.scoutcard b{font-size:14px;font-weight:600}
+.scoutcard p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.6;flex:1}
+.scoutgoal{
+  width:100%;padding:8px 11px;border:1px solid var(--paper-3);border-radius:8px;
+  font-size:12px;
+}
+.scoutgoal:focus{outline:none;border-color:var(--amber)}
+.scoutcard .btn{align-self:flex-start}
+.scoutlive{margin-top:24px}
+.scoutstatus{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.scoutstatus b{font-size:14px;font-weight:600}
+.scoutstatus span{font-size:11px;color:var(--muted)}
+.scoutsteps{
+  background:#12161D;border-radius:9px;padding:11px 13px;max-height:210px;
+  overflow-y:auto;font-family:var(--mono);font-size:10.5px;line-height:1.65;
+}
+.scoutstep{color:#C6D0DB}
+.scoutstep i{font-style:normal;color:#6B7684;margin-right:8px}
+.scoutstep em{font-style:normal;color:#8A94A2;display:block;padding-left:34px}
+.scoutsec{
+  font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98A6B8;
+  font-weight:700;margin:18px 0 9px;
+}
+.scoutfound{display:flex;flex-direction:column;gap:11px}
+.foundcard{
+  background:#fff;border:1px solid var(--paper-3);border-radius:11px;
+  padding:13px 15px;
+}
+.foundtop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.foundtop b{font-size:13.5px;font-weight:600}
+.foundtop span{font-size:10.5px;color:var(--muted)}
+.foundcard > p{margin:5px 0 0;font-size:11.5px;color:var(--muted);line-height:1.6}
+.triedlist{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.tried{
+  border-left:3px solid var(--paper-3);padding:6px 0 6px 10px;font-size:11.5px;
+}
+.tried.ok{border-left-color:#7FB98A}
+.tried.warn{border-left-color:var(--amber)}
+.tried.no{border-left-color:#D9A7A2}
+.tried b{font-family:var(--mono);font-size:11px;margin-right:7px}
+.tried span{color:#3C4B5F}
+.tried em{
+  font-style:normal;display:block;color:var(--muted);font-size:10.5px;
+  line-height:1.55;margin-top:3px;
+}
+.tried .btn.tiny{margin-top:6px}
 .domwrap{max-width:1180px;margin:0 auto;padding:24px 26px 40px}
 .domhead h3{margin:0 0 6px;font-size:20px;font-weight:600}
 .domhead p{margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.65;
@@ -1816,6 +1874,7 @@ body.sizing{user-select:none}
     <div class="group">Executions</div>
     <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
+    <button data-page="pageScouts"><i>&#9906;</i>Scouts</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
     <button data-page="pageRuns"><i>&#8635;</i>Run history</button>
     <button data-page="pageChat"><i>&#9998;</i>Chat</button>
@@ -2059,6 +2118,10 @@ body.sizing{user-select:none}
   <div class="scroll" id="padMain"></div>
 </section>
 
+<section class="page" id="pageScouts">
+  <div class="scroll" id="scoutMain"></div>
+</section>
+
 <section class="page" id="pageDomains">
   <div class="scroll" id="domMain"></div>
 </section>
@@ -2253,6 +2316,7 @@ const state = {
   mathFor:null, mathEntry:null, pickList:[], pickAt:0,
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
+  scout:null, scoutTimer:null, scoutCatalog:null,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -4774,6 +4838,7 @@ dragSplitter($("splitBottom"), ev => {
 const PAGE_SETUP = {
   pagePad: renderLaunchPad,
   pageDomains: renderDomainsPage,
+  pageScouts: renderScoutsPage,
   pagePaper: renderPaperPage,
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
@@ -4849,6 +4914,205 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* ============================== scouts ============================== */
+
+/* Three errands that go and look, and then check what they found.
+
+   Every finding carries evidence produced by running it — a class that imports
+   at a stated size, a paper whose text can actually be fetched, a layer's
+   equation with this network's own numbers. The findings are actionable for the
+   same reason: an imported class can be opened on the canvas, because it has
+   already been built once to earn its place on the list. */
+
+async function renderScoutsPage(){
+  const host = $("scoutMain");
+  host.innerHTML = `<div class="scoutwrap">
+    <div class="scouthead">
+      <h3>Scouts</h3>
+      <p>Each one goes and looks, then checks what it found. Nothing here
+      reports an opinion: a repository either imports or it does not, and the
+      reason it refused is on its card.</p>
+    </div>
+    <div id="scoutPick" class="scoutpick"><span class="waiting">loading…</span></div>
+    <div id="scoutLive"></div>
+  </div>`;
+
+  let d;
+  try{
+    d = await (await fetch(API + "/api/scouts")).json();
+  } catch {
+    $("scoutPick").innerHTML = `<div class="runfail">The server did not answer.</div>`;
+    return;
+  }
+  state.scoutCatalog = d.catalog || [];
+
+  $("scoutPick").innerHTML = state.scoutCatalog.map(entry => `
+    <div class="scoutcard">
+      <b>${entry.name}</b>
+      <p>${entry.doc}</p>
+      ${entry.id === "maths" ? "" : `
+        <input type="text" class="scoutgoal" data-goal="${entry.id}"
+               placeholder="${entry.id === "code"
+                 ? "e.g. depthwise separable convolution"
+                 : "e.g. unique steady state in a compartmental model"}">`}
+      <button class="btn go" data-send="${entry.id}">Send it out</button>
+    </div>`).join("");
+
+  $("scoutPick").querySelectorAll("[data-send]").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const kind = btn.dataset.send;
+      const box = $("scoutPick").querySelector(`[data-goal="${kind}"]`);
+      sendScout(kind, box ? box.value : "");
+    }));
+
+  if ((d.running || []).length) await followScout(d.running[0].id);
+}
+
+async function sendScout(kind, goal){
+  const live = $("scoutLive");
+  live.innerHTML = `<div class="empty" style="padding:12px">sending…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/scouts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, goal, graph: state.graph,
+                             config: {} }),
+    });
+    d = await r.json();
+  } catch {
+    live.innerHTML = `<div class="runfail">No answer from the server.</div>`;
+    return;
+  }
+  if (!r.ok){
+    live.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "It would not start"}</div>`;
+    return;
+  }
+  followScout(d.id);
+}
+
+/* Awaits the first poll so the caller knows the panel has painted; after that
+   it keeps itself up to date. */
+async function followScout(id){
+  if (state.scoutTimer) clearInterval(state.scoutTimer);
+  const tick = async () => {
+    let d;
+    try{
+      d = await (await fetch(API + "/api/scouts/" + id)).json();
+    } catch { return; }
+    state.scout = d;
+    paintScout(d);
+    if (d.status !== "running"){
+      clearInterval(state.scoutTimer);
+      state.scoutTimer = null;
+    }
+  };
+  await tick();
+  if (state.scout && state.scout.status === "running")
+    state.scoutTimer = setInterval(tick, 1200);
+}
+
+function paintScout(d){
+  const live = $("scoutLive");
+  if (!live) return;
+  live.innerHTML = `
+    <div class="scoutlive">
+      <div class="scoutstatus">
+        <b>${d.goal || "this design"}</b>
+        <span class="mono">${d.status} · ${d.seconds}s</span>
+        ${d.status === "running"
+          ? `<button class="btn" id="scoutStop">Stop</button>` : ""}
+      </div>
+      ${d.error ? `<div class="runfail">${d.error}</div>` : ""}
+      <div class="scoutsteps">${(d.steps || []).slice(-12).map(s => `
+        <div class="scoutstep"><i>${s.at}s</i><span>${s.text}</span>
+          ${s.detail ? `<em>${s.detail}</em>` : ""}</div>`).join("")}</div>
+      ${(d.findings || []).length
+        ? `<div class="scoutsec">what it verified</div>
+           <div class="scoutfound">${d.findings.map((f, i) =>
+             scoutCard(f, i)).join("")}</div>`
+        : d.status === "running" ? "" :
+          `<div class="paperwarn">Nothing came back that could be verified.
+           The steps above say where it looked.</div>`}
+    </div>`;
+
+  const stop = $("scoutStop");
+  if (stop) stop.addEventListener("click", async () => {
+    try{ await fetch(API + `/api/scouts/${d.id}/stop`, { method: "POST" }); }
+    catch { /* it will finish on its own */ }
+  });
+  live.querySelectorAll("[data-open]").forEach(btn =>
+    btn.addEventListener("click", () => openScoutFind(+btn.dataset.open,
+                                                     +btn.dataset.tried)));
+}
+
+function scoutCard(f, i){
+  if (f.kind === "repo"){
+    return `<div class="foundcard">
+      <div class="foundtop"><b>${f.name}</b>
+        <span>${f.stars.toLocaleString()} stars · ${f.classes} classes</span></div>
+      ${f.description ? `<p>${f.description}</p>` : ""}
+      <div class="triedlist">${(f.tried || []).map((t, j) => `
+        <div class="tried ${t.imported ? (t.exact === false ? "warn" : "ok") : "no"}">
+          <b>${t.cls}</b>
+          <span>${t.summary}</span>
+          ${t.why ? `<em>${t.why}</em>` : ""}
+          ${t.imported && t.exact !== false
+            ? `<button class="btn tiny" data-open="${i}" data-tried="${j}">
+                 Open on the canvas</button>` : ""}
+        </div>`).join("")}</div>
+    </div>`;
+  }
+  if (f.kind === "paper"){
+    return `<div class="foundcard">
+      <div class="foundtop"><b>${f.title}</b></div>
+      <div class="hitmeta">${[f.authors, f.year, f.journal].filter(Boolean).join(" · ")}
+        ${f.cited_by ? ` · cited ${f.cited_by}` : ""} · ${f.why_group}</div>
+      ${(f.reasons || []).length
+        ? `<div class="hitwhy">${f.reasons.map(x => `<span>${x}</span>`).join("")}</div>`
+        : ""}
+      <div class="hitacts">${f.text_url
+        ? `<span class="fetchnote ok">full text available</span>`
+        : `<span class="hitnotext">no fetchable full text</span>`}
+        ${f.doi ? `<a class="linkbtn" href="https://doi.org/${f.doi}"
+             target="_blank" rel="noreferrer">doi</a>` : ""}</div>
+    </div>`;
+  }
+  // a layer of the current design
+  return `<div class="foundcard">
+    <div class="foundtop"><b>${f.name}</b>
+      <span>${f.parameters.toLocaleString()} parameters${
+        f.share ? ` · ${f.share}%` : ""}</span></div>
+    <div class="hitmeta">${f.title}</div>
+    ${f.equation ? `<pre class="armexpr">${f.equation}</pre>` : ""}
+    ${(f.arithmetic || []).length
+      ? `<table class="armfacts">${f.arithmetic.map(a => `
+          <tr><td class="v">${a[0]}</td><td class="k">${a[1]}</td></tr>`).join("")}
+         </table>` : ""}
+    ${f.missing ? `<p class="hitnotext">No write-up for this layer yet.</p>` : ""}
+  </div>`;
+}
+
+/* A finding is openable because it was already built once to earn its place. */
+function openScoutFind(findingIndex, triedIndex){
+  const f = (state.scout && state.scout.findings || [])[findingIndex];
+  const t = f && (f.tried || [])[triedIndex];
+  if (!t || !t.graph) return;
+  pushHistory();
+  state.graph = t.graph;
+  state.book = null;
+  state.version = null;
+  state.seq = (t.graph.nodes || []).length + (t.graph.edges || []).length + 900;
+  $("gname").value = t.cls;
+  state.graph.name = t.cls;
+  clearSelection();
+  showPage("pageDesign");
+  renderSheetTabs();
+  render(); renderInspector(); analyze();
+  fitView();
+  toast(`${t.cls} from ${f.name} — ${t.parameters.toLocaleString()} parameters.`);
+}
 
 /* ============================= domains ============================= */
 
