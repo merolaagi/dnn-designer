@@ -1148,6 +1148,51 @@ def _():
     assert "renderLaunchPad()" in boot, "boot never fills the launch pad"
 
 
+@check("an openable finding carries a whole graph")
+def _():
+    """A card becomes a button only when the class was built at the right
+    size — so when nothing imported exactly, no button appears, and that
+    looked like a broken feature rather than an answer about the search.
+
+    Two things are checked: an exact import carries a complete graph all the
+    way through JSON, and the page says so when none of them do.
+    """
+    import json as _json
+
+    import scouts
+
+    # a graph built by _try_class must survive the wire intact
+    fake = {"kind": "repo", "name": "a/b", "stars": 1, "classes": 2,
+            "tried": [
+                {"cls": "Good", "imported": True, "exact": True, "parameters": 10,
+                 "graph": {"name": "Good",
+                           "nodes": [{"id": "i", "type": "Input",
+                                      "params": {"shape": [3, 8, 8]}}],
+                           "edges": []}},
+                {"cls": "Wrong", "imported": True, "exact": False,
+                 "parameters": 9, "graph": {"nodes": [], "edges": []}},
+                {"cls": "Refused", "imported": False}]}
+    over_the_wire = _json.loads(_json.dumps(fake))
+    assert over_the_wire["tried"][0]["graph"]["nodes"], \
+        "the graph does not survive serialisation"
+
+    # the page counts what can reach the canvas, and says when nothing can
+    assert "function openableCount" in PAGE
+    counter = PAGE[PAGE.index("function openableCount"):]
+    counter = counter[: counter.index("\nfunction scoutCard")]
+    assert 't.exact !== false' in counter, \
+        "an inexact import is counted as openable"
+    assert "f.ok ? 1 : 0" in counter, "an unverified draft is counted as openable"
+    assert "Nothing here can go on the canvas" in PAGE, \
+        "a search with nothing openable does not say so"
+    assert "not a\n                missing button" in PAGE or \
+           "missing button" in PAGE, \
+        "it does not distinguish an absent button from a broken one"
+
+    # and per repository, so a card with no openable class says why
+    assert "Nothing from this repository can be" in PAGE
+
+
 @check("an errand survives leaving the page")
 def _():
     """Forty seconds of searching the internet should not be lost by clicking

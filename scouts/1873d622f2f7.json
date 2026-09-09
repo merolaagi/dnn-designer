@@ -1,0 +1,22 @@
+{
+ "id": "1873d622f2f7",
+ "kind": "code",
+ "goal": "depthwise separation convolution",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Searching GitHub for \u201cdepthwise separation convolution\u201d",
+   "detail": ""
+  },
+  {
+   "at": 0.2,
+   "text": "Nothing matched.",
+   "detail": "Try naming the architecture rather than the task."
+  }
+ ],
+ "findings": [],
+ "error": "",
+ "seconds": 0.3,
+ "kept_at": 1788990354.781114
+}

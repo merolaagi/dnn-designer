@@ -1,0 +1,3490 @@
+{
+ "id": "743be63797b3",
+ "kind": "code",
+ "goal": "depthwise separability  convolution",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Searching GitHub for \u201cdepthwise separability  convolution\u201d",
+   "detail": ""
+  },
+  {
+   "at": 0.4,
+   "text": "4 repositories to look at",
+   "detail": "tstandley/Xception-PyTorch, gasparian/CRNN-OCR-lite, seungjunlee96/Depthwise-Separable-Convolution_Pytorch, dr-costas/dnd-sed"
+  },
+  {
+   "at": 0.4,
+   "text": "Fetching tstandley/Xception-PyTorch",
+   "detail": ""
+  },
+  {
+   "at": 0.6,
+   "text": "tstandley/Xception-PyTorch: 1 files, 3 nn.Module classes",
+   "detail": ""
+  },
+  {
+   "at": 1.2,
+   "text": "   Xception: 170 layers, 22,855,376 parameters but torch says 22,855,952 \u2014 the graph is not the model",
+   "detail": ""
+  },
+  {
+   "at": 1.2,
+   "text": "   SeparableConv2d: needs 2 constructor arguments, so it was not guessed at",
+   "detail": ""
+  },
+  {
+   "at": 1.2,
+   "text": "   Block: needs 3 constructor arguments, so it was not guessed at",
+   "detail": ""
+  },
+  {
+   "at": 1.2,
+   "text": "Fetching gasparian/CRNN-OCR-lite",
+   "detail": ""
+  },
+  {
+   "at": 1.4,
+   "text": "gasparian/CRNN-OCR-lite: 5 files, 0 nn.Module classes",
+   "detail": ""
+  },
+  {
+   "at": 1.4,
+   "text": "Fetching seungjunlee96/Depthwise-Separable-Convolution_Pytorch",
+   "detail": ""
+  },
+  {
+   "at": 1.7,
+   "text": "seungjunlee96/Depthwise-Separable-Convolution_Pytorch: 3 files, 1 nn.Module classes",
+   "detail": ""
+  },
+  {
+   "at": 1.7,
+   "text": "   depthwise_separable_conv: needs 2 constructor arguments, so it was not guessed at",
+   "detail": ""
+  },
+  {
+   "at": 1.7,
+   "text": "Fetching dr-costas/dnd-sed",
+   "detail": ""
+  },
+  {
+   "at": 1.9,
+   "text": "dr-costas/dnd-sed: 23 files, 8 nn.Module classes",
+   "detail": ""
+  },
+  {
+   "at": 1.9,
+   "text": "   DNN: needs 2 constructor arguments, so it was not guessed at",
+   "detail": ""
+  },
+  {
+   "at": 1.9,
+   "text": "   DepthWiseSeparableConvBlock: needs 3 constructor arguments, so it was not guessed at",
+   "detail": ""
+  },
+  {
+   "at": 1.9,
+   "text": "   DepthWiseSeparableDNN: needs 4 constructor arguments, so it was not guessed at",
+   "detail": ""
+  },
+  {
+   "at": 1.9,
+   "text": "   CRNN: needs 5 constructor arguments, so it was not guessed at",
+   "detail": ""
+  },
+  {
+   "at": 1.9,
+   "text": "7 of 8 classes want a constructor argument.",
+   "detail": "That is the shape of most language model code: one config object built once and passed everywhere (Block, CRNN, DNN, DepthWiseSeparableConvBlock). None of it is out of reach \u2014 Import can take a Setup block that builds the config, and then these classes import like any other. A scout cannot write that block, because guessing the values would make every number it reported meaningless."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "repo",
+   "name": "seungjunlee96/Depthwise-Separable-Convolution_Pytorch",
+   "stars": 86,
+   "description": "Implementation of Depthwise Separable Convolution (pytorch)",
+   "root": "/Users/manishbhattarai/Sites/new_dnn/data/github/seungjunlee96-Depthwise-Separable-Convolution_Pytorch-master",
+   "files": 3,
+   "classes": 1,
+   "tried": [
+    {
+     "cls": "depthwise_separable_conv",
+     "file": "DepthwiseSeparableConvolution/DepthwiseSeparableConvolution.py",
+     "arguments": 2,
+     "imported": false,
+     "summary": "needs 2 constructor arguments, so it was not guessed at",
+     "why": "A class taking a config can only be built once somebody supplies one. Guessing would make any result meaningless."
+    }
+   ],
+   "imported": 0,
+   "inexact": 0,
+   "score": 0.0043
+  },
+  {
+   "kind": "repo",
+   "name": "dr-costas/dnd-sed",
+   "stars": 53,
+   "description": "Sound event detection with depthwise separable and dilated convolutions. ",
+   "root": "/Users/manishbhattarai/Sites/new_dnn/data/github/dr-costas-dnd-sed-master",
+   "files": 23,
+   "classes": 8,
+   "tried": [
+    {
+     "cls": "DNN",
+     "file": "models/_modules/dnn.py",
+     "arguments": 2,
+     "imported": false,
+     "summary": "needs 2 constructor arguments, so it was not guessed at",
+     "why": "A class taking a config can only be built once somebody supplies one. Guessing would make any result meaningless."
+    },
+    {
+     "cls": "DepthWiseSeparableConvBlock",
+     "file": "models/_modules/depthwise_separable_conv_block.py",
+     "arguments": 3,
+     "imported": false,
+     "summary": "needs 3 constructor arguments, so it was not guessed at",
+     "why": "A class taking a config can only be built once somebody supplies one. Guessing would make any result meaningless."
+    },
+    {
+     "cls": "DepthWiseSeparableDNN",
+     "file": "models/_modules/dessed_dnn.py",
+     "arguments": 4,
+     "imported": false,
+     "summary": "needs 4 constructor arguments, so it was not guessed at",
+     "why": "A class taking a config can only be built once somebody supplies one. Guessing would make any result meaningless."
+    },
+    {
+     "cls": "CRNN",
+     "file": "models/crnn.py",
+     "arguments": 5,
+     "imported": false,
+     "summary": "needs 5 constructor arguments, so it was not guessed at",
+     "why": "A class taking a config can only be built once somebody supplies one. Guessing would make any result meaningless."
+    }
+   ],
+   "imported": 0,
+   "inexact": 0,
+   "score": 0.00265
+  },
+  {
+   "kind": "repo",
+   "name": "tstandley/Xception-PyTorch",
+   "stars": 264,
+   "description": "A PyTorch implementation of Xception:  Deep Learning with Depthwise Separable Convolutions",
+   "root": "/Users/manishbhattarai/Sites/new_dnn/data/github/tstandley-Xception-PyTorch-master",
+   "files": 1,
+   "classes": 3,
+   "tried": [
+    {
+     "cls": "Xception",
+     "file": "xception.py",
+     "arguments": 0,
+     "imported": true,
+     "layers": 170,
+     "opaque": 0,
+     "parameters": 22855376,
+     "expected": 22855952,
+     "exact": false,
+     "shapes_ok": true,
+     "graph": {
+      "name": "Xception",
+      "nodes": [
+       {
+        "id": "i1",
+        "type": "Input",
+        "params": {
+         "shape": [
+          1,
+          28,
+          28
+         ],
+         "dtype": "float"
+        },
+        "label": "x",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "id": "i2",
+        "type": "Conv2d",
+        "params": {
+         "filters": 32,
+         "kernel": 3,
+         "stride": 2,
+         "padding": 0,
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 0,
+        "y": 108
+       },
+       {
+        "id": "i3",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "bn1",
+        "x": 0,
+        "y": 216
+       },
+       {
+        "id": "i4",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 0,
+        "y": 324
+       },
+       {
+        "id": "i5",
+        "type": "Conv2d",
+        "params": {
+         "filters": 64,
+         "kernel": 3,
+         "stride": 1,
+         "padding": 0,
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "conv2",
+        "x": 0,
+        "y": 432
+       },
+       {
+        "id": "i6",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "bn2",
+        "x": 0,
+        "y": 540
+       },
+       {
+        "id": "i7",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 0,
+        "y": 648
+       },
+       {
+        "id": "i8",
+        "type": "Conv2d",
+        "params": {
+         "filters": 64,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 64,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 0,
+        "y": 756
+       },
+       {
+        "id": "i9",
+        "type": "Conv2d",
+        "params": {
+         "filters": 128,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 0,
+        "y": 864
+       },
+       {
+        "id": "i10",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "1",
+        "x": 0,
+        "y": 972
+       },
+       {
+        "id": "i11",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 0,
+        "y": 1080
+       },
+       {
+        "id": "i12",
+        "type": "Conv2d",
+        "params": {
+         "filters": 128,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 128,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 0,
+        "y": 1188
+       },
+       {
+        "id": "i13",
+        "type": "Conv2d",
+        "params": {
+         "filters": 128,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 0,
+        "y": 1296
+       },
+       {
+        "id": "i14",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "4",
+        "x": 0,
+        "y": 1404
+       },
+       {
+        "id": "i15",
+        "type": "MaxPool2d",
+        "params": {
+         "kernel": 3,
+         "stride": 2,
+         "padding": 1
+        },
+        "label": "5",
+        "x": 0,
+        "y": 1512
+       },
+       {
+        "id": "i16",
+        "type": "Conv2d",
+        "params": {
+         "filters": 128,
+         "kernel": 1,
+         "stride": 2,
+         "padding": 0,
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "skip",
+        "x": 240,
+        "y": 756
+       },
+       {
+        "id": "i17",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "skipbn",
+        "x": 240,
+        "y": 864
+       },
+       {
+        "id": "i18",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 0,
+        "y": 1620
+       },
+       {
+        "id": "i19",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 0,
+        "y": 1728
+       },
+       {
+        "id": "i20",
+        "type": "Conv2d",
+        "params": {
+         "filters": 128,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 128,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 0,
+        "y": 1836
+       },
+       {
+        "id": "i21",
+        "type": "Conv2d",
+        "params": {
+         "filters": 256,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 0,
+        "y": 1944
+       },
+       {
+        "id": "i22",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 0,
+        "y": 2052
+       },
+       {
+        "id": "i23",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 0,
+        "y": 2160
+       },
+       {
+        "id": "i24",
+        "type": "Conv2d",
+        "params": {
+         "filters": 256,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 256,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 0,
+        "y": 2268
+       },
+       {
+        "id": "i25",
+        "type": "Conv2d",
+        "params": {
+         "filters": 256,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 0,
+        "y": 2376
+       },
+       {
+        "id": "i26",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 0,
+        "y": 2484
+       },
+       {
+        "id": "i27",
+        "type": "MaxPool2d",
+        "params": {
+         "kernel": 3,
+         "stride": 2,
+         "padding": 1
+        },
+        "label": "6",
+        "x": 0,
+        "y": 2592
+       },
+       {
+        "id": "i28",
+        "type": "Conv2d",
+        "params": {
+         "filters": 256,
+         "kernel": 1,
+         "stride": 2,
+         "padding": 0,
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "skip",
+        "x": 240,
+        "y": 1728
+       },
+       {
+        "id": "i29",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "skipbn",
+        "x": 240,
+        "y": 1836
+       },
+       {
+        "id": "i30",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 0,
+        "y": 2700
+       },
+       {
+        "id": "i31",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 0,
+        "y": 2808
+       },
+       {
+        "id": "i32",
+        "type": "Conv2d",
+        "params": {
+         "filters": 256,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 256,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 0,
+        "y": 2916
+       },
+       {
+        "id": "i33",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 0,
+        "y": 3024
+       },
+       {
+        "id": "i34",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 0,
+        "y": 3132
+       },
+       {
+        "id": "i35",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 0,
+        "y": 3240
+       },
+       {
+        "id": "i36",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 0,
+        "y": 3348
+       },
+       {
+        "id": "i37",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 0,
+        "y": 3456
+       },
+       {
+        "id": "i38",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 0,
+        "y": 3564
+       },
+       {
+        "id": "i39",
+        "type": "MaxPool2d",
+        "params": {
+         "kernel": 3,
+         "stride": 2,
+         "padding": 1
+        },
+        "label": "6",
+        "x": 570,
+        "y": 0
+       },
+       {
+        "id": "i40",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 2,
+         "padding": 0,
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "skip",
+        "x": 240,
+        "y": 2808
+       },
+       {
+        "id": "i41",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "skipbn",
+        "x": 240,
+        "y": 2916
+       },
+       {
+        "id": "i42",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 570,
+        "y": 108
+       },
+       {
+        "id": "i43",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 570,
+        "y": 216
+       },
+       {
+        "id": "i44",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 324
+       },
+       {
+        "id": "i45",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 570,
+        "y": 432
+       },
+       {
+        "id": "i46",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 570,
+        "y": 540
+       },
+       {
+        "id": "i47",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 570,
+        "y": 648
+       },
+       {
+        "id": "i48",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 756
+       },
+       {
+        "id": "i49",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 570,
+        "y": 864
+       },
+       {
+        "id": "i50",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 570,
+        "y": 972
+       },
+       {
+        "id": "i51",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 570,
+        "y": 1080
+       },
+       {
+        "id": "i52",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 1188
+       },
+       {
+        "id": "i53",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 570,
+        "y": 1296
+       },
+       {
+        "id": "i54",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 570,
+        "y": 1404
+       },
+       {
+        "id": "i55",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 570,
+        "y": 1512
+       },
+       {
+        "id": "i56",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 570,
+        "y": 1620
+       },
+       {
+        "id": "i57",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 1728
+       },
+       {
+        "id": "i58",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 570,
+        "y": 1836
+       },
+       {
+        "id": "i59",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 570,
+        "y": 1944
+       },
+       {
+        "id": "i60",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 570,
+        "y": 2052
+       },
+       {
+        "id": "i61",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 2160
+       },
+       {
+        "id": "i62",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 570,
+        "y": 2268
+       },
+       {
+        "id": "i63",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 570,
+        "y": 2376
+       },
+       {
+        "id": "i64",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 570,
+        "y": 2484
+       },
+       {
+        "id": "i65",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 2592
+       },
+       {
+        "id": "i66",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 570,
+        "y": 2700
+       },
+       {
+        "id": "i67",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 570,
+        "y": 2808
+       },
+       {
+        "id": "i68",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 570,
+        "y": 2916
+       },
+       {
+        "id": "i69",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 570,
+        "y": 3024
+       },
+       {
+        "id": "i70",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 3132
+       },
+       {
+        "id": "i71",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 570,
+        "y": 3240
+       },
+       {
+        "id": "i72",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 570,
+        "y": 3348
+       },
+       {
+        "id": "i73",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 570,
+        "y": 3456
+       },
+       {
+        "id": "i74",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 570,
+        "y": 3564
+       },
+       {
+        "id": "i75",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 0
+       },
+       {
+        "id": "i76",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 900,
+        "y": 108
+       },
+       {
+        "id": "i77",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 900,
+        "y": 216
+       },
+       {
+        "id": "i78",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 900,
+        "y": 324
+       },
+       {
+        "id": "i79",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 432
+       },
+       {
+        "id": "i80",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 900,
+        "y": 540
+       },
+       {
+        "id": "i81",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 900,
+        "y": 648
+       },
+       {
+        "id": "i82",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 900,
+        "y": 756
+       },
+       {
+        "id": "i83",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 900,
+        "y": 864
+       },
+       {
+        "id": "i84",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 972
+       },
+       {
+        "id": "i85",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 900,
+        "y": 1080
+       },
+       {
+        "id": "i86",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 900,
+        "y": 1188
+       },
+       {
+        "id": "i87",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 900,
+        "y": 1296
+       },
+       {
+        "id": "i88",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 1404
+       },
+       {
+        "id": "i89",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 900,
+        "y": 1512
+       },
+       {
+        "id": "i90",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 900,
+        "y": 1620
+       },
+       {
+        "id": "i91",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 900,
+        "y": 1728
+       },
+       {
+        "id": "i92",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 1836
+       },
+       {
+        "id": "i93",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 900,
+        "y": 1944
+       },
+       {
+        "id": "i94",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 900,
+        "y": 2052
+       },
+       {
+        "id": "i95",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 900,
+        "y": 2160
+       },
+       {
+        "id": "i96",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 900,
+        "y": 2268
+       },
+       {
+        "id": "i97",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 2376
+       },
+       {
+        "id": "i98",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 900,
+        "y": 2484
+       },
+       {
+        "id": "i99",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 900,
+        "y": 2592
+       },
+       {
+        "id": "i100",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 900,
+        "y": 2700
+       },
+       {
+        "id": "i101",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 2808
+       },
+       {
+        "id": "i102",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 900,
+        "y": 2916
+       },
+       {
+        "id": "i103",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 900,
+        "y": 3024
+       },
+       {
+        "id": "i104",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 900,
+        "y": 3132
+       },
+       {
+        "id": "i105",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 900,
+        "y": 3240
+       },
+       {
+        "id": "i106",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 900,
+        "y": 3348
+       },
+       {
+        "id": "i107",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 900,
+        "y": 3456
+       },
+       {
+        "id": "i108",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 900,
+        "y": 3564
+       },
+       {
+        "id": "i109",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 0
+       },
+       {
+        "id": "i110",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 108
+       },
+       {
+        "id": "i111",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 1230,
+        "y": 216
+       },
+       {
+        "id": "i112",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1230,
+        "y": 324
+       },
+       {
+        "id": "i113",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 432
+       },
+       {
+        "id": "i114",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 540
+       },
+       {
+        "id": "i115",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 1230,
+        "y": 648
+       },
+       {
+        "id": "i116",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1230,
+        "y": 756
+       },
+       {
+        "id": "i117",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 864
+       },
+       {
+        "id": "i118",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 972
+       },
+       {
+        "id": "i119",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 1230,
+        "y": 1080
+       },
+       {
+        "id": "i120",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 1230,
+        "y": 1188
+       },
+       {
+        "id": "i121",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 1230,
+        "y": 1296
+       },
+       {
+        "id": "i122",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 1404
+       },
+       {
+        "id": "i123",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 1512
+       },
+       {
+        "id": "i124",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 1230,
+        "y": 1620
+       },
+       {
+        "id": "i125",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1230,
+        "y": 1728
+       },
+       {
+        "id": "i126",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 1836
+       },
+       {
+        "id": "i127",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 1944
+       },
+       {
+        "id": "i128",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 1230,
+        "y": 2052
+       },
+       {
+        "id": "i129",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1230,
+        "y": 2160
+       },
+       {
+        "id": "i130",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 2268
+       },
+       {
+        "id": "i131",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 2376
+       },
+       {
+        "id": "i132",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 1230,
+        "y": 2484
+       },
+       {
+        "id": "i133",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 1230,
+        "y": 2592
+       },
+       {
+        "id": "i134",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 1230,
+        "y": 2700
+       },
+       {
+        "id": "i135",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 2808
+       },
+       {
+        "id": "i136",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 2916
+       },
+       {
+        "id": "i137",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 1230,
+        "y": 3024
+       },
+       {
+        "id": "i138",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1230,
+        "y": 3132
+       },
+       {
+        "id": "i139",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1230,
+        "y": 3240
+       },
+       {
+        "id": "i140",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1230,
+        "y": 3348
+       },
+       {
+        "id": "i141",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 1230,
+        "y": 3456
+       },
+       {
+        "id": "i142",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1230,
+        "y": 3564
+       },
+       {
+        "id": "i143",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1560,
+        "y": 0
+       },
+       {
+        "id": "i144",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1560,
+        "y": 108
+       },
+       {
+        "id": "i145",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "8",
+        "x": 1560,
+        "y": 216
+       },
+       {
+        "id": "i146",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 1560,
+        "y": 324
+       },
+       {
+        "id": "i147",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "0",
+        "x": 1560,
+        "y": 432
+       },
+       {
+        "id": "i148",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1560,
+        "y": 540
+       },
+       {
+        "id": "i149",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1560,
+        "y": 648
+       },
+       {
+        "id": "i150",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "2",
+        "x": 1560,
+        "y": 756
+       },
+       {
+        "id": "i151",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1560,
+        "y": 864
+       },
+       {
+        "id": "i152",
+        "type": "Conv2d",
+        "params": {
+         "filters": 728,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 728,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1560,
+        "y": 972
+       },
+       {
+        "id": "i153",
+        "type": "Conv2d",
+        "params": {
+         "filters": 1024,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1560,
+        "y": 1080
+       },
+       {
+        "id": "i154",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "5",
+        "x": 1560,
+        "y": 1188
+       },
+       {
+        "id": "i155",
+        "type": "MaxPool2d",
+        "params": {
+         "kernel": 3,
+         "stride": 2,
+         "padding": 1
+        },
+        "label": "6",
+        "x": 1560,
+        "y": 1296
+       },
+       {
+        "id": "i156",
+        "type": "Conv2d",
+        "params": {
+         "filters": 1024,
+         "kernel": 1,
+         "stride": 2,
+         "padding": 0,
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "skip",
+        "x": 1800,
+        "y": 432
+       },
+       {
+        "id": "i157",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "skipbn",
+        "x": 1800,
+        "y": 540
+       },
+       {
+        "id": "i158",
+        "type": "Add",
+        "params": {},
+        "label": "",
+        "x": 1560,
+        "y": 1404
+       },
+       {
+        "id": "i159",
+        "type": "Conv2d",
+        "params": {
+         "filters": 1024,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1024,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1560,
+        "y": 1512
+       },
+       {
+        "id": "i160",
+        "type": "Conv2d",
+        "params": {
+         "filters": 1536,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1560,
+        "y": 1620
+       },
+       {
+        "id": "i161",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "bn3",
+        "x": 1560,
+        "y": 1728
+       },
+       {
+        "id": "i162",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1560,
+        "y": 1836
+       },
+       {
+        "id": "i163",
+        "type": "Conv2d",
+        "params": {
+         "filters": 1536,
+         "kernel": 3,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1536,
+         "bias": false
+        },
+        "label": "conv1",
+        "x": 1560,
+        "y": 1944
+       },
+       {
+        "id": "i164",
+        "type": "Conv2d",
+        "params": {
+         "filters": 2048,
+         "kernel": 1,
+         "stride": 1,
+         "padding": "same",
+         "dilation": 1,
+         "groups": 1,
+         "bias": false
+        },
+        "label": "pointwise",
+        "x": 1560,
+        "y": 2052
+       },
+       {
+        "id": "i165",
+        "type": "BatchNorm2d",
+        "params": {
+         "momentum": 0.1,
+         "eps": 1e-05
+        },
+        "label": "bn4",
+        "x": 1560,
+        "y": 2160
+       },
+       {
+        "id": "i166",
+        "type": "Activation",
+        "params": {
+         "kind": "relu"
+        },
+        "label": "relu",
+        "x": 1560,
+        "y": 2268
+       },
+       {
+        "id": "i167",
+        "type": "AdaptiveAvgPool2d",
+        "params": {
+         "size": 1
+        },
+        "label": "",
+        "x": 1560,
+        "y": 2376
+       },
+       {
+        "id": "i168",
+        "type": "Reshape",
+        "params": {
+         "shape": [
+          -1
+         ]
+        },
+        "label": "",
+        "x": 1560,
+        "y": 2484
+       },
+       {
+        "id": "i169",
+        "type": "Linear",
+        "params": {
+         "units": 1000,
+         "bias": true
+        },
+        "label": "fc",
+        "x": 1560,
+        "y": 2592
+       },
+       {
+        "id": "i170",
+        "type": "Output",
+        "params": {
+         "task": "classification"
+        },
+        "label": "",
+        "x": 1560,
+        "y": 2700
+       }
+      ],
+      "edges": [
+       {
+        "id": "e1",
+        "source": "i1",
+        "target": "i2",
+        "port": 0
+       },
+       {
+        "id": "e2",
+        "source": "i2",
+        "target": "i3",
+        "port": 0
+       },
+       {
+        "id": "e3",
+        "source": "i3",
+        "target": "i4",
+        "port": 0
+       },
+       {
+        "id": "e4",
+        "source": "i4",
+        "target": "i5",
+        "port": 0
+       },
+       {
+        "id": "e5",
+        "source": "i5",
+        "target": "i6",
+        "port": 0
+       },
+       {
+        "id": "e6",
+        "source": "i6",
+        "target": "i7",
+        "port": 0
+       },
+       {
+        "id": "e7",
+        "source": "i7",
+        "target": "i8",
+        "port": 0
+       },
+       {
+        "id": "e8",
+        "source": "i8",
+        "target": "i9",
+        "port": 0
+       },
+       {
+        "id": "e9",
+        "source": "i9",
+        "target": "i10",
+        "port": 0
+       },
+       {
+        "id": "e10",
+        "source": "i10",
+        "target": "i11",
+        "port": 0
+       },
+       {
+        "id": "e11",
+        "source": "i11",
+        "target": "i12",
+        "port": 0
+       },
+       {
+        "id": "e12",
+        "source": "i12",
+        "target": "i13",
+        "port": 0
+       },
+       {
+        "id": "e13",
+        "source": "i13",
+        "target": "i14",
+        "port": 0
+       },
+       {
+        "id": "e14",
+        "source": "i14",
+        "target": "i15",
+        "port": 0
+       },
+       {
+        "id": "e15",
+        "source": "i7",
+        "target": "i16",
+        "port": 0
+       },
+       {
+        "id": "e16",
+        "source": "i16",
+        "target": "i17",
+        "port": 0
+       },
+       {
+        "id": "e17",
+        "source": "i15",
+        "target": "i18",
+        "port": 0
+       },
+       {
+        "id": "e18",
+        "source": "i17",
+        "target": "i18",
+        "port": 1
+       },
+       {
+        "id": "e19",
+        "source": "i18",
+        "target": "i19",
+        "port": 0
+       },
+       {
+        "id": "e20",
+        "source": "i19",
+        "target": "i20",
+        "port": 0
+       },
+       {
+        "id": "e21",
+        "source": "i20",
+        "target": "i21",
+        "port": 0
+       },
+       {
+        "id": "e22",
+        "source": "i21",
+        "target": "i22",
+        "port": 0
+       },
+       {
+        "id": "e23",
+        "source": "i22",
+        "target": "i23",
+        "port": 0
+       },
+       {
+        "id": "e24",
+        "source": "i23",
+        "target": "i24",
+        "port": 0
+       },
+       {
+        "id": "e25",
+        "source": "i24",
+        "target": "i25",
+        "port": 0
+       },
+       {
+        "id": "e26",
+        "source": "i25",
+        "target": "i26",
+        "port": 0
+       },
+       {
+        "id": "e27",
+        "source": "i26",
+        "target": "i27",
+        "port": 0
+       },
+       {
+        "id": "e28",
+        "source": "i18",
+        "target": "i28",
+        "port": 0
+       },
+       {
+        "id": "e29",
+        "source": "i28",
+        "target": "i29",
+        "port": 0
+       },
+       {
+        "id": "e30",
+        "source": "i27",
+        "target": "i30",
+        "port": 0
+       },
+       {
+        "id": "e31",
+        "source": "i29",
+        "target": "i30",
+        "port": 1
+       },
+       {
+        "id": "e32",
+        "source": "i30",
+        "target": "i31",
+        "port": 0
+       },
+       {
+        "id": "e33",
+        "source": "i31",
+        "target": "i32",
+        "port": 0
+       },
+       {
+        "id": "e34",
+        "source": "i32",
+        "target": "i33",
+        "port": 0
+       },
+       {
+        "id": "e35",
+        "source": "i33",
+        "target": "i34",
+        "port": 0
+       },
+       {
+        "id": "e36",
+        "source": "i34",
+        "target": "i35",
+        "port": 0
+       },
+       {
+        "id": "e37",
+        "source": "i35",
+        "target": "i36",
+        "port": 0
+       },
+       {
+        "id": "e38",
+        "source": "i36",
+        "target": "i37",
+        "port": 0
+       },
+       {
+        "id": "e39",
+        "source": "i37",
+        "target": "i38",
+        "port": 0
+       },
+       {
+        "id": "e40",
+        "source": "i38",
+        "target": "i39",
+        "port": 0
+       },
+       {
+        "id": "e41",
+        "source": "i30",
+        "target": "i40",
+        "port": 0
+       },
+       {
+        "id": "e42",
+        "source": "i40",
+        "target": "i41",
+        "port": 0
+       },
+       {
+        "id": "e43",
+        "source": "i39",
+        "target": "i42",
+        "port": 0
+       },
+       {
+        "id": "e44",
+        "source": "i41",
+        "target": "i42",
+        "port": 1
+       },
+       {
+        "id": "e45",
+        "source": "i42",
+        "target": "i43",
+        "port": 0
+       },
+       {
+        "id": "e46",
+        "source": "i43",
+        "target": "i44",
+        "port": 0
+       },
+       {
+        "id": "e47",
+        "source": "i44",
+        "target": "i45",
+        "port": 0
+       },
+       {
+        "id": "e48",
+        "source": "i45",
+        "target": "i46",
+        "port": 0
+       },
+       {
+        "id": "e49",
+        "source": "i46",
+        "target": "i47",
+        "port": 0
+       },
+       {
+        "id": "e50",
+        "source": "i47",
+        "target": "i48",
+        "port": 0
+       },
+       {
+        "id": "e51",
+        "source": "i48",
+        "target": "i49",
+        "port": 0
+       },
+       {
+        "id": "e52",
+        "source": "i49",
+        "target": "i50",
+        "port": 0
+       },
+       {
+        "id": "e53",
+        "source": "i50",
+        "target": "i51",
+        "port": 0
+       },
+       {
+        "id": "e54",
+        "source": "i51",
+        "target": "i52",
+        "port": 0
+       },
+       {
+        "id": "e55",
+        "source": "i52",
+        "target": "i53",
+        "port": 0
+       },
+       {
+        "id": "e56",
+        "source": "i53",
+        "target": "i54",
+        "port": 0
+       },
+       {
+        "id": "e57",
+        "source": "i54",
+        "target": "i55",
+        "port": 0
+       },
+       {
+        "id": "e58",
+        "source": "i42",
+        "target": "i55",
+        "port": 1
+       },
+       {
+        "id": "e59",
+        "source": "i55",
+        "target": "i56",
+        "port": 0
+       },
+       {
+        "id": "e60",
+        "source": "i56",
+        "target": "i57",
+        "port": 0
+       },
+       {
+        "id": "e61",
+        "source": "i57",
+        "target": "i58",
+        "port": 0
+       },
+       {
+        "id": "e62",
+        "source": "i58",
+        "target": "i59",
+        "port": 0
+       },
+       {
+        "id": "e63",
+        "source": "i59",
+        "target": "i60",
+        "port": 0
+       },
+       {
+        "id": "e64",
+        "source": "i60",
+        "target": "i61",
+        "port": 0
+       },
+       {
+        "id": "e65",
+        "source": "i61",
+        "target": "i62",
+        "port": 0
+       },
+       {
+        "id": "e66",
+        "source": "i62",
+        "target": "i63",
+        "port": 0
+       },
+       {
+        "id": "e67",
+        "source": "i63",
+        "target": "i64",
+        "port": 0
+       },
+       {
+        "id": "e68",
+        "source": "i64",
+        "target": "i65",
+        "port": 0
+       },
+       {
+        "id": "e69",
+        "source": "i65",
+        "target": "i66",
+        "port": 0
+       },
+       {
+        "id": "e70",
+        "source": "i66",
+        "target": "i67",
+        "port": 0
+       },
+       {
+        "id": "e71",
+        "source": "i67",
+        "target": "i68",
+        "port": 0
+       },
+       {
+        "id": "e72",
+        "source": "i55",
+        "target": "i68",
+        "port": 1
+       },
+       {
+        "id": "e73",
+        "source": "i68",
+        "target": "i69",
+        "port": 0
+       },
+       {
+        "id": "e74",
+        "source": "i69",
+        "target": "i70",
+        "port": 0
+       },
+       {
+        "id": "e75",
+        "source": "i70",
+        "target": "i71",
+        "port": 0
+       },
+       {
+        "id": "e76",
+        "source": "i71",
+        "target": "i72",
+        "port": 0
+       },
+       {
+        "id": "e77",
+        "source": "i72",
+        "target": "i73",
+        "port": 0
+       },
+       {
+        "id": "e78",
+        "source": "i73",
+        "target": "i74",
+        "port": 0
+       },
+       {
+        "id": "e79",
+        "source": "i74",
+        "target": "i75",
+        "port": 0
+       },
+       {
+        "id": "e80",
+        "source": "i75",
+        "target": "i76",
+        "port": 0
+       },
+       {
+        "id": "e81",
+        "source": "i76",
+        "target": "i77",
+        "port": 0
+       },
+       {
+        "id": "e82",
+        "source": "i77",
+        "target": "i78",
+        "port": 0
+       },
+       {
+        "id": "e83",
+        "source": "i78",
+        "target": "i79",
+        "port": 0
+       },
+       {
+        "id": "e84",
+        "source": "i79",
+        "target": "i80",
+        "port": 0
+       },
+       {
+        "id": "e85",
+        "source": "i80",
+        "target": "i81",
+        "port": 0
+       },
+       {
+        "id": "e86",
+        "source": "i68",
+        "target": "i81",
+        "port": 1
+       },
+       {
+        "id": "e87",
+        "source": "i81",
+        "target": "i82",
+        "port": 0
+       },
+       {
+        "id": "e88",
+        "source": "i82",
+        "target": "i83",
+        "port": 0
+       },
+       {
+        "id": "e89",
+        "source": "i83",
+        "target": "i84",
+        "port": 0
+       },
+       {
+        "id": "e90",
+        "source": "i84",
+        "target": "i85",
+        "port": 0
+       },
+       {
+        "id": "e91",
+        "source": "i85",
+        "target": "i86",
+        "port": 0
+       },
+       {
+        "id": "e92",
+        "source": "i86",
+        "target": "i87",
+        "port": 0
+       },
+       {
+        "id": "e93",
+        "source": "i87",
+        "target": "i88",
+        "port": 0
+       },
+       {
+        "id": "e94",
+        "source": "i88",
+        "target": "i89",
+        "port": 0
+       },
+       {
+        "id": "e95",
+        "source": "i89",
+        "target": "i90",
+        "port": 0
+       },
+       {
+        "id": "e96",
+        "source": "i90",
+        "target": "i91",
+        "port": 0
+       },
+       {
+        "id": "e97",
+        "source": "i91",
+        "target": "i92",
+        "port": 0
+       },
+       {
+        "id": "e98",
+        "source": "i92",
+        "target": "i93",
+        "port": 0
+       },
+       {
+        "id": "e99",
+        "source": "i93",
+        "target": "i94",
+        "port": 0
+       },
+       {
+        "id": "e100",
+        "source": "i81",
+        "target": "i94",
+        "port": 1
+       },
+       {
+        "id": "e101",
+        "source": "i94",
+        "target": "i95",
+        "port": 0
+       },
+       {
+        "id": "e102",
+        "source": "i95",
+        "target": "i96",
+        "port": 0
+       },
+       {
+        "id": "e103",
+        "source": "i96",
+        "target": "i97",
+        "port": 0
+       },
+       {
+        "id": "e104",
+        "source": "i97",
+        "target": "i98",
+        "port": 0
+       },
+       {
+        "id": "e105",
+        "source": "i98",
+        "target": "i99",
+        "port": 0
+       },
+       {
+        "id": "e106",
+        "source": "i99",
+        "target": "i100",
+        "port": 0
+       },
+       {
+        "id": "e107",
+        "source": "i100",
+        "target": "i101",
+        "port": 0
+       },
+       {
+        "id": "e108",
+        "source": "i101",
+        "target": "i102",
+        "port": 0
+       },
+       {
+        "id": "e109",
+        "source": "i102",
+        "target": "i103",
+        "port": 0
+       },
+       {
+        "id": "e110",
+        "source": "i103",
+        "target": "i104",
+        "port": 0
+       },
+       {
+        "id": "e111",
+        "source": "i104",
+        "target": "i105",
+        "port": 0
+       },
+       {
+        "id": "e112",
+        "source": "i105",
+        "target": "i106",
+        "port": 0
+       },
+       {
+        "id": "e113",
+        "source": "i106",
+        "target": "i107",
+        "port": 0
+       },
+       {
+        "id": "e114",
+        "source": "i94",
+        "target": "i107",
+        "port": 1
+       },
+       {
+        "id": "e115",
+        "source": "i107",
+        "target": "i108",
+        "port": 0
+       },
+       {
+        "id": "e116",
+        "source": "i108",
+        "target": "i109",
+        "port": 0
+       },
+       {
+        "id": "e117",
+        "source": "i109",
+        "target": "i110",
+        "port": 0
+       },
+       {
+        "id": "e118",
+        "source": "i110",
+        "target": "i111",
+        "port": 0
+       },
+       {
+        "id": "e119",
+        "source": "i111",
+        "target": "i112",
+        "port": 0
+       },
+       {
+        "id": "e120",
+        "source": "i112",
+        "target": "i113",
+        "port": 0
+       },
+       {
+        "id": "e121",
+        "source": "i113",
+        "target": "i114",
+        "port": 0
+       },
+       {
+        "id": "e122",
+        "source": "i114",
+        "target": "i115",
+        "port": 0
+       },
+       {
+        "id": "e123",
+        "source": "i115",
+        "target": "i116",
+        "port": 0
+       },
+       {
+        "id": "e124",
+        "source": "i116",
+        "target": "i117",
+        "port": 0
+       },
+       {
+        "id": "e125",
+        "source": "i117",
+        "target": "i118",
+        "port": 0
+       },
+       {
+        "id": "e126",
+        "source": "i118",
+        "target": "i119",
+        "port": 0
+       },
+       {
+        "id": "e127",
+        "source": "i119",
+        "target": "i120",
+        "port": 0
+       },
+       {
+        "id": "e128",
+        "source": "i107",
+        "target": "i120",
+        "port": 1
+       },
+       {
+        "id": "e129",
+        "source": "i120",
+        "target": "i121",
+        "port": 0
+       },
+       {
+        "id": "e130",
+        "source": "i121",
+        "target": "i122",
+        "port": 0
+       },
+       {
+        "id": "e131",
+        "source": "i122",
+        "target": "i123",
+        "port": 0
+       },
+       {
+        "id": "e132",
+        "source": "i123",
+        "target": "i124",
+        "port": 0
+       },
+       {
+        "id": "e133",
+        "source": "i124",
+        "target": "i125",
+        "port": 0
+       },
+       {
+        "id": "e134",
+        "source": "i125",
+        "target": "i126",
+        "port": 0
+       },
+       {
+        "id": "e135",
+        "source": "i126",
+        "target": "i127",
+        "port": 0
+       },
+       {
+        "id": "e136",
+        "source": "i127",
+        "target": "i128",
+        "port": 0
+       },
+       {
+        "id": "e137",
+        "source": "i128",
+        "target": "i129",
+        "port": 0
+       },
+       {
+        "id": "e138",
+        "source": "i129",
+        "target": "i130",
+        "port": 0
+       },
+       {
+        "id": "e139",
+        "source": "i130",
+        "target": "i131",
+        "port": 0
+       },
+       {
+        "id": "e140",
+        "source": "i131",
+        "target": "i132",
+        "port": 0
+       },
+       {
+        "id": "e141",
+        "source": "i132",
+        "target": "i133",
+        "port": 0
+       },
+       {
+        "id": "e142",
+        "source": "i120",
+        "target": "i133",
+        "port": 1
+       },
+       {
+        "id": "e143",
+        "source": "i133",
+        "target": "i134",
+        "port": 0
+       },
+       {
+        "id": "e144",
+        "source": "i134",
+        "target": "i135",
+        "port": 0
+       },
+       {
+        "id": "e145",
+        "source": "i135",
+        "target": "i136",
+        "port": 0
+       },
+       {
+        "id": "e146",
+        "source": "i136",
+        "target": "i137",
+        "port": 0
+       },
+       {
+        "id": "e147",
+        "source": "i137",
+        "target": "i138",
+        "port": 0
+       },
+       {
+        "id": "e148",
+        "source": "i138",
+        "target": "i139",
+        "port": 0
+       },
+       {
+        "id": "e149",
+        "source": "i139",
+        "target": "i140",
+        "port": 0
+       },
+       {
+        "id": "e150",
+        "source": "i140",
+        "target": "i141",
+        "port": 0
+       },
+       {
+        "id": "e151",
+        "source": "i141",
+        "target": "i142",
+        "port": 0
+       },
+       {
+        "id": "e152",
+        "source": "i142",
+        "target": "i143",
+        "port": 0
+       },
+       {
+        "id": "e153",
+        "source": "i143",
+        "target": "i144",
+        "port": 0
+       },
+       {
+        "id": "e154",
+        "source": "i144",
+        "target": "i145",
+        "port": 0
+       },
+       {
+        "id": "e155",
+        "source": "i145",
+        "target": "i146",
+        "port": 0
+       },
+       {
+        "id": "e156",
+        "source": "i133",
+        "target": "i146",
+        "port": 1
+       },
+       {
+        "id": "e157",
+        "source": "i146",
+        "target": "i147",
+        "port": 0
+       },
+       {
+        "id": "e158",
+        "source": "i147",
+        "target": "i148",
+        "port": 0
+       },
+       {
+        "id": "e159",
+        "source": "i148",
+        "target": "i149",
+        "port": 0
+       },
+       {
+        "id": "e160",
+        "source": "i149",
+        "target": "i150",
+        "port": 0
+       },
+       {
+        "id": "e161",
+        "source": "i150",
+        "target": "i151",
+        "port": 0
+       },
+       {
+        "id": "e162",
+        "source": "i151",
+        "target": "i152",
+        "port": 0
+       },
+       {
+        "id": "e163",
+        "source": "i152",
+        "target": "i153",
+        "port": 0
+       },
+       {
+        "id": "e164",
+        "source": "i153",
+        "target": "i154",
+        "port": 0
+       },
+       {
+        "id": "e165",
+        "source": "i154",
+        "target": "i155",
+        "port": 0
+       },
+       {
+        "id": "e166",
+        "source": "i146",
+        "target": "i156",
+        "port": 0
+       },
+       {
+        "id": "e167",
+        "source": "i156",
+        "target": "i157",
+        "port": 0
+       },
+       {
+        "id": "e168",
+        "source": "i155",
+        "target": "i158",
+        "port": 0
+       },
+       {
+        "id": "e169",
+        "source": "i157",
+        "target": "i158",
+        "port": 1
+       },
+       {
+        "id": "e170",
+        "source": "i158",
+        "target": "i159",
+        "port": 0
+       },
+       {
+        "id": "e171",
+        "source": "i159",
+        "target": "i160",
+        "port": 0
+       },
+       {
+        "id": "e172",
+        "source": "i160",
+        "target": "i161",
+        "port": 0
+       },
+       {
+        "id": "e173",
+        "source": "i161",
+        "target": "i162",
+        "port": 0
+       },
+       {
+        "id": "e174",
+        "source": "i162",
+        "target": "i163",
+        "port": 0
+       },
+       {
+        "id": "e175",
+        "source": "i163",
+        "target": "i164",
+        "port": 0
+       },
+       {
+        "id": "e176",
+        "source": "i164",
+        "target": "i165",
+        "port": 0
+       },
+       {
+        "id": "e177",
+        "source": "i165",
+        "target": "i166",
+        "port": 0
+       },
+       {
+        "id": "e178",
+        "source": "i166",
+        "target": "i167",
+        "port": 0
+       },
+       {
+        "id": "e179",
+        "source": "i167",
+        "target": "i168",
+        "port": 0
+       },
+       {
+        "id": "e180",
+        "source": "i168",
+        "target": "i169",
+        "port": 0
+       },
+       {
+        "id": "e181",
+        "source": "i169",
+        "target": "i170",
+        "port": 0
+       }
+      ]
+     },
+     "notes": [],
+     "summary": "170 layers, 22,855,376 parameters but torch says 22,855,952 \u2014 the graph is not the model",
+     "why": "The traced graph has 22,855,376 parameters and the class has 22,855,952. Something was dropped or duplicated in tracing, so this graph is not a faithful copy \u2014 size, precision and ablation numbers taken from it would be about a different network."
+    },
+    {
+     "cls": "SeparableConv2d",
+     "file": "xception.py",
+     "arguments": 2,
+     "imported": false,
+     "summary": "needs 2 constructor arguments, so it was not guessed at",
+     "why": "A class taking a config can only be built once somebody supplies one. Guessing would make any result meaningless."
+    },
+    {
+     "cls": "Block",
+     "file": "xception.py",
+     "arguments": 3,
+     "imported": false,
+     "summary": "needs 3 constructor arguments, so it was not guessed at",
+     "why": "A class taking a config can only be built once somebody supplies one. Guessing would make any result meaningless."
+    }
+   ],
+   "imported": 0,
+   "inexact": 1,
+   "score": -1.9868
+  }
+ ],
+ "error": "",
+ "seconds": 1.9,
+ "kept_at": 1788990369.999135
+}

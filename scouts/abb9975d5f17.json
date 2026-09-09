@@ -1,0 +1,299 @@
+{
+ "id": "abb9975d5f17",
+ "kind": "maths",
+ "goal": "",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Reading 8 layers",
+   "detail": "63,114 parameters in total"
+  },
+  {
+   "at": 0.0,
+   "text": "   Input: Input",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Conv2d: Discrete cross-correlation",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   BatchNorm2d: Batch normalization",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Activation: relu \u2014 pointwise nonlinearity",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   MaxPool2d: Max pooling",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Flatten: Reinterpretation",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Linear: Affine map",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Output: Output",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "6 of 8 layers have a write-up",
+   "detail": "The rest say so rather than inventing one."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "layer",
+   "id": "n1",
+   "name": "Input",
+   "type": "Input",
+   "title": "Input",
+   "equation": "",
+   "arithmetic": [],
+   "freedom": [],
+   "missing": "The mathematics of Input is not written up here yet. Entry point. Shape is channels-first and excludes the batch dimension. Rather than generate something plausible, this says nothing.",
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    1,
+    28,
+    28
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "n2",
+   "name": "Conv2d",
+   "type": "Conv2d",
+   "title": "Discrete cross-correlation",
+   "equation": "y[c,i,j] = b[c] + \u03a3_k \u03a3_u \u03a3_v W[c,k,u,v] \u00b7 x[k, s\u00b7i + d\u00b7u \u2212 p, s\u00b7j + d\u00b7v \u2212 p]",
+   "arithmetic": [
+    [
+     "effective window",
+     "d(k\u22121)+1 = 1\u00d72+1 = 3"
+    ],
+    [
+     "output size",
+     "\u230a(H + 2p \u2212 d(k\u22121) \u2212 1)/s\u230b + 1 = \u230a(28 + 2 \u2212 2 \u2212 1)/1\u230b + 1 = 28"
+    ],
+    [
+     "parameters",
+     "(C_in/g)\u00b7k\u00b2\u00b7C_out + C_out = 1\u00d79\u00d732 + 32 = 320"
+    ],
+    [
+     "multiplies",
+     "parameters \u00d7 output positions \u2248 288 \u00d7 784 = 225,792"
+    ]
+   ],
+   "freedom": [
+    "The same 288 weights are reused at every one of the 784 positions. That reuse is the whole idea: it assumes what matters is the same everywhere in the image, and it is why a convolution has so few parameters for what it does.",
+    "Dilation widens the window without adding a single parameter: d=1 already reaches 3 pixels using 3\u00d73 weights. Stacking dilations 1,2,4,8 grows the reach exponentially with depth.",
+    "Groups divide the parameters by g. At g=C_in each filter sees one channel \u2014 that is a depthwise convolution, 9 parameters instead of 288, and a 1\u00d71 convolution after it mixes the channels back. That factorisation is most of what makes mobile architectures small."
+   ],
+   "missing": null,
+   "parameters": 320,
+   "share": 0.5,
+   "out_shape": [
+    32,
+    28,
+    28
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "n3",
+   "name": "BatchNorm2d",
+   "type": "BatchNorm2d",
+   "title": "Batch normalization",
+   "equation": "y = \u03b3 \u00b7 (x \u2212 \u03bc_B) / \u221a(\u03c3\u00b2_B + \u03b5) + \u03b2",
+   "arithmetic": [
+    [
+     "output size",
+     "unchanged \u2014 this rescales, it does not reshape"
+    ],
+    [
+     "parameters",
+     "2C = 2\u00d732 = 64 trained"
+    ],
+    [
+     "also stored",
+     "64 running statistics, updated but not trained by the optimizer"
+    ]
+   ],
+   "freedom": [
+    "The statistics come from the batch, so what this layer computes for one sample depends on the others beside it. That is why small batches hurt it and why it behaves differently in eval mode, where the running statistics take over.",
+    "\u03b3 and \u03b2 let the network undo the normalization if that is better \u2014 initialising \u03b3=0 in a residual branch starts the block as the identity, which is a common trick for training very deep stacks.",
+    "LayerNorm takes the statistics per sample instead, so batch size stops mattering. That is why transformers use it."
+   ],
+   "missing": null,
+   "parameters": 64,
+   "share": 0.1,
+   "out_shape": [
+    32,
+    28,
+    28
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "n4",
+   "name": "Activation",
+   "type": "Activation",
+   "title": "relu \u2014 pointwise nonlinearity",
+   "equation": "y = max(0, x)",
+   "arithmetic": [
+    [
+     "output size",
+     "unchanged \u2014 nothing moves between positions"
+    ],
+    [
+     "parameters",
+     "none"
+    ]
+   ],
+   "freedom": [
+    "Zero below the origin, identity above. The gradient is 0 or 1, which is why it trains well and why a unit stuck below zero never recovers.",
+    "Without something like this the whole network collapses: any stack of affine maps is one affine map. This is the only reason depth adds expressive power.",
+    "It acts on each number alone, so it can bend the function but never mix information between positions."
+   ],
+   "missing": null,
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    32,
+    28,
+    28
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "n5",
+   "name": "MaxPool2d",
+   "type": "MaxPool2d",
+   "title": "Max pooling",
+   "equation": "y[c,i,j] = max over the window  x[c, s\u00b7i+u, s\u00b7j+v]",
+   "arithmetic": [
+    [
+     "output size",
+     "\u230a(H + 2p \u2212 k)/s\u230b + 1 = \u230a(28 + 0 \u2212 2)/2\u230b + 1 = 14"
+    ],
+    [
+     "parameters",
+     "none \u2014 the operation has nothing to learn"
+    ],
+    [
+     "kept",
+     "196 of 784 positions (25%)"
+    ]
+   ],
+   "freedom": [
+    "Max is a hard selection: the gradient reaches only the winning element, so the rest of the window learns nothing from this step. Mean spreads it evenly.",
+    "Max keeps the strongest response and discards where in the window it was. That invariance is useful for recognition and harmful for anything needing precise location.",
+    "A strided convolution downsamples too, and learns how rather than being told. It costs parameters; pooling costs none."
+   ],
+   "missing": null,
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    32,
+    14,
+    14
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "n6",
+   "name": "Flatten",
+   "type": "Flatten",
+   "title": "Reinterpretation",
+   "equation": "y[n] = x[i,j,k]   with n = (i\u00b7H + j)\u00b7W + k",
+   "arithmetic": [
+    [
+     "output size",
+     "the product: 32 \u00d7 14 \u00d7 14 = 6,272"
+    ],
+    [
+     "parameters",
+     "none \u2014 not one number changes"
+    ]
+   ],
+   "freedom": [
+    "Nothing is computed here. The same values are read as one long vector.",
+    "What it costs comes next: a dense layer on 6,272 inputs needs 6,272 weights per output. Pooling first is how that bill is avoided.",
+    "Because the ordering is positional, the layer after it treats position 37 as a fixed meaning \u2014 which is why flattening destroys translation invariance that the convolutions built."
+   ],
+   "missing": null,
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    6272
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "n7",
+   "name": "Linear",
+   "type": "Linear",
+   "title": "Affine map",
+   "equation": "y = W x + b",
+   "arithmetic": [
+    [
+     "output size",
+     "10, because you set it \u2014 a dense layer's width is a choice, not a consequence"
+    ],
+    [
+     "parameters",
+     "in\u00d7out + out = 6,272\u00d710 + 10 = 62,730"
+    ],
+    [
+     "multiplies per sample",
+     "62,720"
+    ]
+   ],
+   "freedom": [
+    "Every output sees every input, so cost grows as the product of the two widths. That product is usually where a network's parameters go.",
+    "Two of these in a row with nothing between them multiply to a single matrix W\u2082W\u2081 \u2014 the depth buys nothing without a nonlinearity.",
+    "Factorising W \u2248 UV with U \u2208 \u211d^(out\u00d7r), V \u2208 \u211d^(r\u00d7in) costs r\u00d7(6,272+10) instead of 62,720. Below r \u2248 9 it is cheaper, and it constrains the map to rank r \u2014 sometimes a useful prior rather than only a saving."
+   ],
+   "missing": null,
+   "parameters": 62730,
+   "share": 99.4,
+   "out_shape": [
+    10
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "n8",
+   "name": "Output",
+   "type": "Output",
+   "title": "Output",
+   "equation": "",
+   "arithmetic": [],
+   "freedom": [],
+   "missing": "The mathematics of Output is not written up here yet. Marks the tensor the loss is computed on. Rather than generate something plausible, this says nothing.",
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    10
+   ]
+  }
+ ],
+ "error": "",
+ "seconds": 0.0,
+ "kept_at": 1788990388.213757
+}

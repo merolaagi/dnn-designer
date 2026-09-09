@@ -1178,6 +1178,10 @@ i.covered{
   border-radius:7px;padding:7px 9px;
 }
 .scoutsubject b{font-weight:600}
+.nothingopen{
+  margin-top:8px;font-size:10.5px;line-height:1.55;color:var(--muted);
+  background:var(--paper-2);border-radius:7px;padding:7px 9px;
+}
 .pastrow{display:flex;flex-wrap:wrap;gap:7px}
 .pastchip{
   text-align:left;background:#fff;border:1px solid var(--paper-3);
@@ -5118,6 +5122,15 @@ function paintScout(d){
           ${s.detail ? `<em>${s.detail}</em>` : ""}</div>`).join("")}</div>
       ${(d.findings || []).length
         ? `<div class="scoutsec">what it verified</div>
+           ${openableCount(d) === 0 && d.kind !== "maths" && d.kind !== "papers"
+             ? `<div class="paperwarn">Nothing here can go on the canvas. A
+                class only becomes a button once it has been built at the right
+                size, and none of these were — each card says which of the three
+                reasons applied. That is a real answer about this search, not a
+                missing button.</div>`
+             : openableCount(d)
+               ? `<div class="paperok">${openableCount(d)} of these can go
+                  straight on the canvas.</div>` : ""}
            <div class="scoutfound">${d.findings.map((f, i) =>
              scoutCard(f, i)).join("")}</div>`
         : d.status === "running" ? "" :
@@ -5137,12 +5150,26 @@ function paintScout(d){
     btn.addEventListener("click", () => placeDraft(+btn.dataset.draft)));
 }
 
+/* How many findings could actually reach the canvas. Zero is a fact about the
+   search worth stating, because an absent button looks like a broken one. */
+function openableCount(d){
+  return (d.findings || []).reduce((n, f) => {
+    if (f.kind === "draft") return n + (f.ok ? 1 : 0);
+    if (f.kind === "repo")
+      return n + (f.tried || []).filter(t => t.imported && t.exact !== false).length;
+    return n;
+  }, 0);
+}
+
 function scoutCard(f, i){
   if (f.kind === "repo"){
     return `<div class="foundcard">
       <div class="foundtop"><b>${f.name}</b>
         <span>${f.stars.toLocaleString()} stars · ${f.classes} classes</span></div>
       ${f.description ? `<p>${f.description}</p>` : ""}
+      ${(f.tried || []).some(t => t.imported && t.exact !== false)
+        ? "" : `<div class="nothingopen">Nothing from this repository can be
+          opened — see each class below for why.</div>`}
       <div class="triedlist">${(f.tried || []).map((t, j) => `
         <div class="tried ${t.imported ? (t.exact === false ? "warn" : "ok") : "no"}">
           <b>${t.cls}</b>

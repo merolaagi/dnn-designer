@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.60.1
+
+**Why nothing reached the canvas: none of those results had imported.**
+
+The mechanism works — checked end to end on a real search, not a mock.
+`MobileNetV2` from chenyaofo/pytorch-cifar-models imports exactly, carries a
+155-node, 164-edge graph through JSON, and lands on the canvas with its
+provenance badge.
+
+But every result in the searches so far was a refusal, a class wanting a
+config, or an inexact import like `Xception`. A class becomes a button only
+once it has been built at the right size, so no button appeared — and the page
+never said why, which makes an absent button look like a broken one.
+
+- **The results now say how many can reach the canvas**, and when the answer is
+  none, that it is a real answer about this search rather than a missing
+  feature.
+- **Each repository card says the same** when none of its classes can be
+  opened.
+
+No new button was added, and adding one would have been the wrong fix: placing
+an unverified graph is exactly what the checks exist to prevent. `Xception`
+traced 576 parameters short of the real model, and a canvas holding that would
+give wrong numbers for size, precision and ablation while looking perfectly
+healthy.
+
+To see it work, search something whose repositories hold plain modules —
+"pytorch cifar classification models" returns `MobileNetV2` — rather than
+language model code, where nearly everything takes a config.
+
 ## 1.60.0
 
 Three things from using the scouts in anger, all fair.
