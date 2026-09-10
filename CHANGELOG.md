@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.64.0
+
+**Read a codebase.** Open a zip or tar of source and see what is in it: the
+folder tree on the left, and for any file its classes, its methods and its
+source. Nothing is executed — the archive is unpacked, parsed with `ast`, and
+described.
+
+This is deliberately not the model importer. That looks for `nn.Module`
+subclasses it can trace onto the canvas, and pointed at a research engine it
+finds nothing and says nothing useful. Most code is not a neural network.
+
+What it says about any Python project:
+
+- **The tree**, with `__pycache__`, `.venv` and the rest left out.
+- **Per module** — classes with their bases, methods and first docstring line;
+  module-level functions; line counts.
+- **The import graph**: which modules depend on which, which is most depended
+  upon, and whether there are cycles. A cycle between modules is the same
+  defect as a cycle in a proof DAG — there is no order in which the pieces can
+  be understood one at a time.
+- **What it depends on outside itself**, ranked.
+- **Files that will not parse**, reported rather than skipped: dropping them
+  quietly would make every total a little wrong.
+
+Two things found while building it, on a real 34-file project:
+
+- **`from pkg import b` was recorded as an import of `pkg`**, discarding which
+  module `b` is. Every such edge pointed at the package instead of the module,
+  which hid import cycles completely — a deliberately cyclic fixture came back
+  clean. Fixed, and the real project's edge count went from 81 to 247.
+- **An archive naming `../../owned.txt` would have been extracted.** Python's
+  own guards here differ by version, so the check is done in the reader where
+  it can be relied on, and the same check refuses a request to read a file
+  outside the project.
+
 ## 1.63.0
 
 **The papers scout keeps going, and proves the papers it keeps.**

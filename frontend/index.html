@@ -202,7 +202,8 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
-#pageAgents, #pagePad, #pageDomains, #pageScouts{background:var(--paper)}
+#pageAgents, #pagePad, #pageDomains, #pageScouts,
+#pageCodebase{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -1153,6 +1154,63 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
+.cbwrap{max-width:1280px;margin:0 auto;padding:24px 26px 40px}
+.cbhead h3{margin:0 0 6px;font-size:20px;font-weight:600}
+.cbhead p{margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.65;
+  max-width:660px}
+.cbtools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cbtools label.btn{cursor:pointer}
+.cbtools select{
+  padding:6px 10px;border:1px solid var(--paper-3);border-radius:7px;font-size:11.5px;
+}
+.cbstats{
+  margin:16px 0 12px;font-size:12px;color:var(--muted);padding:10px 13px;
+  background:#fff;border:1px solid var(--paper-3);border-radius:9px;
+}
+.cbstats b{color:var(--text);font-weight:600}
+.cbbad{color:#8C2F27}
+.cbsplit{display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start}
+.cbtree{
+  background:#fff;border:1px solid var(--paper-3);border-radius:10px;
+  padding:8px 0;max-height:72vh;overflow:auto;font-size:11.5px;
+}
+.cbrow{
+  padding:3px 10px 3px 8px;cursor:pointer;display:flex;align-items:center;
+  gap:8px;white-space:nowrap;color:#8A94A2;
+}
+.cbrow.py{color:var(--text)}
+.cbrow.dir{color:var(--text);font-weight:600}
+.cbrow:hover{background:var(--paper-2)}
+.cbrow span{margin-left:auto;font-size:9.5px;color:#B7C0CB}
+.cbdir.shut > *:not(.cbrow){display:none}
+.cbdetail{
+  background:#fff;border:1px solid var(--paper-3);border-radius:10px;
+  padding:14px 16px;min-height:200px;
+}
+.cbsec{
+  font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98A6B8;
+  font-weight:700;margin:16px 0 8px;
+}
+.cbsec:first-child{margin-top:0}
+.cbfilehead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.cbfilehead b{font-size:13.5px;font-weight:600;font-family:var(--mono)}
+.cbfilehead span{font-size:10.5px;color:var(--muted)}
+.cbclass{
+  border-left:3px solid #DCD2F5;padding:5px 0 5px 10px;margin-bottom:8px;
+}
+.cbclass b{font-size:12.5px;font-weight:600}
+.cbclass .mono{font-size:10.5px;color:var(--muted);margin-left:6px}
+.cbclass p{margin:3px 0 0;font-size:11px;color:var(--muted);line-height:1.55}
+.cbmethods{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.cbmethods span{
+  font-family:var(--mono);font-size:9.5px;background:var(--paper-2);
+  border-radius:4px;padding:1px 6px;color:#3C4453;
+}
+.cbsource{
+  margin:0;padding:11px 13px;background:#12161D;color:#C6D0DB;border-radius:8px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.6;max-height:52vh;
+  overflow:auto;white-space:pre;
+}
 .scoutwrap{max-width:1180px;margin:0 auto;padding:24px 26px 40px}
 .scouthead h3{margin:0 0 6px;font-size:20px;font-weight:600}
 .scouthead p{margin:0 0 18px;font-size:12.5px;color:var(--muted);line-height:1.65;
@@ -1916,6 +1974,7 @@ body.sizing{user-select:none}
     <div class="group">Executions</div>
     <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
+    <button data-page="pageCodebase"><i>&#9783;</i>Read a codebase</button>
     <button data-page="pageScouts"><i>&#9906;</i>Scouts</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
     <button data-page="pageRuns"><i>&#8635;</i>Run history</button>
@@ -2160,6 +2219,10 @@ body.sizing{user-select:none}
   <div class="scroll" id="padMain"></div>
 </section>
 
+<section class="page" id="pageCodebase">
+  <div class="scroll" id="codeMain"></div>
+</section>
+
 <section class="page" id="pageScouts">
   <div class="scroll" id="scoutMain"></div>
 </section>
@@ -2360,6 +2423,7 @@ const state = {
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
+  codebase:null, cbFile:null,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -4882,6 +4946,7 @@ const PAGE_SETUP = {
   pagePad: renderLaunchPad,
   pageDomains: renderDomainsPage,
   pageScouts: renderScoutsPage,
+  pageCodebase: renderCodebasePage,
   pagePaper: renderPaperPage,
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
@@ -4958,6 +5023,221 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* ============================= codebase ============================= */
+
+/* Reading somebody else's project, which is not the same job as importing a
+   model. The importer looks for nn.Module subclasses it can trace; pointed at
+   a research engine it finds nothing and says nothing useful, because most
+   code is not a neural network.
+
+   What can be said honestly without running any of it: the tree, what each
+   module holds, and which modules depend on which. That last one is the same
+   kind of object the canvas already deals in — nodes, edges, and a question
+   about cycles. */
+
+async function renderCodebasePage(){
+  const host = $("codeMain");
+  host.innerHTML = `<div class="cbwrap">
+    <div class="cbhead">
+      <h3>Read a codebase</h3>
+      <p>Unpack a zip or tar of source and see what is in it: the tree, what
+      each module holds, and which modules depend on which. Nothing is executed
+      — the files are read and parsed, nothing more.</p>
+      <div class="cbtools">
+        <label class="btn" for="cbFile">Open an archive</label>
+        <input type="file" id="cbFile" accept=".zip,.tar,.gz,.tgz" hidden>
+        <select id="cbOpen"><option value="">projects already open…</option></select>
+        <span id="cbNote" class="hint"></span>
+      </div>
+    </div>
+    <div id="cbBody"></div>
+  </div>`;
+
+  $("cbFile").addEventListener("change", uploadCodebase);
+  $("cbOpen").addEventListener("change", () => {
+    if ($("cbOpen").value) openCodebase($("cbOpen").value);
+  });
+  await listCodebases();
+  if (state.codebase) paintCodebase(state.codebase);
+}
+
+async function listCodebases(){
+  let d;
+  try{
+    d = await (await fetch(API + "/api/codebase")).json();
+  } catch { return; }
+  const sel = $("cbOpen");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">projects already open…</option>`
+    + (d.projects || []).map(p =>
+        `<option value="${p.id}"${state.codebase && state.codebase.id === p.id
+          ? " selected" : ""}>${p.id}</option>`).join("");
+}
+
+async function uploadCodebase(){
+  const picker = $("cbFile");
+  if (!picker.files || !picker.files[0]) return;
+  $("cbNote").textContent = "unpacking…";
+  const form = new FormData();
+  form.append("file", picker.files[0]);
+  let r, d;
+  try{
+    r = await fetch(API + "/api/codebase", { method: "POST", body: form });
+    d = await r.json();
+  } catch {
+    $("cbNote").textContent = "the server did not answer";
+    return;
+  }
+  if (!r.ok){
+    $("cbNote").textContent = "";
+    $("cbBody").innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "It would not open"}</div>`;
+    return;
+  }
+  $("cbNote").textContent = "";
+  state.codebase = d;
+  state.cbFile = null;
+  await listCodebases();
+  paintCodebase(d);
+}
+
+async function openCodebase(id){
+  let r, d;
+  try{
+    r = await fetch(API + "/api/codebase/" + encodeURIComponent(id));
+    d = await r.json();
+  } catch { return; }
+  if (!r.ok) return;
+  state.codebase = d;
+  state.cbFile = null;
+  paintCodebase(d);
+}
+
+function paintCodebase(d){
+  const s = d.survey, t = s.totals;
+  $("cbBody").innerHTML = `
+    <div class="cbstats">
+      <b>${t.files}</b> python files · <b>${t.lines.toLocaleString()}</b> lines ·
+      <b>${t.classes}</b> classes · <b>${t.functions}</b> module-level functions
+      ${s.unparsed.length
+        ? ` · <span class="cbbad">${s.unparsed.length} would not parse</span>`
+        : ""}
+    </div>
+    <div class="cbsplit">
+      <div class="cbtree">${treeHtml(d.tree, 0)}</div>
+      <div class="cbdetail" id="cbDetail">${codebaseOverview(s)}</div>
+    </div>`;
+
+  $("cbBody").querySelectorAll("[data-cbfile]").forEach(row =>
+    row.addEventListener("click", () => showCodeFile(row.dataset.cbfile)));
+  $("cbBody").querySelectorAll("[data-cbdir]").forEach(row =>
+    row.addEventListener("click", () => {
+      row.parentElement.classList.toggle("shut");
+    }));
+}
+
+function treeHtml(node, depth){
+  if (node.kind === "file"){
+    return `<div class="cbrow ${node.python ? "py" : ""}"
+      data-cbfile="${node.path}" style="padding-left:${8 + depth * 13}px">
+      ${node.name}<span>${(node.bytes / 1024).toFixed(1)}k</span></div>`;
+  }
+  return `<div class="cbdir">
+    <div class="cbrow dir" data-cbdir="1"
+      style="padding-left:${8 + depth * 13}px"><b>${node.name || "/"}</b></div>
+    ${(node.children || []).map(c => treeHtml(c, depth + 1)).join("")}</div>`;
+}
+
+function codebaseOverview(s){
+  const cycles = s.cycles || [];
+  return `
+    <div class="cbsec">what depends on what</div>
+    ${cycles.length
+      ? `<div class="paperwarn"><b>${cycles.length} import cycle${
+          cycles.length === 1 ? "" : "s"}.</b> A cycle between modules is the
+         same defect as a cycle in a proof graph: there is no order in which
+         the pieces can be understood one at a time.
+         ${cycles.map(c => `<pre>${c.join(" → ")}</pre>`).join("")}</div>`
+      : `<div class="paperok">No import cycles. Every module can be read in
+         some order where nothing refers forward.</div>`}
+
+    ${(s.depended_on || []).length ? `
+      <table class="runtable">
+        <thead><tr><th>module</th><th class="num">imported by</th></tr></thead>
+        <tbody>${s.depended_on.filter(([, n]) => n > 0).map(([name, n]) => `
+          <tr><td><b>${name}</b></td><td class="num">${n}</td></tr>`).join("")}
+        </tbody></table>
+      <p class="mathnote">The most depended-upon module is where a change costs
+      the most. It is usually the one holding the shared types.</p>` : ""}
+
+    ${(s.outside || []).length ? `
+      <div class="cbsec">what it depends on, outside itself</div>
+      <div class="hitwhy">${s.outside.map(([name, n]) =>
+        `<span>${name} · ${n}</span>`).join("")}</div>` : ""}
+
+    ${s.unparsed.length ? `
+      <div class="cbsec">would not parse</div>
+      <div class="paperwarn">${s.unparsed.map(p => `<div>${p}</div>`).join("")}
+      <p style="margin:6px 0 0">Reported rather than skipped: dropping them
+      quietly would make every total above a little wrong.</p></div>` : ""}
+
+    <div class="cbsec">largest modules</div>
+    <table class="runtable">
+      <thead><tr><th>file</th><th class="num">lines</th>
+        <th class="num">classes</th><th class="num">functions</th></tr></thead>
+      <tbody>${(s.modules || []).slice()
+        .sort((a, b) => b.lines - a.lines).slice(0, 10).map(m => `
+        <tr data-cbfile="${m.path}"><td>${m.path}</td>
+          <td class="num">${m.lines}</td>
+          <td class="num">${m.classes.length}</td>
+          <td class="num">${m.functions.length}</td></tr>`).join("")}
+      </tbody></table>`;
+}
+
+async function showCodeFile(path){
+  const host = $("cbDetail");
+  const s = state.codebase && state.codebase.survey;
+  const module = (s && s.modules || []).find(m => m.path === path);
+  host.innerHTML = `<div class="empty" style="padding:12px">reading ${path}…</div>`;
+  let d = null;
+  try{
+    const r = await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/file?path=` + encodeURIComponent(path));
+    d = r.ok ? await r.json() : null;
+  } catch { /* fall through to what the survey knows */ }
+
+  host.innerHTML = `
+    <div class="cbfilehead"><b>${path}</b>
+      ${module ? `<span>${module.lines} lines · ${module.classes.length}
+        classes · ${module.functions.length} functions</span>` : ""}</div>
+    ${module && module.error
+      ? `<div class="runfail">This file does not parse — ${module.error}</div>`
+      : ""}
+    ${module && module.classes.length ? `
+      <div class="cbsec">classes</div>
+      ${module.classes.map(c => `<div class="cbclass">
+        <b>${c.name}</b>${c.bases.length
+          ? `<span class="mono">(${c.bases.join(", ")})</span>` : ""}
+        ${c.doc ? `<p>${c.doc}</p>` : ""}
+        ${c.methods.length
+          ? `<div class="cbmethods">${c.methods.map(m =>
+              `<span>${m}</span>`).join("")}</div>` : ""}
+      </div>`).join("")}` : ""}
+    ${module && module.functions.length ? `
+      <div class="cbsec">functions</div>
+      <div class="hitwhy">${module.functions.map(f =>
+        `<span>${f}</span>`).join("")}</div>` : ""}
+    ${d ? `<div class="cbsec">source${d.truncated
+        ? " — first 4,000 lines" : ""}</div>
+      <pre class="cbsource">${d.text.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")}</pre>` : ""}
+    <button class="btn" id="cbBack">back to the overview</button>`;
+
+  const back = $("cbBack");
+  if (back) back.addEventListener("click", () =>
+    host.innerHTML = codebaseOverview(state.codebase.survey));
+}
 
 /* ============================== scouts ============================== */
 

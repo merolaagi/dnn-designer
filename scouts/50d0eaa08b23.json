@@ -1,0 +1,99 @@
+{
+ "id": "50d0eaa08b23",
+ "kind": "papers",
+ "goal": "unique steady state in compartmental model",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Round 1: as asked",
+   "detail": "unique steady state in compartmental model"
+  },
+  {
+   "at": 56.1,
+   "text": "   17 new papers; reading the most promising",
+   "detail": ""
+  },
+  {
+   "at": 57.2,
+   "text": "   kept \u201cAnalysis of a mathematical model for malaria using dat\u201d \u2014 30 passages stating a result",
+   "detail": ""
+  },
+  {
+   "at": 57.2,
+   "text": "Round 2: asking for a model of it",
+   "detail": "unique steady state compartmental model mathematical model"
+  },
+  {
+   "at": 113.5,
+   "text": "   3 new papers; reading the most promising",
+   "detail": ""
+  },
+  {
+   "at": 114.7,
+   "text": "Round 3: asking for the dynamics rather than the task",
+   "detail": "unique steady state compartmental model dynamical system stability"
+  },
+  {
+   "at": 170.5,
+   "text": "   2 new papers; reading the most promising",
+   "detail": ""
+  },
+  {
+   "at": 171.1,
+   "text": "Round 4: asking for a compartmental description",
+   "detail": "unique steady state compartmental model compartmental model steady state"
+  },
+  {
+   "at": 228.6,
+   "text": "   0 new papers; reading the most promising",
+   "detail": ""
+  },
+  {
+   "at": 228.6,
+   "text": "Round 5: asking straight for a well-posedness result",
+   "detail": "unique steady state compartmental model differential equation existence uniqueness"
+  },
+  {
+   "at": 284.7,
+   "text": "   2 new papers; reading the most promising",
+   "detail": ""
+  },
+  {
+   "at": 286.0,
+   "text": "1 papers read and found to state a result",
+   "detail": "Analysis of a mathematical model for malaria using data-driven approach."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "paper",
+   "title": "Analysis of a mathematical model for malaria using data-driven approach.",
+   "authors": "Rajnarayanan A, Kumar M, Tridane A.",
+   "year": "2025",
+   "journal": "Scientific reports",
+   "cited_by": 4,
+   "recurrence": 0,
+   "reasons": [
+    "maths: compartmental model, mathematical model, parameter estimation",
+    "supporting: equilibri",
+    "observational: epidemiolog"
+   ],
+   "why_group": "matched the question",
+   "doi": "10.1038/s41598-025-12078-4",
+   "text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12297371/fullTextXML",
+   "fit": 14.5,
+   "topic": 4,
+   "found_by": "as asked",
+   "query": "unique steady state in compartmental model",
+   "claims": 30,
+   "passages": 36,
+   "equations": 9,
+   "best": "In the study by Bhuju et al. , the temperature dependence of the transmission rate was analyzed using the SEIR model for humans and the LSEI model for mosquitoes. The authors conducted various mathematical analyses, including the stability of the disease-free equilibrium and the existence of the endemic equilibrium. Numerical simulations across different temperature scenarios revealed that tempera",
+   "score": 173.0
+  }
+ ],
+ "error": "",
+ "seconds": 286.0,
+ "kept_at": 1788996817.98384
+}

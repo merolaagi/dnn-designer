@@ -27,6 +27,7 @@ import advisor
 import assistant
 import auth
 import blockloader
+import codebase
 import codegen
 import importer
 import mathbook
@@ -838,6 +839,76 @@ def scout_stop(scout_id: str):
         raise HTTPException(404, detail="No such scout.")
     scout.stop.set()
     return {"stopping": True}
+
+
+CODEBASES = Path(__file__).resolve().parent / "codebases"
+
+
+@app.post("/api/codebase")
+async def codebase_upload(file: UploadFile = File(...)):
+    """Unpack an archive of source and describe what is in it."""
+    name = Path(file.filename or "project").name
+    stem = "".join(c for c in Path(name).stem if c.isalnum() or c in "-_")[:40]
+    slot = CODEBASES / (stem or "project")
+    codebase.forget(slot)
+    slot.mkdir(parents=True, exist_ok=True)
+    holding = slot / name
+    holding.write_bytes(await file.read())
+    try:
+        root = codebase.unpack(holding, slot / "src")
+    except codebase.ArchiveError as exc:
+        codebase.forget(slot)
+        raise HTTPException(400, detail={"message": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        codebase.forget(slot)
+        raise HTTPException(400, detail={
+            "message": f"Could not open it: {type(exc).__name__}: {exc}"})
+    finally:
+        if holding.exists():
+            holding.unlink()
+
+    (slot / "root.txt").write_text(str(root))
+    return {"id": stem or "project", "name": name,
+            "tree": codebase.tree_of(root), "survey": codebase.survey(root)}
+
+
+def _codebase_root(project: str) -> Path:
+    marker = CODEBASES / project / "root.txt"
+    if not marker.exists():
+        raise HTTPException(404, detail={"message": "That project is not open."})
+    return Path(marker.read_text().strip())
+
+
+@app.get("/api/codebase")
+def codebase_list():
+    out = []
+    if CODEBASES.exists():
+        for slot in sorted(CODEBASES.iterdir()):
+            if (slot / "root.txt").exists():
+                out.append({"id": slot.name})
+    return {"projects": out}
+
+
+@app.get("/api/codebase/{project}")
+def codebase_open(project: str):
+    root = _codebase_root(project)
+    return {"id": project, "tree": codebase.tree_of(root),
+            "survey": codebase.survey(root)}
+
+
+@app.get("/api/codebase/{project}/file")
+def codebase_file(project: str, path: str):
+    root = _codebase_root(project)
+    try:
+        return codebase.read_file(root, path)
+    except codebase.ArchiveError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.delete("/api/codebase/{project}")
+def codebase_forget(project: str):
+    codebase.forget(CODEBASES / project)
+    return {"forgotten": True}
 
 
 @app.post("/api/trace")

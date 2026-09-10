@@ -1267,6 +1267,89 @@ def _():
     scouts.forget(scout.id)
 
 
+@check("an archive of source can be laid out and described")
+def _():
+    """Reading somebody else's project is not the same job as importing a
+    model. The importer looks for nn.Module subclasses; pointed at a research
+    engine it finds nothing and says nothing useful, because most code is not a
+    neural network.
+
+    What is checked here is that nothing is executed, that the totals are not
+    quietly wrong, and that an archive cannot write outside its own folder.
+    """
+    import tarfile
+    import tempfile
+    import zipfile
+
+    import codebase
+
+    work = Path(tempfile.mkdtemp())
+
+    # a small project with a deliberate import cycle and a file that will not
+    # parse: both are things the survey must report rather than hide
+    src = work / "proj"
+    (src / "pkg").mkdir(parents=True)
+    (src / "pkg" / "__init__.py").write_text("")
+    (src / "pkg" / "a.py").write_text(
+        "from pkg import b\n\nclass Alpha:\n    def go(self):\n        pass\n")
+    (src / "pkg" / "b.py").write_text("from pkg import a\n\ndef helper():\n    pass\n")
+    (src / "pkg" / "broken.py").write_text("def oops(:\n")
+    (src / "pkg" / "__pycache__").mkdir()
+    (src / "pkg" / "__pycache__" / "a.cpython-311.pyc").write_text("junk")
+
+    bundle = work / "proj.zip"
+    with zipfile.ZipFile(bundle, "w") as z:
+        for path in src.rglob("*"):
+            if path.is_file():
+                z.write(path, str(path.relative_to(work)))
+
+    root = codebase.unpack(bundle, work / "out")
+    survey = codebase.survey(root)
+
+    assert survey["totals"]["files"] == 4, survey["totals"]
+    assert survey["totals"]["classes"] == 1, survey["totals"]
+    assert survey["unparsed"] == ["pkg/broken.py"], \
+        "a file that will not parse was skipped instead of reported"
+    assert survey["cycles"], "the import cycle was not found"
+
+    # compiled leftovers are not the codebase
+    tree = codebase.tree_of(root)
+
+    def names(node):
+        yield node["name"]
+        for child in node.get("children", []):
+            yield from names(child)
+
+    assert "__pycache__" not in set(names(tree))
+
+    # an archive must not be able to write outside its folder
+    escape = work / "escape.zip"
+    with zipfile.ZipFile(escape, "w") as z:
+        z.writestr("../../owned.txt", "no")
+    try:
+        codebase.unpack(escape, work / "out2")
+        raise AssertionError("a path-traversal archive was extracted")
+    except codebase.ArchiveError as exc:
+        assert "outside its folder" in str(exc), exc
+    assert not (work.parent / "owned.txt").exists()
+
+    # and neither can a request for a file outside it
+    try:
+        codebase.read_file(root, "../../../etc/passwd")
+        raise AssertionError("a file outside the project was read")
+    except codebase.ArchiveError:
+        pass
+
+    # nothing in here runs the code
+    body = inspect.getsource(codebase)
+    for forbidden in ("exec(", "eval(", "subprocess", "__import__"):
+        assert forbidden not in body, f"{forbidden} appears in the reader"
+
+    for token in ("function renderCodebasePage", "function treeHtml",
+                  'id="pageCodebase"'):
+        assert token in PAGE, f"{token} is missing from the codebase page"
+
+
 @check("a scout verifies what it finds rather than describing it")
 def _():
     """The useful thing about a scout here is not that it can search — anyone
