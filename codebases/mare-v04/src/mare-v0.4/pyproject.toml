@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mare-research-engine"
+version = "0.4.0"
+description = "MARE: a small, evidence-driven multi-agent mathematical research engine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.8",
+  "numpy>=2.0",
+  "sympy>=1.13",
+  "openai>=1.100",
+  "langgraph>=0.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+postgres = ["psycopg[binary]>=3.2", "pgvector>=0.3"]
+
+[project.scripts]
+mare = "mare.cli:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mare"]

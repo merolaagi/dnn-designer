@@ -1,0 +1,13 @@
+MARE neural policy for RUN-5eed98e717
+enabled: True
+labeled branch examples: 7
+labeled question examples: 3
+branch network: active=True hidden=10 trained=7 loss=0.13309100881137054
+question network: active=True hidden=10 trained=3 loss=0.00908874011988088
+
+Current branch decisions:
+  Failure reconciliation   final=0.921 heuristic=1.000 neural=0.594@0.20
+  Synthesis                final=0.920 heuristic=1.000 neural=0.588@0.20
+  Gradient dynamics        final=0.886 heuristic=0.959 neural=0.585@0.20
+  Characteristics          final=0.874 heuristic=0.944 neural=0.587@0.20
+  Energy mechanism         final=0.110 heuristic=0.000 neural=0.565@0.20

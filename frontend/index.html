@@ -1206,6 +1206,13 @@ i.covered{
   font-family:var(--mono);font-size:9.5px;background:var(--paper-2);
   border-radius:4px;padding:1px 6px;color:#3C4453;
 }
+.cbmap{
+  margin-top:10px;background:#FBFCFD;border:1px solid var(--paper-3);
+  border-radius:9px;overflow:auto;max-height:66vh;
+}
+.cbnode{cursor:pointer}
+.cbnode:hover rect{fill:#FFFDF7;stroke:var(--amber)}
+.cbacts{display:flex;gap:8px;margin-top:12px}
 .cbsource{
   margin:0;padding:11px 13px;background:#12161D;color:#C6D0DB;border-radius:8px;
   font-family:var(--mono);font-size:10.5px;line-height:1.6;max-height:52vh;
@@ -5130,7 +5137,9 @@ function paintCodebase(d){
     </div>`;
 
   $("cbBody").querySelectorAll("[data-cbfile]").forEach(row =>
-    row.addEventListener("click", () => showCodeFile(row.dataset.cbfile)));
+    row.addEventListener("click", () => showFileDiagram(row.dataset.cbfile)));
+  const seeMap = $("cbSeeMap");
+  if (seeMap) seeMap.addEventListener("click", showModuleMap);
   $("cbBody").querySelectorAll("[data-cbdir]").forEach(row =>
     row.addEventListener("click", () => {
       row.parentElement.classList.toggle("shut");
@@ -5149,9 +5158,156 @@ function treeHtml(node, depth){
     ${(node.children || []).map(c => treeHtml(c, depth + 1)).join("")}</div>`;
 }
 
+/* The project as a picture, and each file as a picture. Deliberately not the
+   design canvas: that graph carries shapes and parameter counts and generates
+   PyTorch from them, and a Python module has none of those. Drawing them in
+   the same place would make every check on the canvas meaningless. */
+async function showModuleMap(){
+  const host = $("cbDetail");
+  host.innerHTML = `<div class="empty" style="padding:12px">drawing the map…</div>`;
+  let d;
+  try{
+    d = await (await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/map`)).json();
+  } catch { host.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  state.cbMap = d;
+
+  // rank the modules by how much depends on them: the ones everything imports
+  // belong at the bottom, the entry points at the top
+  const fanIn = {};
+  d.nodes.forEach(n => fanIn[n.id] = 0);
+  d.edges.forEach(e => fanIn[e.to] = (fanIn[e.to] || 0) + 1);
+  const order = d.nodes.slice().sort((a, b) => fanIn[b.id] - fanIn[a.id]);
+  const columns = 4;
+  const place = {};
+  order.forEach((n, i) => {
+    place[n.id] = { x: 30 + (i % columns) * 250,
+                    y: 30 + Math.floor(i / columns) * 74 };
+  });
+  const height = 60 + Math.ceil(order.length / columns) * 74;
+
+  host.innerHTML = `
+    <div class="cbfilehead"><b>every module</b>
+      <span>${d.nodes.length} modules · ${d.edges.length} imports ·
+      ${d.cycles.length} cycles</span></div>
+    <p class="mathnote">Ordered by how many modules import them: the ones
+    everything depends on come first. Click one to see inside it.</p>
+    <div class="cbmap"><svg viewBox="0 0 1030 ${height}" width="100%"
+        height="${height}">
+      ${d.edges.map(e => {
+        const a = place[e.from], b = place[e.to];
+        if (!a || !b) return "";
+        return `<path d="M${a.x + 100} ${a.y + 34} C${a.x + 100} ${a.y + 60},
+          ${b.x + 100} ${b.y - 20}, ${b.x + 100} ${b.y}"
+          fill="none" stroke="#CBD5E1" stroke-width="1"/>`;
+      }).join("")}
+      ${order.map(n => `
+        <g class="cbnode" data-cbopen="${n.path}">
+          <rect x="${place[n.id].x}" y="${place[n.id].y}" width="200" height="34"
+            rx="7" fill="#fff" stroke="${fanIn[n.id] > 5 ? "#8A5CF6" : "#CBD5E1"}"
+            stroke-width="${fanIn[n.id] > 5 ? 1.6 : 1}"/>
+          <text x="${place[n.id].x + 10}" y="${place[n.id].y + 15}"
+            font-size="10.5" fill="#16202E">${n.id}</text>
+          <text x="${place[n.id].x + 10}" y="${place[n.id].y + 27}"
+            font-size="9" fill="#8A94A2">${n.lines} lines · ${n.classes} classes
+            · imported by ${fanIn[n.id]}</text>
+        </g>`).join("")}
+    </svg></div>`;
+
+  host.querySelectorAll("[data-cbopen]").forEach(g =>
+    g.addEventListener("click", () => showFileDiagram(g.dataset.cbopen)));
+}
+
+async function showFileDiagram(path){
+  const host = $("cbDetail");
+  host.innerHTML = `<div class="empty" style="padding:12px">reading ${path}…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/diagram?path=` + encodeURIComponent(path));
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "It would not draw"}</div>`;
+    return;
+  }
+
+  const classes = d.nodes.filter(n => n.kind === "class");
+  const loose = d.nodes.filter(n => n.kind === "function");
+  const place = {};
+  let y = 34;
+  classes.forEach(c => {
+    place[c.id] = { x: 30, y, w: 250 };
+    y += 30;
+    d.nodes.filter(n => n.parent === c.id).forEach(m => {
+      place[m.id] = { x: 60, y, w: 220 };
+      y += 26;
+    });
+    y += 12;
+  });
+  loose.forEach(f => { place[f.id] = { x: 30, y, w: 250 }; y += 28; });
+  const height = y + 20;
+
+  host.innerHTML = `
+    <div class="cbfilehead"><b>${path}</b>
+      <span>${d.nodes.length} definitions · ${d.edges.length} calls drawn</span></div>
+    ${d.edges.length === 0 && d.unresolved
+      ? `<div class="paperwarn">No call could be drawn with certainty, though
+         ${d.unresolved} calls are made through variables — <span
+         class="mono">self.provider.run()</span> and the like. Which object
+         that is cannot be known without running the program, so nothing is
+         drawn rather than guessed.</div>`
+      : d.unresolved
+        ? `<p class="mathnote">${d.edges.length} calls drawn.
+           ${d.unresolved} more go through variables and cannot be resolved
+           without running the program, so they are left out.</p>`
+        : ""}
+    <div class="cbmap"><svg viewBox="0 0 620 ${height}" width="100%"
+        height="${height}">
+      ${d.edges.map(e => {
+        const a = place[e.from], b = place[e.to];
+        if (!a || !b) return "";
+        const bend = 330 + Math.min(90, Math.abs(a.y - b.y) / 2);
+        return `<path d="M${a.x + a.w} ${a.y + 11} C${bend} ${a.y + 11},
+          ${bend} ${b.y + 11}, ${b.x + b.w} ${b.y + 11}"
+          fill="none" stroke="#8A5CF6" stroke-width="1" opacity=".55"/>`;
+      }).join("")}
+      ${d.nodes.map(n => {
+        const at = place[n.id];
+        if (!at) return "";
+        const fill = n.kind === "class" ? "#F4F1FE"
+                   : n.kind === "method" ? "#fff" : "#FFFDF7";
+        return `<g>
+          <rect x="${at.x}" y="${at.y}" width="${at.w}" height="22" rx="6"
+            fill="${fill}" stroke="#CBD5E1"/>
+          <text x="${at.x + 9}" y="${at.y + 15}" font-size="10.5"
+            fill="#16202E" font-weight="${n.kind === "class" ? 600 : 400}">
+            ${n.name}</text>
+          <text x="${at.x + at.w - 9}" y="${at.y + 15}" font-size="8.5"
+            text-anchor="end" fill="#98A6B8">${n.kind} · line ${n.line}</text>
+        </g>`;
+      }).join("")}
+    </svg></div>
+    ${(d.reaches || []).length ? `
+      <div class="cbsec">this file reaches into</div>
+      <div class="hitwhy">${d.reaches.map(m =>
+        `<span>${m}</span>`).join("")}</div>` : ""}
+    <div class="cbacts">
+      <button class="btn" id="cbMapBack">the whole map</button>
+      <button class="btn" id="cbSrc">its source</button>
+    </div>`;
+
+  $("cbMapBack").addEventListener("click", showModuleMap);
+  $("cbSrc").addEventListener("click", () => showCodeFile(path));
+}
+
 function codebaseOverview(s){
   const cycles = s.cycles || [];
   return `
+    <div class="cbacts" style="margin-bottom:12px">
+      <button class="btn go" id="cbSeeMap">Draw every module</button>
+    </div>
     <div class="cbsec">what depends on what</div>
     ${cycles.length
       ? `<div class="paperwarn"><b>${cycles.length} import cycle${
@@ -5232,11 +5388,10 @@ async function showCodeFile(path){
         ? " — first 4,000 lines" : ""}</div>
       <pre class="cbsource">${d.text.replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")}</pre>` : ""}
-    <button class="btn" id="cbBack">back to the overview</button>`;
+    <button class="btn" id="cbBack">back to its diagram</button>`;
 
   const back = $("cbBack");
-  if (back) back.addEventListener("click", () =>
-    host.innerHTML = codebaseOverview(state.codebase.survey));
+  if (back) back.addEventListener("click", () => showFileDiagram(path));
 }
 
 /* ============================== scouts ============================== */

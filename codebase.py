@@ -162,6 +162,7 @@ def read_module(path: Path, root: Path) -> Module:
 
 def tree_of(root: Path) -> Dict[str, Any]:
     """The folder structure, with the noise left out."""
+    root = root.resolve()
 
     def walk(here: Path) -> Dict[str, Any]:
         kids = []
@@ -187,6 +188,7 @@ def tree_of(root: Path) -> Dict[str, Any]:
 
 def survey(root: Path) -> Dict[str, Any]:
     """Everything that can be said without running any of it."""
+    root = root.resolve()
     modules: List[Module] = []
     for path in sorted(root.rglob("*.py")):
         if any(part in NOISE for part in path.parts):
@@ -276,9 +278,137 @@ def _cycles(own: Dict[str, Module], edges: List[Dict[str, str]]) -> List[List[st
     return found[:12]
 
 
-def read_file(root: Path, relative: str, limit: int = 4000) -> Dict[str, Any]:
+def diagram(root: Path, relative: str, own: Optional[Set[str]] = None
+            ) -> Dict[str, Any]:
+    """One file as a flowchart: what it defines and what calls what.
+
+    This is not the design canvas and must not be. That graph carries shapes
+    and parameter counts and generates PyTorch from them; a Python module has
+    none of those, and putting one there would make every check downstream
+    meaningless. It is drawn separately, and the difference is the point.
+
+    Edges are calls found by reading the syntax. A call made through a variable
+    — `self.provider.run()` where the provider was passed in — cannot be
+    resolved without running the program, so it is not drawn. What is drawn is
+    what is certain.
+    """
+    # Resolve both, or neither. On macOS /var/folders is a symlink to
+    # /private/var/folders, so resolving the file and not the root makes them
+    # look like different trees and every relative_to() fails.
+    root = root.resolve()
     target = (root / relative).resolve()
-    if root.resolve() not in target.parents and target != root.resolve():
+    if root != target and root not in target.parents:
+        raise ArchiveError("That path is outside the project.")
+    if not target.exists() or target.suffix != ".py":
+        raise ArchiveError("That is not a Python file in this project.")
+    source = target.read_text(errors="replace")
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        raise ArchiveError(f"It does not parse: line {exc.lineno}: {exc.msg}")
+
+    nodes: List[Dict[str, Any]] = []
+    defined: Dict[str, str] = {}          # callable name -> node id
+
+    def add(kind: str, name: str, line: int, parent: str = "",
+            detail: str = "") -> str:
+        nid = f"n{len(nodes)}"
+        nodes.append({"id": nid, "kind": kind, "name": name, "line": line,
+                      "parent": parent, "detail": detail})
+        defined.setdefault(name, nid)
+        return nid
+
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            cid = add("class", node.name, node.lineno,
+                      detail=", ".join(ast.unparse(b) for b in node.bases)[:60])
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    add("method", item.name, item.lineno, parent=cid)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            add("function", node.name, node.lineno)
+
+    by_id = {n["id"]: n for n in nodes}
+    edges: List[Dict[str, Any]] = []
+    seen: Set[tuple] = set()
+
+    def calls_in(body, holder: str) -> None:
+        for inner in ast.walk(ast.Module(body=body, type_ignores=[])):
+            if not isinstance(inner, ast.Call):
+                continue
+            func = inner.func
+            name = ""
+            if isinstance(func, ast.Name):
+                name = func.id
+            elif isinstance(func, ast.Attribute):
+                # self.foo() is certain; anything.foo() is not
+                if isinstance(func.value, ast.Name) and func.value.id == "self":
+                    name = func.attr
+                else:
+                    continue
+            if name in defined and defined[name] != holder:
+                key = (holder, defined[name])
+                if key not in seen:
+                    seen.add(key)
+                    edges.append({"from": holder, "to": defined[name]})
+
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    holder = next((n["id"] for n in nodes
+                                   if n["name"] == item.name
+                                   and n["line"] == item.lineno), "")
+                    if holder:
+                        calls_in(item.body, holder)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            holder = next((n["id"] for n in nodes
+                           if n["name"] == node.name
+                           and n["line"] == node.lineno), "")
+            if holder:
+                calls_in(node.body, holder)
+
+    module = read_module(target, root)
+    # Resolve to modules and deduplicate: `from mare.models import X, Y, Z`
+    # reaches one module, not four, and listing the symbols made a file look
+    # far more entangled than it is.
+    here = _module_name(target, root)
+    lookup = {k: None for k in (own or set())}
+    reaches = sorted({_resolve(t, lookup) for t in module.imports
+                      if own and _resolve(t, lookup)} - {here})
+    return {"path": relative, "nodes": nodes, "edges": edges,
+            "reaches": reaches[:12],
+            "unresolved": _unresolved_calls(tree, defined)}
+
+
+def _unresolved_calls(tree: ast.AST, defined: Dict[str, str]) -> int:
+    """How many calls could not be drawn, so the diagram admits its gaps."""
+    total = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if not (isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "self"):
+                total += 1
+    return total
+
+
+def module_map(root: Path) -> Dict[str, Any]:
+    """The project as a graph of modules: who imports whom."""
+    root = root.resolve()
+    facts = survey(root)
+    nodes = []
+    for module in facts["modules"]:
+        name = _module_name(root / module["path"], root)
+        nodes.append({"id": name, "path": module["path"], "lines": module["lines"],
+                      "classes": len(module["classes"]),
+                      "functions": len(module["functions"])})
+    return {"nodes": nodes, "edges": facts["edges"], "cycles": facts["cycles"]}
+
+
+def read_file(root: Path, relative: str, limit: int = 4000) -> Dict[str, Any]:
+    root = root.resolve()
+    target = (root / relative).resolve()
+    if root != target and root not in target.parents:
         raise ArchiveError("That path is outside the project.")
     if not target.exists() or target.is_dir():
         raise ArchiveError("No such file in this project.")

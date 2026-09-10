@@ -1,0 +1,60 @@
+MARE run: RUN-5eed98e717
+Problem: Inviscid Burgers finite-time gradient blow-up
+Rounds: 2
+Model invocations: 31
+Budget: model_calls=31/250 reserved_output_tokens=124000/1000000 tool_calls=7/2000
+
+Branches:
+  Failure reconciliation   score=0.921 heuristic=1.000 neural=0.594@0.20 status=promising     progress=1.00
+  Synthesis                score=0.920 heuristic=1.000 neural=0.588@0.20 status=promising     progress=1.00
+  Gradient dynamics        score=0.886 heuristic=0.959 neural=0.585@0.20 status=promising     progress=1.00
+  Characteristics          score=0.874 heuristic=0.944 neural=0.587@0.20 status=promising     progress=1.00
+  Energy mechanism         score=0.110 heuristic=0.000 neural=0.565@0.20 status=terminated    progress=0.50
+
+Research questions:
+  [answered  ] p=0.790 heuristic=0.790 Q-ed0f4500e5: How can conserved L2 energy coexist with unbounded spatial gradients?
+  [answered  ] p=0.676 heuristic=0.676 Q-e794aa4680: Can the first zero of the characteristic Jacobian determine the earliest singular time exactly?
+  [answered  ] p=0.653 heuristic=0.653 Q-6166c0d574: Does the Riccati blow-up mechanism require only the existence of one negative initial derivative?
+  [open      ] p=0.509 heuristic=0.465 neural=0.911@0.10 Q-32b4a98f17: Which stronger norm would control the gradient while remaining compatible with Burgers scaling?
+
+Claims:
+  [verified        ] C-07d5d25f1c: For inviscid Burgers, characteristics satisfy x(t)=xi+t*u0(xi) and u(x(t),t)=u0(xi).
+      - scope-audit/pass: Auxiliary assumptions reviewed against immutable problem scope.
+      - supports: sympy:burgers_characteristic_jacobian — Characteristic Jacobian check residual is 0.
+  [verified        ] C-a64c9a72bd: Along a Burgers characteristic, w=u_x obeys w'=-w^2 and hence w(t)=w0/(1+t*w0).
+      - scope-audit/pass: Auxiliary assumptions reviewed against immutable problem scope.
+      - supports: sympy:riccati_solution — Residual d/dt(w)+w^2 simplifies to 0.
+  [rejected        ] C-b1c2860e98: Finite-time Burgers gradient blow-up is caused by unbounded growth of the L2 energy of u.
+      - scope-audit/pass: Auxiliary assumptions reviewed against immutable problem scope.
+      - contradicts: sympy:burgers_l2_energy — For smooth solutions before singularity, u^2 u_x=(u^3/3)_x, so the spatial integral is a boundary term and L2 energy is conserved under periodic/decaying conditions.
+      - objection/fatal: For smooth decaying/periodic inviscid Burgers solutions before shock formation, the L2 energy is conserved; gradient blow-up does not require L2 divergence.
+  [verified        ] C-79ffe4fe0d: If min_x u0'(x)=m<0, the classical inviscid Burgers solution develops gradient blow-up no later than T=-1/m, when the characteristic map loses invertibility.
+      - requires: C-07d5d25f1c, C-a64c9a72bd
+      - scope-audit/pass: Root candidate matches the immutable problem scope.
+      - supports: sympy:blowup_time_consistency — At T=-1/m, 1+T*m simplifies to 0.
+  [verified        ] C-c28e66c670: Conservation of the L2 norm is compatible with unbounded spatial gradients; L2 control of u alone does not control u_x.
+      - scope-audit/pass: Auxiliary assumptions reviewed against immutable problem scope.
+      - supports: sympy:energy_gradient_separation — For u_n=sin(nx), integral_0^(2pi) u_n^2 dx = pi, while u_n'(0) = n.
+  [verified        ] C-8a8cdc723b: If m=min_x u0'(x)<0, the earliest characteristic-Jacobian degeneracy occurs at T=-1/m.
+      - scope-audit/pass: Auxiliary assumptions reviewed against immutable problem scope.
+      - supports: sympy:blowup_time_consistency — At T=-1/m, 1+T*m simplifies to 0.
+  [verified        ] C-a883046c61: A Burgers characteristic with initial slope w0<0 has w(t)=w0/(1+t w0) and its gradient diverges at t=-1/w0.
+      - scope-audit/pass: Auxiliary assumptions reviewed against immutable problem scope.
+      - supports: sympy:riccati_solution — Residual d/dt(w)+w^2 simplifies to 0.
+
+Reusable failures:
+  F-422c4efe86: Do not infer derivative singularity from divergence of a conserved global L2 norm.
+
+Candidate proof roots:
+  C-79ffe4fe0d: completeness=100.0% status=verified unresolved=0 formalization_ready=True
+
+Neural research policy:
+  enabled=True branch_examples=7 question_examples=3 max_blend=0.65
+  branch_net: active=True trained=7 loss=0.13309100881137054
+  question_net: active=True trained=3 loss=0.00908874011988088
+
+Synthesis:
+  - Characteristics + gradient dynamics jointly identify the singular time.
+  - Two independently useful branches combine into the benchmark result.
+
+Summary: verified=6 rejected=1 scope_blocked=0 failures=1 questions=4 dependency_edges=2 sources=0

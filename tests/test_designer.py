@@ -1267,6 +1267,83 @@ def _():
     scouts.forget(scout.id)
 
 
+@check("a file becomes a diagram, and only of calls it is sure about")
+def _():
+    """A call through a variable — self.provider.run(), where the provider was
+    passed in — cannot be resolved without running the program. Drawing it
+    would mean guessing which object it is, so it is counted and left out
+    rather than invented.
+
+    And this is not the design canvas: that graph carries shapes and parameter
+    counts and generates PyTorch from them. A Python module has neither.
+    """
+    import tempfile
+
+    import codebase
+
+    # Reach the project through a symlink, which is what a macOS temporary
+    # directory is: /var/folders is a link to /private/var/folders. Resolving
+    # the file but not the root made them look like different trees, and every
+    # relative_to() raised. Linux does not reproduce it without this.
+    import os
+
+    base = Path(tempfile.mkdtemp())
+    real = base / "real"
+    (real / "proj").mkdir(parents=True)
+    link = base / "link"
+    try:
+        os.symlink(real, link)
+        root = link / "proj"
+    except (OSError, NotImplementedError):
+        root = real / "proj"          # a platform without symlinks
+    work = base
+    (root / "m.py").write_text(
+        "class Engine:\n"
+        "    def run(self):\n"
+        "        self.step()\n"
+        "        self.provider.call()\n"
+        "        helper()\n"
+        "    def step(self):\n"
+        "        pass\n"
+        "\n"
+        "def helper():\n"
+        "    pass\n")
+
+    d = codebase.diagram(root, "m.py", {"m"})
+    kinds = {n["name"]: n["kind"] for n in d["nodes"]}
+    assert kinds == {"Engine": "class", "run": "method", "step": "method",
+                     "helper": "function"}, kinds
+
+    by_name = {n["name"]: n["id"] for n in d["nodes"]}
+    drawn = {(e["from"], e["to"]) for e in d["edges"]}
+    assert (by_name["run"], by_name["step"]) in drawn, \
+        "self.step() is certain and was not drawn"
+    assert (by_name["run"], by_name["helper"]) in drawn, \
+        "a call to a module-level function was not drawn"
+    assert d["unresolved"] >= 1, \
+        "self.provider.call() was not counted as undrawable"
+    assert len(drawn) == 2, f"something was invented: {drawn}"
+
+    # the map is the same graph the survey found
+    (root / "n.py").write_text("from m import Engine\n")
+    mapped = codebase.module_map(root)
+    assert {n["id"] for n in mapped["nodes"]} == {"m", "n"}
+    assert {"from": "n", "to": "m"} in mapped["edges"]
+
+    # the page draws both, and says what it left out
+    for token in ("function showModuleMap", "function showFileDiagram",
+                  "cannot be resolved"):
+        assert token in PAGE, f"{token} is missing"
+
+    # and it must not put any of this on the design canvas
+    drawer = PAGE[PAGE.index("async function showFileDiagram"):]
+    drawer = drawer[: drawer.index("\nfunction codebaseOverview")]
+    assert 'showPage("pageDesign")' not in drawer, \
+        "a module diagram is being pushed onto the tensor canvas"
+    assert "state.graph" not in drawer, \
+        "the module diagram touches the design graph"
+
+
 @check("an archive of source can be laid out and described")
 def _():
     """Reading somebody else's project is not the same job as importing a

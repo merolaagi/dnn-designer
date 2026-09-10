@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: mare
+      POSTGRES_PASSWORD: mare
+      POSTGRES_DB: mare
+    ports:
+      - "5432:5432"
+    volumes:
+      - mare_pg:/var/lib/postgresql/data
+
+volumes:
+  mare_pg:

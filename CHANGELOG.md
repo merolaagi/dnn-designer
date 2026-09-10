@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.65.1
+
+**Fixed: the codebase reader broke on any path through a symlink.**
+
+On macOS `/var/folders` is a symlink to `/private/var/folders`. The reader
+resolved the *file* but not the *root*, so the two looked like different trees
+and every `relative_to()` raised:
+
+```text
+'/private/var/.../proj/m.py' is not in the subpath of '/var/.../proj'
+```
+
+Both are resolved now, or neither, in all five places that walk the tree. Linux
+does not reproduce this by accident, so the test now reaches the project through
+a symlink deliberately — and the path-escape refusal is checked in the same
+place, because resolving more paths is exactly the change that could have
+weakened it.
+
+This is why the suite runs on your machine as well as mine: it is a real
+platform difference, and it would have hit any project reached through a linked
+directory, not only a temporary one.
+
+## 1.65.0
+
+**A codebase becomes diagrams.** Two of them.
+
+**Every module, as one picture.** Each module a box, each import a line,
+ordered so the most depended-upon come first and the entry points last. The
+ones more than five modules import are outlined in purple. Click any box to go
+inside it. On MARE v0.3: 34 modules, 247 imports, no cycles, with `mare.models`
+sitting at the bottom where 114 references land.
+
+**Each file, as its own diagram.** Classes with their methods indented beneath
+them, module-level functions below, and a line for every call one makes to
+another.
+
+**Only the calls it is sure about.** `self.step()` is certain and is drawn.
+`self.provider.run()` is not — which object that provider is cannot be known
+without running the program, and drawing it would mean guessing. Those are
+counted and reported instead: MARE's `agents.py` draws no edges at all and says
+so, because all 29 of its calls go through injected providers. That is a true
+fact about the design, and a diagram that invented arrows would have hidden it.
+
+**It is deliberately not the design canvas.** That graph carries shapes and
+parameter counts and generates PyTorch from them; a Python module has neither,
+and putting one there would make every check downstream meaningless. A test
+asserts the module diagrams never touch `state.graph` or open the canvas.
+
+Fixed while building: `from mare.models import A, B, C` was listing three
+symbols as three modules reached, making every file look far more entangled
+than it is.
+
 ## 1.64.0
 
 **Read a codebase.** Open a zip or tar of source and see what is in it: the

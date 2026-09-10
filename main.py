@@ -905,6 +905,22 @@ def codebase_file(project: str, path: str):
         raise HTTPException(400, detail={"message": str(exc)})
 
 
+@app.get("/api/codebase/{project}/map")
+def codebase_map(project: str):
+    return codebase.module_map(_codebase_root(project))
+
+
+@app.get("/api/codebase/{project}/diagram")
+def codebase_diagram(project: str, path: str):
+    root = _codebase_root(project)
+    own = {codebase._module_name(root / m["path"], root)
+           for m in codebase.survey(root)["modules"]}
+    try:
+        return codebase.diagram(root, path, own)
+    except codebase.ArchiveError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
 @app.delete("/api/codebase/{project}")
 def codebase_forget(project: str):
     codebase.forget(CODEBASES / project)
