@@ -39,6 +39,7 @@ import graph as G
 import workbook
 import quantize as quant
 import scouts
+import watcher
 import tracer
 import train as T
 import walkthrough as walk
@@ -919,6 +920,35 @@ def codebase_diagram(project: str, path: str):
         return codebase.diagram(root, path, own)
     except codebase.ArchiveError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
+
+
+class WatchPayload(BaseModel):
+    entry: str
+    seconds: int = 20
+
+
+@app.get("/api/codebase/{project}/entries")
+def codebase_entries(project: str):
+    return {"entries": watcher.entry_points(_codebase_root(project))}
+
+
+@app.post("/api/codebase/{project}/run")
+def codebase_run(project: str, body: WatchPayload):
+    """Run the project and record what called what.
+
+    This executes the uploaded code. It is never automatic and never in this
+    process, but a subprocess with a timeout stops an accident rather than an
+    attacker — the endpoint exists because the alternative, guessing at the
+    calls that go through variables, is worse than saying plainly what this
+    does.
+    """
+    root = _codebase_root(project)
+    entry = (body.entry or "").strip()
+    if not entry:
+        raise HTTPException(400, detail={"message": "Name something to run."})
+    if ".." in entry or entry.startswith("/"):
+        raise HTTPException(400, detail={"message": "That is not inside the project."})
+    return watcher.watch(root, entry, seconds=body.seconds)
 
 
 @app.delete("/api/codebase/{project}")

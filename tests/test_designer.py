@@ -1267,6 +1267,98 @@ def _():
     scouts.forget(scout.id)
 
 
+@check("running a codebase records the calls reading cannot see")
+def _():
+    """`self.provider.run()` cannot be resolved by reading, and in a
+    well-designed system that is most of the interesting calls. Running it
+    answers the other half — at the cost of running somebody's code, which is
+    why it happens in a subprocess, on request, with a timeout.
+    """
+    import tempfile
+
+    import watcher
+
+    work = Path(tempfile.mkdtemp())
+    proj = work / "proj"
+    proj.mkdir()
+    (proj / "engine.py").write_text(
+        "class Provider:\n"
+        "    def call(self):\n"
+        "        return 1\n"
+        "class Engine:\n"
+        "    def __init__(self, provider):\n"
+        "        self.provider = provider\n"
+        "    def run(self):\n"
+        "        self.step()\n"
+        "        return self.provider.call()\n"
+        "    def step(self):\n"
+        "        return 0\n"
+        "def helper():\n"
+        "    return Engine(Provider()).run()\n"
+        'if __name__ == "__main__":\n'
+        "    helper()\n")
+
+    result = watcher.watch(proj, "engine.py", seconds=30)
+    assert result["status"] == "ran", result
+    pairs = {(e["from"], e["to"]) for e in result["edges"]}
+
+    # the edge that reading cannot draw
+    assert ("Engine.run", "Provider.call") in pairs, \
+        f"the call through the injected provider was not recorded: {pairs}"
+    assert ("Engine.run", "Engine.step") in pairs
+
+    # and nothing from outside the project: "<frozen runpy>" resolved against
+    # the working directory once made every runpy frame look like project code
+    for edge in result["edges"]:
+        assert not edge["from_file"].startswith("<"), edge
+        assert ".." not in edge["from_file"], edge
+    assert all("runpy" not in e["from_file"] for e in result["edges"]), \
+        "the machinery that started the program is in the trace"
+
+    body = inspect.getsource(watcher)
+    assert "subprocess.run" in body, "it does not use a subprocess"
+    assert "timeout=seconds" in body, "there is no timeout"
+    assert "exec(" not in body.replace("subprocess", ""), \
+        "generated code is executed in this process somewhere"
+
+    # a run that never ends is stopped and says so, rather than returning empty
+    slow = proj / "slow.py"
+    slow.write_text("import time\nwhile True:\n    time.sleep(0.1)\n")
+    stopped = watcher.watch(proj, "slow.py", seconds=2)
+    assert stopped["status"] == "timeout", stopped["status"]
+    assert "stopped" in stopped["detail"], stopped["detail"]
+
+    # the page has to say what running it does and does not protect against
+    assert "This runs the code" in PAGE
+    assert "not an attacker" in PAGE, \
+        "it implies the subprocess is a sandbox"
+    assert "observed, not inferred" in PAGE
+
+    import main
+
+    assert "codebase_run" in dir(main)
+
+
+@check("a codebase diagram can be rearranged")
+def _():
+    """A layout is a guess at a readable arrangement, and a guess is often
+    wrong. Being able to pull two boxes apart is the difference between a
+    picture and a diagram."""
+    assert "function makeDraggable" in PAGE
+    drag = PAGE[PAGE.index("function makeDraggable"):]
+    drag = drag[: drag.index("\nasync function showFileDiagram")]
+    assert "pointerdown" in drag and "pointermove" in drag
+    assert "holding.moved" in drag, \
+        "a drag would also count as a click and open the file"
+
+    # the same squared paper as the design canvas
+    assert ".cbmap{" in PAGE
+    style = PAGE[PAGE.index(".cbmap{"):]
+    style = style[: style.index("}")]
+    assert "url(" in style and "svg+xml" in style, \
+        "the diagram surface is not the squared paper"
+
+
 @check("a file becomes a diagram, and only of calls it is sure about")
 def _():
     """A call through a variable — self.provider.run(), where the provider was

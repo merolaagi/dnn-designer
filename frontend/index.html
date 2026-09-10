@@ -1207,12 +1207,34 @@ i.covered{
   border-radius:4px;padding:1px 6px;color:#3C4453;
 }
 .cbmap{
-  margin-top:10px;background:#FBFCFD;border:1px solid var(--paper-3);
-  border-radius:9px;overflow:auto;max-height:66vh;
+  margin-top:10px;border:1px solid var(--paper-3);border-radius:9px;
+  overflow:auto;max-height:66vh;
+  /* the same squared paper as the design canvas, so the two read as the same
+     kind of surface even though what they hold is not the same kind of thing */
+  background:var(--paper) url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'>\
+<path d='M20 0H0v20' fill='none' stroke='%23E4E9F0' stroke-width='1'/></svg>");
 }
+.cbmap svg{cursor:default}
+.cbnode.dragging rect{stroke:var(--amber);stroke-width:2}
 .cbnode{cursor:pointer}
 .cbnode:hover rect{fill:#FFFDF7;stroke:var(--amber)}
-.cbacts{display:flex;gap:8px;margin-top:12px}
+.cbacts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.cbrun{
+  margin-top:12px;padding:12px 14px;border-radius:9px;background:#FFF8E9;
+  border:1px solid #E8D9AE;
+}
+.cbrun b{display:block;font-size:12.5px;color:#6B5418;margin-bottom:4px}
+.cbrun p{margin:0 0 10px;font-size:11.5px;line-height:1.6;color:#6B5418}
+.cbrunrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cbrunrow select{
+  flex:1;min-width:180px;padding:6px 9px;border:1px solid var(--paper-3);
+  border-radius:7px;font-size:11.5px;
+}
+.cbrunrow label{font-size:11px;color:var(--muted);display:flex;
+  align-items:center;gap:5px}
+.cbrunrow input{width:56px;padding:5px 7px;border:1px solid var(--paper-3);
+  border-radius:6px;font-size:11.5px}
 .cbsource{
   margin:0;padding:11px 13px;background:#12161D;color:#C6D0DB;border-radius:8px;
   font-family:var(--mono);font-size:10.5px;line-height:1.6;max-height:52vh;
@@ -2430,7 +2452,8 @@ const state = {
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
-  codebase:null, cbFile:null,
+  codebase:null, cbFile:null, cbMap:null, cbMapPlace:null,
+  cbTrace:null, cbTraceEntry:null,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -5186,36 +5209,90 @@ async function showModuleMap(){
   });
   const height = 60 + Math.ceil(order.length / columns) * 74;
 
+  Object.assign(place, state.cbMapPlace || {});
   host.innerHTML = `
     <div class="cbfilehead"><b>every module</b>
       <span>${d.nodes.length} modules · ${d.edges.length} imports ·
       ${d.cycles.length} cycles</span></div>
     <p class="mathnote">Ordered by how many modules import them: the ones
-    everything depends on come first. Click one to see inside it.</p>
-    <div class="cbmap"><svg viewBox="0 0 1030 ${height}" width="100%"
-        height="${height}">
-      ${d.edges.map(e => {
+    everything depends on come first. Drag a box to rearrange it; click one to
+    see inside.</p>
+    <div class="cbmap"><svg id="cbMapSvg" viewBox="0 0 1030 ${height}"
+        width="100%" height="${height}"></svg></div>`;
+
+  const svg = $("cbMapSvg");
+  const paint = () => {
+    svg.innerHTML =
+      d.edges.map(e => {
         const a = place[e.from], b = place[e.to];
         if (!a || !b) return "";
         return `<path d="M${a.x + 100} ${a.y + 34} C${a.x + 100} ${a.y + 60},
           ${b.x + 100} ${b.y - 20}, ${b.x + 100} ${b.y}"
           fill="none" stroke="#CBD5E1" stroke-width="1"/>`;
-      }).join("")}
-      ${order.map(n => `
-        <g class="cbnode" data-cbopen="${n.path}">
+      }).join("")
+      + order.map(n => `
+        <g class="cbnode" data-drag="${n.id}" data-cbopen="${n.path}">
           <rect x="${place[n.id].x}" y="${place[n.id].y}" width="200" height="34"
             rx="7" fill="#fff" stroke="${fanIn[n.id] > 5 ? "#8A5CF6" : "#CBD5E1"}"
             stroke-width="${fanIn[n.id] > 5 ? 1.6 : 1}"/>
           <text x="${place[n.id].x + 10}" y="${place[n.id].y + 15}"
-            font-size="10.5" fill="#16202E">${n.id}</text>
+            font-size="10.5" fill="#16202E" pointer-events="none">${n.id}</text>
           <text x="${place[n.id].x + 10}" y="${place[n.id].y + 27}"
-            font-size="9" fill="#8A94A2">${n.lines} lines · ${n.classes} classes
-            · imported by ${fanIn[n.id]}</text>
-        </g>`).join("")}
-    </svg></div>`;
+            font-size="9" fill="#8A94A2" pointer-events="none">${n.lines} lines
+            · ${n.classes} classes · imported by ${fanIn[n.id]}</text>
+        </g>`).join("");
+  };
+  paint();
+  state.cbMapPlace = place;
+  const dragging = makeDraggable(svg, place, paint);
+  svg.addEventListener("click", ev => {
+    const node = ev.target.closest("[data-cbopen]");
+    if (node && !dragging()) showFileDiagram(node.dataset.cbopen);
+  });
+}
 
-  host.querySelectorAll("[data-cbopen]").forEach(g =>
-    g.addEventListener("click", () => showFileDiagram(g.dataset.cbopen)));
+/* Nodes can be moved. The layout is a guess at a readable arrangement and a
+   guess is often wrong; being able to pull two boxes apart is the difference
+   between a picture and a diagram. Positions are remembered per file for the
+   session, so going away and coming back does not undo the work. */
+function makeDraggable(svg, place, redraw){
+  let holding = null;
+  const at = ev => {
+    const box = svg.getBoundingClientRect();
+    const view = svg.viewBox.baseVal;
+    return { x: (ev.clientX - box.left) / box.width * view.width,
+             y: (ev.clientY - box.top) / box.height * view.height };
+  };
+  svg.addEventListener("pointerdown", ev => {
+    const node = ev.target.closest("[data-drag]");
+    if (!node) return;
+    const spot = at(ev);
+    holding = { id: node.dataset.drag,
+                dx: spot.x - place[node.dataset.drag].x,
+                dy: spot.y - place[node.dataset.drag].y, moved: false };
+    node.classList.add("dragging");
+    svg.setPointerCapture(ev.pointerId);
+  });
+  svg.addEventListener("pointermove", ev => {
+    if (!holding) return;
+    const spot = at(ev);
+    place[holding.id].x = Math.max(0, spot.x - holding.dx);
+    place[holding.id].y = Math.max(0, spot.y - holding.dy);
+    holding.moved = true;
+    redraw();
+  });
+  const release = ev => {
+    if (!holding) return;
+    svg.querySelectorAll(".dragging").forEach(n => n.classList.remove("dragging"));
+    // a drag is not a click: opening the file after moving it is not what was
+    // asked for
+    const wasDrag = holding.moved;
+    holding = null;
+    if (wasDrag && ev) ev.stopPropagation();
+  };
+  svg.addEventListener("pointerup", release);
+  svg.addEventListener("pointerleave", release);
+  return () => holding !== null;
 }
 
 async function showFileDiagram(path){
@@ -5296,10 +5373,113 @@ async function showFileDiagram(path){
     <div class="cbacts">
       <button class="btn" id="cbMapBack">the whole map</button>
       <button class="btn" id="cbSrc">its source</button>
-    </div>`;
+      <button class="btn" id="cbRunIt">Run it and watch</button>
+    </div>
+    <div id="cbRunOut"></div>`;
 
   $("cbMapBack").addEventListener("click", showModuleMap);
   $("cbSrc").addEventListener("click", () => showCodeFile(path));
+  $("cbRunIt").addEventListener("click", () => offerRun(path));
+  if (state.cbTrace) paintTrace(path);
+}
+
+/* Reading gives certainty about the calls a compiler could see. It cannot see
+   self.provider.run(), and in a well-made system that is most of the
+   interesting calls. Running answers the other half — at the cost of running
+   somebody's code, which is a different kind of act and is asked for each
+   time. */
+async function offerRun(path){
+  const host = $("cbRunOut");
+  let entries = [];
+  try{
+    entries = (await (await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/entries`)).json()).entries || [];
+  } catch { /* the box still works with a typed path */ }
+
+  host.innerHTML = `<div class="cbrun">
+    <b>This runs the code.</b>
+    <p>In a separate process, stopped after a timeout, recording only calls
+    inside the project. That stops an accident, not an attacker: the code can
+    still read your files and open sockets as whoever runs this server. Run
+    things you would run yourself.</p>
+    <div class="cbrunrow">
+      <select id="cbEntry">
+        ${entries.map(e => `<option value="${e}"${e === path ? " selected" : ""}
+          >${e}</option>`).join("")}
+        ${entries.includes(path) ? "" : `<option value="${path}" selected>${path}</option>`}
+      </select>
+      <label>stop after <input type="number" id="cbSeconds" value="20" min="1"
+        max="120"> s</label>
+      <button class="btn go" id="cbGo">Run it</button>
+    </div>
+  </div>`;
+
+  $("cbGo").addEventListener("click", async () => {
+    const entry = $("cbEntry").value;
+    const seconds = +$("cbSeconds").value || 20;
+    host.innerHTML = `<div class="empty" style="padding:12px">running
+      ${entry}…</div>`;
+    let r, d;
+    try{
+      r = await fetch(API + `/api/codebase/${encodeURIComponent(
+        state.codebase.id)}/run`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entry, seconds }),
+      });
+      d = await r.json();
+    } catch {
+      host.innerHTML = `<div class="runfail">No answer from the server.</div>`;
+      return;
+    }
+    if (!r.ok){
+      host.innerHTML = `<div class="runfail">${
+        (d.detail && d.detail.message) || "It would not run"}</div>`;
+      return;
+    }
+    state.cbTrace = d;
+    state.cbTraceEntry = entry;
+    await showFileDiagram(path);
+  });
+}
+
+function paintTrace(path){
+  const d = state.cbTrace;
+  const host = $("cbRunOut");
+  if (!host || !d) return;
+  const here = (d.edges || []).filter(e => e.from_file === path
+                                        || e.to_file === path);
+  const verdict = d.status === "ran" ? "paperok"
+                : d.status === "timeout" ? "paperwarn" : "runfail";
+  host.innerHTML = `
+    <div class="${verdict}">
+      <b>${d.status === "ran" ? "It ran." : d.status === "timeout"
+          ? "It was stopped." : "It stopped early."}</b>
+      ${d.detail ? ` ${d.detail}` : ""}
+      ${d.functions ? ` ${d.functions} functions were entered, and
+        ${(d.edges || []).length} calls recorded across the project —
+        ${here.length} of them touching this file.` : ""}
+    </div>
+    ${d.stderr ? `<div class="cbsec">what it wrote to stderr</div>
+      <pre class="cbsource">${d.stderr.replace(/</g, "&lt;")}</pre>` : ""}
+    ${d.stdout ? `<div class="cbsec">what it printed</div>
+      <pre class="cbsource">${d.stdout.replace(/</g, "&lt;")}</pre>` : ""}
+    ${here.length ? `<div class="cbsec">calls actually made, in this file</div>
+      <table class="runtable"><thead><tr><th>from</th><th>to</th>
+        <th class="num">times</th></tr></thead><tbody>
+        ${here.slice(0, 40).map(e => `<tr>
+          <td>${e.from_file === path ? "" : e.from_file + " · "}${e.from}</td>
+          <td>${e.to_file === path ? "" : e.to_file + " · "}${e.to}</td>
+          <td class="num">${e.times}</td></tr>`).join("")}
+      </tbody></table>
+      <p class="mathnote">These are observed, not inferred. Any that the
+      diagram above does not draw is a call through a variable — which is
+      exactly what reading the source cannot resolve.</p>` : ""}
+    <button class="btn" id="cbClearTrace">forget this run</button>`;
+  const clear = $("cbClearTrace");
+  if (clear) clear.addEventListener("click", () => {
+    state.cbTrace = null;
+    showFileDiagram(path);
+  });
 }
 
 function codebaseOverview(s){

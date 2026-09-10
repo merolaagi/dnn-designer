@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.66.0
+
+**Run it and watch.** The diagrams drew only calls that reading could be sure
+of, which left out `self.provider.run()` — and in a well-made system that is
+most of the interesting calls. MARE's `agents.py` drew no edges at all for
+exactly that reason.
+
+Now a file's diagram offers to run the project and record what actually called
+what. On a class whose collaborator is injected, the trace produces
+`Engine.run → Provider.call`: the edge that cannot be read off the source at
+all.
+
+**About running it, plainly.** It happens in a subprocess, never in the
+application process, never automatically, and it is killed after a timeout that
+is reported rather than disguised as an empty result. That stops an accident,
+not an attacker — the code can still read files and open sockets as whoever runs
+the server. The panel says so before you press anything, because a subprocess
+with a timeout is not a sandbox and calling it one would be worse than saying
+nothing.
+
+Results are labelled *observed, not inferred*, and anything the static diagram
+does not draw is precisely a call through a variable.
+
+Found while building it: **`<frozen runpy>` is not a path**, but `abspath()`
+resolves it against the working directory — which is the project — so every
+runpy and posixpath frame looked like project code and the first traces were
+mostly the machinery that started the program.
+
+**Also asked for, also done:** the diagram surface is the same squared paper as
+the design canvas, and every box can be dragged. A drag is not treated as a
+click, so rearranging a module does not open it.
+
 ## 1.65.1
 
 **Fixed: the codebase reader broke on any path through a symlink.**
