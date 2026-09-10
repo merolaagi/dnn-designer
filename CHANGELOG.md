@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.66.1
+
+**Fixed: clicking a module on the map did nothing.** My own dragging broke it.
+Capturing the pointer makes the SVG the target of the click that follows, so
+looking up which box was clicked always found the SVG and never a module. The
+pressed node is remembered on the way down instead, and a press that never
+moved counts as a click on the thing that was pressed.
+
+**And the page is shaped like the canvas now**, which is what it should have
+been from the start: **tree, drawing, panel**. Picking a module fills the panel
+and draws its diagram on the stage — the drawing stays put and the panel
+changes, exactly as the design canvas works.
+
+The panel has three tabs:
+
+- **module** — classes with bases, methods and docstrings; functions; and what
+  it reaches into, each one clickable to jump there.
+- **source** — the file itself.
+- **run** — the tracing, which used to be buried under the diagram. It states
+  what running does and does not protect against before offering the button.
+
+Once a run has happened, the diagram marks in green every definition that was
+actually entered, and says how many observed calls the source reading missed —
+those being the calls through variables, which is the whole reason for running
+it.
+
 ## 1.66.0
 
 **Run it and watch.** The diagrams drew only calls that reading could be sure

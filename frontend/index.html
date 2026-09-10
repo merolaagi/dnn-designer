@@ -1169,7 +1169,33 @@ i.covered{
 }
 .cbstats b{color:var(--text);font-weight:600}
 .cbbad{color:#8C2F27}
-.cbsplit{display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start}
+/* tree, drawing, panel — the shape the design canvas already uses */
+.cbsplit{
+  display:grid;grid-template-columns:250px minmax(0, 1fr) 340px;gap:14px;
+  align-items:start;
+}
+@media (max-width: 1200px){
+  .cbsplit{grid-template-columns:220px minmax(0, 1fr)}
+  .cbpanel{grid-column:1 / -1}
+}
+.cbstage{
+  background:#fff;border:1px solid var(--paper-3);border-radius:10px;
+  padding:14px 16px;min-height:260px;
+}
+.cbpanel{
+  background:#fff;border:1px solid var(--paper-3);border-radius:10px;
+  overflow:hidden;position:sticky;top:12px;
+}
+.cbtabs{display:flex;border-bottom:1px solid var(--paper-3);background:var(--paper-2)}
+.cbtabs button{
+  flex:1;padding:9px 6px;background:none;border:none;font-size:11px;
+  color:var(--muted);border-bottom:2px solid transparent;text-transform:capitalize;
+}
+.cbtabs button.on{color:var(--text);border-bottom-color:#8A5CF6;font-weight:600}
+.cbtabs button:hover{color:var(--text)}
+.cbpanelbody{padding:13px 15px;max-height:72vh;overflow-y:auto}
+.cbjump{cursor:pointer}
+.cbjump:hover{background:#EAE3FC}
 .cbtree{
   background:#fff;border:1px solid var(--paper-3);border-radius:10px;
   padding:8px 0;max-height:72vh;overflow:auto;font-size:11.5px;
@@ -2453,7 +2479,7 @@ const state = {
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
   codebase:null, cbFile:null, cbMap:null, cbMapPlace:null,
-  cbTrace:null, cbTraceEntry:null,
+  cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module",
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -5156,11 +5182,30 @@ function paintCodebase(d){
     </div>
     <div class="cbsplit">
       <div class="cbtree">${treeHtml(d.tree, 0)}</div>
-      <div class="cbdetail" id="cbDetail">${codebaseOverview(s)}</div>
+      <div class="cbstage" id="cbDetail">${codebaseOverview(s)}</div>
+      <div class="cbpanel">
+        <div class="cbtabs" id="cbTabs">
+          ${["module", "source", "run"].map(t =>
+            `<button data-cbtab="${t}"${state.cbTab === t ? ' class="on"' : ""}
+              >${t}</button>`).join("")}
+        </div>
+        <div class="cbpanelbody" id="cbPanel">
+          <div class="empty" style="padding:14px">Pick a module on the map or a
+          file in the tree. What it holds appears here, and the diagram stays
+          where it is.</div>
+        </div>
+      </div>
     </div>`;
 
   $("cbBody").querySelectorAll("[data-cbfile]").forEach(row =>
-    row.addEventListener("click", () => showFileDiagram(row.dataset.cbfile)));
+    row.addEventListener("click", () => pickModule(row.dataset.cbfile)));
+  $("cbBody").querySelectorAll("[data-cbtab]").forEach(tab =>
+    tab.addEventListener("click", () => {
+      state.cbTab = tab.dataset.cbtab;
+      $("cbTabs").querySelectorAll("[data-cbtab]").forEach(b =>
+        b.classList.toggle("on", b.dataset.cbtab === state.cbTab));
+      paintPanel();
+    }));
   const seeMap = $("cbSeeMap");
   if (seeMap) seeMap.addEventListener("click", showModuleMap);
   $("cbBody").querySelectorAll("[data-cbdir]").forEach(row =>
@@ -5244,18 +5289,107 @@ async function showModuleMap(){
   };
   paint();
   state.cbMapPlace = place;
-  const dragging = makeDraggable(svg, place, paint);
-  svg.addEventListener("click", ev => {
-    const node = ev.target.closest("[data-cbopen]");
-    if (node && !dragging()) showFileDiagram(node.dataset.cbopen);
-  });
+  makeDraggable(svg, place, paint, pickModule);
+}
+
+/* Picking a module fills the panel and draws it, without throwing away the
+   map. The canvas works this way — the drawing stays put and the panel changes
+   — and there was no reason for this to work differently. */
+async function pickModule(path){
+  state.cbPicked = path;
+  state.cbDiagram = null;
+  paintPanel();
+  try{
+    const r = await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/diagram?path=` + encodeURIComponent(path));
+    if (r.ok) state.cbDiagram = await r.json();
+  } catch { /* the panel says what it has */ }
+  paintPanel();
+  if (state.cbDiagram) drawFileDiagram();
+}
+
+function paintPanel(){
+  const host = $("cbPanel");
+  if (!host) return;
+  const path = state.cbPicked;
+  if (!path){
+    host.innerHTML = `<div class="empty" style="padding:14px">Pick a module on
+      the map or a file in the tree.</div>`;
+    return;
+  }
+  const tab = state.cbTab || "module";
+  if (tab === "module") return paintPanelModule(host, path);
+  if (tab === "source") return paintPanelSource(host, path);
+  return paintPanelRun(host, path);
+}
+
+function paintPanelModule(host, path){
+  const survey = state.codebase && state.codebase.survey;
+  const module = ((survey && survey.modules) || []).find(m => m.path === path);
+  const d = state.cbDiagram;
+  host.innerHTML = `
+    <div class="cbfilehead"><b>${path}</b></div>
+    ${module ? `<div class="hitmeta">${module.lines} lines ·
+      ${module.classes.length} classes · ${module.functions.length}
+      functions</div>` : ""}
+    ${module && module.error
+      ? `<div class="runfail">Does not parse — ${module.error}</div>` : ""}
+    ${d ? `<p class="mathnote">${d.edges.length} calls drawn${
+      d.unresolved ? `, ${d.unresolved} through variables and not drawn — run
+      it to see those` : ""}.</p>` : `<div class="empty">reading…</div>`}
+    ${module && module.classes.length ? `
+      <div class="cbsec">classes</div>
+      ${module.classes.map(c => `<div class="cbclass">
+        <b>${c.name}</b>${c.bases.length
+          ? `<span class="mono">(${c.bases.join(", ")})</span>` : ""}
+        ${c.doc ? `<p>${c.doc}</p>` : ""}
+        ${c.methods.length ? `<div class="cbmethods">${c.methods.map(m =>
+          `<span>${m}</span>`).join("")}</div>` : ""}
+      </div>`).join("")}` : ""}
+    ${module && module.functions.length ? `
+      <div class="cbsec">functions</div>
+      <div class="hitwhy">${module.functions.map(f =>
+        `<span>${f}</span>`).join("")}</div>` : ""}
+    ${d && (d.reaches || []).length ? `
+      <div class="cbsec">reaches into</div>
+      <div class="hitwhy">${d.reaches.map(m =>
+        `<span class="cbjump" data-cbreach="${m}">${m}</span>`).join("")}</div>`
+      : ""}
+    <button class="btn" id="cbBackMap">back to every module</button>`;
+
+  host.querySelectorAll("[data-cbreach]").forEach(chip =>
+    chip.addEventListener("click", () => {
+      const survey = state.codebase.survey;
+      const wanted = chip.dataset.cbreach.split(".").join("/");
+      const hit = (survey.modules || []).find(m =>
+        m.path === wanted + ".py" || m.path === wanted + "/__init__.py");
+      if (hit) pickModule(hit.path);
+    }));
+  const back = $("cbBackMap");
+  if (back) back.addEventListener("click", showModuleMap);
+}
+
+async function paintPanelSource(host, path){
+  host.innerHTML = `<div class="empty" style="padding:14px">reading…</div>`;
+  let d = null;
+  try{
+    const r = await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/file?path=` + encodeURIComponent(path));
+    d = r.ok ? await r.json() : null;
+  } catch { /* nothing to show */ }
+  host.innerHTML = d
+    ? `<div class="cbfilehead"><b>${path}</b><span>${d.lines} lines${
+        d.truncated ? ", first 4,000 shown" : ""}</span></div>
+       <pre class="cbsource">${d.text.replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")}</pre>`
+    : `<div class="runfail">Could not read it.</div>`;
 }
 
 /* Nodes can be moved. The layout is a guess at a readable arrangement and a
    guess is often wrong; being able to pull two boxes apart is the difference
    between a picture and a diagram. Positions are remembered per file for the
    session, so going away and coming back does not undo the work. */
-function makeDraggable(svg, place, redraw){
+function makeDraggable(svg, place, redraw, onPick){
   let holding = null;
   const at = ev => {
     const box = svg.getBoundingClientRect();
@@ -5269,7 +5403,11 @@ function makeDraggable(svg, place, redraw){
     const spot = at(ev);
     holding = { id: node.dataset.drag,
                 dx: spot.x - place[node.dataset.drag].x,
-                dy: spot.y - place[node.dataset.drag].y, moved: false };
+                dy: spot.y - place[node.dataset.drag].y, moved: false,
+                // Remembered here because capturing the pointer makes the svg
+                // the target of the click that follows — which is what stopped
+                // clicking a module from opening it.
+                open: node.dataset.cbopen || "" };
     node.classList.add("dragging");
     svg.setPointerCapture(ev.pointerId);
   });
@@ -5284,31 +5422,22 @@ function makeDraggable(svg, place, redraw){
   const release = ev => {
     if (!holding) return;
     svg.querySelectorAll(".dragging").forEach(n => n.classList.remove("dragging"));
-    // a drag is not a click: opening the file after moving it is not what was
-    // asked for
-    const wasDrag = holding.moved;
+    const { moved, open } = holding;
     holding = null;
-    if (wasDrag && ev) ev.stopPropagation();
+    // A press that did not move is a click on the thing that was pressed. The
+    // browser will report it against the svg because of the capture, so it is
+    // acted on here instead.
+    if (!moved && open && typeof onPick === "function") onPick(open);
   };
   svg.addEventListener("pointerup", release);
-  svg.addEventListener("pointerleave", release);
+  svg.addEventListener("pointercancel", release);
   return () => holding !== null;
 }
 
-async function showFileDiagram(path){
+function drawFileDiagram(){
+  const d = state.cbDiagram;
   const host = $("cbDetail");
-  host.innerHTML = `<div class="empty" style="padding:12px">reading ${path}…</div>`;
-  let r, d;
-  try{
-    r = await fetch(API + `/api/codebase/${encodeURIComponent(
-      state.codebase.id)}/diagram?path=` + encodeURIComponent(path));
-    d = await r.json();
-  } catch { host.innerHTML = `<div class="runfail">No answer.</div>`; return; }
-  if (!r.ok){
-    host.innerHTML = `<div class="runfail">${
-      (d.detail && d.detail.message) || "It would not draw"}</div>`;
-    return;
-  }
+  if (!d || !host) return;
 
   const classes = d.nodes.filter(n => n.kind === "class");
   const loose = d.nodes.filter(n => n.kind === "function");
@@ -5324,128 +5453,87 @@ async function showFileDiagram(path){
     y += 12;
   });
   loose.forEach(f => { place[f.id] = { x: 30, y, w: 250 }; y += 28; });
-  const height = y + 20;
+  const height = Math.max(240, y + 20);
+
+  const observed = new Set(((state.cbTrace && state.cbTrace.edges) || [])
+    .filter(e => e.from_file === d.path && e.to_file === d.path)
+    .map(e => `${e.from}->${e.to}`));
+  const byId = {};
+  d.nodes.forEach(n => byId[n.id] = n);
+  const drawn = new Set(d.edges.map(e =>
+    `${byId[e.from] ? byId[e.from].name : ""}->${byId[e.to] ? byId[e.to].name : ""}`));
+  const extra = [...observed].filter(k => !drawn.has(k));
 
   host.innerHTML = `
-    <div class="cbfilehead"><b>${path}</b>
-      <span>${d.nodes.length} definitions · ${d.edges.length} calls drawn</span></div>
-    ${d.edges.length === 0 && d.unresolved
-      ? `<div class="paperwarn">No call could be drawn with certainty, though
-         ${d.unresolved} calls are made through variables — <span
-         class="mono">self.provider.run()</span> and the like. Which object
-         that is cannot be known without running the program, so nothing is
-         drawn rather than guessed.</div>`
-      : d.unresolved
-        ? `<p class="mathnote">${d.edges.length} calls drawn.
-           ${d.unresolved} more go through variables and cannot be resolved
-           without running the program, so they are left out.</p>`
-        : ""}
-    <div class="cbmap"><svg viewBox="0 0 620 ${height}" width="100%"
-        height="${height}">
-      ${d.edges.map(e => {
+    <div class="cbfilehead"><b>${d.path}</b>
+      <span>${d.nodes.length} definitions · ${d.edges.length} calls read${
+        observed.size ? ` · ${observed.size} seen when run` : ""}</span></div>
+    <div class="cbmap"><svg id="cbFileSvg" viewBox="0 0 620 ${height}"
+      width="100%" height="${height}"></svg></div>
+    ${extra.length ? `<p class="mathnote"><b>${extra.length} of the calls seen
+      when it ran are not in the source reading</b> — those go through
+      variables, which is exactly what a compiler cannot resolve:
+      ${extra.slice(0, 4).map(k => `<span class="mono">${k.replace("->", " → ")
+      }</span>`).join(", ")}.</p>` : ""}`;
+
+  const svg = $("cbFileSvg");
+  const paint = () => {
+    svg.innerHTML =
+      d.edges.map(e => {
         const a = place[e.from], b = place[e.to];
         if (!a || !b) return "";
         const bend = 330 + Math.min(90, Math.abs(a.y - b.y) / 2);
         return `<path d="M${a.x + a.w} ${a.y + 11} C${bend} ${a.y + 11},
           ${bend} ${b.y + 11}, ${b.x + b.w} ${b.y + 11}"
           fill="none" stroke="#8A5CF6" stroke-width="1" opacity=".55"/>`;
-      }).join("")}
-      ${d.nodes.map(n => {
+      }).join("")
+      + d.nodes.map(n => {
         const at = place[n.id];
         if (!at) return "";
+        const ran = observed.size && [...observed].some(k =>
+          k.startsWith(n.name + "->") || k.endsWith("->" + n.name));
         const fill = n.kind === "class" ? "#F4F1FE"
                    : n.kind === "method" ? "#fff" : "#FFFDF7";
-        return `<g>
+        return `<g class="cbnode" data-drag="${n.id}">
           <rect x="${at.x}" y="${at.y}" width="${at.w}" height="22" rx="6"
-            fill="${fill}" stroke="#CBD5E1"/>
-          <text x="${at.x + 9}" y="${at.y + 15}" font-size="10.5"
-            fill="#16202E" font-weight="${n.kind === "class" ? 600 : 400}">
-            ${n.name}</text>
+            fill="${fill}" stroke="${ran ? "#7FB98A" : "#CBD5E1"}"
+            stroke-width="${ran ? 1.6 : 1}"/>
+          <text x="${at.x + 9}" y="${at.y + 15}" font-size="10.5" fill="#16202E"
+            pointer-events="none"
+            font-weight="${n.kind === "class" ? 600 : 400}">${n.name}</text>
           <text x="${at.x + at.w - 9}" y="${at.y + 15}" font-size="8.5"
-            text-anchor="end" fill="#98A6B8">${n.kind} · line ${n.line}</text>
+            text-anchor="end" fill="#98A6B8" pointer-events="none">${
+              ran ? "ran · " : ""}line ${n.line}</text>
         </g>`;
-      }).join("")}
-    </svg></div>
-    ${(d.reaches || []).length ? `
-      <div class="cbsec">this file reaches into</div>
-      <div class="hitwhy">${d.reaches.map(m =>
-        `<span>${m}</span>`).join("")}</div>` : ""}
-    <div class="cbacts">
-      <button class="btn" id="cbMapBack">the whole map</button>
-      <button class="btn" id="cbSrc">its source</button>
-      <button class="btn" id="cbRunIt">Run it and watch</button>
-    </div>
-    <div id="cbRunOut"></div>`;
-
-  $("cbMapBack").addEventListener("click", showModuleMap);
-  $("cbSrc").addEventListener("click", () => showCodeFile(path));
-  $("cbRunIt").addEventListener("click", () => offerRun(path));
-  if (state.cbTrace) paintTrace(path);
+      }).join("");
+  };
+  paint();
+  makeDraggable(svg, place, paint, null);
 }
 
-/* Reading gives certainty about the calls a compiler could see. It cannot see
-   self.provider.run(), and in a well-made system that is most of the
-   interesting calls. Running answers the other half — at the cost of running
-   somebody's code, which is a different kind of act and is asked for each
-   time. */
-async function offerRun(path){
-  const host = $("cbRunOut");
-  let entries = [];
-  try{
-    entries = (await (await fetch(API + `/api/codebase/${encodeURIComponent(
-      state.codebase.id)}/entries`)).json()).entries || [];
-  } catch { /* the box still works with a typed path */ }
-
-  host.innerHTML = `<div class="cbrun">
-    <b>This runs the code.</b>
-    <p>In a separate process, stopped after a timeout, recording only calls
-    inside the project. That stops an accident, not an attacker: the code can
-    still read your files and open sockets as whoever runs this server. Run
-    things you would run yourself.</p>
-    <div class="cbrunrow">
-      <select id="cbEntry">
-        ${entries.map(e => `<option value="${e}"${e === path ? " selected" : ""}
-          >${e}</option>`).join("")}
-        ${entries.includes(path) ? "" : `<option value="${path}" selected>${path}</option>`}
-      </select>
-      <label>stop after <input type="number" id="cbSeconds" value="20" min="1"
-        max="120"> s</label>
-      <button class="btn go" id="cbGo">Run it</button>
-    </div>
-  </div>`;
-
-  $("cbGo").addEventListener("click", async () => {
-    const entry = $("cbEntry").value;
-    const seconds = +$("cbSeconds").value || 20;
-    host.innerHTML = `<div class="empty" style="padding:12px">running
-      ${entry}…</div>`;
-    let r, d;
-    try{
-      r = await fetch(API + `/api/codebase/${encodeURIComponent(
-        state.codebase.id)}/run`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entry, seconds }),
-      });
-      d = await r.json();
-    } catch {
-      host.innerHTML = `<div class="runfail">No answer from the server.</div>`;
-      return;
-    }
-    if (!r.ok){
-      host.innerHTML = `<div class="runfail">${
-        (d.detail && d.detail.message) || "It would not run"}</div>`;
-      return;
-    }
-    state.cbTrace = d;
-    state.cbTraceEntry = entry;
-    await showFileDiagram(path);
-  });
-}
-
-function paintTrace(path){
+function paintPanelRun(host, path){
   const d = state.cbTrace;
-  const host = $("cbRunOut");
-  if (!host || !d) return;
+  if (!d){
+    host.innerHTML = `<div class="cbrun">
+      <b>This runs the code.</b>
+      <p>In a separate process, stopped after a timeout, recording only calls
+      inside the project. That stops an accident, not an attacker: the code can
+      still read your files and open sockets as whoever runs this server. Run
+      things you would run yourself.</p>
+      <div class="cbrunrow">
+        <select id="cbEntry"></select>
+        <label>stop after <input type="number" id="cbSeconds" value="20" min="1"
+          max="120"> s</label>
+        <button class="btn go" id="cbGo">Run it</button>
+      </div>
+      <p style="margin:9px 0 0">Reading cannot resolve a call through a
+      variable. Running is the only way to see those, and they are usually the
+      ones that matter.</p>
+    </div>`;
+    fillEntries(path);
+    $("cbGo").addEventListener("click", () => startRun(path));
+    return;
+  }
   const here = (d.edges || []).filter(e => e.from_file === path
                                         || e.to_file === path);
   const verdict = d.status === "ran" ? "paperok"
@@ -5455,31 +5543,75 @@ function paintTrace(path){
       <b>${d.status === "ran" ? "It ran." : d.status === "timeout"
           ? "It was stopped." : "It stopped early."}</b>
       ${d.detail ? ` ${d.detail}` : ""}
-      ${d.functions ? ` ${d.functions} functions were entered, and
-        ${(d.edges || []).length} calls recorded across the project —
-        ${here.length} of them touching this file.` : ""}
+      ${d.functions ? ` ${d.functions} functions entered,
+        ${(d.edges || []).length} calls recorded, ${here.length} touching this
+        file.` : ""}
     </div>
-    ${d.stderr ? `<div class="cbsec">what it wrote to stderr</div>
+    ${d.stderr ? `<div class="cbsec">stderr</div>
       <pre class="cbsource">${d.stderr.replace(/</g, "&lt;")}</pre>` : ""}
-    ${d.stdout ? `<div class="cbsec">what it printed</div>
+    ${d.stdout ? `<div class="cbsec">printed</div>
       <pre class="cbsource">${d.stdout.replace(/</g, "&lt;")}</pre>` : ""}
-    ${here.length ? `<div class="cbsec">calls actually made, in this file</div>
+    ${here.length ? `<div class="cbsec">calls actually made here</div>
       <table class="runtable"><thead><tr><th>from</th><th>to</th>
         <th class="num">times</th></tr></thead><tbody>
-        ${here.slice(0, 40).map(e => `<tr>
+        ${here.slice(0, 60).map(e => `<tr>
           <td>${e.from_file === path ? "" : e.from_file + " · "}${e.from}</td>
           <td>${e.to_file === path ? "" : e.to_file + " · "}${e.to}</td>
           <td class="num">${e.times}</td></tr>`).join("")}
       </tbody></table>
-      <p class="mathnote">These are observed, not inferred. Any that the
-      diagram above does not draw is a call through a variable — which is
-      exactly what reading the source cannot resolve.</p>` : ""}
-    <button class="btn" id="cbClearTrace">forget this run</button>`;
-  const clear = $("cbClearTrace");
-  if (clear) clear.addEventListener("click", () => {
-    state.cbTrace = null;
-    showFileDiagram(path);
+      <p class="mathnote">Observed, not inferred.</p>` : ""}
+    <div class="cbacts">
+      <button class="btn" id="cbAgain">run something else</button>
+      <button class="btn" id="cbClearTrace">forget this run</button>
+    </div>`;
+  $("cbAgain").addEventListener("click", () => {
+    state.cbTrace = null; paintPanel();
   });
+  $("cbClearTrace").addEventListener("click", () => {
+    state.cbTrace = null; paintPanel(); drawFileDiagram();
+  });
+}
+
+async function fillEntries(path){
+  let entries = [];
+  try{
+    entries = (await (await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/entries`)).json()).entries || [];
+  } catch { /* the typed path still works */ }
+  const sel = $("cbEntry");
+  if (!sel) return;
+  if (!entries.includes(path)) entries = [path].concat(entries);
+  sel.innerHTML = entries.map(e =>
+    `<option value="${e}"${e === path ? " selected" : ""}>${e}</option>`).join("");
+}
+
+async function startRun(path){
+  const host = $("cbPanel");
+  const entry = $("cbEntry").value || path;
+  const seconds = +$("cbSeconds").value || 20;
+  host.innerHTML = `<div class="empty" style="padding:14px">running ${entry}…
+    it will be stopped after ${seconds}s.</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/run`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entry, seconds }),
+    });
+    d = await r.json();
+  } catch {
+    host.innerHTML = `<div class="runfail">No answer from the server.</div>`;
+    return;
+  }
+  if (!r.ok){
+    host.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "It would not run"}</div>`;
+    return;
+  }
+  state.cbTrace = d;
+  state.cbTraceEntry = entry;
+  paintPanel();
+  drawFileDiagram();
 }
 
 function codebaseOverview(s){
@@ -5531,48 +5663,6 @@ function codebaseOverview(s){
       </tbody></table>`;
 }
 
-async function showCodeFile(path){
-  const host = $("cbDetail");
-  const s = state.codebase && state.codebase.survey;
-  const module = (s && s.modules || []).find(m => m.path === path);
-  host.innerHTML = `<div class="empty" style="padding:12px">reading ${path}…</div>`;
-  let d = null;
-  try{
-    const r = await fetch(API + `/api/codebase/${encodeURIComponent(
-      state.codebase.id)}/file?path=` + encodeURIComponent(path));
-    d = r.ok ? await r.json() : null;
-  } catch { /* fall through to what the survey knows */ }
-
-  host.innerHTML = `
-    <div class="cbfilehead"><b>${path}</b>
-      ${module ? `<span>${module.lines} lines · ${module.classes.length}
-        classes · ${module.functions.length} functions</span>` : ""}</div>
-    ${module && module.error
-      ? `<div class="runfail">This file does not parse — ${module.error}</div>`
-      : ""}
-    ${module && module.classes.length ? `
-      <div class="cbsec">classes</div>
-      ${module.classes.map(c => `<div class="cbclass">
-        <b>${c.name}</b>${c.bases.length
-          ? `<span class="mono">(${c.bases.join(", ")})</span>` : ""}
-        ${c.doc ? `<p>${c.doc}</p>` : ""}
-        ${c.methods.length
-          ? `<div class="cbmethods">${c.methods.map(m =>
-              `<span>${m}</span>`).join("")}</div>` : ""}
-      </div>`).join("")}` : ""}
-    ${module && module.functions.length ? `
-      <div class="cbsec">functions</div>
-      <div class="hitwhy">${module.functions.map(f =>
-        `<span>${f}</span>`).join("")}</div>` : ""}
-    ${d ? `<div class="cbsec">source${d.truncated
-        ? " — first 4,000 lines" : ""}</div>
-      <pre class="cbsource">${d.text.replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")}</pre>` : ""}
-    <button class="btn" id="cbBack">back to its diagram</button>`;
-
-  const back = $("cbBack");
-  if (back) back.addEventListener("click", () => showFileDiagram(path));
-}
 
 /* ============================== scouts ============================== */
 

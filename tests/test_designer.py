@@ -1332,11 +1332,35 @@ def _():
     assert "This runs the code" in PAGE
     assert "not an attacker" in PAGE, \
         "it implies the subprocess is a sandbox"
-    assert "observed, not inferred" in PAGE
+    assert "bserved, not inferred" in PAGE, \
+        "the trace does not distinguish what it saw from what it inferred"
 
     import main
 
     assert "codebase_run" in dir(main)
+
+
+@check("the codebase page is shaped like the canvas")
+def _():
+    """Tree, drawing, panel — and picking something fills the panel without
+    throwing the drawing away, which is how the design canvas has always
+    worked and there was no reason for this to differ."""
+    for token in ("cbsplit", "cbstage", "cbpanel", "cbtabs",
+                  "function paintPanel", "function pickModule"):
+        assert token in PAGE, f"{token} is missing"
+
+    layout = PAGE[PAGE.index(".cbsplit{"):]
+    layout = layout[: layout.index("}")]
+    assert layout.count("minmax") >= 1 and "340px" in layout, \
+        "the panel has no column of its own"
+
+    picker = PAGE[PAGE.index("async function pickModule"):]
+    picker = picker[: picker.index("\nfunction paintPanel")]
+    assert "paintPanel()" in picker and "drawFileDiagram()" in picker, \
+        "picking a module does not fill both the panel and the stage"
+
+    tabs = PAGE[PAGE.index('["module", "source", "run"]'):]
+    assert tabs, "the panel has no tabs"
 
 
 @check("a codebase diagram can be rearranged")
@@ -1346,10 +1370,15 @@ def _():
     picture and a diagram."""
     assert "function makeDraggable" in PAGE
     drag = PAGE[PAGE.index("function makeDraggable"):]
-    drag = drag[: drag.index("\nasync function showFileDiagram")]
+    drag = drag[: drag.index("\nfunction drawFileDiagram")]
     assert "pointerdown" in drag and "pointermove" in drag
-    assert "holding.moved" in drag, \
+    assert "moved, open" in drag, \
         "a drag would also count as a click and open the file"
+    # Capturing the pointer makes the svg the target of the click that
+    # follows, so the pressed node is remembered instead of read back from
+    # the event — which is why clicking a module stopped opening it.
+    assert "open: node.dataset.cbopen" in drag, \
+        "the click target is read after capture, where it is always the svg"
 
     # the same squared paper as the design canvas
     assert ".cbmap{" in PAGE
@@ -1423,13 +1452,13 @@ def _():
     assert {"from": "n", "to": "m"} in mapped["edges"]
 
     # the page draws both, and says what it left out
-    for token in ("function showModuleMap", "function showFileDiagram",
-                  "cannot be resolved"):
+    for token in ("function showModuleMap", "function drawFileDiagram",
+                  "function pickModule", "through variables"):
         assert token in PAGE, f"{token} is missing"
 
     # and it must not put any of this on the design canvas
-    drawer = PAGE[PAGE.index("async function showFileDiagram"):]
-    drawer = drawer[: drawer.index("\nfunction codebaseOverview")]
+    drawer = PAGE[PAGE.index("function drawFileDiagram"):]
+    drawer = drawer[: drawer.index("\nfunction paintPanelRun")]
     assert 'showPage("pageDesign")' not in drawer, \
         "a module diagram is being pushed onto the tensor canvas"
     assert "state.graph" not in drawer, \
