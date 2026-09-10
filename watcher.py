@@ -40,7 +40,8 @@ OUT = sys.argv[3]
 
 edges = {}
 counts = {}
-stack = []
+order = []
+LIMIT = 4000
 
 
 def inside(filename):
@@ -85,6 +86,19 @@ def trace(frame, event, arg):
     if caller is not None:
         pair = repr((name_of(caller), here))
         edges[pair] = edges.get(pair, 0) + 1
+
+    # The order matters as much as the counts. A walkthrough is a sequence and
+    # a set of edges cannot be replayed: two calls made in either order look
+    # identical once they are edges. Depth is how many project frames sit
+    # below this one, so the shape of the descent survives too.
+    if len(order) < LIMIT:
+        depth = 0
+        up = frame.f_back
+        while up is not None:
+            if inside(up.f_code.co_filename):
+                depth += 1
+            up = up.f_back
+        order.append([depth, here[0], here[1], code.co_firstlineno])
     return None
 
 
@@ -92,7 +106,8 @@ def dump(status, detail=""):
     with open(OUT, "w") as fh:
         json.dump({"status": status, "detail": detail,
                    "edges": list(edges.items()),
-                   "counts": list(counts.items())}, fh)
+                   "counts": list(counts.items()),
+                   "order": order}, fh)
 
 
 sys.path.insert(0, ROOT)
@@ -170,7 +185,12 @@ def watch(root: Path, target: str, seconds: int = 20) -> Dict[str, Any]:
         entered.append({"file": where, "name": what, "times": times})
     entered.sort(key=lambda e: -e["times"])
 
+    sequence = [{"depth": d, "file": f, "name": n, "line": ln}
+                for d, f, n, ln in blob.get("order", [])]
+
     return {
+        "sequence": sequence,
+        "truncated": len(sequence) >= 4000,
         "status": blob.get("status") or ("failed" if done.returncode else "ran"),
         "detail": blob.get("detail", ""),
         "returncode": done.returncode,

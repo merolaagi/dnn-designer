@@ -1340,6 +1340,122 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("code is measured, not given an equation it does not have")
+def _():
+    """The canvas has a Maths tab because a layer has an equation. A function
+    does not, and writing one would be inventing something.
+
+    What a function does have is structure that can be counted, so that is what
+    is counted — and the panel says which of the two it is doing.
+    """
+    import tempfile
+
+    import codebase
+
+    work = Path(tempfile.mkdtemp())
+    root = work / "proj"
+    root.mkdir()
+    (root / "m.py").write_text(
+        "def simple():\n"
+        "    return 1\n"
+        "\n"
+        "def tangled(a, b):\n"
+        '    """It does."""\n'
+        "    for x in a:\n"
+        "        if x and b:\n"
+        "            while x:\n"
+        "                try:\n"
+        "                    return x\n"
+        "                except ValueError:\n"
+        "                    pass\n"
+        "    return 0\n")
+
+    m = codebase.measures(root, "m.py")
+    by = {f["name"]: f for f in m["functions"]}
+
+    assert by["simple"]["paths"] == 1, by["simple"]
+    assert by["simple"]["depth"] == 0
+    assert not by["simple"]["doc"]
+
+    # for + if + and + while + except = five decisions, plus the one path
+    assert by["tangled"]["paths"] == 6, by["tangled"]
+    assert by["tangled"]["depth"] >= 4, by["tangled"]
+    assert by["tangled"]["arguments"] == 2
+    assert by["tangled"]["doc"]
+
+    # the hardest comes first, because that is the one worth seeing
+    assert m["functions"][0]["name"] == "tangled"
+    assert m["totals"]["undocumented"] == 1
+
+    # a method's own name is not counted as an argument
+    (root / "k.py").write_text(
+        "class A:\n    def go(self, x):\n        return x\n")
+    k = codebase.measures(root, "k.py")
+    assert k["functions"][0]["name"] == "A.go"
+    assert k["functions"][0]["arguments"] == 1, "self was counted as an argument"
+
+    # the panel must not call this maths
+    panel = PAGE[PAGE.index("async function paintPanelMeasures"):]
+    panel = panel[: panel.index("\nasync function paintPanelNotes")]
+    assert "no equation to show" in panel, \
+        "it does not say why there is no equation"
+    assert "not quality" in panel, \
+        "a count is presented as a verdict on the code"
+
+
+@check("a recorded run can be walked through in order")
+def _():
+    """The canvas walks an example through a network because the wiring fixes
+    the order. Here the order is not in the source — which function runs next
+    depends on the data — so it can only be replayed from a recording."""
+    if not HAVE_TORCH:
+        pass          # nothing here needs torch, but keep the shape uniform
+    import tempfile
+
+    import watcher
+
+    work = Path(tempfile.mkdtemp())
+    proj = work / "proj"
+    proj.mkdir()
+    (proj / "engine.py").write_text(
+        "class Provider:\n"
+        "    def call(self):\n"
+        "        return 1\n"
+        "class Engine:\n"
+        "    def __init__(self, p):\n"
+        "        self.p = p\n"
+        "    def run(self):\n"
+        "        self.step()\n"
+        "        return self.p.call()\n"
+        "    def step(self):\n"
+        "        return 0\n"
+        "def helper():\n"
+        "    return Engine(Provider()).run()\n"
+        'if __name__ == "__main__":\n'
+        "    helper()\n")
+
+    result = watcher.watch(proj, "engine.py", seconds=30)
+    order = [s["name"] for s in result["sequence"]]
+    assert order, "nothing was recorded in order"
+
+    # the sequence has to be a sequence: step before the provider call, and
+    # both inside run
+    assert order.index("Engine.step") < order.index("Provider.call"), order
+    assert order.index("Engine.run") < order.index("Engine.step"), order
+
+    depths = {s["name"]: s["depth"] for s in result["sequence"]}
+    assert depths["Engine.step"] > depths["Engine.run"], \
+        "the descent is flat, so nesting was not recorded"
+
+    # and the panel refuses to invent one when nothing has been run
+    walk = PAGE[PAGE.index("function paintPanelWalk"):]
+    walk = walk[: walk.index("\nfunction codebaseOverview")]
+    assert "depends on the data" in walk, \
+        "it does not say why the order cannot be read from the source"
+    assert "Nothing here is\n    inferred" in walk or "inferred" in walk, \
+        "it does not distinguish replay from inference"
+
+
 @check("the codebase page is shaped like the canvas")
 def _():
     """Tree, drawing, panel — and picking something fills the panel without
@@ -1359,8 +1475,12 @@ def _():
     assert "paintPanel()" in picker and "drawFileDiagram()" in picker, \
         "picking a module does not fill both the panel and the stage"
 
-    tabs = PAGE[PAGE.index('["module", "source", "run"]'):]
-    assert tabs, "the panel has no tabs"
+    # the panel's tabs, which grew when the codebase page gained the canvas's
+    # own views
+    for tab in ("module", "measures", "walkthrough", "notes", "source", "run"):
+        assert f'"{tab}"' in PAGE, f"the {tab} tab is missing"
+    for painter in ("paintPanelMeasures", "paintPanelWalk", "paintPanelNotes"):
+        assert f"function {painter}" in PAGE, f"{painter} is missing"
 
 
 @check("a codebase diagram can be rearranged")

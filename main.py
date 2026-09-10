@@ -927,6 +927,79 @@ class WatchPayload(BaseModel):
     seconds: int = 20
 
 
+@app.get("/api/codebase/{project}/measures")
+def codebase_measures(project: str, path: str):
+    try:
+        return codebase.measures(_codebase_root(project), path)
+    except codebase.ArchiveError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/codebase/{project}/notes")
+def codebase_notes(project: str, path: str):
+    """What is worth saying about this module, from what was counted."""
+    root = _codebase_root(project)
+    facts = codebase.survey(root)
+    try:
+        counted = codebase.measures(root, path)
+    except codebase.ArchiveError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+    module = next((m for m in facts["modules"] if m["path"] == path), None)
+    name = codebase._module_name(root / path, root)
+    fan_in = sum(1 for e in facts["edges"] if e["to"] == name)
+    fan_out = len({e["to"] for e in facts["edges"] if e["from"] == name})
+
+    notes = []
+
+    def say(title, why, weight=0):
+        notes.append({"title": title, "why": why, "weight": weight})
+
+    hardest = counted["functions"][0] if counted["functions"] else None
+    if hardest and hardest["paths"] >= 12:
+        say(f"{hardest['name']} has {hardest['paths']} paths through it",
+            f"That is {hardest['lines']} lines nested {hardest['depth']} deep. "
+            f"Every path is a case somebody has to hold in their head at once, "
+            f"and it is the place a change is most likely to break something "
+            f"the change was not about.", 5)
+
+    if fan_in >= 8:
+        say(f"{fan_in} modules import this one",
+            "A change here reaches all of them. That is not a fault — shared "
+            "types belong somewhere — but it is where the cost of a change is "
+            "highest.", 4)
+
+    if fan_out >= 8:
+        say(f"This module reaches into {fan_out} others",
+            "It knows about a lot of the system. Whether that is orchestration "
+            "or entanglement depends on whether the others know about it back.",
+            3)
+
+    if counted["totals"]["undocumented"] and counted["totals"]["functions"]:
+        share = (counted["totals"]["undocumented"]
+                 / counted["totals"]["functions"])
+        if share > 0.7:
+            say(f"{counted['totals']['undocumented']} of "
+                f"{counted['totals']['functions']} functions have no docstring",
+                "Not a defect. Worth knowing before reading it, because the "
+                "code is the only description of itself there is.", 1)
+
+    deep = [f for f in counted["functions"] if f["depth"] >= 5]
+    if deep:
+        say(f"{len(deep)} function{'s' if len(deep) > 1 else ''} nested five "
+            f"deep or more",
+            "Depth costs more than length. " + ", ".join(
+                f["name"] for f in deep[:4]) + ".", 3)
+
+    if module and module.get("error"):
+        say("This file does not parse", module["error"], 9)
+
+    notes.sort(key=lambda n: -n["weight"])
+    return {"path": path, "notes": notes,
+            "fan_in": fan_in, "fan_out": fan_out,
+            "totals": counted["totals"]}
+
+
 @app.get("/api/codebase/{project}/entries")
 def codebase_entries(project: str):
     return {"entries": watcher.entry_points(_codebase_root(project))}

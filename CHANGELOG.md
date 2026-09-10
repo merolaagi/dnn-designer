@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.68.0
+
+**The codebase panel gains the canvas's views — three of the four, honestly.**
+
+**Measures**, not Maths. The canvas has a Maths tab because a layer *has* an
+equation. A Python function does not, and writing one would be inventing
+something. What a function does have is structure that can be counted, so it is
+counted: paths through it, nesting depth, length, arguments, exits. On MARE's
+`engine.py`:
+
+```text
+ResearchEngine.prepare_next_round   24 paths   86 lines   3 deep
+ResearchEngine.enrich_literature    19 paths   43 lines   4 deep
+ResearchEngine.adversarial_review   18 paths   53 lines   5 deep
+```
+
+Paths is one plus every decision — each `if`, loop, `except`, comprehension and
+`and`. The panel says explicitly that this counts cases to hold in mind and not
+quality: a long dispatch table scores badly and reads fine.
+
+**Walkthrough**, replayed rather than inferred. The canvas can walk an example
+through a network because the wiring fixes the order. In code it does not —
+which function runs next depends on the data — so this replays a recorded run,
+step by step, with the depth of the descent preserved. Without a run it says why
+it has nothing to show rather than inventing a plausible path. The tracer now
+records call order and nesting, not only counts.
+
+**Notes**, which is the Assistant's job here. Grounded in what was counted:
+which function has the most paths and why that matters, how many modules import
+this one, how many it reaches into, functions nested five deep, undocumented
+functions. On `engine.py` it reports 10 modules importing it, 13 reached, and
+names the three functions nested five deep. Every line ends with the reminder
+that it counted rather than judged.
+
+**Story** is not there, and should not be: the canvas's Story reads a batch
+through the layers with the real numbers. The equivalent for code is the
+walkthrough, and having both would be one idea wearing two names.
+
 ## 1.67.0
 
 **The import dialog fills in what to pass.** The scout has worked this out for

@@ -1194,6 +1194,21 @@ i.covered{
 .cbtabs button.on{color:var(--text);border-bottom-color:#8A5CF6;font-weight:600}
 .cbtabs button:hover{color:var(--text)}
 .cbpanelbody{padding:13px 15px;max-height:72vh;overflow-y:auto}
+.cbwalk{
+  margin:10px 0;border:1px solid var(--paper-3);border-radius:8px;
+  overflow:hidden;font-size:11px;
+}
+.cbwalkline{
+  padding:5px 10px;display:flex;gap:8px;align-items:baseline;cursor:pointer;
+  border-bottom:1px solid var(--paper-2);color:var(--muted);
+}
+.cbwalkline:last-child{border-bottom:none}
+.cbwalkline b{font-weight:500;color:#3C4B5F}
+.cbwalkline span{margin-left:auto;font-size:9px;color:#B7C0CB}
+.cbwalkline.on{background:#F4F1FE}
+.cbwalkline.on b{font-weight:600;color:#16202E}
+.cbwalkline:hover{background:var(--paper-2)}
+table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
 .cbjump{cursor:pointer}
 .cbjump:hover{background:#EAE3FC}
 .cbtree{
@@ -2479,7 +2494,7 @@ const state = {
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
   codebase:null, cbFile:null, cbMap:null, cbMapPlace:null,
-  cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module",
+  cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module", cbWalkAt:0,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
   panMode:false, spaceHeld:false,
@@ -5185,7 +5200,7 @@ function paintCodebase(d){
       <div class="cbstage" id="cbDetail">${codebaseOverview(s)}</div>
       <div class="cbpanel">
         <div class="cbtabs" id="cbTabs">
-          ${["module", "source", "run"].map(t =>
+          ${["module", "measures", "walkthrough", "notes", "source", "run"].map(t =>
             `<button data-cbtab="${t}"${state.cbTab === t ? ' class="on"' : ""}
               >${t}</button>`).join("")}
         </div>
@@ -5319,8 +5334,132 @@ function paintPanel(){
   }
   const tab = state.cbTab || "module";
   if (tab === "module") return paintPanelModule(host, path);
+  if (tab === "measures") return paintPanelMeasures(host, path);
+  if (tab === "walkthrough") return paintPanelWalk(host, path);
+  if (tab === "notes") return paintPanelNotes(host, path);
   if (tab === "source") return paintPanelSource(host, path);
   return paintPanelRun(host, path);
+}
+
+/* The canvas has a Maths tab because a layer has an equation. A Python
+   function does not, and writing one would be inventing something. What a
+   function does have is structure that can be counted — branches, nesting,
+   length — and those are facts about how hard it is to hold in your head.
+   That is the honest analogue, so it is called what it is. */
+async function paintPanelMeasures(host, path){
+  host.innerHTML = `<div class="empty" style="padding:14px">counting…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/measures?path=` + encodeURIComponent(path));
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "Could not count it"}</div>`;
+    return;
+  }
+  const t = d.totals;
+  host.innerHTML = `
+    <div class="cbfilehead"><b>${path}</b></div>
+    <p class="mathnote">There is no equation to show — a function is not a
+    layer. What can be counted is what makes it hard to read: how many paths go
+    through it, how deep it nests, how long it is.</p>
+    <div class="cbstats" style="margin:10px 0">
+      <b>${t.functions}</b> functions · <b>${t.paths}</b> paths in total ·
+      deepest nesting <b>${t.deepest}</b> · longest <b>${t.longest}</b> lines
+    </div>
+    <table class="runtable">
+      <thead><tr><th>function</th><th class="num">paths</th>
+        <th class="num">lines</th><th class="num">deep</th></tr></thead>
+      <tbody>${d.functions.map(f => `<tr>
+        <td><b>${f.name}</b><span>line ${f.line}${
+          f.arguments ? ` · ${f.arguments} arguments` : ""}${
+          f.returns > 1 ? ` · ${f.returns} exits` : ""}</span></td>
+        <td class="num${f.paths >= 12 ? " cbbad" : ""}">${f.paths}</td>
+        <td class="num">${f.lines}</td>
+        <td class="num${f.depth >= 5 ? " cbbad" : ""}">${f.depth}</td>
+      </tr>`).join("")}</tbody></table>
+    <p class="mathnote">Paths is one plus every decision — each <span
+    class="mono">if</span>, loop, <span class="mono">except</span>,
+    comprehension and <span class="mono">and</span>. It counts cases to hold in
+    mind, not quality: a long dispatch table scores badly and reads fine.</p>`;
+}
+
+async function paintPanelNotes(host, path){
+  host.innerHTML = `<div class="empty" style="padding:14px">reading…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + `/api/codebase/${encodeURIComponent(
+      state.codebase.id)}/notes?path=` + encodeURIComponent(path));
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "Nothing to say"}</div>`;
+    return;
+  }
+  host.innerHTML = `
+    <div class="cbfilehead"><b>${path}</b>
+      <span>imported by ${d.fan_in} · reaches ${d.fan_out}</span></div>
+    ${d.notes.length
+      ? d.notes.map(n => `<div class="advidea">
+          <b>${n.title}</b><p>${n.why}</p></div>`).join("")
+      : `<div class="paperok">Nothing stands out. Short functions, shallow
+         nesting, and it is not at the centre of the import graph.</div>`}
+    <p class="mathnote">Every line above is counted from this file, not
+    judged. None of it says the code is wrong.</p>`;
+}
+
+/* The canvas walks one example through the layers. The same idea here is a
+   call sequence — but it has to have been recorded, because the order of
+   calls is not in the source. */
+function paintPanelWalk(host, path){
+  const trace = state.cbTrace;
+  if (!trace || !(trace.sequence || []).length){
+    host.innerHTML = `<div class="empty" style="padding:14px">
+      <b>Nothing to walk through yet.</b>
+      <p style="margin:7px 0 0">The canvas can walk an example through a
+      network because the order is fixed by the wiring. Here it is not: which
+      function runs next depends on the data. Run the project on the
+      <b>run</b> tab and this replays what actually happened.</p></div>`;
+    return;
+  }
+  const steps = trace.sequence;
+  const at = Math.min(state.cbWalkAt || 0, steps.length - 1);
+  state.cbWalkAt = at;
+  const step = steps[at];
+  const here = steps
+    .map((s, i) => ({ ...s, i }))
+    .filter(s => Math.abs(s.i - at) <= 6);
+
+  host.innerHTML = `
+    <div class="cbfilehead"><b>call ${at + 1} of ${steps.length}</b>
+      ${trace.truncated ? `<span>first 4,000 recorded</span>` : ""}</div>
+    <div class="advlayer">
+      <div class="advhead"><b>${step.name}</b><span>${step.file}</span></div>
+      <div class="advmeta">line ${step.line} · ${step.depth} deep</div>
+    </div>
+    <div class="cbwalk">${here.map(s => `
+      <div class="cbwalkline${s.i === at ? " on" : ""}"
+        style="padding-left:${6 + s.depth * 14}px" data-walk="${s.i}">
+        <b>${s.name}</b><span>${s.file}</span></div>`).join("")}</div>
+    <div class="cbacts">
+      <button class="btn" id="cbWalkBack" ${at === 0 ? "disabled" : ""}>Back</button>
+      <button class="btn go" id="cbWalkNext"
+        ${at >= steps.length - 1 ? "disabled" : ""}>Next</button>
+      <button class="btn" id="cbWalkTop">First</button>
+    </div>
+    <p class="mathnote">This is what ran, in the order it ran. Nothing here is
+    inferred from the source.</p>`;
+
+  const go = n => { state.cbWalkAt = n; paintPanelWalk($("cbPanel"), path); };
+  $("cbWalkBack").addEventListener("click", () => go(Math.max(0, at - 1)));
+  $("cbWalkNext").addEventListener("click", () =>
+    go(Math.min(steps.length - 1, at + 1)));
+  $("cbWalkTop").addEventListener("click", () => go(0));
+  host.querySelectorAll("[data-walk]").forEach(row =>
+    row.addEventListener("click", () => go(+row.dataset.walk)));
 }
 
 function paintPanelModule(host, path){

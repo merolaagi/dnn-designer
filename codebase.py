@@ -392,6 +392,85 @@ def _unresolved_calls(tree: ast.AST, defined: Dict[str, str]) -> int:
     return total
 
 
+#: What makes a function hard to hold in your head. Each of these is a place
+#: the reader has to remember something and come back to it.
+BRANCHING = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.ExceptHandler,
+             ast.With, ast.AsyncWith, ast.IfExp, ast.Assert, ast.comprehension)
+
+
+def measures(root: Path, relative: str) -> Dict[str, Any]:
+    """How complicated each function is, counted rather than judged.
+
+    A neural layer has an equation, and the canvas shows it. A Python function
+    has no equation — writing one would be inventing something. What it does
+    have is structure that can be counted: branches, depth of nesting, length,
+    arguments, exits. Those are facts about how hard it is to hold in your
+    head, and they are the honest analogue.
+    """
+    root = root.resolve()
+    target = (root / relative).resolve()
+    if root != target and root not in target.parents:
+        raise ArchiveError("That path is outside the project.")
+    if not target.exists() or target.suffix != ".py":
+        raise ArchiveError("That is not a Python file in this project.")
+    try:
+        tree = ast.parse(target.read_text(errors="replace"))
+    except SyntaxError as exc:
+        raise ArchiveError(f"It does not parse: line {exc.lineno}: {exc.msg}")
+
+    rows: List[Dict[str, Any]] = []
+
+    def depth_of(node, level=0) -> int:
+        deepest = level
+        for child in ast.iter_child_nodes(node):
+            step = level + 1 if isinstance(child, BRANCHING) else level
+            deepest = max(deepest, depth_of(child, step))
+        return deepest
+
+    def look(node, owner: str = "") -> None:
+        branches = sum(1 for n in ast.walk(node) if isinstance(n, BRANCHING))
+        # boolean operators are branches too: `a and b` is a decision
+        branches += sum(len(n.values) - 1 for n in ast.walk(node)
+                        if isinstance(n, ast.BoolOp))
+        lines = (getattr(node, "end_lineno", node.lineno) or node.lineno) - node.lineno + 1
+        args = node.args
+        rows.append({
+            "name": (owner + "." + node.name) if owner else node.name,
+            "line": node.lineno,
+            "lines": lines,
+            # one path through, plus one for every decision: the usual count
+            "paths": branches + 1,
+            "depth": depth_of(node),
+            "arguments": len(args.args) + len(args.kwonlyargs)
+                         - (1 if owner else 0),
+            "returns": sum(1 for n in ast.walk(node)
+                           if isinstance(n, (ast.Return, ast.Yield))),
+            "doc": bool(ast.get_docstring(node)),
+        })
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            look(node)
+        elif isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    look(item, node.name)
+
+    rows.sort(key=lambda r: (-r["paths"], -r["lines"]))
+    total = sum(r["paths"] for r in rows)
+    return {
+        "path": relative,
+        "functions": rows,
+        "totals": {
+            "functions": len(rows),
+            "paths": total,
+            "deepest": max((r["depth"] for r in rows), default=0),
+            "longest": max((r["lines"] for r in rows), default=0),
+            "undocumented": sum(1 for r in rows if not r["doc"]),
+        },
+    }
+
+
 def module_map(root: Path) -> Dict[str, Any]:
     """The project as a graph of modules: who imports whom."""
     root = root.resolve()

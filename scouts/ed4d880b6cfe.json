@@ -1,0 +1,187 @@
+{
+ "id": "ed4d880b6cfe",
+ "kind": "maths",
+ "goal": "",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Reading 5 layers",
+   "detail": "1,226 parameters in total"
+  },
+  {
+   "at": 0.0,
+   "text": "   Input: Input",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Conv2d: Discrete cross-correlation",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   GlobalAvgPool: Global average pooling",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Linear: Affine map",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Output: Output",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "3 of 5 layers have a write-up",
+   "detail": "The rest say so rather than inventing one."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "layer",
+   "id": "i",
+   "name": "Input",
+   "type": "Input",
+   "title": "Input",
+   "equation": "",
+   "arithmetic": [],
+   "freedom": [],
+   "missing": "The mathematics of Input is not written up here yet. Entry point. Shape is channels-first and excludes the batch dimension. Rather than generate something plausible, this says nothing.",
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    3,
+    32,
+    32
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "c",
+   "name": "Conv2d",
+   "type": "Conv2d",
+   "title": "Discrete cross-correlation",
+   "equation": "y[c,i,j] = b[c] + \u03a3_k \u03a3_u \u03a3_v W[c,k,u,v] \u00b7 x[k, s\u00b7i + d\u00b7u \u2212 p, s\u00b7j + d\u00b7v \u2212 p]",
+   "arithmetic": [
+    [
+     "effective window",
+     "d(k\u22121)+1 = 1\u00d72+1 = 3"
+    ],
+    [
+     "output size",
+     "\u230a(H + 2p \u2212 d(k\u22121) \u2212 1)/s\u230b + 1 = \u230a(32 + 2 \u2212 2 \u2212 1)/1\u230b + 1 = 32"
+    ],
+    [
+     "parameters",
+     "(C_in/g)\u00b7k\u00b2\u00b7C_out + C_out = 3\u00d79\u00d732 + 32 = 896"
+    ],
+    [
+     "multiplies",
+     "parameters \u00d7 output positions \u2248 864 \u00d7 1,024 = 884,736"
+    ]
+   ],
+   "freedom": [
+    "The same 864 weights are reused at every one of the 1,024 positions. That reuse is the whole idea: it assumes what matters is the same everywhere in the image, and it is why a convolution has so few parameters for what it does.",
+    "Dilation widens the window without adding a single parameter: d=1 already reaches 3 pixels using 3\u00d73 weights. Stacking dilations 1,2,4,8 grows the reach exponentially with depth.",
+    "Groups divide the parameters by g. At g=C_in each filter sees one channel \u2014 that is a depthwise convolution, 27 parameters instead of 864, and a 1\u00d71 convolution after it mixes the channels back. That factorisation is most of what makes mobile architectures small."
+   ],
+   "missing": null,
+   "parameters": 896,
+   "share": 73.1,
+   "out_shape": [
+    32,
+    32,
+    32
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "g",
+   "name": "GlobalAvgPool",
+   "type": "GlobalAvgPool",
+   "title": "Global average pooling",
+   "equation": "y[c] = (1/HW) \u03a3_i \u03a3_j x[c,i,j]",
+   "arithmetic": [
+    [
+     "output size",
+     "C = 32, one number per channel"
+    ],
+    [
+     "parameters",
+     "none"
+    ],
+    [
+     "compared with flattening",
+     "a Linear on the flattened map would need 32,768 inputs; after this it needs 32 \u2014 a factor of 1024 fewer weights in the head"
+    ]
+   ],
+   "freedom": [
+    "Each channel becomes one number: how strongly its feature was present anywhere. All spatial information is gone by construction.",
+    "It accepts any H and W, so the network stops caring about input size.",
+    "The reason a classifier head after this is tiny \u2014 and the reason it cannot express anything about where things were."
+   ],
+   "missing": null,
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    32
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "h",
+   "name": "Linear",
+   "type": "Linear",
+   "title": "Affine map",
+   "equation": "y = W x + b",
+   "arithmetic": [
+    [
+     "output size",
+     "10, because you set it \u2014 a dense layer's width is a choice, not a consequence"
+    ],
+    [
+     "parameters",
+     "in\u00d7out + out = 32\u00d710 + 10 = 330"
+    ],
+    [
+     "multiplies per sample",
+     "320"
+    ]
+   ],
+   "freedom": [
+    "Every output sees every input, so cost grows as the product of the two widths. That product is usually where a network's parameters go.",
+    "Two of these in a row with nothing between them multiply to a single matrix W\u2082W\u2081 \u2014 the depth buys nothing without a nonlinearity.",
+    "Factorising W \u2248 UV with U \u2208 \u211d^(out\u00d7r), V \u2208 \u211d^(r\u00d7in) costs r\u00d7(32+10) instead of 320. Below r \u2248 7 it is cheaper, and it constrains the map to rank r \u2014 sometimes a useful prior rather than only a saving."
+   ],
+   "missing": null,
+   "parameters": 330,
+   "share": 26.9,
+   "out_shape": [
+    10
+   ]
+  },
+  {
+   "kind": "layer",
+   "id": "o",
+   "name": "Output",
+   "type": "Output",
+   "title": "Output",
+   "equation": "",
+   "arithmetic": [],
+   "freedom": [],
+   "missing": "The mathematics of Output is not written up here yet. Marks the tensor the loss is computed on. Rather than generate something plausible, this says nothing.",
+   "parameters": 0,
+   "share": 0.0,
+   "out_shape": [
+    10
+   ]
+  }
+ ],
+ "error": "",
+ "seconds": 0.0,
+ "kept_at": 1789080738.7138402
+}
