@@ -1165,6 +1165,7 @@ class CodePayload(BaseModel):
 
 class ScanPayload(BaseModel):
     root: str
+    shape: str = "3,224,224"
 
 
 class FolderImportPayload(BaseModel):
@@ -1248,9 +1249,32 @@ def scan_folder(body: ScanPayload):
     """List every nn.Module in a folder. Reads syntax trees only — nothing runs
     until a class is actually picked for import."""
     try:
-        return importer.scan_folder(body.root)
+        found = importer.scan_folder(body.root)
     except importer.ImportError_ as exc:
         raise HTTPException(400, detail={"message": str(exc)})
+    return _with_suggestions(found, body.shape)
+
+
+def _with_suggestions(found: Dict[str, Any], shape: str) -> Dict[str, Any]:
+    """Fill in what to pass, where it can be worked out from the names.
+
+    "what to pass" is a fair question to be stuck on, and the scout already
+    answers it for its own imports. Leaving the person to guess while the same
+    program can work it out is not a boundary worth keeping.
+    """
+    try:
+        dims = [int(x) for x in str(shape).replace("x", ",").split(",") if x.strip()]
+    except ValueError:
+        dims = [3, 224, 224]
+    for model in found.get("models", []):
+        wants = model.get("wants") or []
+        if not wants:
+            continue
+        model["signature"] = ", ".join(wants)
+        guess = importer.guess_arguments(wants, dims)
+        model["suggested"] = (", ".join(repr(v) for v in guess)
+                              if guess is not None else "")
+    return found
 
 
 class RepoPayload(BaseModel):

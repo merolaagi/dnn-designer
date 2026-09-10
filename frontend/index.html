@@ -7763,7 +7763,7 @@ async function loadProjectTree(root){
   try{
     r = await fetch(API + "/api/scan-folder/tree", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ root }),
+      body: JSON.stringify({ root, shape: $("im_shape").value || "3,224,224" }),
     });
     d = await r.json();
   } catch { host.innerHTML = `<div class="empty" style="padding:12px">No answer.</div>`; return; }
@@ -9442,7 +9442,7 @@ async function scanCodeFolder(){
   try{
     r = await fetch(API + "/api/scan-folder", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ root }),
+      body: JSON.stringify({ root, shape: $("im_shape").value || "3,224,224" }),
     });
     d = await r.json();
   } catch { host.innerHTML = `<div class="scannote">The server did not respond.</div>`; return; }
@@ -9494,11 +9494,15 @@ function renderScanResults(){
      ${scan.repo ? `<div class="repoline">from <b>${scan.repo}</b> at
         <span class="mono">${scan.ref}</span></div>` : ""}
      ${scan.models.some(m => m.arguments > 0)
-       ? `<div class="argnote">Some of these take a constructor argument — the
-          box on the row is what to pass, not how many. Build it in
-          <b>Setup</b> below and name it here. For a class taking a config that
-          is usually one line in Setup and <span class="mono">cfg</span> in the
-          box.</div>` : ""}
+       ? `<div class="argnote">${scan.models.some(m => m.suggested)
+            ? `The boxes are filled in where the argument names say what they
+               want — <span class="mono">in_channels, out_channels,
+               kernel_size</span> can be worked out from your input shape, and
+               those are a suggestion to check rather than an answer. `
+            : ""}Anything left blank asks for something structural — a config
+          object, a tokenizer, another model — which cannot be inferred from a
+          name. Build those in <b>Setup</b> below and name them in the box.
+          </div>` : ""}
      <div class="scannote">Read ${scan.files} files.
        ${scan.skipped.length ? `<span class="scanskip">${scan.skipped.length}
          skipped for syntax errors.</span>` : ""}
@@ -9570,11 +9574,17 @@ function scanRow(model, scan){
     </div>
     ${model.arguments > 0
       ? `<input type="text" class="scanargs${
-             (scan.args[key] || "").trim() ? "" : " wanting"}" data-args="${key}"
-           title="What to pass this class. Define it in Setup first, then name it here — for minGPT that is cfg."
-           placeholder="${(scan.signature || "").split(",")[0].trim()
-                          || "what to pass"}"
-           value="${(scan.args[key] || "").replace(/"/g, "&quot;")}">`
+             (scan.args[key] || model.suggested || "").trim() ? "" : " wanting"}"
+           data-args="${key}"
+           title="${model.signature
+             ? "Takes " + model.signature + ". "
+             : ""}${model.suggested
+             ? "Filled in from the parameter names and your input shape — check it."
+             : "These cannot be worked out from their names. Build them in Setup and name them here."}"
+           placeholder="${(model.signature || "what to pass")
+             .replace(/"/g, "&quot;")}"
+           value="${(scan.args[key] !== undefined
+             ? scan.args[key] : (model.suggested || "")).replace(/"/g, "&quot;")}">`
       : `<span class="scanargs none">no args</span>`}
     ${badge}
     <button class="btn tiny" data-try="${key}">Try</button>

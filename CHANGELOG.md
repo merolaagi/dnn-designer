@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.67.0
+
+**The import dialog fills in what to pass.** The scout has worked this out for
+its own imports since 1.61, and leaving a person to guess while the same
+program can answer it was not a boundary worth keeping.
+
+On `onnx/models`, scanned against a 3×224×224 input:
+
+```text
+ConvLayer            (in_channels, out_channels, kernel_size, stride)   3, 32, 3, 1
+ResidualBlock        (channels)                                         3
+UpsampleConvLayer    (in_channels, out_channels, kernel_size, stride)   3, 32, 3, 1
+CombinedDecoder      (decoder, lm_head, config)                         left blank
+SimplifiedT5Encoder  (encoder)                                          left blank
+GenerativeT5         (encoder, decoder_with_lm_head, tokenizer)         left blank
+```
+
+All three filled ones import: 896, 168 and 896 parameters.
+
+Three things about how it is presented:
+
+- **The placeholder is the signature**, so a box you have to fill yourself says
+  what it wants rather than "what to pass".
+- **A filled box is marked as a suggestion to check**, not an answer. It is
+  inferred from parameter names and your input shape, and a name can lie.
+- **A box that cannot be inferred stays empty and says why.** A tokenizer or a
+  config is a structural decision; filling it with something plausible would
+  produce a model that builds and means nothing.
+
 ## 1.66.1
 
 **Fixed: clicking a module on the map did nothing.** My own dragging broke it.

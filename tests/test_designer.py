@@ -1548,6 +1548,48 @@ def _():
         assert token in PAGE, f"{token} is missing from the codebase page"
 
 
+@check("the import dialog suggests what to pass")
+def _():
+    """"What to pass" is a fair question to be stuck on, and the scout already
+    answers it for its own imports. Leaving a person to guess while the same
+    program can work it out is not a boundary worth keeping — but a suggestion
+    has to be marked as one, and the ones that cannot be inferred have to stay
+    blank rather than be filled with something plausible.
+    """
+    import importer
+    import main
+
+    assert importer.guess_arguments(
+        ["in_channels", "out_channels", "kernel_size", "stride"],
+        [3, 224, 224]) == [3, 32, 3, 1]
+    assert importer.guess_arguments(["channels"], [3, 224, 224]) == [3]
+    assert importer.guess_arguments(
+        ["encoder", "decoder_with_lm_head", "tokenizer"], [3, 224, 224]) is None, \
+        "a tokenizer was invented"
+    assert importer.guess_arguments(["config"], [1, 28, 28]) is None
+
+    # the scan carries both the signature and the suggestion
+    found = main._with_suggestions({"models": [
+        {"cls": "A", "arguments": 2, "wants": ["in_channels", "out_channels"]},
+        {"cls": "B", "arguments": 1, "wants": ["config"]},
+        {"cls": "C", "arguments": 0, "wants": []},
+    ]}, "3,32,32")
+    by = {m["cls"]: m for m in found["models"]}
+    assert by["A"]["suggested"] == "3, 32", by["A"]
+    assert by["A"]["signature"] == "in_channels, out_channels"
+    assert by["B"]["suggested"] == "", "a structural argument was suggested"
+    assert "suggested" not in by["C"], "a class taking nothing was given something"
+
+    # the box is filled from it, and the empty ones say why they are empty
+    row = PAGE[PAGE.index("function scanRow"):]
+    row = row[: row.index("\nfunction modelFor")]
+    assert "model.suggested" in row, "the suggestion never reaches the box"
+    assert "check it" in row, "a suggestion is presented as an answer"
+    assert "cannot be worked out from their names" in row, \
+        "a blank box gives no reason for being blank"
+    assert "model.signature" in row, "the box does not show what it wants"
+
+
 @check("a scout verifies what it finds rather than describing it")
 def _():
     """The useful thing about a scout here is not that it can search — anyone
