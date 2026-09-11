@@ -1206,6 +1206,87 @@ def _():
         "it opens the page without fetching the paper"
 
 
+@check("a scout can work out how to import a whole repository")
+def _():
+    """The Import dialog can plan one class, which is the right shape when you
+    know which class you want. It is the wrong shape for a repository you have
+    never seen: forty classes, each unreachable for a different reason, and no
+    way to find the two that are not without pressing forty buttons.
+
+    This is the agent form of the same work — and it holds itself to the same
+    standard, which is that a plan is imported before it is reported.
+    """
+    import tempfile
+
+    import scouts
+
+    work = Path(tempfile.mkdtemp())
+    root = work / "proj"
+    (root / "pkg").mkdir(parents=True)
+    (root / "pkg" / "__init__.py").write_text("")
+    (root / "pkg" / "configs.py").write_text(
+        "from dataclasses import dataclass\n"
+        "@dataclass\n"
+        "class BlockConfig:\n"
+        "    input_dims: int\n"
+        "    hidden_dims: int\n")
+    (root / "pkg" / "nets.py").write_text(
+        "import torch.nn as nn\n"
+        "from . import configs\n"
+        "class Plain(nn.Module):\n"
+        "    def __init__(self):\n"
+        "        super().__init__()\n"
+        "        self.fc = nn.Linear(16, 4)\n"
+        "    def forward(self, x):\n"
+        "        return self.fc(x)\n"
+        "class Configured(nn.Module):\n"
+        "    def __init__(self, config: configs.BlockConfig):\n"
+        "        super().__init__()\n"
+        "        self.fc = nn.Linear(config.input_dims, config.hidden_dims)\n"
+        "    def forward(self, x):\n"
+        "        return self.fc(x)\n"
+        "class Impossible(nn.Module):\n"
+        "    def __init__(self, tokenizer):\n"
+        "        super().__init__()\n")
+
+    scout = scouts.start("imports", str(root), {"classes": 10},
+                         {"nodes": [{"type": "Input",
+                                     "params": {"shape": [16]}}]})
+    assert scout.settled.wait(timeout=180), "the scout never settled"
+    assert scout.status == "done", scout.error
+
+    by = {f["cls"]: f for f in scout.findings}
+    assert set(by) == {"Plain", "Configured", "Impossible"}, set(by)
+
+    assert by["Plain"]["works"], by["Plain"]
+    assert by["Plain"]["parameters"] == 16 * 4 + 4, by["Plain"]
+
+    # the config was read from the repository and written out
+    assert by["Configured"]["works"], by["Configured"]
+    assert "BlockConfig(" in by["Configured"]["setup"], by["Configured"]
+    assert "input_dims=16" in by["Configured"]["setup"], \
+        "the input width was not taken from the shape"
+    assert by["Configured"]["args"], "nothing was passed"
+
+    # and a tokenizer is refused rather than invented
+    assert not by["Impossible"]["works"]
+    assert "cannot be worked out" in by["Impossible"]["summary"], \
+        by["Impossible"]["summary"]
+
+    # the plan is checked by importing with it, not asserted
+    body = inspect.getsource(scouts._plan_and_check)
+    assert "importer.from_folder" in body, "a plan is reported untested"
+    assert "the plan did not import" in body
+
+    # an inexact import is not a success, same rule as the code scout
+    assert 'out["works"] = ' in body or "exact or not expected" in body, \
+        "an import that disagrees with torch would count as working"
+
+    for token in ('f.kind === "importable"', "function openScoutImport",
+                  "data-import="):
+        assert token in PAGE, f"{token} is missing from the scouts page"
+
+
 @check("an errand survives leaving the page")
 def _():
     """Forty seconds of searching the internet should not be lost by clicking
@@ -1886,7 +1967,7 @@ def _():
     import scouts
 
     ids = {entry["id"] for entry in scouts.CATALOG}
-    assert ids == {"code", "papers", "draft", "maths"}, ids
+    assert ids == {"code", "papers", "imports", "draft", "maths"}, ids
 
     # A drafted design must be checked before it is offered: assembled,
     # counted against torch, and run. Putting an unverified one on the canvas

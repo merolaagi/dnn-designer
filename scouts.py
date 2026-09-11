@@ -145,6 +145,14 @@ CATALOG = [
             "Reports which papers have fetchable text, because one that does "
             "not cannot be read here.",
      "params": [{"name": "hubs", "kind": "int", "default": 6}]},
+    {"id": "imports", "name": "Work out how to import a repository",
+     "doc": "Give it a GitHub repository or a folder. It fetches it, finds "
+            "every nn.Module, and for each one works out what to pass — "
+            "reading the config classes in the repo itself where there is "
+            "one — then imports with that plan to check. Reports which "
+            "classes are reachable, at what size, and the specific reason "
+            "each of the rest is not.",
+     "params": [{"name": "classes", "kind": "int", "default": 24}]},
     {"id": "draft", "name": "Draft a design for me",
      "doc": "Finds the guided build closest to what you describe, assembles "
             "the whole thing, fits it to your input shape and number of "
@@ -168,7 +176,8 @@ def start(kind: str, goal: str, config: Dict[str, Any],
     scout = Scout(id=uuid.uuid4().hex[:12], kind=kind, goal=goal)
     SCOUTS[scout.id] = scout
     runner = {"code": _scout_code, "papers": _scout_papers,
-              "draft": _scout_draft, "maths": _scout_maths}.get(kind)
+              "imports": _scout_imports, "draft": _scout_draft,
+              "maths": _scout_maths}.get(kind)
     if runner is None:
         scout.status = "error"
         scout.error = f"No scout called {kind!r}."
@@ -588,6 +597,150 @@ def _scout_papers(scout: Scout, config: Dict[str, Any],
               "than of the search: a task like classifying images has no such "
               "theorem to find. The code scout and Draft a design are the "
               "tools for those.")
+
+
+# --------------------------------------------------------------------------
+# imports
+# --------------------------------------------------------------------------
+
+def _scout_imports(scout: Scout, config: Dict[str, Any],
+                   graph: Dict[str, Any]) -> None:
+    """Work out how to import everything in one repository, and check it.
+
+    The Import dialog can do this for one class at a time, which is the right
+    shape when you already know which class you want. It is the wrong shape for
+    a repository you have never seen: forty classes, most of them unreachable
+    for reasons that differ, and no way to find the two that are not without
+    pressing forty buttons.
+    """
+    import importer
+
+    want = (scout.goal or "").strip()
+    if not want:
+        raise RuntimeError("Name a repository or a folder.")
+
+    limit = max(1, min(60, int(config.get("classes", 24))))
+    shape = _input_shape(graph) or [3, 224, 224]
+
+    if Path(want).exists():
+        root = str(Path(want).resolve())
+        scout.say(f"Reading {root}")
+    else:
+        scout.say(f"Fetching {want}")
+        try:
+            root = importer.fetch_repo(want)["root"]
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Could not fetch {want}: {exc}")
+
+    scan = importer.scan_folder(root)
+    models = [m for m in (scan.get("models") or [])
+              if not _is_scaffolding(m["file"])] or (scan.get("models") or [])
+    scout.say(f"{scan['files']} files, {len(models)} nn.Module classes",
+              f"looking at {min(limit, len(models))} of them")
+
+    foreign: Dict[str, int] = {}
+    for model in models:
+        if model.get("foreign"):
+            foreign[model["foreign"]] = foreign.get(model["foreign"], 0) + 1
+    if foreign:
+        scout.say("Some are written in another framework",
+                  ", ".join(f"{n} in {name}" for name, n in foreign.items())
+                  + " — this traces PyTorch, so no argument will import those.")
+
+    # cheapest first: no arguments, then a plain number, then a config
+    def effort(model):
+        if model.get("foreign"):
+            return 3
+        if not model.get("arguments"):
+            return 0
+        return 1 if importer.guess_arguments(
+            model.get("wants") or [], shape) is not None else 2
+
+    models.sort(key=lambda m: (effort(m), m["cls"]))
+
+    reachable = 0
+    for model in models[:limit]:
+        if scout.stop.is_set():
+            return
+        verdict = _plan_and_check(importer, root, model, shape)
+        scout.say(f"   {model['cls']}: {verdict['summary']}")
+        if verdict["works"]:
+            reachable += 1
+        scout.findings.append({"kind": "importable", **verdict})
+
+    scout.findings.sort(key=lambda f: (not f["works"], -f.get("parameters", 0)))
+    if reachable:
+        scout.say(f"{reachable} of {min(limit, len(models))} can be imported",
+                  "Each one below carries the argument and the Setup block that "
+                  "made it work, checked by importing with them.")
+    else:
+        scout.say("None of them import.",
+                  "Each card says why. The commonest reasons are a config that "
+                  "cannot be built from its field names, a forward() that "
+                  "branches on tensor values, and another framework entirely.")
+
+
+def _plan_and_check(importer, root: str, model: Dict[str, Any],
+                    shape: List[int]) -> Dict[str, Any]:
+    """One class: work out the arguments, then import with them."""
+    out = {"cls": model["cls"], "file": model["file"],
+           "foreign": model.get("foreign", ""), "works": False,
+           "args": "", "setup": ""}
+
+    if model.get("foreign"):
+        out["summary"] = f"written in {model['foreign']}"
+        out["why"] = (f"This traces PyTorch modules with torch.fx. A "
+                      f"{model['foreign']} module is a different object and no "
+                      f"argument changes that — the source is still readable "
+                      f"under Read a codebase.")
+        return out
+
+    args, setup = "", ""
+    if model.get("arguments"):
+        try:
+            plan = importer.plan_arguments(root, model["file"], model["cls"],
+                                           shape)
+        except Exception as exc:  # noqa: BLE001
+            out["summary"] = "could not be read"
+            out["why"] = str(exc)[:240]
+            return out
+        if not plan["args"] and not plan["setup"]:
+            out["summary"] = "needs something that cannot be worked out"
+            out["why"] = plan["why"]
+            return out
+        args, setup = plan["args"], plan["setup"]
+
+    try:
+        built = importer.from_folder(root, model["file"], model["cls"],
+                                     shape, args, setup)
+    except Exception as exc:  # noqa: BLE001
+        out.update({"args": args, "setup": setup})
+        out["summary"] = "the plan did not import"
+        out["why"] = str(exc)[:260]
+        return out
+
+    built.pop("_notes", None)
+    expected = built.pop("_expected_parameters", 0)
+    built.pop("_entry", None)
+    built.pop("_routing", None)
+    report = G.analyze(G.parse(built))
+    counted = report.get("total_learnables", 0)
+    exact = bool(expected) and counted == expected
+
+    out.update({
+        "works": exact or not expected,
+        "args": args, "setup": setup, "graph": built,
+        "layers": len(built.get("nodes", [])),
+        "parameters": counted, "torch": expected, "exact": exact,
+    })
+    out["summary"] = (f"{out['layers']} layers, {counted:,} parameters"
+                      + (", matching torch" if exact else
+                         f" but torch says {expected:,}" if expected else "")
+                      + (f" — with {args}" if args else ""))
+    if expected and not exact:
+        out["why"] = (f"The traced graph has {counted:,} parameters and the "
+                      f"class has {expected:,}, so this graph is not the model.")
+    return out
 
 
 # --------------------------------------------------------------------------

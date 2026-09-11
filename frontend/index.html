@@ -6067,6 +6067,8 @@ async function renderScoutsPage(){
         <input type="text" class="scoutgoal" data-goal="${entry.id}"
                placeholder="${entry.id === "code"
                  ? "e.g. depthwise separable convolution"
+                 : entry.id === "imports"
+                 ? "e.g. google-research/timesfm, or a folder path"
                  : entry.id === "draft"
                  ? "e.g. classify small colour images"
                  : "e.g. unique steady state in a compartmental model"}">`}
@@ -6228,6 +6230,8 @@ function paintScout(d){
   live.querySelectorAll("[data-open]").forEach(btn =>
     btn.addEventListener("click", () => openScoutFind(+btn.dataset.open,
                                                      +btn.dataset.tried)));
+  live.querySelectorAll("[data-import]").forEach(btn =>
+    btn.addEventListener("click", () => openScoutImport(+btn.dataset.import)));
   live.querySelectorAll("[data-draft]").forEach(btn =>
     btn.addEventListener("click", () => placeDraft(+btn.dataset.draft)));
   live.querySelectorAll("[data-paper]").forEach(btn =>
@@ -6268,6 +6272,23 @@ function scoutCard(f, i){
             ? `<button class="btn tiny" data-open="${i}" data-tried="${j}">
                  Open on the canvas</button>` : ""}
         </div>`).join("")}</div>
+    </div>`;
+  }
+  if (f.kind === "importable"){
+    return `<div class="foundcard">
+      <div class="foundtop"><b>${f.cls}</b>
+        <span>${f.file}${f.parameters
+          ? ` · ${f.parameters.toLocaleString()} parameters` : ""}</span></div>
+      <div class="tried ${f.works ? "ok" : (f.foreign ? "no" : "warn")}">
+        <span>${f.summary}</span>
+        ${f.why ? `<em>${f.why}</em>` : ""}
+      </div>
+      ${f.args ? `<div class="cbsec">what to pass</div>
+        <pre class="armexpr">${f.args.replace(/</g, "&lt;")}</pre>` : ""}
+      ${f.setup ? `<div class="cbsec">setup it wrote</div>
+        <pre class="armexpr">${f.setup.replace(/</g, "&lt;")}</pre>` : ""}
+      ${f.works ? `<button class="btn tiny" data-import="${i}">
+        Open on the canvas</button>` : ""}
     </div>`;
   }
   if (f.kind === "draft"){
@@ -6326,6 +6347,28 @@ function scoutCard(f, i){
          </table>` : ""}
     ${f.missing ? `<p class="hitnotext">No write-up for this layer yet.</p>` : ""}
   </div>`;
+}
+
+/* An importable class was imported once already, with the arguments shown on
+   its card, which is what earned it the button. */
+function openScoutImport(index){
+  const f = (state.scout && state.scout.findings || [])[index];
+  if (!f || !f.works || !f.graph) return;
+  pushHistory();
+  state.graph = f.graph;
+  state.graph.name = f.cls;
+  state.book = null;
+  state.version = null;
+  state.seq = (f.graph.nodes || []).length + (f.graph.edges || []).length + 900;
+  $("gname").value = f.cls;
+  clearSelection();
+  showPage("pageDesign");
+  renderSheetTabs();
+  render(); renderInspector(); analyze();
+  fitView();
+  state.cameFrom = { how: "imported", what: f.cls, scout: state.scout.id };
+  toast(`${f.cls} — ${f.parameters.toLocaleString()} parameters`
+        + (f.args ? `, built with ${f.args}` : "") + ".");
 }
 
 /* A drafted design is placeable for the same reason a found class is: it was

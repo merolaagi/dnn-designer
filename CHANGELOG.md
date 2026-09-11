@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.71.0
+
+**The agent, which 1.70.0 was not.** Last version put the config-working-out
+into a button in the Import dialog. That is the right shape when you already
+know which class you want, and the wrong one for a repository you have never
+seen — forty classes, each unreachable for a different reason, and no way to
+find the two that are not without pressing forty buttons.
+
+**Scouts &rarr; "Work out how to import a repository"** does the whole thing.
+Give it `google-research/timesfm` or a folder path and it fetches, finds every
+`nn.Module`, works out the arguments for each — reading the repository's own
+config classes where there is one — imports with that plan, and reports the
+result. Cheapest first: no arguments, then a plain number, then a config.
+
+On timesfm, 14 classes deep:
+
+```text
+YES  ResidualBlock        7 layers, 24,864 parameters, matching torch
+                          with 128, 32, 128
+ no  RMSNorm              6 layers, 0 parameters but torch says 128
+ no  MultiHeadAttention   the plan did not import
+ no  (nine more)          written in Flax
+```
+
+Every card carries the argument and the Setup block that was used, so a
+success can be repeated by hand and a failure can be argued with. The ones that
+work open on the canvas in one press.
+
+`RMSNorm` is the interesting failure: the plan was right and the import
+succeeded, but the traced graph has no parameters where the class has 128 — its
+learnable scale is lost in tracing. That is not a working import and is not
+reported as one.
+
 ## 1.70.0
 
 **"Work it out" — the dialog writes the Setup block itself.**
