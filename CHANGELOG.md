@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.73.0
+
+**The Maths panel is read in three passes now**, taking the shape the ML Math
+Lab uses — which is better than the one it had, and the reason is that it is
+organised around what a reader wants rather than around what the data happens
+to be.
+
+**The equation card** sits at the top: the equation large, with this network's
+own result beside it. That pairing is the entire reason to read a panel instead
+of a textbook, and it was previously four scrolls apart.
+
+**Three tabs.**
+
+- **Understand** — the notation, each symbol collapsed until asked for. Somebody
+  who knows what W is should not scroll past four rows explaining it, and
+  somebody who does not should be one click from the answer. Then why it
+  matters, then the lessons that explain it.
+- **Derive** — the numbers worked through with your shapes, then the
+  curriculum's derivation step by step, and the mistake people make.
+- **Code** — the line this design actually generates for this layer, and the
+  curriculum's worked example.
+
+Each tab says when it has nothing rather than being blank.
+
+Found while building it: the Code tab asked the per-node entry for `.line`,
+which does not exist — the fields are `init` and `call`. It would have shown an
+empty tab and looked like there was no code for any layer.
+
 ## 1.72.0
 
 **The ML Math Lab curriculum, integrated rather than bolted on.**

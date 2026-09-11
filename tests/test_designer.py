@@ -1485,6 +1485,53 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("the maths panel is read in three passes, not one column")
+def _():
+    """Understand, Derive, Code — the shape a reader wants rather than the
+    shape the data arrives in. The equation goes at the top with this
+    network's own result beside it, because that pairing is the reason to read
+    a panel instead of a textbook.
+    """
+    for token in ("function paintMathTab", "eqcard", "mathtabs",
+                  "function offerDerivation", "function offerLessonCode"):
+        assert token in PAGE, f"{token} is missing"
+
+    tabs = PAGE[PAGE.index('["understand", "derive", "code"]'):]
+    assert tabs, "the panel has no tabs"
+
+    # notation collapsed by default: somebody who knows what W is should not
+    # scroll past four rows explaining it
+    assert "notarow" in PAGE and ".notarow.open span" in PAGE, \
+        "the notation rows do not expand"
+
+    # the Code tab must use the fields the generator actually produces
+    coder = PAGE[PAGE.index("async function offerLessonCode"):]
+    coder = coder[: coder.index("\n/* ============================ sheets")]
+    assert "generated.init" in coder and "generated.call" in coder, \
+        "it asks for a field the per-node code entry does not have"
+    # matched on code, not prose: the comment explaining the fix says ".line"
+    assert "generated.line" not in coder, \
+        "the old non-existent field is still read"
+
+    # and the entry really does carry those two
+    if HAVE_TORCH:
+        g, rep = analyzed(build(
+            [("i", "Input", {"shape": [28]}),
+             ("l", "Linear", {"units": 28}),
+             ("o", "Output", {"task": "classification"})],
+            [("i", "l", 0), ("l", "o", 0)], "Panel"))
+        node_code = {}
+        codegen.to_pytorch(g, rep, node_code)
+        entry = node_code["l"]
+        assert entry.get("init") and entry.get("call"), entry.keys()
+        assert "line" not in entry, \
+            "a line field exists after all, so the guard above is wrong"
+
+    # each tab has somewhere to say it has nothing, rather than being blank
+    for empty in ("No derivation for this layer", "No worked code for this layer"):
+        assert empty in PAGE, f"a tab can be empty without saying so: {empty}"
+
+
 @check("a lesson sits beside the layer it explains")
 def _():
     """Eighteen lessons written for a separate application, kept here because

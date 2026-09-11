@@ -1225,6 +1225,40 @@ i.covered{
 .cbwalkline.on b{font-weight:600;color:#16202E}
 .cbwalkline:hover{background:var(--paper-2)}
 table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
+.eqcard{
+  margin:12px 0;padding:18px 16px;border-radius:11px;
+  background:linear-gradient(#FBFAFF, #F6F4FD);border:1px solid #E4DFF5;
+  text-align:center;
+}
+.eqbig{font-size:19px;line-height:1.5;color:#231C3D;font-family:var(--mono)}
+.eqlive{margin-top:11px;font-size:10.5px;color:var(--muted)}
+.eqlive i{
+  font-style:normal;display:block;font-size:8.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:#9A8FC4;margin-bottom:3px;
+}
+.eqwhere{margin-top:8px;font-size:10.5px;color:var(--muted);font-family:var(--mono)}
+.mathtabs{display:flex;gap:2px;border-bottom:1px solid var(--paper-3);margin-bottom:12px}
+.mathtabs button{
+  padding:8px 14px;background:none;border:none;font-size:11.5px;
+  color:var(--muted);border-bottom:2px solid transparent;text-transform:capitalize;
+}
+.mathtabs button.on{color:var(--text);border-bottom-color:#8A5CF6;font-weight:600}
+.mathtabs button:hover{color:var(--text)}
+.notation{display:flex;flex-direction:column;gap:4px}
+.notarow{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:#fff;border:1px solid var(--paper-3);border-radius:8px;
+  padding:8px 11px;cursor:pointer;
+}
+.notarow:hover{border-color:#C3B8E8}
+.notarow .sym{font-family:var(--mono);font-size:12px;color:#5B3BB5;min-width:26px}
+.notarow span{
+  flex:1;font-size:11px;color:#3C4B5F;line-height:1.5;
+  max-height:0;overflow:hidden;transition:max-height .15s;
+}
+.notarow.open span{max-height:120px}
+.notarow i{font-style:normal;color:#B7C0CB;font-size:13px}
+.notarow.open i{color:#8A5CF6}
 .lessonlist{display:flex;flex-direction:column;gap:6px}
 .lessonrow{
   text-align:left;background:#fff;border:1px solid var(--paper-3);
@@ -2547,7 +2581,7 @@ const state = {
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
-  codebase:null, cbFile:null, maths:null, lesson:null, cbMap:null, cbMapPlace:null,
+  codebase:null, cbFile:null, maths:null, lesson:null, mathTab:"understand", mathType:null, lessonCache:null, cbMap:null, cbMapPlace:null,
   cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module", cbWalkAt:0,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
@@ -9196,7 +9230,8 @@ async function offerLesson(layerType){
   } catch { return; }
   if (!d.lessons || !d.lessons.length) return;
 
-  host.insertAdjacentHTML("beforeend", `
+  const slot = $("mathLesson") || host;
+  slot.insertAdjacentHTML("beforeend", `
     <div class="mathsec">the lesson behind it</div>
     <div class="lessonlist">${d.lessons.map(e => `
       <button class="lessonrow" data-lesson="${e.id}">
@@ -9206,7 +9241,7 @@ async function offerLesson(layerType){
       </button>`).join("")}</div>
     <p class="mathnote">From <b>${d.source.name}</b>.</p>`);
 
-  host.querySelectorAll("[data-lesson]").forEach(row =>
+  slot.querySelectorAll("[data-lesson]").forEach(row =>
     row.addEventListener("click", () => showLesson(row.dataset.lesson)));
 }
 
@@ -9300,8 +9335,8 @@ async function renderMathPanel(){
     return;
   }
   if (state.mathFor === node.id && state.mathEntry){
+    state.mathType = node.type;
     paintMath(state.mathEntry);
-    offerLesson(node.type);
     return;
   }
   host.innerHTML = `<div class="empty" style="padding:14px">working it through…</div>`;
@@ -9318,6 +9353,16 @@ async function renderMathPanel(){
   paintMath(d);
 }
 
+/* Understand, Derive, Code — the shape a reader wants, rather than the shape
+   the data happens to arrive in. The equation goes at the top with this
+   network's own result beside it, because that pairing is the whole reason to
+   read a panel instead of a textbook. The rest is behind three tabs so the
+   panel is short enough to read.
+
+   Notation is collapsed by default. Somebody who knows what W is should not
+   scroll past four rows explaining it, and somebody who does not should be one
+   click from the answer. */
+
 function paintMath(d){
   const host = $("mathBody");
   if (d.missing){
@@ -9325,23 +9370,135 @@ function paintMath(d){
       <div class="mathmissing">${d.missing}</div>`;
     return;
   }
-  host.innerHTML =
-    `<div class="mathhead"><b>${d.label}</b><span>${d.title}</span></div>`
-    + `<div class="mathfig">${mathDiagram(d)}</div>`
-    + `<div class="matheq">${d.equation}</div>`
-    + (d.shape ? `<div class="mathwhere">${d.shape}</div>` : "")
-    + (d.symbols.length
-        ? `<div class="mathsec">what each part is</div>`
-          + `<table class="mathtab">${d.symbols.map(s =>
-              `<tr><td class="sym">${s[0]}</td><td>${s[1]}</td></tr>`).join("")}</table>`
-        : "")
-    + `<div class="mathsec">worked through, here</div>`
-    + `<table class="mathtab">${d.arithmetic.map(a =>
-        `<tr><td class="key">${a[0]}</td><td class="val">${a[1]}</td></tr>`).join("")}</table>`
-    + (d.freedom.length
-        ? `<div class="mathsec">where the freedom is</div>`
-          + d.freedom.filter(Boolean).map(f => `<p class="mathnote">${f}</p>`).join("")
-        : "");
+  state.mathTab = state.mathTab || "understand";
+  const live = (d.arithmetic || []).find(a =>
+    /output size|shape/.test(String(a[0]))) || (d.arithmetic || [])[0];
+
+  host.innerHTML = `
+    <div class="mathhead"><b>${d.label}</b><span>${d.title}</span></div>
+    <div class="mathfig">${mathDiagram(d)}</div>
+
+    <div class="eqcard">
+      <div class="eqbig">${d.equation}</div>
+      ${live ? `<div class="eqlive"><i>in this network</i>
+        <span class="mono">${live[0]} ${live[1]}</span></div>` : ""}
+      ${d.shape ? `<div class="eqwhere">${d.shape}</div>` : ""}
+    </div>
+
+    <div class="mathtabs" id="mathTabs">
+      ${["understand", "derive", "code"].map(t =>
+        `<button data-mathtab="${t}"${state.mathTab === t ? ' class="on"' : ""}
+          >${t}</button>`).join("")}
+    </div>
+    <div id="mathTabBody"></div>`;
+
+  $("mathTabs").querySelectorAll("[data-mathtab]").forEach(btn =>
+    btn.addEventListener("click", () => {
+      state.mathTab = btn.dataset.mathtab;
+      $("mathTabs").querySelectorAll("[data-mathtab]").forEach(b =>
+        b.classList.toggle("on", b.dataset.mathtab === state.mathTab));
+      paintMathTab(d);
+    }));
+  paintMathTab(d);
+}
+
+function paintMathTab(d){
+  const host = $("mathTabBody");
+  if (!host) return;
+  const tab = state.mathTab || "understand";
+
+  if (tab === "understand"){
+    host.innerHTML = `
+      ${(d.symbols || []).length ? `
+        <div class="mathsec">read the notation</div>
+        <div class="notation">${d.symbols.map(sym => `
+          <button class="notarow" data-note="1">
+            <b class="sym">${sym[0]}</b><span>${sym[1]}</span><i>+</i>
+          </button>`).join("")}</div>` : ""}
+      ${(d.freedom || []).filter(Boolean).length ? `
+        <div class="mathsec">why this matters</div>
+        ${d.freedom.filter(Boolean).map(f =>
+          `<p class="mathnote">${f}</p>`).join("")}` : ""}
+      <div id="mathLesson"></div>`;
+    host.querySelectorAll("[data-note]").forEach(row =>
+      row.addEventListener("click", () => row.classList.toggle("open")));
+    offerLesson(d.type || state.mathType);
+    return;
+  }
+
+  if (tab === "derive"){
+    host.innerHTML = `
+      <div class="mathsec">worked through, here</div>
+      <table class="mathtab">${(d.arithmetic || []).map(a =>
+        `<tr><td class="key">${a[0]}</td><td class="val">${a[1]}</td></tr>`
+        ).join("")}</table>
+      <div id="mathDerive"><p class="mathnote">Looking for a derivation…</p></div>`;
+    offerDerivation(d.type || state.mathType);
+    return;
+  }
+
+  host.innerHTML = `<div id="mathCode"><p class="mathnote">Looking for the
+    code…</p></div>`;
+  offerLessonCode(d.type || state.mathType);
+}
+
+/* The derivation and the code come from the curriculum, which has them and
+   mathbook does not. Where there is no lesson the panel says so rather than
+   leaving an empty tab. */
+async function lessonsFor(layerType){
+  if (!layerType) return null;
+  state.lessonCache = state.lessonCache || {};
+  if (state.lessonCache[layerType]) return state.lessonCache[layerType];
+  let d = null;
+  try{
+    d = await (await fetch(API + "/api/lessons/for-layer/"
+      + encodeURIComponent(layerType))).json();
+  } catch { return null; }
+  state.lessonCache[layerType] = d;
+  return d;
+}
+
+async function offerDerivation(layerType){
+  const host = $("mathDerive");
+  const d = await lessonsFor(layerType);
+  if (!host) return;
+  const first = d && (d.lessons || [])[0];
+  if (!first){
+    host.innerHTML = `<p class="mathnote">No derivation for this layer in the
+      curriculum. The numbers above are still worked from your shapes.</p>`;
+    return;
+  }
+  host.innerHTML = `
+    <div class="mathsec">${first.name}, step by step</div>
+    <ol class="lessonsteps">${(first.steps || []).map(([eq, why]) => `
+      <li><pre class="armexpr">${eq.replace(/</g, "&lt;")}</pre>
+        <span>${why}</span></li>`).join("")}</ol>
+    ${first.trap ? `<div class="paperwarn"><b>The usual mistake.</b>
+      ${first.trap}</div>` : ""}
+    <button class="btn" data-lesson="${first.id}">the whole lesson</button>`;
+  host.querySelectorAll("[data-lesson]").forEach(b =>
+    b.addEventListener("click", () => showLesson(b.dataset.lesson)));
+}
+
+async function offerLessonCode(layerType){
+  const host = $("mathCode");
+  const d = await lessonsFor(layerType);
+  if (!host) return;
+  const withCode = ((d && d.lessons) || []).filter(e => e.code);
+  // the per-node entry carries `init` and `call`, not a single line — asking
+  // for `.line` showed nothing at all and looked like there was no code
+  const generated = state.nodeCode && state.sel && state.nodeCode[state.sel];
+  const mine = generated
+    ? [generated.init, generated.call].filter(Boolean).join("\n") : "";
+  host.innerHTML = `
+    ${mine ? `
+      <div class="mathsec">what this design generates</div>
+      <pre class="cbsource">${mine.replace(/</g, "&lt;")}</pre>` : ""}
+    ${withCode.length ? withCode.map(e => `
+      <div class="mathsec">${e.name}</div>
+      <pre class="cbsource">${e.code.replace(/</g, "&lt;")}</pre>`).join("")
+      : `<p class="mathnote">No worked code for this layer in the
+         curriculum.</p>`}`;
 }
 
 /* ============================ sheets ============================ */
