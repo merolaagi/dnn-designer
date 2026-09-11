@@ -510,6 +510,81 @@ def problem_set_status(problem_id: str, claim_id: str, body: StatusPayload):
     return {"claim": claim, "standing": workbench.standing(problem)}
 
 
+@app.post("/api/problems/{problem_id}/claims/{claim_id}/probe")
+def problem_probe_claim(problem_id: str, claim_id: str):
+    """Hunt for a counterexample to the claim's identity."""
+    problem = workbench.load(problem_id)
+    if not problem:
+        raise HTTPException(404, detail={"message": "No such problem."})
+    claim = next((c for c in problem["claims"] if c["id"] == claim_id), None)
+    if not claim or not claim["identity"]:
+        raise HTTPException(400, detail={
+            "message": "This claim states no identity to put numbers into."})
+    result = workbench.probe(claim["identity"])
+    result["at"] = time.time()
+    claim["evidence"] = [e for e in claim["evidence"]
+                         if e.get("kind") != "numeric"] + [result]
+    # A counterexample decides it. Surviving the probe decides nothing, so the
+    # status is only moved in the direction the evidence actually supports.
+    if not result["ok"] and result.get("counterexample"):
+        claim["status"] = "rejected"
+    workbench.save(problem)
+    return {"result": result, "claim": claim,
+            "standing": workbench.standing(problem)}
+
+
+@app.get("/api/problems/{problem_id}/literature")
+def problem_literature(problem_id: str):
+    """What has been written about this, including attempts that failed.
+
+    Two searches, because they find different things: the problem as stated,
+    and the problem alongside the words people use when something did not work.
+    A paper reporting a failed approach is worth more to somebody starting than
+    a survey, and it is the one nobody thinks to look for.
+    """
+    problem = workbench.load(problem_id)
+    if not problem:
+        raise HTTPException(404, detail={"message": "No such problem."})
+    from dnn_bench import paper_to_spec as p2s
+
+    question = (problem.get("title") or "") + " " + (problem.get("statement") or "")
+    question = " ".join(question.split()[:24])
+    out = {"question": question, "groups": []}
+
+    for label, query, why in (
+        ("on the problem", question,
+         "What the search understands the problem to be about."),
+        ("attempts and counterexamples",
+         question + " counterexample obstruction no-go failure",
+         "Papers using the language of things not working. A failed approach "
+         "written down is worth more to somebody starting than another survey, "
+         "and nobody thinks to search for it."),
+    ):
+        chatter = []
+        try:
+            found = p2s.discover(query, n_hubs=4, use_arxiv=True,
+                                 log=lambda *a: chatter.append(" ".join(map(str, a))))
+        except Exception as exc:  # noqa: BLE001
+            out["groups"].append({"label": label, "why": why, "error": str(exc)[:200],
+                                  "papers": []})
+            continue
+        unreachable = [c for c in chatter if "unavailable" in c]
+        papers = []
+        for key in ("foundational", "direct", "preprints", "hubs"):
+            for hit in (found.get(key) or [])[:5]:
+                papers.append({
+                    "title": hit.title, "authors": hit.authors, "year": hit.year,
+                    "journal": hit.journal, "cited_by": hit.cited_by,
+                    "doi": hit.doi, "text_url": p2s.full_text(hit),
+                    "reasons": list(hit.reasons or []),
+                })
+        out["groups"].append({
+            "label": label, "why": why, "papers": papers[:10],
+            "error": (unreachable[0][:160] if unreachable and not papers else ""),
+        })
+    return out
+
+
 @app.post("/api/problems/{problem_id}/failures")
 def problem_add_failure(problem_id: str, body: ProblemPayload):
     """What was tried and did not work, kept so it is not tried twice."""

@@ -164,6 +164,75 @@ def check_identity(identity: str, timeout_note: str = "") -> Dict[str, Any]:
                       f"that are not written down."}
 
 
+def probe(identity: str, tries: int = 400) -> Dict[str, Any]:
+    """Hunt for a counterexample by putting numbers in.
+
+    Simplification failing to reach zero does not prove an identity false — it
+    may simply be beyond sympy, or true only under conditions nobody wrote
+    down. A concrete counterexample settles it. Most attempts at a hard problem
+    die on one, and finding it in a second is a kindness rather than a defeat.
+
+    The reverse is not symmetric and the wording here has to reflect that:
+    surviving four hundred random points is not proof of anything. It is a
+    reason to keep going, which is a different sentence.
+    """
+    if "=" not in identity:
+        return {"ok": False, "kind": "numeric",
+                "detail": "Not an identity. Write it as lhs = rhs."}
+    left, _, right = identity.partition("=")
+    try:
+        import random
+
+        import sympy
+        from sympy.parsing.sympy_parser import (parse_expr,
+                                                standard_transformations,
+                                                implicit_multiplication_application)
+
+        rules = standard_transformations + (implicit_multiplication_application,)
+        lhs = parse_expr(left.strip(), transformations=rules)
+        rhs = parse_expr(right.strip(), transformations=rules)
+        difference = lhs - rhs
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "kind": "numeric",
+                "detail": f"Could not read it: {type(exc).__name__}: {exc}"}
+
+    free = sorted(difference.free_symbols, key=str)
+    if not free:
+        value = complex(sympy.N(difference))
+        near = abs(value) < 1e-9
+        return {"ok": near, "kind": "numeric",
+                "detail": ("Both sides are the same number."
+                           if near else f"The two sides differ by {value}.")}
+
+    worst = None
+    checked = 0
+    for _ in range(max(10, min(5000, tries))):
+        point = {sym: sympy.Rational(random.randint(-40, 40), random.randint(1, 9))
+                 for sym in free}
+        try:
+            value = complex(sympy.N(difference.subs(point)))
+        except Exception:  # noqa: BLE001 - a singular point is not a counterexample
+            continue
+        checked += 1
+        if not (value == value):          # NaN
+            continue
+        if abs(value) > 1e-6:
+            worst = (point, value)
+            break
+
+    if worst:
+        point, value = worst
+        where = ", ".join(f"{sym} = {val}" for sym, val in point.items())
+        return {"ok": False, "kind": "numeric", "counterexample": where,
+                "detail": f"False at {where}: the two sides differ by "
+                          f"{value:.6g}. One counterexample is enough."}
+
+    return {"ok": True, "kind": "numeric",
+            "detail": f"Held at {checked} random points. That is not a proof — "
+                      f"it is a reason to keep going rather than evidence that "
+                      f"it is true."}
+
+
 # --------------------------------------------------------------------------
 # critics: deterministic, and unable to be flattered
 # --------------------------------------------------------------------------

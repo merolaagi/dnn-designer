@@ -1566,6 +1566,41 @@ def _():
     finally:
         auth._current.reset(token)
 
+    # A counterexample settles a claim; surviving a probe settles nothing,
+    # and the two must not be reported as though they were symmetric.
+    token2 = auth._current.set("prover")
+    try:
+        wrong = wb.probe("(x + y)**2 = x**2 + y**2", tries=300)
+        assert not wrong["ok"] and wrong.get("counterexample"), wrong
+        assert "One counterexample is enough" in wrong["detail"]
+
+        conditional = wb.probe("sqrt(x**2) = x", tries=300)
+        assert not conditional["ok"], \
+            "an identity true only for x >= 0 passed unconditionally"
+
+        right = wb.probe("sin(x)**2 + cos(x)**2 = 1", tries=200)
+        assert right["ok"], right
+        assert "not a proof" in right["detail"], \
+            "surviving the probe was reported as evidence that it is true"
+        assert "counterexample" not in right, right
+    finally:
+        auth._current.reset(token2)
+
+    # and the page offers both, with the difference visible
+    assert "Hunt a counterexample" in PAGE
+    assert "Simplify it" in PAGE, \
+        "the two kinds of check are not distinguished on the page"
+
+    # literature has to look for failures too, which nobody searches for
+    import inspect
+
+    import main
+
+    lit = inspect.getsource(main.problem_literature)
+    assert "counterexample obstruction no-go failure" in lit, \
+        "it only searches for the problem, not for attempts at it"
+    assert "nobody thinks to search for it" in lit
+
     # the page must not promise more than it does
     assert "It will not prove anything for you" in PAGE, \
         "the page does not say what it cannot do"

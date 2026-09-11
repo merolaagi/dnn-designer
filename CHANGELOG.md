@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.75.0
+
+Two pieces of the collaborator, both of which can be done properly rather than
+gestured at.
+
+**Hunt a counterexample.** Simplification failing to reach zero does not prove
+an identity false — it may be beyond sympy, or true only under conditions
+nobody wrote down. So a claim can now be attacked numerically: random rational
+points until one of them breaks it.
+
+```text
+(x + y)**2 = x**2 + y**2    false at x = -33, y = -4/3
+sqrt(x**2) = x              false at x = -26/9
+sin(x)**2 + cos(x)**2 = 1   held at 300 points
+```
+
+The second is the useful one: true for x ≥ 0 and the probe finds the missing
+condition rather than the mistake. **The asymmetry is respected everywhere.** A
+counterexample sets the claim to rejected. Surviving four hundred points sets
+nothing, and says so: *"that is not a proof — it is a reason to keep going."*
+Most attempts at a hard problem die on a counterexample, and finding it in a
+second is a kindness.
+
+**What has been written about this, including the failures.** Two searches from
+the problem statement: the problem as stated, and the problem beside the
+language people use when something did not work — counterexample, obstruction,
+no-go. A failed approach written down is worth more to somebody starting than
+another survey, and it is the one nobody thinks to search for.
+
+Not built, and worth saying rather than implying: **Lean checking** needs a Lean
+toolchain and a real project — MARE already has that boundary and it should live
+there, not be faked here. Nor is there simulation or animation yet.
+
 ## 1.74.1
 
 **Fixed: an empty problem was told it "holds together".**

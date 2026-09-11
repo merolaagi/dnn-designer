@@ -1222,6 +1222,11 @@ i.covered{
   resize:vertical;
 }
 .wbinput:focus,.wbtext:focus{outline:none;border-color:var(--amber)}
+.wbpaper{
+  border-left:3px solid var(--paper-3);padding:6px 0 6px 11px;margin-bottom:9px;
+}
+.wbpaper b{display:block;font-size:12px;font-weight:600;line-height:1.45}
+.wbpaper span{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
 .wbdeps{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .wbdeps label{display:flex;gap:7px;font-size:11px;color:#3C4B5F;align-items:center}
 .mmtext{
@@ -5439,7 +5444,9 @@ function paintProblem(){
             `<div class="wbev no">${o.text}</div>`).join("")}
           <div class="cbacts">
             ${c.identity ? `<button class="btn tiny" data-check="${c.id}">
-              Run the identity</button>` : ""}
+              Simplify it</button>
+              <button class="btn tiny" data-probe="${c.id}">
+              Hunt a counterexample</button>` : ""}
             <button class="btn tiny" data-mark="${c.id}|verified">Verified</button>
             <button class="btn tiny" data-mark="${c.id}|rejected">Rejected</button>
             <button class="btn tiny" data-mark="${c.id}|assumed">Assumed</button>
@@ -5466,6 +5473,16 @@ function paintProblem(){
     </div>
 
     <div class="wbcard">
+      <div class="mathsec">what has been written about this</div>
+      <p class="mathnote">Two searches: the problem as stated, and the problem
+      beside the words people use when something did not work. A failed
+      approach written down is worth more to somebody starting than another
+      survey, and it is the one nobody thinks to search for.</p>
+      <button class="btn" id="wbLit">Search the literature</button>
+      <div id="wbLitOut"></div>
+    </div>
+
+    <div class="wbcard">
       <div class="mathsec">what was tried and did not work</div>
       ${(p.failures || []).length
         ? p.failures.map(f => `<div class="wbev no">${f.text}</div>`).join("")
@@ -5479,6 +5496,10 @@ function paintProblem(){
 
   $("wbBody").querySelectorAll("[data-check]").forEach(b =>
     b.addEventListener("click", () => runIdentity(b.dataset.check)));
+  $("wbBody").querySelectorAll("[data-probe]").forEach(b =>
+    b.addEventListener("click", () => probeClaim(b.dataset.probe)));
+  const lit = $("wbLit");
+  if (lit) lit.addEventListener("click", loadLiterature);
   $("wbBody").querySelectorAll("[data-mark]").forEach(b =>
     b.addEventListener("click", () => {
       const [id, status] = b.dataset.mark.split("|");
@@ -5501,6 +5522,57 @@ async function runIdentity(claimId){
     return;
   }
   await openProblem(state.problem.id);
+}
+
+/* Simplification failing is not disproof; a counterexample is. Most attempts
+   at a hard problem die on one, and finding it in a second is a kindness. */
+async function probeClaim(claimId){
+  let r, d;
+  try{
+    r = await fetch(API + `/api/problems/${state.problem.id}/claims/${claimId}/probe`,
+                    { method: "POST" });
+    d = await r.json();
+  } catch { return; }
+  if (!r.ok){
+    $("wbBody").insertAdjacentHTML("afterbegin",
+      `<div class="runfail">${(d.detail && d.detail.message) || "It would not run"}</div>`);
+    return;
+  }
+  await openProblem(state.problem.id);
+}
+
+async function loadLiterature(){
+  const host = $("wbLitOut");
+  host.innerHTML = `<div class="empty" style="padding:12px">searching — this is
+    the one part that reaches the internet…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + `/api/problems/${state.problem.id}/literature`);
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "It would not search"}</div>`;
+    return;
+  }
+  host.innerHTML = (d.groups || []).map(g => `
+    <div class="mathsec">${g.label}</div>
+    <p class="mathnote">${g.why}</p>
+    ${g.error ? `<div class="paperwarn">${g.error}</div>` : ""}
+    ${g.papers.length ? g.papers.map(paper => `
+      <div class="wbpaper">
+        <b>${paper.title}</b>
+        <span>${[paper.authors, paper.year, paper.journal]
+          .filter(Boolean).join(" · ")}${paper.cited_by
+          ? ` · cited ${paper.cited_by}` : ""}</span>
+        ${(paper.reasons || []).length
+          ? `<div class="hitwhy">${paper.reasons.map(x =>
+              `<span>${x}</span>`).join("")}</div>` : ""}
+        ${paper.doi ? `<a class="linkbtn" href="https://doi.org/${paper.doi}"
+          target="_blank" rel="noreferrer">doi</a>` : ""}
+      </div>`).join("")
+      : g.error ? "" : `<p class="mathnote">Nothing came back for that.</p>`}`
+    ).join("");
 }
 
 async function markClaim(claimId, status){
