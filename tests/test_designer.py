@@ -1540,6 +1540,23 @@ def _():
 
         standing = wb.standing(problem)
         assert not standing["sound"], "an argument with fatal objections was sound"
+        assert standing["verdict"] == "broken", standing["verdict"]
+
+        # An empty argument has no fatal objections, which is not the same as
+        # holding together. Saying so over an empty problem is the exact
+        # flattery this exists to refuse, and it did say so.
+        blank = wb.create("Empty", "Nothing yet.", [])
+        assert wb.standing(blank)["verdict"] == "empty", wb.standing(blank)
+        assert not wb.standing(blank)["sound"], \
+            "an empty problem reported as sound"
+
+        # nor is "no contradiction" the same as "proved"
+        partial = wb.create("Partial", "Something.", [])
+        one = wb.add_claim(partial, "A step nobody has checked", [], [])
+        assert wb.standing(partial)["verdict"] == "open", wb.standing(partial)
+        one["status"] = "verified"
+        one["evidence"].append({"ok": True, "kind": "stated", "detail": "cited"})
+        assert wb.standing(partial)["verdict"] == "closed", wb.standing(partial)
         assert "axisymmetry" in standing["assumed"]
 
         # and it survives, in the account that owns it
@@ -1552,6 +1569,10 @@ def _():
     # the page must not promise more than it does
     assert "It will not prove anything for you" in PAGE, \
         "the page does not say what it cannot do"
+    assert "nothing stated yet" in PAGE and "no contradiction, nothing closed" in PAGE, \
+        "the page still reports only sound or broken"
+    assert "empty page has no spelling mistakes" in PAGE, \
+        "an empty problem is not told that it is empty"
     assert "function renderWorkbenchPage" in PAGE
 
 

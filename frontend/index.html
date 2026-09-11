@@ -1169,6 +1169,13 @@ i.covered{
 .wbtitle b{font-size:16px;font-weight:600}
 .wbok{font-size:10px;color:#256B39;background:#E6F5EA;border-radius:5px;padding:2px 8px}
 .wbbad{font-size:10px;color:#8C2F27;background:#FDECEC;border-radius:5px;padding:2px 8px}
+.wb-empty,.wb-open,.wb-broken,.wb-closed{
+  font-size:10px;border-radius:5px;padding:2px 8px;
+}
+.wb-empty{color:var(--muted);background:var(--paper-2)}
+.wb-open{color:#7A5400;background:#FFF6E6}
+.wb-broken{color:#8C2F27;background:#FDECEC}
+.wb-closed{color:#256B39;background:#E6F5EA}
 .wbstatement{margin:7px 0 0;font-size:12.5px;line-height:1.65;color:#3C4B5F}
 .wbcounts{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}
 .wbchip{
@@ -5368,8 +5375,11 @@ function paintProblem(){
   $("wbBody").innerHTML = `
     <div class="wbcard">
       <div class="wbtitle"><b>${p.title}</b>
-        <span class="${s.sound ? "wbok" : "wbbad"}">${s.sound
-          ? "holds together" : "does not hold together"}</span></div>
+        <span class="wb-${s.verdict}">${
+          s.verdict === "empty" ? "nothing stated yet"
+          : s.verdict === "broken" ? "does not hold together"
+          : s.verdict === "open" ? "no contradiction, nothing closed"
+          : "a root claim is closed"}</span></div>
       <p class="wbstatement">${p.statement}</p>
       ${(p.scope || []).length
         ? `<div class="mathsec">granted</div>
@@ -5383,7 +5393,11 @@ function paintProblem(){
         .join("") || `<span class="wbchip">no claims yet</span>`}</div>
     </div>
 
-    ${(s.objections || []).length ? `
+    ${s.verdict === "empty" ? `
+      <div class="wbcard"><div class="paperwarn">No claims yet, so there is
+      nothing to check. An empty argument has no faults for the same reason an
+      empty page has no spelling mistakes — it is not a good sign.</div></div>`
+      : (s.objections || []).length ? `
       <div class="wbcard">
         <div class="mathsec">what does not hold</div>
         ${s.objections.map(o => `
@@ -5393,10 +5407,15 @@ function paintProblem(){
           </div>`).join("")}
         <p class="mathnote">None of this is an opinion about the mathematics.
         Each one is a fact about the structure that can be checked by looking.</p>
-      </div>` : `
-      <div class="wbcard"><div class="paperok">Nothing structural is wrong. That
-      is not the same as the argument being right — it means the critics here
-      have nothing left to say, and what remains is the mathematics.</div></div>`}
+      </div>` : s.verdict === "open" ? `
+      <div class="wbcard"><div class="paperok">Nothing structural is wrong, and
+      nothing is closed: no claim that stands on nothing else is verified with
+      everything beneath it verified too. The critics have nothing left to say,
+      which means what remains is the mathematics.</div></div>` : `
+      <div class="wbcard"><div class="paperok">A root claim is closed — verified,
+      with everything it rests on verified all the way down. That is as far as
+      this can take you: it says the structure is sound, not that the steps are
+      true. Only the symbolic checks say anything about truth.</div></div>`}
 
     <div class="wbcard">
       <div class="mathsec">claims</div>

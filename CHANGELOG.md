@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.74.1
+
+**Fixed: an empty problem was told it "holds together".**
+
+A problem with no claims has no fatal objections, and the verdict was computed
+from exactly that — so stating the Poincaré conjecture and adding nothing earned
+a green badge and the sentence *"Nothing structural is wrong."* Both were true
+and both were useless: an empty argument has no faults for the same reason an
+empty page has no spelling mistakes.
+
+That is the precise flattery the workbench exists to refuse, shipped in its
+first version, which is worth saying plainly.
+
+There are four states now, not two:
+
+- **nothing stated yet** — no claims, so nothing to check;
+- **does not hold together** — a fatal objection stands;
+- **no contradiction, nothing closed** — the critics have nothing left to say
+  and no claim is closed, which is where honest work usually sits;
+- **a root claim is closed** — verified with everything beneath it verified,
+  which says the structure is sound and nothing about whether the steps are
+  true. Only the symbolic checks speak to truth.
+
 ## 1.74.0
 
 **The workbench** — for an argument too long to hold in your head.

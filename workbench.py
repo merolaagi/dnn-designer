@@ -269,10 +269,25 @@ def standing(problem: Dict[str, Any]) -> Dict[str, Any]:
     closed = [c for c in roots
               if c["status"] == "verified" and _closed(c, claims)]
 
+
+    # An argument with nothing in it has no fatal objections, which is not the
+    # same as holding together — it is the difference between a clean bill of
+    # health and an empty file. Saying "holds together" over an empty problem
+    # is the exact flattery this whole thing exists to refuse.
+    if not claims:
+        verdict = "empty"
+    elif fatal:
+        verdict = "broken"
+    elif not closed:
+        verdict = "open"
+    else:
+        verdict = "closed"
+
     return {
         "counts": by_status,
         "objections": objections,
-        "sound": not fatal,
+        "verdict": verdict,
+        "sound": not fatal and bool(claims),
         "roots": [c["id"] for c in roots],
         "closed_roots": [c["id"] for c in closed],
         "assumed": sorted({a for c in claims for a in c["assumes"]}),
