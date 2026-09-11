@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.70.0
+
+**"Work it out" — the dialog writes the Setup block itself.**
+
+A class wanting a config is not out of reach. The config is usually a dataclass
+in the same repository with typed fields, and all of that can be read: the
+annotation on the constructor argument names the class, the class names its
+fields, the fields carry types, defaults and `Literal` options. What cannot be
+read is what the author meant by the values.
+
+So each row that needs an argument now has a **Work it out** button. It reads
+the annotations, finds the config, writes the import and the constructor call
+into Setup, fills the argument box — **and then imports with it before offering
+it.** A plan that does not import comes back as a failure with the reason, not
+as advice.
+
+On `google-research/timesfm`:
+
+```text
+ResidualBlock          from timesfm.configs import ResidualBlockConfig
+                       config_cfg = ResidualBlockConfig(input_dims=128,
+                           hidden_dims=32, output_dims=128, use_bias=True,
+                           activation='relu')
+                       -> 7 layers, 24,864 parameters, matching torch
+
+RandomFourierFeatures  -> 14 layers, 20,640 parameters
+RMSNorm                -> 128, no Setup needed
+Transformer            -> the plan built, but the class cannot be traced
+ResidualBlock (flax)   -> the plan built, but Flax will not import
+```
+
+Values come from the same name-based guessing the argument boxes use, so
+`input_dims` takes your input width and `hidden_dims` takes 32. A `Literal`
+gives its own first option. A field nothing is known about — a tokenizer, a
+model — stops the whole plan rather than being filled in, because a config that
+is half invented is worse than one never offered.
+
+An existing Setup block is added to, never replaced.
+
+Also fixed: the plural dimension names — `input_dims`, `output_dims`,
+`model_dims`, `hidden_dims` — were unrecognised, so every one of them came out
+as `1`.
+
 ## 1.69.1
 
 **timesfm is JAX. No argument would ever have imported those classes.**

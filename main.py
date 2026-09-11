@@ -1430,6 +1430,55 @@ def _with_suggestions(found: Dict[str, Any], shape: str) -> Dict[str, Any]:
     return found
 
 
+class PlanPayload(BaseModel):
+    root: str
+    file: str
+    cls: str
+    shape: str = "3,224,224"
+
+
+@app.post("/api/scan-folder/plan")
+def plan_arguments(body: PlanPayload):
+    """Work out what to pass, then prove it by importing with it.
+
+    Reading a config class's fields is easy; being right about them is not. So
+    the plan is tried before it is offered, and a plan that does not import is
+    returned as a failure with the reason rather than as advice.
+    """
+    try:
+        dims = [int(x) for x in body.shape.replace("x", ",").split(",") if x.strip()]
+    except ValueError:
+        dims = [3, 224, 224]
+    try:
+        plan = importer.plan_arguments(body.root, body.file, body.cls, dims)
+    except importer.ImportError_ as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+    if not plan["args"] and not plan["setup"]:
+        return {**plan, "works": False}
+
+    try:
+        built = importer.from_folder(body.root, body.file, body.cls, dims,
+                                     plan["args"], plan["setup"])
+    except Exception as exc:  # noqa: BLE001
+        return {**plan, "works": False,
+                "why": f"The plan did not import: {str(exc)[:220]} — the "
+                       f"values are a guess from the field names and this one "
+                       f"was wrong."}
+
+    built.pop("_notes", None)
+    expected = built.pop("_expected_parameters", 0)
+    built.pop("_entry", None)
+    built.pop("_routing", None)
+    report = G.analyze(G.parse(built))
+    counted = report.get("total_learnables", 0)
+    return {**plan, "works": True,
+            "layers": len(built.get("nodes", [])),
+            "parameters": counted,
+            "exact": bool(expected) and counted == expected,
+            "torch": expected}
+
+
 class RepoPayload(BaseModel):
     url: str
     refresh: bool = False

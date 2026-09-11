@@ -9954,6 +9954,10 @@ function scanRow(model, scan){
              ? scan.args[key] : (model.suggested || "")).replace(/"/g, "&quot;")}">`
       : `<span class="scanargs none">no args</span>`}
     ${badge}
+    ${model.arguments > 0 && !model.blocked
+      ? `<button class="btn tiny" data-plan="${key}"
+           title="Read the class's annotations, find the config it wants, write the Setup block — then import with it to check">Work it out</button>`
+      : ""}
     <button class="btn tiny" data-try="${key}">Try</button>
   </div>`;
 }
@@ -9997,6 +10001,57 @@ function paintPeek(model, d){
         parts.map(pair => pair[1]
           ? `<span class="${pair[1]}">${escapeHtml(pair[0])}</span>`
           : escapeHtml(pair[0])).join("")).join("\n") + `</pre>`;
+}
+
+/* Read the class's own annotations, find the config it wants, write the Setup
+   block that builds it — then import with it before offering it. Reading the
+   fields is easy; being right about their values is not, so a plan that does
+   not import comes back as a failure rather than as advice. */
+async function workOutArguments(key){
+  const model = modelFor(key);
+  if (!model) return;
+  const note = $("importNote");
+  if (note) note.innerHTML = `working out ${model.cls}\u2026`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/scan-folder/plan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root: state.scan.root, file: model.file,
+                             cls: model.cls,
+                             shape: $("im_shape").value || "3,224,224" }),
+    });
+    d = await r.json();
+  } catch {
+    if (note) note.innerHTML = "The server did not answer.";
+    return;
+  }
+  if (!r.ok){
+    if (note) note.innerHTML = "";
+    state.scan.tried[key] = { ok: false, kind: "refused",
+      message: (d.detail && d.detail.message) || "Could not work it out" };
+    renderScanResults();
+    return;
+  }
+
+  if (d.works){
+    state.scan.args[key] = d.args;
+    if (d.setup){
+      const box = $("im_setup");
+      const already = box.value || "";
+      // do not throw away a Setup block somebody wrote; add to it
+      box.value = already.includes(d.setup) ? already
+        : (already ? already.trimEnd() + "\n\n" + d.setup : d.setup);
+    }
+    state.scan.picked.add(key);
+    state.scan.tried[key] = { ok: true, kind: "worked",
+      message: `${d.layers} layers, ${d.parameters.toLocaleString()} parameters`
+               + (d.exact ? ", matching torch" : "")
+               + (d.setup ? " — Setup written below" : "") };
+  } else {
+    state.scan.tried[key] = { ok: false, kind: "refused", message: d.why };
+  }
+  renderScanResults();
+  if (note) note.innerHTML = "";
 }
 
 async function tryClass(key){

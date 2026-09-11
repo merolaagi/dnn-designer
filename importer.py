@@ -19,6 +19,7 @@ you to look at, rather than being silently dropped or silently guessed at.
 
 from __future__ import annotations
 
+import ast
 import re
 import math
 from pathlib import Path
@@ -734,11 +735,13 @@ GUESSES: List[tuple] = [
     # "the size of tensor a (224) must match tensor b (32)" — a suggestion
     # that is confidently wrong is worse than none.
     (("num_features", "features", "normalized_shape", "d_model", "model_dim",
-      "embedding_dims", "embed_dim", "embedding_dim", "num_dims", "n_embd",
-      "hidden_size", "dim"), "width"),
+      "model_dims", "embedding_dims", "embed_dim", "embedding_dim", "num_dims",
+      "n_embd", "hidden_size", "dim", "input_dims", "input_dim", "in_dim",
+      "output_dims", "output_dim"), "width"),
     (("out_channel", "out_channels", "out_ch", "nout", "output_channels",
       "out_dim", "output_dim", "out_features", "c_out", "cnn_channels",
-      "hidden", "hidden_dim", "width", "planes", "units", "size"), 32),
+      "hidden", "hidden_dim", "hidden_dims", "width", "planes", "units",
+      "size"), 32),
     (("num_classes", "n_classes", "nb_classes", "classes", "num_class"), 10),
     (("kernel_size", "kernel", "k", "ksize"), 3),
     (("stride", "s"), 1),
@@ -800,6 +803,171 @@ def guess_arguments(wants: List[str], shape: List[int]) -> Optional[List[Any]]:
         values.append(picked)
     return values
 
+
+
+def _class_defs(root: Path) -> Dict[str, Any]:
+    """Every class in the project, by bare name, with where it came from."""
+    out: Dict[str, Any] = {}
+    base = Path(root)
+    for path in sorted(base.rglob("*.py")):
+        if set(path.relative_to(base).parts) & SKIP_BELOW:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                out.setdefault(node.name, (node, path))
+    return out
+
+
+def _fields_of(node: ast.ClassDef) -> List[Dict[str, Any]]:
+    """A config's fields: name, declared type, default if it has one."""
+    fields = []
+    for item in node.body:
+        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+            fields.append({
+                "name": item.target.id,
+                "type": ast.unparse(item.annotation),
+                "default": ast.unparse(item.value) if item.value else None,
+            })
+    return fields
+
+
+def _value_for(field: Dict[str, Any], shape: List[int],
+               defs: Dict[str, Any], depth: int = 0) -> Optional[str]:
+    """A plausible literal for one config field, or nothing.
+
+    Literal["relu", "swish"] gives its own answer — take the first, which is
+    the one the author wrote first. A nested config is built recursively. A
+    type nothing is known about stops the whole plan rather than being filled
+    with a guess, because a config that is half invented is worse than one that
+    was never offered.
+    """
+    if field["default"] is not None:
+        return field["default"]
+
+    declared = field["type"]
+    literal = re.match(r"Literal\[(.+)\]", declared)
+    if literal:
+        first = literal.group(1).split(",")[0].strip()
+        return first
+
+    guess = guess_arguments([field["name"]], shape)
+    if guess is not None:
+        return repr(guess[0])
+
+    if declared.startswith("bool"):
+        return "True"
+    if declared.startswith("int"):
+        return "1"
+    if declared.startswith("float"):
+        return "1.0"
+    if declared.startswith("str"):
+        return '""'
+
+    bare = declared.split(".")[-1].split("[")[0]
+    if depth < 2 and bare in defs:
+        inner = _plan_config(bare, shape, defs, depth + 1)
+        if inner:
+            return inner
+    return None
+
+
+def _plan_config(name: str, shape: List[int], defs: Dict[str, Any],
+                 depth: int = 0) -> Optional[str]:
+    """A constructor call for a config class, or nothing if a field defeats it."""
+    entry = defs.get(name)
+    if not entry:
+        return None
+    fields = _fields_of(entry[0])
+    if not fields:
+        return None
+    parts = []
+    for field in fields:
+        value = _value_for(field, shape, defs, depth)
+        if value is None:
+            return None
+        parts.append(f"{field['name']}={value}")
+    return f"{name}({', '.join(parts)})"
+
+
+def plan_arguments(root: str, file: str, cls: str,
+                   shape: List[int]) -> Dict[str, Any]:
+    """Work out a Setup block and an argument string for one class.
+
+    The config it wants is usually a dataclass in the same repository, with
+    typed fields — all of which can be read. What cannot be read is what the
+    author meant by them, so the values come from the same name-based guessing
+    the argument boxes use, and the result is offered as something to check.
+    """
+    base = Path(root)
+    target = base / file
+    if not target.exists():
+        raise ImportError_(f"{file} is not in this project.")
+    source = target.read_text(encoding="utf-8", errors="replace")
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        raise ImportError_(f"{file} does not parse: {exc.msg}")
+
+    found = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == cls:
+            found = node
+            break
+    if found is None:
+        raise ImportError_(f"{cls} is not in {file}.")
+
+    init = next((b for b in found.body
+                 if isinstance(b, ast.FunctionDef) and b.name == "__init__"), None)
+    if init is None:
+        return {"cls": cls, "args": "", "setup": "", "why": "It takes nothing."}
+
+    positional = init.args.args[1:]
+    required = positional[: len(positional) - len(init.args.defaults)]
+    if not required:
+        return {"cls": cls, "args": "", "setup": "", "why": "It takes nothing."}
+
+    defs = _class_defs(base)
+    imports: List[str] = []
+    lines: List[str] = []
+    names: List[str] = []
+    unknown: List[str] = []
+
+    for arg in required:
+        annotation = ast.unparse(arg.annotation) if arg.annotation else ""
+        bare = annotation.split(".")[-1].split("[")[0]
+        plain = guess_arguments([arg.arg], shape)
+
+        if bare in defs and not annotation.startswith(("int", "float", "str", "bool")):
+            built = _plan_config(bare, shape, defs)
+            if built is None:
+                unknown.append(f"{arg.arg}: {annotation or 'no type given'}")
+                continue
+            where = defs[bare][1].relative_to(base)
+            module = ".".join(where.with_suffix("").parts)
+            for prefix in ("src.", ):
+                if module.startswith(prefix):
+                    module = module[len(prefix):]
+            imports.append(f"from {module} import {bare}")
+            lines.append(f"{arg.arg}_cfg = {built}")
+            names.append(f"{arg.arg}_cfg")
+        elif plain is not None:
+            names.append(repr(plain[0]))
+        else:
+            unknown.append(f"{arg.arg}: {annotation or 'no type given'}")
+
+    if unknown:
+        return {"cls": cls, "args": "", "setup": "",
+                "why": "Could not work out " + "; ".join(unknown)
+                       + ". Those are decisions rather than values."}
+
+    setup = "\n".join(imports + lines)
+    return {"cls": cls, "args": ", ".join(names), "setup": setup,
+            "why": "Read from the class's own type annotations. The values are "
+                   "guessed from the field names — check them."}
 
 
 def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:

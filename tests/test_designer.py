@@ -1730,6 +1730,79 @@ def _():
         assert token in PAGE, f"{token} is missing from the codebase page"
 
 
+@check("the dialog can work out a config and prove it")
+def _():
+    """A class wanting a config is not out of reach: the config is usually a
+    dataclass in the same repository with typed fields, all of which can be
+    read. What cannot be read is what the author meant by the values, so they
+    are guessed from the field names — and the plan is imported before it is
+    offered, because a plan that does not work is not advice.
+    """
+    import tempfile
+
+    import importer
+
+    work = Path(tempfile.mkdtemp())
+    root = work / "proj"
+    (root / "pkg").mkdir(parents=True)
+    (root / "pkg" / "__init__.py").write_text("")
+    (root / "pkg" / "configs.py").write_text(
+        "from dataclasses import dataclass\n"
+        "from typing import Literal\n"
+        "@dataclass\n"
+        "class BlockConfig:\n"
+        "    input_dims: int\n"
+        "    hidden_dims: int\n"
+        "    use_bias: bool\n"
+        '    activation: Literal["relu", "gelu"]\n')
+    (root / "pkg" / "block.py").write_text(
+        "import torch.nn as nn\n"
+        "from . import configs\n"
+        "class Block(nn.Module):\n"
+        "    def __init__(self, config: configs.BlockConfig):\n"
+        "        super().__init__()\n"
+        "        self.fc = nn.Linear(config.input_dims, config.hidden_dims,\n"
+        "                            bias=config.use_bias)\n"
+        "    def forward(self, x):\n"
+        "        return self.fc(x)\n")
+
+    plan = importer.plan_arguments(str(root), "pkg/block.py", "Block", [64])
+    assert plan["args"], plan
+    assert "BlockConfig(" in plan["setup"], plan["setup"]
+    assert "input_dims=64" in plan["setup"], \
+        "the input width was not taken from the shape"
+    assert "activation='relu'" in plan["setup"], \
+        "a Literal did not give its own first option"
+    assert "use_bias=True" in plan["setup"]
+    assert "import" in plan["setup"], "the config is never imported"
+
+    # a field nothing is known about stops the plan rather than being invented
+    (root / "pkg" / "hard.py").write_text(
+        "import torch.nn as nn\n"
+        "class Hard(nn.Module):\n"
+        "    def __init__(self, tokenizer):\n"
+        "        super().__init__()\n")
+    stuck = importer.plan_arguments(str(root), "pkg/hard.py", "Hard", [64])
+    assert not stuck["args"], "a tokenizer was invented"
+    assert "decisions rather than values" in stuck["why"], stuck["why"]
+
+    # the endpoint imports with the plan before returning it
+    import inspect
+
+    import main
+
+    body = inspect.getsource(main.plan_arguments)
+    assert "importer.from_folder" in body, "the plan is offered untested"
+    assert "did not import" in body, "a failing plan is returned as advice"
+
+    assert "function workOutArguments" in PAGE
+    assert "data-plan=" in PAGE, "there is no way to ask for a plan"
+    worker = PAGE[PAGE.index("async function workOutArguments"):]
+    worker = worker[: worker.index("\nasync function tryClass")]
+    assert "already.includes" in worker, \
+        "writing a plan would discard a Setup block somebody wrote"
+
+
 @check("the import dialog suggests what to pass")
 def _():
     """"What to pass" is a fair question to be stuck on, and the scout already
