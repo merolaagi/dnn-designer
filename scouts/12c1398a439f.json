@@ -1,0 +1,1414 @@
+{
+ "id": "12c1398a439f",
+ "kind": "imports",
+ "goal": "https://github.com/google-research/timesfm",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Fetching https://github.com/google-research/timesfm",
+   "detail": ""
+  },
+  {
+   "at": 0.4,
+   "text": "100 files, 39 nn.Module classes",
+   "detail": "looking at 24 of them"
+  },
+  {
+   "at": 0.4,
+   "text": "Some are written in another framework",
+   "detail": "9 in Flax \u2014 this traces PyTorch, so no argument will import those."
+  },
+  {
+   "at": 0.4,
+   "text": "   TimesFM3Mlx: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 1.0,
+   "text": "   TimesFM3Torch: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 1.0,
+   "text": "   TimesFM_2p5_200M_torch_module: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 1.1,
+   "text": "   MultiHeadAttention: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 1.2,
+   "text": "   MultiHeadAttention: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 1.4,
+   "text": "   PerDimScale: 4 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "detail": ""
+  },
+  {
+   "at": 1.5,
+   "text": "   PerDimScale: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 1.6,
+   "text": "   PerDimScale: 5 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "detail": ""
+  },
+  {
+   "at": 1.7,
+   "text": "   PositionalEmbedding: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 1.8,
+   "text": "   RMSNorm: 6 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "detail": ""
+  },
+  {
+   "at": 1.8,
+   "text": "   RMSNorm: 8 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "detail": ""
+  },
+  {
+   "at": 1.9,
+   "text": "   ResidualBlock: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 2.0,
+   "text": "   ResidualBlock: 7 layers, 2,664 parameters, matching torch \u2014 with 28, 32, 28",
+   "detail": ""
+  },
+  {
+   "at": 2.1,
+   "text": "   RotaryPositionalEmbedding: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 2.2,
+   "text": "   RotaryPositionalEmbedding: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 2.3,
+   "text": "   MixingTransformer: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 2.3,
+   "text": "   MixingTransformer: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 2.4,
+   "text": "   MultiHeadAttention: needs something that cannot be worked out",
+   "detail": ""
+  },
+  {
+   "at": 2.5,
+   "text": "   PatchedTimeSeriesDecoder: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 2.6,
+   "text": "   RMSNorm: needs something that cannot be worked out",
+   "detail": ""
+  },
+  {
+   "at": 2.7,
+   "text": "   RandomFourierFeatures: 14 layers, 1,015 parameters but torch says 1,029 \u2014 with config_cfg",
+   "detail": ""
+  },
+  {
+   "at": 2.8,
+   "text": "   ResidualBlock: 7 layers, 2,664 parameters, matching torch \u2014 with config_cfg",
+   "detail": ""
+  },
+  {
+   "at": 2.8,
+   "text": "   ResidualBlock: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 2.9,
+   "text": "   StackedDecoder: needs something that cannot be worked out",
+   "detail": ""
+  },
+  {
+   "at": 2.9,
+   "text": "2 of 24 can be imported",
+   "detail": "Each one below carries the argument and the Setup block that made it work, checked by importing with them."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "importable",
+   "cls": "ResidualBlock",
+   "file": "v1/src/timesfm/pytorch_patched_decoder.py",
+   "foreign": "",
+   "works": true,
+   "args": "28, 32, 28",
+   "setup": "",
+   "graph": {
+    "name": "ResidualBlock",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        1,
+        28,
+        28
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Linear",
+      "params": {
+       "units": 32,
+       "bias": true
+      },
+      "label": "0",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Activation",
+      "params": {
+       "kind": "silu"
+      },
+      "label": "1",
+      "x": 0,
+      "y": 216
+     },
+     {
+      "id": "i4",
+      "type": "Linear",
+      "params": {
+       "units": 28,
+       "bias": true
+      },
+      "label": "output_layer",
+      "x": 0,
+      "y": 324
+     },
+     {
+      "id": "i5",
+      "type": "Linear",
+      "params": {
+       "units": 28,
+       "bias": true
+      },
+      "label": "residual_layer",
+      "x": 240,
+      "y": 108
+     },
+     {
+      "id": "i6",
+      "type": "Add",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 432
+     },
+     {
+      "id": "i7",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 540
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 0
+     },
+     {
+      "id": "e3",
+      "source": "i3",
+      "target": "i4",
+      "port": 0
+     },
+     {
+      "id": "e4",
+      "source": "i1",
+      "target": "i5",
+      "port": 0
+     },
+     {
+      "id": "e5",
+      "source": "i4",
+      "target": "i6",
+      "port": 0
+     },
+     {
+      "id": "e6",
+      "source": "i5",
+      "target": "i6",
+      "port": 1
+     },
+     {
+      "id": "e7",
+      "source": "i6",
+      "target": "i7",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 7,
+   "parameters": 2664,
+   "torch": 2664,
+   "exact": true,
+   "summary": "7 layers, 2,664 parameters, matching torch \u2014 with 28, 32, 28"
+  },
+  {
+   "kind": "importable",
+   "cls": "ResidualBlock",
+   "file": "src/timesfm/torch/dense.py",
+   "foreign": "",
+   "works": true,
+   "args": "config_cfg",
+   "setup": "from timesfm.configs import ResidualBlockConfig\nconfig_cfg = ResidualBlockConfig(input_dims=28, hidden_dims=32, output_dims=28, use_bias=True, activation='relu')",
+   "graph": {
+    "name": "ResidualBlock",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        1,
+        28,
+        28
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Linear",
+      "params": {
+       "units": 32,
+       "bias": true
+      },
+      "label": "hidden_layer",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Activation",
+      "params": {
+       "kind": "relu"
+      },
+      "label": "activation",
+      "x": 0,
+      "y": 216
+     },
+     {
+      "id": "i4",
+      "type": "Linear",
+      "params": {
+       "units": 28,
+       "bias": true
+      },
+      "label": "output_layer",
+      "x": 0,
+      "y": 324
+     },
+     {
+      "id": "i5",
+      "type": "Linear",
+      "params": {
+       "units": 28,
+       "bias": true
+      },
+      "label": "residual_layer",
+      "x": 240,
+      "y": 108
+     },
+     {
+      "id": "i6",
+      "type": "Add",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 432
+     },
+     {
+      "id": "i7",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 540
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 0
+     },
+     {
+      "id": "e3",
+      "source": "i3",
+      "target": "i4",
+      "port": 0
+     },
+     {
+      "id": "e4",
+      "source": "i1",
+      "target": "i5",
+      "port": 0
+     },
+     {
+      "id": "e5",
+      "source": "i4",
+      "target": "i6",
+      "port": 0
+     },
+     {
+      "id": "e6",
+      "source": "i5",
+      "target": "i6",
+      "port": 1
+     },
+     {
+      "id": "e7",
+      "source": "i6",
+      "target": "i7",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 7,
+   "parameters": 2664,
+   "torch": 2664,
+   "exact": true,
+   "summary": "7 layers, 2,664 parameters, matching torch \u2014 with config_cfg"
+  },
+  {
+   "kind": "importable",
+   "cls": "RandomFourierFeatures",
+   "file": "src/timesfm/torch/dense.py",
+   "foreign": "",
+   "works": false,
+   "args": "config_cfg",
+   "setup": "from timesfm.configs import RandomFourierFeaturesConfig\nconfig_cfg = RandomFourierFeaturesConfig(input_dims=28, output_dims=28, projection_stddev=1.0, use_bias=True)",
+   "graph": {
+    "name": "RandomFourierFeatures",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        1,
+        28,
+        28
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Linear",
+      "params": {
+       "units": 7,
+       "bias": true
+      },
+      "label": "projection_layer",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Custom",
+      "params": {
+       "label": "cos",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: cos was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %cos : [num_users=1] = call_function[target=torch.cos](args = (%projection_layer,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "cos",
+      "x": 0,
+      "y": 216
+     },
+     {
+      "id": "i4",
+      "type": "Custom",
+      "params": {
+       "label": "sin",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: sin was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %sin : [num_users=1] = call_function[target=torch.sin](args = (%projection_layer,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "sin",
+      "x": 240,
+      "y": 216
+     },
+     {
+      "id": "i5",
+      "type": "Add",
+      "params": {},
+      "label": "",
+      "x": 480,
+      "y": 216
+     },
+     {
+      "id": "i6",
+      "type": "Custom",
+      "params": {
+       "label": "sin",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: sin was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %sin_1 : [num_users=1] = call_function[target=torch.sin](args = (%add,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "sin",
+      "x": 0,
+      "y": 324
+     },
+     {
+      "id": "i7",
+      "type": "Elementwise",
+      "params": {
+       "op": "sign"
+      },
+      "label": "",
+      "x": 0,
+      "y": 432
+     },
+     {
+      "id": "i8",
+      "type": "Add",
+      "params": {},
+      "label": "",
+      "x": 720,
+      "y": 216
+     },
+     {
+      "id": "i9",
+      "type": "Custom",
+      "params": {
+       "label": "sin",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: sin was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %sin_2 : [num_users=1] = call_function[target=torch.sin](args = (%add_1,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "sin",
+      "x": 240,
+      "y": 324
+     },
+     {
+      "id": "i10",
+      "type": "Elementwise",
+      "params": {
+       "op": "sign"
+      },
+      "label": "",
+      "x": 240,
+      "y": 432
+     },
+     {
+      "id": "i11",
+      "type": "Concat",
+      "params": {
+       "axis": 0
+      },
+      "label": "",
+      "x": 0,
+      "y": 540
+     },
+     {
+      "id": "i12",
+      "type": "Linear",
+      "params": {
+       "units": 28,
+       "bias": true
+      },
+      "label": "residual_layer",
+      "x": 240,
+      "y": 108
+     },
+     {
+      "id": "i13",
+      "type": "Add",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 648
+     },
+     {
+      "id": "i14",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 756
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 0
+     },
+     {
+      "id": "e3",
+      "source": "i2",
+      "target": "i4",
+      "port": 0
+     },
+     {
+      "id": "e4",
+      "source": "i2",
+      "target": "i5",
+      "port": 0
+     },
+     {
+      "id": "e5",
+      "source": "i5",
+      "target": "i6",
+      "port": 0
+     },
+     {
+      "id": "e6",
+      "source": "i6",
+      "target": "i7",
+      "port": 0
+     },
+     {
+      "id": "e7",
+      "source": "i2",
+      "target": "i8",
+      "port": 0
+     },
+     {
+      "id": "e8",
+      "source": "i8",
+      "target": "i9",
+      "port": 0
+     },
+     {
+      "id": "e9",
+      "source": "i9",
+      "target": "i10",
+      "port": 0
+     },
+     {
+      "id": "e10",
+      "source": "i3",
+      "target": "i11",
+      "port": 0
+     },
+     {
+      "id": "e11",
+      "source": "i4",
+      "target": "i11",
+      "port": 1
+     },
+     {
+      "id": "e12",
+      "source": "i7",
+      "target": "i11",
+      "port": 2
+     },
+     {
+      "id": "e13",
+      "source": "i10",
+      "target": "i11",
+      "port": 3
+     },
+     {
+      "id": "e14",
+      "source": "i1",
+      "target": "i12",
+      "port": 0
+     },
+     {
+      "id": "e15",
+      "source": "i11",
+      "target": "i13",
+      "port": 0
+     },
+     {
+      "id": "e16",
+      "source": "i12",
+      "target": "i13",
+      "port": 1
+     },
+     {
+      "id": "e17",
+      "source": "i13",
+      "target": "i14",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 14,
+   "parameters": 1015,
+   "torch": 1029,
+   "exact": false,
+   "summary": "14 layers, 1,015 parameters but torch says 1,029 \u2014 with config_cfg",
+   "why": "The traced graph has 1,015 parameters and the class has 1,029, so this graph is not the model."
+  },
+  {
+   "kind": "importable",
+   "cls": "TimesFM3Mlx",
+   "file": "src/timesfm3/mlx/model.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "src/timesfm3/mlx/model.py did not import: ModuleNotFoundError: No module named 'mlx'."
+  },
+  {
+   "kind": "importable",
+   "cls": "TimesFM3Torch",
+   "file": "src/timesfm3/torch/model.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "This model cannot be traced into a single graph. Usually this means forward() branches on tensor values. torch.fx reported: TraceError: symbolically traced variables cannot be used as inputs to control flow"
+  },
+  {
+   "kind": "importable",
+   "cls": "TimesFM_2p5_200M_torch_module",
+   "file": "src/timesfm/timesfm_2p5/timesfm_2p5_torch.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "src/timesfm/timesfm_2p5/timesfm_2p5_torch.py did not import: ImportError: attempted relative import with no known parent package. It uses relative imports, so it belongs to a package that is not importable from here \u2014 installing the project would fix it."
+  },
+  {
+   "kind": "importable",
+   "cls": "MultiHeadAttention",
+   "file": "src/timesfm/torch/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "4, 1",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "MultiHeadAttention could not be built with (4, 1): ValueError: Memory dimension (1) must be divisible by 'num_heads' heads (4)."
+  },
+  {
+   "kind": "importable",
+   "cls": "MultiHeadAttention",
+   "file": "src/timesfm3/torch/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "4, 1",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "This model cannot be traced into a single graph. Usually this means forward() branches on tensor values. torch.fx reported: TraceError: symbolically traced variables cannot be used as inputs to control flow"
+  },
+  {
+   "kind": "importable",
+   "cls": "PerDimScale",
+   "file": "src/timesfm/torch/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "graph": {
+    "name": "PerDimScale",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        1,
+        28,
+        28
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Custom",
+      "params": {
+       "label": "softplus",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: softplus was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %softplus : [num_users=1] = call_function[target=torch._C._nn.softplus](args = (%per_dim_scale,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "softplus",
+      "x": 240,
+      "y": 0
+     },
+     {
+      "id": "i3",
+      "type": "Multiply",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i4",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 216
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i3",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 1
+     },
+     {
+      "id": "e3",
+      "source": "i3",
+      "target": "i4",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 4,
+   "parameters": 0,
+   "torch": 28,
+   "exact": false,
+   "summary": "4 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "why": "The traced graph has 0 parameters and the class has 28, so this graph is not the model."
+  },
+  {
+   "kind": "importable",
+   "cls": "PerDimScale",
+   "file": "src/timesfm3/mlx/normalization.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "src/timesfm3/mlx/normalization.py did not import: ModuleNotFoundError: No module named 'mlx'."
+  },
+  {
+   "kind": "importable",
+   "cls": "PerDimScale",
+   "file": "src/timesfm3/torch/normalization.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "graph": {
+    "name": "PerDimScale",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        1,
+        28,
+        28
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Custom",
+      "params": {
+       "label": "truediv",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: truediv was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %truediv : [num_users=1] = call_function[target=operator.truediv](args = (%mul, 5.291502622129181), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "truediv",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Custom",
+      "params": {
+       "label": "softplus",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: softplus was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %softplus : [num_users=1] = call_function[target=torch._C._nn.softplus](args = (%per_dim_scale,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "softplus",
+      "x": 240,
+      "y": 0
+     },
+     {
+      "id": "i4",
+      "type": "Multiply",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 216
+     },
+     {
+      "id": "i5",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 324
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i4",
+      "port": 0
+     },
+     {
+      "id": "e3",
+      "source": "i3",
+      "target": "i4",
+      "port": 1
+     },
+     {
+      "id": "e4",
+      "source": "i4",
+      "target": "i5",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 5,
+   "parameters": 0,
+   "torch": 28,
+   "exact": false,
+   "summary": "5 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "why": "The traced graph has 0 parameters and the class has 28, so this graph is not the model."
+  },
+  {
+   "kind": "importable",
+   "cls": "PositionalEmbedding",
+   "file": "v1/src/timesfm/pytorch_patched_decoder.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "This model cannot be traced into a single graph. Usually this means forward() branches on tensor values. torch.fx reported: TraceError: symbolically traced variables cannot be used as inputs to control flow"
+  },
+  {
+   "kind": "importable",
+   "cls": "RMSNorm",
+   "file": "src/timesfm/torch/normalization.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "graph": {
+    "name": "RMSNorm",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        1,
+        28,
+        28
+       ],
+       "dtype": "float"
+      },
+      "label": "inputs",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Custom",
+      "params": {
+       "label": "square",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: square was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %square : [num_users=1] = call_function[target=torch.square](args = (%inputs,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "square",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Reduce",
+      "params": {
+       "op": "mean",
+       "axis": -1,
+       "keep": true
+      },
+      "label": "",
+      "x": 0,
+      "y": 216
+     },
+     {
+      "id": "i4",
+      "type": "Elementwise",
+      "params": {
+       "op": "rsqrt"
+      },
+      "label": "",
+      "x": 0,
+      "y": 324
+     },
+     {
+      "id": "i5",
+      "type": "Multiply",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 432
+     },
+     {
+      "id": "i6",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 540
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 0
+     },
+     {
+      "id": "e3",
+      "source": "i3",
+      "target": "i4",
+      "port": 0
+     },
+     {
+      "id": "e4",
+      "source": "i1",
+      "target": "i5",
+      "port": 0
+     },
+     {
+      "id": "e5",
+      "source": "i4",
+      "target": "i5",
+      "port": 1
+     },
+     {
+      "id": "e6",
+      "source": "i5",
+      "target": "i6",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 6,
+   "parameters": 0,
+   "torch": 28,
+   "exact": false,
+   "summary": "6 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "why": "The traced graph has 0 parameters and the class has 28, so this graph is not the model."
+  },
+  {
+   "kind": "importable",
+   "cls": "RMSNorm",
+   "file": "v1/src/timesfm/pytorch_patched_decoder.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "graph": {
+    "name": "RMSNorm",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        1,
+        28,
+        28
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Elementwise",
+      "params": {
+       "op": "pow",
+       "n": 2.0
+      },
+      "label": "",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Reduce",
+      "params": {
+       "op": "mean",
+       "axis": -1,
+       "keep": true
+      },
+      "label": "",
+      "x": 0,
+      "y": 216
+     },
+     {
+      "id": "i4",
+      "type": "Elementwise",
+      "params": {
+       "op": "rsqrt"
+      },
+      "label": "",
+      "x": 0,
+      "y": 324
+     },
+     {
+      "id": "i5",
+      "type": "Multiply",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 432
+     },
+     {
+      "id": "i6",
+      "type": "Custom",
+      "params": {
+       "label": "float",
+       "shape_rule": "list(shape)",
+       "torch_code": "nn.Identity()  # TODO: float was not reconstructed",
+       "keras_code": "layers.Activation(\"linear\")",
+       "imports": "",
+       "values": {
+        "original": "# %float_2 : [num_users=1] = call_method[target=float](args = (%weight,), kwargs = {})",
+        "reason": "operation has no layer equivalent"
+       }
+      },
+      "label": "float",
+      "x": 240,
+      "y": 0
+     },
+     {
+      "id": "i7",
+      "type": "Multiply",
+      "params": {},
+      "label": "",
+      "x": 0,
+      "y": 540
+     },
+     {
+      "id": "i8",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 648
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 0
+     },
+     {
+      "id": "e3",
+      "source": "i3",
+      "target": "i4",
+      "port": 0
+     },
+     {
+      "id": "e4",
+      "source": "i1",
+      "target": "i5",
+      "port": 0
+     },
+     {
+      "id": "e5",
+      "source": "i4",
+      "target": "i5",
+      "port": 1
+     },
+     {
+      "id": "e6",
+      "source": "i5",
+      "target": "i7",
+      "port": 0
+     },
+     {
+      "id": "e7",
+      "source": "i6",
+      "target": "i7",
+      "port": 1
+     },
+     {
+      "id": "e8",
+      "source": "i7",
+      "target": "i8",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 8,
+   "parameters": 0,
+   "torch": 28,
+   "exact": false,
+   "summary": "8 layers, 0 parameters but torch says 28 \u2014 with 28",
+   "why": "The traced graph has 0 parameters and the class has 28, so this graph is not the model."
+  },
+  {
+   "kind": "importable",
+   "cls": "ResidualBlock",
+   "file": "src/timesfm3/mlx/dense.py",
+   "foreign": "",
+   "works": false,
+   "args": "1, 32",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "src/timesfm3/mlx/dense.py did not import: ModuleNotFoundError: No module named 'mlx'."
+  },
+  {
+   "kind": "importable",
+   "cls": "RotaryPositionalEmbedding",
+   "file": "src/timesfm/torch/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "This model cannot be traced into a single graph. Usually this means forward() branches on tensor values. torch.fx reported: TraceError: symbolically traced variables cannot be used as inputs to control flow"
+  },
+  {
+   "kind": "importable",
+   "cls": "RotaryPositionalEmbedding",
+   "file": "src/timesfm3/torch/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "28",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "This model cannot be traced into a single graph. Usually this means forward() branches on tensor values. torch.fx reported: TraceError: symbolically traced variables cannot be used as inputs to control flow"
+  },
+  {
+   "kind": "importable",
+   "cls": "MixingTransformer",
+   "file": "src/timesfm3/mlx/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "cfg_cfg",
+   "setup": "from timesfm3.mlx.configs import TimesFM3MlxConfig\ncfg_cfg = TimesFM3MlxConfig(input_patch_len=32, output_patch_len=64, model_dims=1280, hidden_dims=1280, num_layers=20, num_heads=16, quantiles=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9), use_variate_attention=True, use_stitching=True, use_linear_detrending=True, linear_detrending_threshold=0.5, value_clip=1e+20)",
+   "summary": "the plan did not import",
+   "why": "src/timesfm3/mlx/transformer.py did not import: ModuleNotFoundError: No module named 'mlx'."
+  },
+  {
+   "kind": "importable",
+   "cls": "MixingTransformer",
+   "file": "src/timesfm3/torch/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "config_cfg",
+   "setup": "from timesfm.configs import TransformerConfig\nconfig_cfg = TransformerConfig(model_dims=28, hidden_dims=32, num_heads=4, attention_norm='rms', feedforward_norm='rms', qk_norm='rms', use_bias=True, use_rotary_position_embeddings=True, ff_activation='relu', fuse_qkv=True)",
+   "summary": "the plan did not import",
+   "why": "MixingTransformer could not be built with (config_cfg): AttributeError: 'TransformerConfig' object has no attribute 'use_rope_seq'"
+  },
+  {
+   "kind": "importable",
+   "cls": "MultiHeadAttention",
+   "file": "src/timesfm3/mlx/transformer.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "needs something that cannot be worked out",
+   "why": "Could not work out use_rope: bool; causal: bool. Those are decisions rather than values."
+  },
+  {
+   "kind": "importable",
+   "cls": "PatchedTimeSeriesDecoder",
+   "file": "v1/src/timesfm/pytorch_patched_decoder.py",
+   "foreign": "",
+   "works": false,
+   "args": "config_cfg",
+   "setup": "from v1.src.timesfm.pytorch_patched_decoder import TimesFMConfig\nconfig_cfg = TimesFMConfig(num_layers=20, num_heads=16, num_kv_heads=16, hidden_size=1280, intermediate_size=1280, head_dim=80, rms_norm_eps=1e-06, patch_len=32, horizon_len=128, quantiles=dataclasses.field(default_factory=create_quantiles), pad_val=1123581321.0, tolerance=1e-06, dtype='bfloat32', use_positional_embedding=True)",
+   "summary": "the plan did not import",
+   "why": "The setup did not run: ModuleNotFoundError: No module named 'timesfm.timesfm_base'"
+  },
+  {
+   "kind": "importable",
+   "cls": "RMSNorm",
+   "file": "src/timesfm3/mlx/normalization.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "needs something that cannot be worked out",
+   "why": "Could not work out dims: int. Those are decisions rather than values."
+  },
+  {
+   "kind": "importable",
+   "cls": "ResidualBlock",
+   "file": "src/timesfm3/torch/dense.py",
+   "foreign": "",
+   "works": false,
+   "args": "config_cfg",
+   "setup": "from timesfm.configs import ResidualBlockConfig\nconfig_cfg = ResidualBlockConfig(input_dims=28, hidden_dims=32, output_dims=28, use_bias=True, activation='relu')",
+   "summary": "the plan did not import",
+   "why": "ResidualBlock could not be built with (config_cfg): AttributeError: 'ResidualBlockConfig' object has no attribute 'identity_skip'"
+  },
+  {
+   "kind": "importable",
+   "cls": "StackedDecoder",
+   "file": "v1/src/timesfm/pytorch_patched_decoder.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "needs something that cannot be worked out",
+   "why": "Could not work out intermediate_size: int; num_kv_heads: int; head_dim: int. Those are decisions rather than values."
+  }
+ ],
+ "error": "",
+ "seconds": 2.9,
+ "kept_at": 1789136603.819971
+}

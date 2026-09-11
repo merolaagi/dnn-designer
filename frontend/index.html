@@ -203,7 +203,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
 #pageAgents, #pagePad, #pageDomains, #pageScouts,
-#pageCodebase, #pageMaths{background:var(--paper)}
+#pageCodebase, #pageMaths, #pageWorkbench{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -1154,6 +1154,69 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
+.wbwrap{max-width:900px;margin:0 auto;padding:24px 26px 40px}
+.wbhead h3{margin:0 0 6px;font-size:20px;font-weight:600}
+.wbhead p{margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.65}
+.wbplain{
+  padding:10px 12px;border-radius:8px;background:#FFF8E9;border:1px solid #E8D9AE;
+  color:#6B5418 !important;
+}
+.wbcard{
+  background:#fff;border:1px solid var(--paper-3);border-radius:11px;
+  padding:15px 17px;margin-top:14px;
+}
+.wbtitle{display:flex;align-items:baseline;gap:10px}
+.wbtitle b{font-size:16px;font-weight:600}
+.wbok{font-size:10px;color:#256B39;background:#E6F5EA;border-radius:5px;padding:2px 8px}
+.wbbad{font-size:10px;color:#8C2F27;background:#FDECEC;border-radius:5px;padding:2px 8px}
+.wbstatement{margin:7px 0 0;font-size:12.5px;line-height:1.65;color:#3C4B5F}
+.wbcounts{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}
+.wbchip{
+  font-size:10px;border-radius:5px;padding:2px 8px;background:var(--paper-2);
+  color:var(--muted);
+}
+.wbchip.verified{background:#E6F5EA;color:#256B39}
+.wbchip.rejected{background:#FDECEC;color:#8C2F27}
+.wbchip.assumed{background:#FFF6E6;color:#7A5400}
+.wbobj{border-left:3px solid #D9A7A2;padding:5px 0 5px 10px;margin-bottom:8px}
+.wbobj.fatal{border-left-color:#B4453A}
+.wbobj b{display:block;font-size:11.5px;font-weight:600}
+.wbobj p{margin:2px 0 0;font-size:11px;line-height:1.55;color:var(--muted)}
+.wbclaim{
+  border:1px solid var(--paper-3);border-radius:9px;padding:10px 12px;
+  margin-bottom:9px;
+}
+.wbclaim.verified{border-color:#BFE0C8;background:#FCFEFC}
+.wbclaim.rejected{border-color:#E7C3C3;background:#FFFCFC}
+.wbclaimhead{display:flex;align-items:baseline;gap:8px}
+.wbclaimhead b{font-size:12.5px;font-weight:500;line-height:1.5}
+.wbstatus{
+  flex:none;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:700;border-radius:5px;padding:2px 7px;background:var(--paper-2);
+  color:var(--muted);
+}
+.wbstatus.verified{background:#E6F5EA;color:#256B39}
+.wbstatus.rejected{background:#FDECEC;color:#8C2F27}
+.wbstatus.assumed{background:#FFF6E6;color:#7A5400}
+.wbmeta{font-size:10.5px;color:var(--muted);margin-top:5px}
+.wbev{
+  font-size:10.5px;line-height:1.55;margin-top:6px;padding:6px 9px;
+  border-radius:6px;background:var(--paper-2);color:#3C4453;
+}
+.wbev.ok{background:#EFF8F1;color:#256B39}
+.wbev.no{background:#FDECEC;color:#8C2F27}
+.wbinput{
+  width:100%;margin-top:8px;padding:8px 11px;border:1px solid var(--paper-3);
+  border-radius:8px;font-size:12px;
+}
+.wbtext{
+  width:100%;margin-top:8px;padding:9px 12px;border:1px solid var(--paper-3);
+  border-radius:8px;font-size:12px;line-height:1.6;min-height:80px;
+  resize:vertical;
+}
+.wbinput:focus,.wbtext:focus{outline:none;border-color:var(--amber)}
+.wbdeps{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.wbdeps label{display:flex;gap:7px;font-size:11px;color:#3C4B5F;align-items:center}
 .mmtext{
   width:100%;min-height:130px;margin-top:12px;padding:11px 13px;
   border:1px solid var(--paper-3);border-radius:9px;font-size:12px;
@@ -2128,6 +2191,7 @@ body.sizing{user-select:none}
     <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
     <button data-page="pageMaths"><i>&#8747;</i>Maths &rarr; layers</button>
+    <button data-page="pageWorkbench"><i>&#9635;</i>The workbench</button>
     <button data-page="pageCodebase"><i>&#9783;</i>Read a codebase</button>
     <button data-page="pageScouts"><i>&#9906;</i>Scouts</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
@@ -2373,6 +2437,10 @@ body.sizing{user-select:none}
   <div class="scroll" id="padMain"></div>
 </section>
 
+<section class="page" id="pageWorkbench">
+  <div class="scroll" id="wbMain"></div>
+</section>
+
 <section class="page" id="pageMaths">
   <div class="scroll" id="mathMain"></div>
 </section>
@@ -2581,7 +2649,7 @@ const state = {
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
-  codebase:null, cbFile:null, maths:null, lesson:null, mathTab:"understand", mathType:null, lessonCache:null, cbMap:null, cbMapPlace:null,
+  codebase:null, cbFile:null, maths:null, problem:null, lesson:null, mathTab:"understand", mathType:null, lessonCache:null, cbMap:null, cbMapPlace:null,
   cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module", cbWalkAt:0,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
@@ -5107,6 +5175,7 @@ const PAGE_SETUP = {
   pageScouts: renderScoutsPage,
   pageCodebase: renderCodebasePage,
   pageMaths: renderMathsPage,
+  pageWorkbench: renderWorkbenchPage,
   pagePaper: renderPaperPage,
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
@@ -5183,6 +5252,275 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* =========================== the workbench =========================== */
+
+/* For a problem that will not fall in one sitting.
+
+   It does not solve anything. What defeats people on hard problems is rarely a
+   missing idea — it is losing track of which of forty steps were checked,
+   which were assumed, which quietly added a hypothesis, and which were tried
+   last month and failed for a reason nobody wrote down. That is bookkeeping,
+   and bookkeeping is the one part of this a program does perfectly.
+
+   The critics are deterministic and cannot be flattered. They have no view on
+   whether the mathematics is interesting. */
+
+async function renderWorkbenchPage(){
+  const host = $("wbMain");
+  host.innerHTML = `<div class="wbwrap">
+    <div class="wbhead">
+      <h3>The workbench</h3>
+      <p>For an argument too long to hold in your head. State the problem and
+      the assumptions you are allowed, break it into claims, and let the
+      critics tell you where it does not hold together — a claim resting on a
+      rejected one, an assumption the problem never granted, a circle, an
+      identity nobody ran.</p>
+      <p class="wbplain"><b>It will not prove anything for you.</b> Its one
+      kind of real evidence is a symbolic check that either simplifies to zero
+      or does not. Everything else it stores is your reasoning, labelled
+      honestly as yours.</p>
+      <div class="cbacts">
+        <button class="btn go" id="wbNew">State a problem</button>
+        <select id="wbOpen"><option value="">problems already open…</option></select>
+      </div>
+    </div>
+    <div id="wbBody"></div>
+  </div>`;
+
+  $("wbNew").addEventListener("click", newProblem);
+  $("wbOpen").addEventListener("change", () => {
+    if ($("wbOpen").value) openProblem($("wbOpen").value);
+  });
+  await listProblems();
+  if (state.problem) openProblem(state.problem.id);
+}
+
+async function listProblems(){
+  let d;
+  try{ d = await (await fetch(API + "/api/problems")).json(); } catch { return; }
+  const sel = $("wbOpen");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">problems already open…</option>`
+    + (d.problems || []).map(p =>
+        `<option value="${p.id}">${p.title} — ${p.verified}/${p.claims}
+         verified</option>`).join("");
+}
+
+function newProblem(){
+  $("wbBody").innerHTML = `
+    <div class="wbcard">
+      <div class="mathsec">the problem</div>
+      <input type="text" id="wbTitle" class="wbinput" placeholder="a short name">
+      <textarea id="wbStatement" class="wbtext"
+        placeholder="State it once, precisely. Everything after this is measured against it."></textarea>
+      <div class="mathsec">what you are allowed to assume</div>
+      <textarea id="wbScope" class="wbtext" style="min-height:70px"
+        placeholder="One per line — smooth initial data, periodic boundary, positive rate constants. A claim assuming anything not on this list gets flagged, which is the point."></textarea>
+      <p class="mathnote">Fix this before any work starts. A proof that quietly
+      assumes smoothness is not a proof of the theorem that did not, and the
+      reliable way to catch that is to write down what was granted while nobody
+      is invested in the answer yet.</p>
+      <button class="btn go" id="wbCreate">Open it</button>
+    </div>`;
+  $("wbCreate").addEventListener("click", async () => {
+    const body = {
+      title: $("wbTitle").value,
+      statement: $("wbStatement").value,
+      scope: ($("wbScope").value || "").split("\n").filter(x => x.trim()),
+    };
+    let r, d;
+    try{
+      r = await fetch(API + "/api/problems", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body) });
+      d = await r.json();
+    } catch { return; }
+    if (!r.ok){
+      $("wbBody").insertAdjacentHTML("afterbegin",
+        `<div class="runfail">${(d.detail && d.detail.message) || "It would not open"}</div>`);
+      return;
+    }
+    await listProblems();
+    openProblem(d.id);
+  });
+}
+
+async function openProblem(id){
+  let r, d;
+  try{
+    r = await fetch(API + "/api/problems/" + encodeURIComponent(id));
+    d = await r.json();
+  } catch { return; }
+  if (!r.ok) return;
+  state.problem = d;
+  paintProblem();
+}
+
+function paintProblem(){
+  const p = state.problem;
+  const s = p.standing;
+  const byId = {};
+  (p.claims || []).forEach(c => byId[c.id] = c);
+  const objectionsFor = id =>
+    (s.objections || []).filter(o => o.claim === id);
+
+  $("wbBody").innerHTML = `
+    <div class="wbcard">
+      <div class="wbtitle"><b>${p.title}</b>
+        <span class="${s.sound ? "wbok" : "wbbad"}">${s.sound
+          ? "holds together" : "does not hold together"}</span></div>
+      <p class="wbstatement">${p.statement}</p>
+      ${(p.scope || []).length
+        ? `<div class="mathsec">granted</div>
+           <div class="hitwhy">${p.scope.map(x =>
+             `<span>${x}</span>`).join("")}</div>`
+        : `<p class="mathnote">Nothing is granted, so every assumption a claim
+           makes will be flagged.</p>`}
+      <div class="wbcounts">${Object.entries(s.counts)
+        .filter(([, n]) => n)
+        .map(([k, n]) => `<span class="wbchip ${k}">${n} ${k}</span>`)
+        .join("") || `<span class="wbchip">no claims yet</span>`}</div>
+    </div>
+
+    ${(s.objections || []).length ? `
+      <div class="wbcard">
+        <div class="mathsec">what does not hold</div>
+        ${s.objections.map(o => `
+          <div class="wbobj ${o.severity}">
+            <b>${byId[o.claim] ? byId[o.claim].text.slice(0, 70) : o.claim}</b>
+            <p>${o.text}</p>
+          </div>`).join("")}
+        <p class="mathnote">None of this is an opinion about the mathematics.
+        Each one is a fact about the structure that can be checked by looking.</p>
+      </div>` : `
+      <div class="wbcard"><div class="paperok">Nothing structural is wrong. That
+      is not the same as the argument being right — it means the critics here
+      have nothing left to say, and what remains is the mathematics.</div></div>`}
+
+    <div class="wbcard">
+      <div class="mathsec">claims</div>
+      ${(p.claims || []).length ? (p.claims || []).map(c => `
+        <div class="wbclaim ${c.status}">
+          <div class="wbclaimhead">
+            <span class="wbstatus ${c.status}">${c.status}</span>
+            <b>${c.text}</b>
+          </div>
+          ${c.identity ? `<pre class="armexpr">${c.identity
+            .replace(/</g, "&lt;")}</pre>` : ""}
+          ${c.depends.length ? `<div class="wbmeta">rests on ${c.depends
+            .map(x => byId[x] ? byId[x].text.slice(0, 40) : x).join("; ")}</div>`
+            : ""}
+          ${c.assumes.length ? `<div class="wbmeta">assumes ${c.assumes
+            .join("; ")}</div>` : ""}
+          ${(c.evidence || []).map(e => `
+            <div class="wbev ${e.ok ? "ok" : "no"}">${e.kind}: ${e.detail}</div>`
+            ).join("")}
+          ${objectionsFor(c.id).map(o =>
+            `<div class="wbev no">${o.text}</div>`).join("")}
+          <div class="cbacts">
+            ${c.identity ? `<button class="btn tiny" data-check="${c.id}">
+              Run the identity</button>` : ""}
+            <button class="btn tiny" data-mark="${c.id}|verified">Verified</button>
+            <button class="btn tiny" data-mark="${c.id}|rejected">Rejected</button>
+            <button class="btn tiny" data-mark="${c.id}|assumed">Assumed</button>
+          </div>
+        </div>`).join("")
+        : `<p class="mathnote">No claims yet. Break the problem into statements
+           small enough that each one is separately true or false.</p>`}
+    </div>
+
+    <div class="wbcard">
+      <div class="mathsec">add a claim</div>
+      <textarea id="wbClaim" class="wbtext" style="min-height:60px"
+        placeholder="One statement, small enough to be separately true or false."></textarea>
+      <input type="text" id="wbIdentity" class="wbinput"
+        placeholder="optional: an identity to check, as lhs = rhs — e.g. diff(x**2, x) = 2*x">
+      <input type="text" id="wbAssumes" class="wbinput"
+        placeholder="optional: assumptions it needs, comma separated">
+      ${(p.claims || []).length ? `
+        <div class="mathsec">rests on</div>
+        <div class="wbdeps">${p.claims.map(c => `
+          <label><input type="checkbox" data-dep="${c.id}">
+            ${c.text.slice(0, 60)}</label>`).join("")}</div>` : ""}
+      <button class="btn go" id="wbAdd">Add it</button>
+    </div>
+
+    <div class="wbcard">
+      <div class="mathsec">what was tried and did not work</div>
+      ${(p.failures || []).length
+        ? p.failures.map(f => `<div class="wbev no">${f.text}</div>`).join("")
+        : `<p class="mathnote">Nothing recorded. A dead end written down is
+           worth as much as a step forward — it is the thing you would
+           otherwise try again in six weeks.</p>`}
+      <input type="text" id="wbFail" class="wbinput"
+        placeholder="what you tried, and why it did not work">
+      <button class="btn" id="wbAddFail">Keep it</button>
+    </div>`;
+
+  $("wbBody").querySelectorAll("[data-check]").forEach(b =>
+    b.addEventListener("click", () => runIdentity(b.dataset.check)));
+  $("wbBody").querySelectorAll("[data-mark]").forEach(b =>
+    b.addEventListener("click", () => {
+      const [id, status] = b.dataset.mark.split("|");
+      markClaim(id, status);
+    }));
+  $("wbAdd").addEventListener("click", addClaim);
+  $("wbAddFail").addEventListener("click", addFailure);
+}
+
+async function runIdentity(claimId){
+  let r, d;
+  try{
+    r = await fetch(API + `/api/problems/${state.problem.id}/claims/${claimId}/check`,
+                    { method: "POST" });
+    d = await r.json();
+  } catch { return; }
+  if (!r.ok){
+    $("wbBody").insertAdjacentHTML("afterbegin",
+      `<div class="runfail">${(d.detail && d.detail.message) || "It would not run"}</div>`);
+    return;
+  }
+  await openProblem(state.problem.id);
+}
+
+async function markClaim(claimId, status){
+  try{
+    await fetch(API + `/api/problems/${state.problem.id}/claims/${claimId}/status`,
+      { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }) });
+  } catch { return; }
+  await openProblem(state.problem.id);
+}
+
+async function addClaim(){
+  const depends = [...$("wbBody").querySelectorAll("[data-dep]")]
+    .filter(b => b.checked).map(b => b.dataset.dep);
+  const body = {
+    text: $("wbClaim").value,
+    identity: $("wbIdentity").value,
+    assumes: ($("wbAssumes").value || "").split(",").filter(x => x.trim()),
+    depends,
+  };
+  if (!body.text.trim()) return;
+  try{
+    await fetch(API + `/api/problems/${state.problem.id}/claims`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body) });
+  } catch { return; }
+  await openProblem(state.problem.id);
+}
+
+async function addFailure(){
+  const text = $("wbFail").value;
+  if (!text.trim()) return;
+  try{
+    await fetch(API + `/api/problems/${state.problem.id}/failures`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statement: text }) });
+  } catch { return; }
+  await openProblem(state.problem.id);
+}
 
 /* =========================== maths to layers =========================== */
 

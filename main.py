@@ -42,6 +42,7 @@ import workbook
 import quantize as quant
 import scouts
 import watcher
+import workbench
 import tracer
 import train as T
 import walkthrough as walk
@@ -409,6 +410,118 @@ class MathMatchPayload(BaseModel):
     graph: Dict[str, Any] = {}
     codebase: str = ""
     path: str = ""
+
+
+class ProblemPayload(BaseModel):
+    title: str = ""
+    statement: str = ""
+    scope: List[str] = []
+
+
+class ClaimPayload(BaseModel):
+    text: str
+    depends: List[str] = []
+    assumes: List[str] = []
+    identity: str = ""
+
+
+class StatusPayload(BaseModel):
+    status: str
+    note: str = ""
+
+
+@app.get("/api/problems")
+def problem_list():
+    return {"problems": workbench.listing()}
+
+
+@app.post("/api/problems")
+def problem_create(body: ProblemPayload):
+    if not body.statement.strip():
+        raise HTTPException(400, detail={
+            "message": "State the problem. Everything else depends on it "
+                       "being fixed before the work starts."})
+    return workbench.create(body.title, body.statement, body.scope)
+
+
+@app.get("/api/problems/{problem_id}")
+def problem_open(problem_id: str):
+    problem = workbench.load(problem_id)
+    if not problem:
+        raise HTTPException(404, detail={"message": "No such problem."})
+    return {**problem, "standing": workbench.standing(problem)}
+
+
+@app.post("/api/problems/{problem_id}/claims")
+def problem_add_claim(problem_id: str, body: ClaimPayload):
+    problem = workbench.load(problem_id)
+    if not problem:
+        raise HTTPException(404, detail={"message": "No such problem."})
+    if not body.text.strip():
+        raise HTTPException(400, detail={"message": "A claim needs a statement."})
+    claim = workbench.add_claim(problem, body.text, body.depends,
+                               body.assumes, body.identity)
+    workbench.save(problem)
+    return {"claim": claim, "standing": workbench.standing(problem)}
+
+
+@app.post("/api/problems/{problem_id}/claims/{claim_id}/check")
+def problem_check_claim(problem_id: str, claim_id: str):
+    """Run the claim's stated identity. The only evidence here that is not
+    somebody's opinion."""
+    problem = workbench.load(problem_id)
+    if not problem:
+        raise HTTPException(404, detail={"message": "No such problem."})
+    claim = next((c for c in problem["claims"] if c["id"] == claim_id), None)
+    if not claim:
+        raise HTTPException(404, detail={"message": "No such claim."})
+    if not claim["identity"]:
+        raise HTTPException(400, detail={
+            "message": "This claim states no identity, so there is nothing to "
+                       "run. Write one as lhs = rhs, or record why it is "
+                       "believed instead."})
+    result = workbench.check_identity(claim["identity"])
+    result["at"] = time.time()
+    claim["evidence"] = [e for e in claim["evidence"]
+                         if e.get("kind") != "symbolic"] + [result]
+    # the check decides the status, not the person who wrote the claim
+    claim["status"] = "verified" if result["ok"] else "rejected"
+    workbench.save(problem)
+    return {"result": result, "claim": claim,
+            "standing": workbench.standing(problem)}
+
+
+@app.post("/api/problems/{problem_id}/claims/{claim_id}/status")
+def problem_set_status(problem_id: str, claim_id: str, body: StatusPayload):
+    problem = workbench.load(problem_id)
+    if not problem:
+        raise HTTPException(404, detail={"message": "No such problem."})
+    claim = next((c for c in problem["claims"] if c["id"] == claim_id), None)
+    if not claim:
+        raise HTTPException(404, detail={"message": "No such claim."})
+    if body.status not in workbench.STATUSES:
+        raise HTTPException(400, detail={"message": f"Unknown status {body.status}."})
+    claim["status"] = body.status
+    if body.note:
+        claim["evidence"].append({"ok": body.status == "verified",
+                                  "kind": "stated", "detail": body.note,
+                                  "at": time.time()})
+    workbench.save(problem)
+    return {"claim": claim, "standing": workbench.standing(problem)}
+
+
+@app.post("/api/problems/{problem_id}/failures")
+def problem_add_failure(problem_id: str, body: ProblemPayload):
+    """What was tried and did not work, kept so it is not tried twice."""
+    problem = workbench.load(problem_id)
+    if not problem:
+        raise HTTPException(404, detail={"message": "No such problem."})
+    if not body.statement.strip():
+        raise HTTPException(400, detail={"message": "Say what failed."})
+    problem["failures"].append({"text": body.statement.strip(),
+                                "at": time.time()})
+    workbench.save(problem)
+    return {"failures": problem["failures"]}
 
 
 @app.get("/api/lessons")

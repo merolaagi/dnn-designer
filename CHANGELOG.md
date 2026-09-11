@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.74.0
+
+**The workbench** — for an argument too long to hold in your head.
+
+It will not prove anything for you, and it says so on the page. What defeats
+people on hard problems is rarely a missing idea; it is losing track of which of
+forty steps were checked, which were assumed, which quietly added a hypothesis,
+and which were tried last month and failed for a reason nobody wrote down. That
+is bookkeeping, and bookkeeping is the one part of this a program does
+perfectly.
+
+It holds the problem stated once with its assumptions fixed, claims small enough
+to be separately true or false, the evidence for each, a dependency graph, and
+the dead ends.
+
+**The critics are deterministic and cannot be flattered.** They have no view on
+whether the mathematics is interesting. They report:
+
+- a claim marked verified with no evidence recorded — *agreement is not
+  verification*;
+- a claim resting on one that was rejected;
+- a claim more certain than what it stands on;
+- an assumption the problem statement never granted, which makes the result
+  about a different problem;
+- a circular dependency;
+- an identity written down and never run.
+
+**One kind of evidence here is not an opinion.** An identity written as
+`lhs = rhs` is checked with sympy, and the check sets the status — not the
+person who wrote the claim. `diff(w0/(1+t*w0), t) = -(w0/(1+t*w0))**2`
+simplifies to zero and the claim becomes verified; a false one becomes rejected
+with the residual shown.
+
+Problems are kept in the signed-in account's workspace, beside its designs,
+runs and scout errands.
+
+This follows the model of MARE, which is a fuller engine for the same job —
+branches, adversarial review, literature provenance, a Lean formalization gate.
+Its central rule is the one that matters here too, and it is MARE's sentence:
+**agreement is not verification**.
+
 ## 1.73.0
 
 **The Maths panel is read in three passes now**, taking the shape the ML Math

@@ -1485,6 +1485,76 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("the workbench cannot be flattered")
+def _():
+    """It does not solve anything, and an application implying otherwise would
+    be lying. What it does is bookkeeping a person loses track of: which steps
+    were checked, which assumed, which quietly added a hypothesis.
+
+    So the tests are about the critics refusing to agree: a claim marked
+    verified with no evidence, one resting on a rejected claim, one assuming
+    something the problem never granted, and a circle.
+    """
+    import auth
+    import workbench as wb
+
+    token = auth._current.set("prover")
+    try:
+        problem = wb.create("Test", "Show something.", ["smooth data"])
+
+        # the one evidence that is not an opinion
+        good = wb.check_identity("diff(x**2, x) = 2*x")
+        assert good["ok"], good
+        bad = wb.check_identity("diff(x**2, x) = 3*x")
+        assert not bad["ok"], "a false identity passed"
+        assert "not 0" in bad["detail"], bad
+        assert not wb.check_identity("x**2")["ok"], "a non-identity was accepted"
+
+        a = wb.add_claim(problem, "A", [], [], identity="diff(x**2, x) = 2*x")
+        b = wb.add_claim(problem, "B", [a["id"]], [])
+        c = wb.add_claim(problem, "C", [], [])
+        d = wb.add_claim(problem, "D", [c["id"]], [])
+        e = wb.add_claim(problem, "E", [], ["axisymmetry"])
+
+        a["evidence"].append(good)
+        a["status"] = "verified"
+        b["status"] = "verified"          # honest: a is verified
+        c["status"] = "rejected"
+        d["status"] = "verified"          # dishonest: rests on a rejected claim
+
+        kinds = {o["kind"] for o in wb.critique(problem)}
+        assert "unevidenced" in kinds, "a claim verified with no evidence passed"
+        assert "rests_on_rejected" in kinds, "a claim on a rejected one passed"
+        assert "out_of_scope" in kinds, "a smuggled assumption passed"
+
+        # b is verified on a verified claim with evidence: not an objection
+        against_b = [o for o in wb.critique(problem) if o["claim"] == b["id"]]
+        assert all(o["kind"] != "rests_on_rejected" for o in against_b), against_b
+
+        # a circle is not an argument
+        f = wb.add_claim(problem, "F", [], [])
+        g = wb.add_claim(problem, "G", [f["id"]], [])
+        f["depends"].append(g["id"])
+        assert any(o["kind"] == "circular" for o in wb.critique(problem)), \
+            "a circular dependency was not found"
+
+        standing = wb.standing(problem)
+        assert not standing["sound"], "an argument with fatal objections was sound"
+        assert "axisymmetry" in standing["assumed"]
+
+        # and it survives, in the account that owns it
+        wb.save(problem)
+        assert wb.load(problem["id"]), "the problem was not kept"
+        assert problem["id"] in {x["id"] for x in wb.listing()}
+    finally:
+        auth._current.reset(token)
+
+    # the page must not promise more than it does
+    assert "It will not prove anything for you" in PAGE, \
+        "the page does not say what it cannot do"
+    assert "function renderWorkbenchPage" in PAGE
+
+
 @check("the maths panel is read in three passes, not one column")
 def _():
     """Understand, Derive, Code — the shape a reader wants rather than the
