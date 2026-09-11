@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.69.1
+
+**timesfm is JAX. No argument would ever have imported those classes.**
+
+Nine of the forty classes in `google-research/timesfm` are `flax.nnx` modules.
+This traces PyTorch with `torch.fx`, which follows PyTorch tensors — a Flax
+module is a different object and no constructor argument changes that. The
+dialog was offering an argument box and a **Try** button for all of them, which
+is a promise it could not keep.
+
+The scanner now reads each file's imports and says which framework it is written
+against. Foreign classes get a reason in place of the box, and a line at the top
+naming the framework and pointing at *Read a codebase*, where the source is
+still readable.
+
+The same repository ships **flax, torch and mlx** versions of the same classes
+side by side, so `RMSNorm` appears three times — one blocked, two suggested.
+That is the right answer and it is worth seeing.
+
+**Two fixes to the suggestions themselves:**
+
+- **`num_features`, `d_model`, `embedding_dims` and their relatives were not
+  recognised at all**, so the boxes stayed blank on exactly the classes you were
+  looking at.
+- **A normalization's width is the last dimension of its input, not 32.**
+  Guessing 32 produced *"the size of tensor a (224) must match tensor b (32)"* —
+  a suggestion that is confidently wrong is worse than no suggestion.
+  `RMSNorm(224)` imports where `RMSNorm(32)` did not.
+
 ## 1.69.0
 
 **Maths → layers.** Feed it a textbook chapter, a paper or a PDF, and it says

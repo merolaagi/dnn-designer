@@ -1973,6 +1973,10 @@ body.sizing{user-select:none}
   border-color:#E0C48A;background:#FFFCF3;
 }
 .scanargs.none{border:none;color:#B7C0CB;font-size:9.5px;text-align:right}
+.scanblocked{
+  font-size:10px;color:#8C2F27;background:#FDECEC;border-radius:5px;
+  padding:2px 8px;white-space:nowrap;
+}
 .argnote{
   font-size:10.5px;line-height:1.6;color:#6B5418;background:#FFF8E9;
   border:1px solid #E8D9AE;border-radius:7px;padding:8px 10px;margin-top:8px;
@@ -9846,7 +9850,14 @@ function renderScanResults(){
      </div>
      ${scan.repo ? `<div class="repoline">from <b>${scan.repo}</b> at
         <span class="mono">${scan.ref}</span></div>` : ""}
-     ${scan.models.some(m => m.arguments > 0)
+     ${scan.models.some(m => m.blocked)
+       ? `<div class="argnote" style="background:#FDECEC;border-color:#E7C3C3;
+            color:#8C2F27">${scan.models.filter(m => m.blocked).length} of these
+          are written in another framework — ${[...new Set(scan.models
+            .filter(m => m.blocked).map(m => m.foreign))].join(", ")}. This
+          traces PyTorch modules, so no argument will import them. Their source
+          is readable under <b>Read a codebase</b>.</div>` : ""}
+     ${scan.models.some(m => m.arguments > 0 && !m.blocked)
        ? `<div class="argnote">${scan.models.some(m => m.suggested)
             ? `The boxes are filled in where the argument names say what they
                want — <span class="mono">in_channels, out_channels,
@@ -9925,7 +9936,10 @@ function scanRow(model, scan){
       <b>${model.cls}</b>
       <span class="mono">${model.file}:${model.line}</span>
     </div>
-    ${model.arguments > 0
+    ${model.blocked
+      ? `<span class="scanblocked" title="${model.blocked}">${
+           model.blocked.split(",")[0]}</span>`
+      : model.arguments > 0
       ? `<input type="text" class="scanargs${
              (scan.args[key] || model.suggested || "").trim() ? "" : " wanting"}"
            data-args="${key}"

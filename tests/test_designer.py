@@ -1745,6 +1745,14 @@ def _():
         ["in_channels", "out_channels", "kernel_size", "stride"],
         [3, 224, 224]) == [3, 32, 3, 1]
     assert importer.guess_arguments(["channels"], [3, 224, 224]) == [3]
+
+    # A normalization's width has to equal the axis it normalizes, which is
+    # the last dimension — not an arbitrary 32. Guessing 32 produced "the size
+    # of tensor a (224) must match tensor b (32)", and a suggestion that is
+    # confidently wrong is worse than none.
+    assert importer.guess_arguments(["num_features"], [3, 224, 224]) == [224]
+    assert importer.guess_arguments(["d_model"], [16, 768]) == [768]
+    assert importer.guess_arguments(["num_features"], [64]) == [64]
     assert importer.guess_arguments(
         ["encoder", "decoder_with_lm_head", "tokenizer"], [3, 224, 224]) is None, \
         "a tokenizer was invented"
@@ -1761,6 +1769,28 @@ def _():
     assert by["A"]["signature"] == "in_channels, out_channels"
     assert by["B"]["suggested"] == "", "a structural argument was suggested"
     assert "suggested" not in by["C"], "a class taking nothing was given something"
+
+    # A module written in another framework is refused outright rather than
+    # given an argument box: torch.fx follows PyTorch tensors, and no
+    # constructor argument turns a Flax module into one.
+    assert importer.framework_of("from flax import nnx\nimport jax") == "Flax"
+    assert importer.framework_of("import tensorflow as tf") == "TensorFlow"
+    assert importer.framework_of("import torch\nimport jax") == "", \
+        "a file importing torch was called foreign"
+    assert importer.framework_of("import math") == ""
+
+    blocked = main._with_suggestions({"models": [
+        {"cls": "Flaxy", "arguments": 1, "wants": ["num_features"],
+         "foreign": "Flax"},
+    ]}, "3,224,224")["models"][0]
+    assert blocked.get("blocked"), "a Flax module was offered an argument"
+    assert "no argument will make it import" in blocked["blocked"]
+    assert "suggested" not in blocked, \
+        "it suggested an argument for something that cannot import"
+    assert "Read a codebase" in blocked["blocked"], \
+        "it does not say what can still be done with the file"
+
+    assert "scanblocked" in PAGE, "the dialog has no way to show a refusal"
 
     # the box is filled from it, and the empty ones say why they are empty
     row = PAGE[PAGE.index("function scanRow"):]

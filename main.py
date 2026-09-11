@@ -1412,6 +1412,14 @@ def _with_suggestions(found: Dict[str, Any], shape: str) -> Dict[str, Any]:
     except ValueError:
         dims = [3, 224, 224]
     for model in found.get("models", []):
+        if model.get("foreign"):
+            # No constructor argument will help: torch.fx follows PyTorch
+            # tensors, and this is a different framework's module object.
+            model["blocked"] = (
+                f"Written in {model['foreign']}, not PyTorch. This traces "
+                f"PyTorch modules, so no argument will make it import — the "
+                f"source is still readable under Read a codebase.")
+            continue
         wants = model.get("wants") or []
         if not wants:
             continue

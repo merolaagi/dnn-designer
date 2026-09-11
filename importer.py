@@ -729,9 +729,16 @@ def _repo_result(spec, ref, target: Path, cached: bool) -> Dict[str, Any]:
 GUESSES: List[tuple] = [
     (("in_channel", "in_channels", "in_ch", "nin", "input_channels", "in_dim",
       "input_dim", "in_features", "channels", "c_in"), "channels"),
+    # A normalization's width has to equal the axis it normalizes, which is
+    # the last dimension of what it is given. Guessing 32 for these produced
+    # "the size of tensor a (224) must match tensor b (32)" — a suggestion
+    # that is confidently wrong is worse than none.
+    (("num_features", "features", "normalized_shape", "d_model", "model_dim",
+      "embedding_dims", "embed_dim", "embedding_dim", "num_dims", "n_embd",
+      "hidden_size", "dim"), "width"),
     (("out_channel", "out_channels", "out_ch", "nout", "output_channels",
       "out_dim", "output_dim", "out_features", "c_out", "cnn_channels",
-      "hidden", "hidden_dim", "dim", "width", "planes"), 32),
+      "hidden", "hidden_dim", "width", "planes", "units", "size"), 32),
     (("num_classes", "n_classes", "nb_classes", "classes", "num_class"), 10),
     (("kernel_size", "kernel", "k", "ksize"), 3),
     (("stride", "s"), 1),
@@ -744,6 +751,32 @@ GUESSES: List[tuple] = [
 ]
 
 
+#: Frameworks whose modules this cannot trace. torch.fx follows PyTorch
+#: tensors; a Flax module is a different object entirely and no constructor
+#: argument will change that. Offering to try one is a promise that cannot be
+#: kept.
+FOREIGN = {
+    "jax": "JAX", "flax": "Flax", "haiku": "Haiku", "equinox": "Equinox",
+    "tensorflow": "TensorFlow", "keras": "Keras", "paddle": "PaddlePaddle",
+    "mxnet": "MXNet", "mindspore": "MindSpore", "chainer": "Chainer",
+}
+
+
+def framework_of(source: str) -> str:
+    """Which framework a file is written against, from what it imports."""
+    seen = set()
+    for line in source.splitlines():
+        line = line.strip()
+        if not line.startswith(("import ", "from ")):
+            continue
+        head = line.split()[1].split(".")[0]
+        if head in FOREIGN:
+            seen.add(FOREIGN[head])
+        elif head == "torch":
+            return ""              # torch anywhere in the file settles it
+    return sorted(seen)[0] if seen else ""
+
+
 def guess_arguments(wants: List[str], shape: List[int]) -> Optional[List[Any]]:
     """Propose a value for every required argument, or give up.
 
@@ -752,13 +785,15 @@ def guess_arguments(wants: List[str], shape: List[int]) -> Optional[List[Any]]:
     that would be the meaningless kind of guess.
     """
     channels = int(shape[0]) if shape else 3
+    width = int(shape[-1]) if shape else 32
     values: List[Any] = []
     for name in wants:
         lowered = name.lower().strip("_")
         picked = None
         for names, value in GUESSES:
             if lowered in names:
-                picked = channels if value == "channels" else value
+                picked = (channels if value == "channels"
+                          else width if value == "width" else value)
                 break
         if picked is None:
             return None
@@ -792,11 +827,13 @@ def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
             break
         scanned += 1
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+            text = path.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(text)
         except SyntaxError as exc:
             skipped.append({"file": str(path.relative_to(base)), "why": f"syntax: {exc.msg}"})
             continue
 
+        foreign = framework_of(text)
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
@@ -821,6 +858,7 @@ def scan_folder(root: str, limit: int = 400) -> Dict[str, Any]:
                 wants = positional[:required]
             found.append({
                 "file": str(path.relative_to(base)),
+                "foreign": foreign,
                 "cls": node.name,
                 "line": node.lineno,
                 "bases": bases,
