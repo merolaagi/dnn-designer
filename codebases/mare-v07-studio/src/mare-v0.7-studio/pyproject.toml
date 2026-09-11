@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mare-web"
+version = "0.7.0"
+description = "Persistent web workbench for the MARE v0.4 research engine"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+ "pypdf==6.18.0", "pydantic>=2.11,<3", "numpy>=2.2,<3", "sympy>=1.13,<2",
+ "fastapi>=0.115,<1", "uvicorn[standard]>=0.34,<1",
+ "sqlalchemy[asyncio]>=2.0.40,<3", "aiosqlite>=0.21,<1",
+ "asyncpg>=0.30,<1", "alembic>=1.15,<2", "pydantic-settings>=2.8,<3",
+]
+[project.optional-dependencies]
+planner = ["torch==2.14.0"]
+openai = ["openai>=1.100,<3"]
+langgraph = ["langgraph>=0.6,<2"]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.26,<2", "httpx>=0.28,<1", "ruff>=0.11,<1"]
+postgres = ["psycopg[binary]>=3.2,<4", "pgvector>=0.3,<1"]
+[project.scripts]
+mare = "mare.cli:main"
+mare-planner = "mare_planner.cli:main"
+mare-worker = "mare_web.worker:main"
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+[tool.hatch.build.targets.wheel]
+packages = ["mare", "mare_web", "mare_planner"]
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+include = ["mare_planner/**/*.py", "tests/test_planner.py", "tests/test_studio.py", "mare_web/**/*.py", "tests/test_web*.py", "migrations/**/*.py"]
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

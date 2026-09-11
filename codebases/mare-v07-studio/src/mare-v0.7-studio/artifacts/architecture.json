@@ -1,0 +1,20 @@
+{
+  "name": "MARE Graph Research Planner",
+  "version": "0.6.0",
+  "configuration": {
+    "width": 128,
+    "depth": 3
+  },
+  "trainable_parameters": 831747,
+  "node_features": 48,
+  "context_features": 35,
+  "relation_types": 14,
+  "heads": [
+    "utility",
+    "normalized_reserved_explorer_tokens",
+    "resolution"
+  ],
+  "checkpoint_training_source": "synthetic",
+  "default_deployment": "shadow",
+  "framework_integration": "Dedicated sparse PyTorch implementation; not yet a DNN Designer plugin"
+}

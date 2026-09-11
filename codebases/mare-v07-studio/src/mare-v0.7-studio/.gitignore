@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+web/*.tsbuildinfo
+secrets/

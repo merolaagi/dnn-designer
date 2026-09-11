@@ -1,0 +1,888 @@
+{
+  "workflow": "studio",
+  "id": "RUN-292094bf4d",
+  "title": "Burgers \u00b7 test beyond the assumed regime",
+  "status": "completed",
+  "provider": "mock",
+  "target_rounds": 3,
+  "current_round": 3,
+  "attempts": 1,
+  "created_at": "2026-09-10T22:38:14.982248Z",
+  "updated_at": "2026-09-10T22:38:17.438849Z",
+  "error": null,
+  "snapshot": {
+    "studio_data": {
+      "input": {
+        "title": "Burgers \u00b7 test beyond the assumed regime",
+        "text": "Worked example authored for this studio, not an imported research paper.\nConsider the inviscid Burgers equation u_t + u*u_x = 0.\nAssume a smooth classical solution while following a characteristic dx/dt = u.\nSet m = u_x along that characteristic. Differentiating the PDE yields dm/dt = -m**2.\nFor m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.\nThis reduced calculation does not solve the Navier-Stokes global regularity problem.\nOpen question: which assumptions allow a related mechanism in a different PDE?",
+        "provider": "mock",
+        "model": {
+          "name": "Burgers characteristic gradient",
+          "variables": [
+            "m"
+          ],
+          "derivatives": [
+            "-m**2"
+          ],
+          "initial": [
+            -1.0
+          ],
+          "parameters": [],
+          "horizon": 2.0,
+          "assumptions": [
+            "A smooth inviscid Burgers solution exists up to the times considered.",
+            "m follows a characteristic; this is not the full PDE simulation."
+          ],
+          "provenance": "Explicit worked example reduction; not a model learned from an external paper."
+        },
+        "parent_run_id": "RUN-b876ed7783"
+      },
+      "stage": "numerical failure",
+      "parent_run_id": "RUN-b876ed7783",
+      "source": {
+        "text": "Worked example authored for this studio, not an imported research paper.\nConsider the inviscid Burgers equation u_t + u*u_x = 0.\nAssume a smooth classical solution while following a characteristic dx/dt = u.\nSet m = u_x along that characteristic. Differentiating the PDE yields dm/dt = -m**2.\nFor m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.\nThis reduced calculation does not solve the Navier-Stokes global regularity problem.\nOpen question: which assumptions allow a related mechanism in a different PDE?",
+        "sha256": "d06e1a820b5e96c8f79e69cefef1741b59429dc66d672af4cdc8beeb5cc0216c",
+        "pdf_sha256": null
+      },
+      "trace": [
+        {
+          "title": "Read the source",
+          "detail": "Preserved the imported text and its SHA-256 hash. No paper instructions are executed.",
+          "status": "recorded"
+        },
+        {
+          "title": "Extract and propose",
+          "detail": "Choose or edit an explicit model to test a method inspired by this source.",
+          "status": "hypothesis"
+        },
+        {
+          "title": "Test the proposal",
+          "detail": "Computed 100 of 200 RK4 steps and 200 of 400 refinement steps. Maximum sampled grid difference: 819.91. This does not establish a theorem.",
+          "status": "numerical failure"
+        }
+      ],
+      "analysis": {
+        "summary": "Offline extraction found candidate passages. It does not understand arbitrary papers.",
+        "findings": [
+          {
+            "kind": "equation",
+            "quote": "Consider the inviscid Burgers equation u_t + u*u_x = 0.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 73,
+            "source_end": 128,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "Assume a smooth classical solution while following a characteristic dx/dt = u.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 129,
+            "source_end": 207,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "Set m = u_x along that characteristic.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 208,
+            "source_end": 246,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "Differentiating the PDE yields dm/dt = -m**2.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 247,
+            "source_end": 292,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "For m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 293,
+            "source_end": 363,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "open_question",
+            "quote": "Open question: which assumptions allow a related mechanism in a different PDE?",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 449,
+            "source_end": 527,
+            "status": "source-linked candidate"
+          }
+        ],
+        "proposed_model": null,
+        "model_rationale": "Choose or edit an explicit model to test a method inspired by this source.",
+        "limitations": [
+          "Equations in PDF text may lose symbols or layout.",
+          "Source text and extracted rules are not verified facts."
+        ],
+        "next_methods": [
+          "Check the source assumptions and units.",
+          "Design a baseline and a falsifying experiment.",
+          "Compare numerical behavior across initial values and step sizes."
+        ]
+      },
+      "model": {
+        "name": "Burgers characteristic gradient",
+        "variables": [
+          "m"
+        ],
+        "derivatives": [
+          "-m**2"
+        ],
+        "initial": [
+          -1.0
+        ],
+        "parameters": [],
+        "horizon": 2.0,
+        "assumptions": [
+          "A smooth inviscid Burgers solution exists up to the times considered.",
+          "m follows a characteristic; this is not the full PDE simulation."
+        ],
+        "provenance": "Explicit worked example reduction; not a model learned from an external paper."
+      },
+      "model_origin": "learner supplied",
+      "experiment": {
+        "method": "Classical explicit RK4",
+        "steps": 200,
+        "points": [
+          {
+            "t": 0,
+            "y": [
+              -1.0
+            ]
+          },
+          {
+            "t": 0.01,
+            "y": [
+              -1.0101010100966736
+            ]
+          },
+          {
+            "t": 0.02,
+            "y": [
+              -1.0204081632562727
+            ]
+          },
+          {
+            "t": 0.03,
+            "y": [
+              -1.0309278350374265
+            ]
+          },
+          {
+            "t": 0.04,
+            "y": [
+              -1.0416666666470384
+            ]
+          },
+          {
+            "t": 0.05,
+            "y": [
+              -1.0526315789217755
+            ]
+          },
+          {
+            "t": 0.06,
+            "y": [
+              -1.0638297872019904
+            ]
+          },
+          {
+            "t": 0.07,
+            "y": [
+              -1.0752688171652538
+            ]
+          },
+          {
+            "t": 0.08,
+            "y": [
+              -1.0869565216925068
+            ]
+          },
+          {
+            "t": 0.09,
+            "y": [
+              -1.0989010988462682
+            ]
+          },
+          {
+            "t": 0.1,
+            "y": [
+              -1.1111111110473884
+            ]
+          },
+          {
+            "t": 0.11,
+            "y": [
+              -1.1235955055446185
+            ]
+          },
+          {
+            "t": 0.12,
+            "y": [
+              -1.1363636362798317
+            ]
+          },
+          {
+            "t": 0.13,
+            "y": [
+              -1.1494252872611908
+            ]
+          },
+          {
+            "t": 0.14,
+            "y": [
+              -1.1627906975670017
+            ]
+          },
+          {
+            "t": 0.15,
+            "y": [
+              -1.176470588114546
+            ]
+          },
+          {
+            "t": 0.16,
+            "y": [
+              -1.1904761903409709
+            ]
+          },
+          {
+            "t": 0.17,
+            "y": [
+              -1.2048192769574975
+            ]
+          },
+          {
+            "t": 0.18,
+            "y": [
+              -1.219512194953938
+            ]
+          },
+          {
+            "t": 0.19,
+            "y": [
+              -1.2345679010479904
+            ]
+          },
+          {
+            "t": 0.2,
+            "y": [
+              -1.2499999997932298
+            ]
+          },
+          {
+            "t": 0.21,
+            "y": [
+              -1.26582278458138
+            ]
+          },
+          {
+            "t": 0.22,
+            "y": [
+              -1.2820512817986027
+            ]
+          },
+          {
+            "t": 0.23,
+            "y": [
+              -1.298701298422539
+            ]
+          },
+          {
+            "t": 0.24,
+            "y": [
+              -1.3157894733770106
+            ]
+          },
+          {
+            "t": 0.25,
+            "y": [
+              -1.333333332995097
+            ]
+          },
+          {
+            "t": 0.26,
+            "y": [
+              -1.3513513509792197
+            ]
+          },
+          {
+            "t": 0.27,
+            "y": [
+              -1.369863013289451
+            ]
+          },
+          {
+            "t": 0.28,
+            "y": [
+              -1.3888888884391828
+            ]
+          },
+          {
+            "t": 0.29,
+            "y": [
+              -1.408450703731274
+            ]
+          },
+          {
+            "t": 0.3,
+            "y": [
+              -1.4285714280287236
+            ]
+          },
+          {
+            "t": 0.31,
+            "y": [
+              -1.4492753617227947
+            ]
+          },
+          {
+            "t": 0.32,
+            "y": [
+              -1.470588234639501
+            ]
+          },
+          {
+            "t": 0.33,
+            "y": [
+              -1.4925373127138384
+            ]
+          },
+          {
+            "t": 0.34,
+            "y": [
+              -1.515151514361673
+            ]
+          },
+          {
+            "t": 0.35000000000000003,
+            "y": [
+              -1.53846153759365
+            ]
+          },
+          {
+            "t": 0.36,
+            "y": [
+              -1.5624999990460289
+            ]
+          },
+          {
+            "t": 0.37,
+            "y": [
+              -1.5873015862525528
+            ]
+          },
+          {
+            "t": 0.38,
+            "y": [
+              -1.6129032246523
+            ]
+          },
+          {
+            "t": 0.39,
+            "y": [
+              -1.6393442610245406
+            ]
+          },
+          {
+            "t": 0.4,
+            "y": [
+              -1.6666666652670734
+            ]
+          },
+          {
+            "t": 0.41000000000000003,
+            "y": [
+              -1.6949152526943947
+            ]
+          },
+          {
+            "t": 0.42,
+            "y": [
+              -1.724137929332226
+            ]
+          },
+          {
+            "t": 0.43,
+            "y": [
+              -1.754385963032517
+            ]
+          },
+          {
+            "t": 0.44,
+            "y": [
+              -1.7857142836364792
+            ]
+          },
+          {
+            "t": 0.45,
+            "y": [
+              -1.8181818158826781
+            ]
+          },
+          {
+            "t": 0.46,
+            "y": [
+              -1.8518518493049054
+            ]
+          },
+          {
+            "t": 0.47000000000000003,
+            "y": [
+              -1.8867924500052784
+            ]
+          },
+          {
+            "t": 0.48,
+            "y": [
+              -1.923076919939614
+            ]
+          },
+          {
+            "t": 0.49,
+            "y": [
+              -1.9607843102363678
+            ]
+          },
+          {
+            "t": 0.5,
+            "y": [
+              -1.999999996113836
+            ]
+          },
+          {
+            "t": 0.51,
+            "y": [
+              -2.0408163221953703
+            ]
+          },
+          {
+            "t": 0.52,
+            "y": [
+              -2.0833333284889806
+            ]
+          },
+          {
+            "t": 0.53,
+            "y": [
+              -2.1276595690451643
+            ]
+          },
+          {
+            "t": 0.54,
+            "y": [
+              -2.1739130373961726
+            ]
+          },
+          {
+            "t": 0.55,
+            "y": [
+              -2.2222222153871445
+            ]
+          },
+          {
+            "t": 0.56,
+            "y": [
+              -2.272727265029636
+            ]
+          },
+          {
+            "t": 0.5700000000000001,
+            "y": [
+              -2.3255813866602466
+            ]
+          },
+          {
+            "t": 0.58,
+            "y": [
+              -2.3809523711218423
+            ]
+          },
+          {
+            "t": 0.59,
+            "y": [
+              -2.439024379093181
+            ]
+          },
+          {
+            "t": 0.6,
+            "y": [
+              -2.49999998731788
+            ]
+          },
+          {
+            "t": 0.61,
+            "y": [
+              -2.564102549637712
+            ]
+          },
+          {
+            "t": 0.62,
+            "y": [
+              -2.631578930820467
+            ]
+          },
+          {
+            "t": 0.63,
+            "y": [
+              -2.7027026837110344
+            ]
+          },
+          {
+            "t": 0.64,
+            "y": [
+              -2.77777775590737
+            ]
+          },
+          {
+            "t": 0.65,
+            "y": [
+              -2.8571428318662466
+            ]
+          },
+          {
+            "t": 0.66,
+            "y": [
+              -2.941176441262438
+            ]
+          },
+          {
+            "t": 0.67,
+            "y": [
+              -3.0303029961397754
+            ]
+          },
+          {
+            "t": 0.68,
+            "y": [
+              -3.124999960027061
+            ]
+          },
+          {
+            "t": 0.6900000000000001,
+            "y": [
+              -3.22580640462347
+            ]
+          },
+          {
+            "t": 0.7000000000000001,
+            "y": [
+              -3.3333332778191718
+            ]
+          },
+          {
+            "t": 0.71,
+            "y": [
+              -3.4482757961313935
+            ]
+          },
+          {
+            "t": 0.72,
+            "y": [
+              -3.571428492658759
+            ]
+          },
+          {
+            "t": 0.73,
+            "y": [
+              -3.7037036090201045
+            ]
+          },
+          {
+            "t": 0.74,
+            "y": [
+              -3.8461537315790078
+            ]
+          },
+          {
+            "t": 0.75,
+            "y": [
+              -3.9999998603505826
+            ]
+          },
+          {
+            "t": 0.76,
+            "y": [
+              -4.166666495117518
+            ]
+          },
+          {
+            "t": 0.77,
+            "y": [
+              -4.34782587441933
+            ]
+          },
+          {
+            "t": 0.78,
+            "y": [
+              -4.545454279679214
+            ]
+          },
+          {
+            "t": 0.79,
+            "y": [
+              -4.761904426159027
+            ]
+          },
+          {
+            "t": 0.8,
+            "y": [
+              -4.9999995710955805
+            ]
+          },
+          {
+            "t": 0.81,
+            "y": [
+              -5.263157340022471
+            ]
+          },
+          {
+            "t": 0.8200000000000001,
+            "y": [
+              -5.55555482824003
+            ]
+          },
+          {
+            "t": 0.8300000000000001,
+            "y": [
+              -5.882351972885506
+            ]
+          },
+          {
+            "t": 0.84,
+            "y": [
+              -6.249998688625228
+            ]
+          },
+          {
+            "t": 0.85,
+            "y": [
+              -6.666664855956485
+            ]
+          },
+          {
+            "t": 0.86,
+            "y": [
+              -7.1428545870223425
+            ]
+          },
+          {
+            "t": 0.87,
+            "y": [
+              -7.692303992372691
+            ]
+          },
+          {
+            "t": 0.88,
+            "y": [
+              -8.333327817835693
+            ]
+          },
+          {
+            "t": 0.89,
+            "y": [
+              -9.09090058133197
+            ]
+          },
+          {
+            "t": 0.9,
+            "y": [
+              -9.999986323072282
+            ]
+          },
+          {
+            "t": 0.91,
+            "y": [
+              -11.111088015482933
+            ]
+          },
+          {
+            "t": 0.92,
+            "y": [
+              -12.499958550469405
+            ]
+          },
+          {
+            "t": 0.93,
+            "y": [
+              -14.285633951487652
+            ]
+          },
+          {
+            "t": 0.9400000000000001,
+            "y": [
+              -16.66649458267935
+            ]
+          },
+          {
+            "t": 0.9500000000000001,
+            "y": [
+              -19.999577887016212
+            ]
+          },
+          {
+            "t": 0.96,
+            "y": [
+              -24.998743380764033
+            ]
+          },
+          {
+            "t": 0.97,
+            "y": [
+              -33.32828954647014
+            ]
+          },
+          {
+            "t": 0.98,
+            "y": [
+              -49.965940321325625
+            ]
+          },
+          {
+            "t": 0.99,
+            "y": [
+              -99.28991296801605
+            ]
+          },
+          {
+            "t": 1.0,
+            "y": [
+              -819.9102346574253
+            ]
+          }
+        ],
+        "first_step": {
+          "t": 0.0,
+          "h": 0.01,
+          "before": [
+            -1.0
+          ],
+          "k1": [
+            -1.0
+          ],
+          "k2": [
+            -1.0100249999999997
+          ],
+          "k3": [
+            -1.0101257537625155
+          ],
+          "k4": [
+            -1.0203045504790917
+          ],
+          "after": [
+            -1.0101010100966736
+          ]
+        },
+        "refined_steps": 400,
+        "computed_steps": 100,
+        "refined_computed_steps": 200,
+        "grid_difference": 819.9101391509618,
+        "comparison_complete": false,
+        "failure": {
+          "t": 1.0,
+          "reason": "Derivative left the finite experimental range",
+          "meaning": "Numerical failure is not a proof of singularity or a theorem counterexample."
+        },
+        "conclusion": "Observed trajectories and a step-halving comparison; no proof or validated error bound.",
+        "solver_source": "mare_web/studio.py: simulate"
+      }
+    },
+    "planner_data": {},
+    "run_id": "RUN-292094bf4d",
+    "problem": {
+      "id": "P-bd2f8ae252",
+      "title": "Burgers \u00b7 test beyond the assumed regime",
+      "canonical_statement": "Worked example authored for this studio, not an imported research paper.\nConsider the inviscid Burgers equation u_t + u*u_x = 0.\nAssume a smooth classical solution while following a characteristic dx/dt = u.\nSet m = u_x along that characteristic. Differentiating the PDE yields dm/dt = -m**2.\nFor m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.\nThis reduced calculation does not solve the Navier-Stokes global regularity problem.\nOpen question: which assumptions allow a related mechanism in a different PDE?",
+      "definitions": [],
+      "assumptions": [],
+      "success_conditions": [],
+      "disallowed_shortcuts": [],
+      "scope_constraints": [],
+      "verification_requirements": [],
+      "formal_target": null
+    },
+    "budget": {
+      "max_model_calls": 250,
+      "max_reserved_output_tokens": 1000000,
+      "max_tool_calls": 2000,
+      "max_rounds": 3,
+      "model_calls_used": 0,
+      "reserved_output_tokens_used": 0,
+      "tool_calls_used": 0
+    },
+    "policy": {
+      "enabled": false,
+      "hidden_size": 12,
+      "min_branch_examples": 12,
+      "min_question_examples": 16,
+      "training_epochs": 220,
+      "learning_rate": 0.03,
+      "l2": 0.0001,
+      "seed": 7,
+      "max_neural_blend": 0.65,
+      "blend_warmup_examples": 20,
+      "examples": [],
+      "branch_network": null,
+      "question_network": null
+    },
+    "current_round": 3,
+    "branches": [],
+    "questions": [],
+    "tasks": [],
+    "claims": [],
+    "dependency_edges": [],
+    "objections": [],
+    "failures": [],
+    "evidence": [],
+    "sources": [],
+    "source_links": [],
+    "assumption_audits": [],
+    "formalizations": [],
+    "tool_invocations": [],
+    "invocations": [],
+    "events": [
+      {
+        "id": "EV-95e122b88c",
+        "event_type": "studio_stage",
+        "actor": "paper-studio",
+        "round_no": 1,
+        "object_id": null,
+        "payload": {
+          "phase": 1,
+          "stage": "source imported"
+        },
+        "timestamp": "2026-09-10T22:38:16.871241Z"
+      },
+      {
+        "id": "EV-a49ff9de2c",
+        "event_type": "studio_stage",
+        "actor": "paper-studio",
+        "round_no": 2,
+        "object_id": null,
+        "payload": {
+          "phase": 2,
+          "stage": "model proposed"
+        },
+        "timestamp": "2026-09-10T22:38:17.130542Z"
+      },
+      {
+        "id": "EV-6e6c8e7362",
+        "event_type": "studio_stage",
+        "actor": "paper-studio",
+        "round_no": 3,
+        "object_id": null,
+        "payload": {
+          "phase": 3,
+          "stage": "numerical failure"
+        },
+        "timestamp": "2026-09-10T22:38:17.398437Z"
+      }
+    ],
+    "synthesis_notes": []
+  }
+}

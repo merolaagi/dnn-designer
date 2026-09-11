@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.69.0
+
+**Maths → layers.** Feed it a textbook chapter, a paper or a PDF, and it says
+which of the mathematics in it is already implemented by a layer here — with the
+layer's own equation beside the passage.
+
+The correspondence is checkable rather than rhetorical, which is the only reason
+this is worth building. The application already stores the equation each layer
+computes, so *"the book defines a matrix–vector product, and `Linear` computes
+`y = W x + b`"* is a statement about two things that are both written down.
+
+On a linear algebra text it matches eigenvalues and spectra to
+`ImplicitEquilibrium`, convexity to the convex domain, the Banach fixed point
+theorem to the implicit layers, and matrix products to `Linear`. On a statistics
+chapter: expectation and variance to the normalization layers, KL divergence to
+`Sampling`, Markov chains to `RBM` and message passing.
+
+Four things it is careful about:
+
+- **It discriminates.** A recipe matches nothing, which is checked.
+- **Every match quotes the sentence that produced it**, so a wrong one takes a
+  second to dismiss. The matching is by vocabulary and says so.
+- **A concept no single layer implements says that.** The chain rule maps to no
+  layer, because backpropagation is the whole graph — it would be easy and wrong
+  to attribute it to one.
+- **What your canvas uses and the document never mentions is listed.** Silence
+  is not agreement, and a reader otherwise assumes it is.
+
+**And the customising half.** Each match offers *Put one on the canvas*, which
+places the layer and opens the Maths tab with its equation and your shapes, and
+*What can be changed*, which lists the settings and what each does to the
+equation above it.
+
 ## 1.68.0
 
 **The codebase panel gains the canvas's views — three of the four, honestly.**

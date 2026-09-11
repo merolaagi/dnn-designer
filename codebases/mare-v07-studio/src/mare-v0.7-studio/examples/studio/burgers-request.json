@@ -1,0 +1,25 @@
+{
+  "title": "Burgers \u00b7 inspectable research attempt",
+  "text": "Worked example authored for this studio, not an imported research paper.\nConsider the inviscid Burgers equation u_t + u*u_x = 0.\nAssume a smooth classical solution while following a characteristic dx/dt = u.\nSet m = u_x along that characteristic. Differentiating the PDE yields dm/dt = -m**2.\nFor m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.\nThis reduced calculation does not solve the Navier-Stokes global regularity problem.\nOpen question: which assumptions allow a related mechanism in a different PDE?",
+  "provider": "mock",
+  "model": {
+    "name": "Burgers characteristic gradient",
+    "variables": [
+      "m"
+    ],
+    "derivatives": [
+      "-m**2"
+    ],
+    "initial": [
+      -1.0
+    ],
+    "parameters": [],
+    "horizon": 0.9,
+    "assumptions": [
+      "A smooth inviscid Burgers solution exists up to the times considered.",
+      "m follows a characteristic; this is not the full PDE simulation."
+    ],
+    "provenance": "Explicit worked example reduction; not a model learned from an external paper."
+  },
+  "parent_run_id": null
+}

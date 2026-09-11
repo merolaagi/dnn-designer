@@ -1,0 +1,115 @@
+.studio {
+  max-width: 1200px;
+  margin: auto;
+}
+.studio .panel {
+  margin: 24px 0;
+}
+.studio-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.studio label {
+  display: block;
+  margin: 16px 0;
+}
+.studio input:not([type="file"]),
+.studio textarea,
+.studio select {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #becac3;
+  border-radius: 5px;
+  font: inherit;
+  box-sizing: border-box;
+}
+.studio textarea {
+  font: 14px/1.6 monospace;
+}
+.studio button {
+  margin: 4px 0;
+}
+.model-equation {
+  display: grid;
+  grid-template-columns: 1fr 3fr 1fr;
+  gap: 12px;
+}
+.finding {
+  padding: 16px 0;
+  border-top: 1px solid #dce4df;
+}
+.finding blockquote {
+  margin: 12px 0;
+  padding: 12px 18px;
+  border-left: 3px solid #678778;
+  background: #f4f7f4;
+  white-space: pre-wrap;
+}
+.equation {
+  font: 18px/1.7 monospace;
+  background: #f0f5f1;
+  padding: 12px;
+  overflow: auto;
+}
+.source-text {
+  white-space: pre-wrap;
+  max-height: 480px;
+  overflow: auto;
+  word-break: break-word;
+}
+.theatre {
+  width: min(1000px, 94vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid #aabbb2;
+  border-radius: 10px;
+  background: #fff;
+  color: #243d34;
+}
+.theatre::backdrop {
+  background: rgba(10, 24, 18, 0.65);
+}
+.theatre canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 16px 0;
+}
+.theatre input[type="range"] {
+  width: 100%;
+}
+.theatre pre {
+  overflow: auto;
+  max-height: 260px;
+  background: #f4f7f4;
+  padding: 15px;
+}
+.studio mark {
+  background: #f6e6a9;
+}
+.studio .eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+.studio small {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .model-equation {
+    grid-template-columns: 1fr;
+  }
+  .theatre {
+    padding: 12px;
+  }
+  .studio-row {
+    align-items: flex-start;
+  }
+  .studio h1 {
+    font-size: 28px;
+  }
+}

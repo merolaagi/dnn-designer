@@ -1,0 +1,1484 @@
+{
+  "workflow": "studio",
+  "id": "RUN-b876ed7783",
+  "title": "Burgers \u00b7 inspectable research attempt",
+  "status": "completed",
+  "provider": "mock",
+  "target_rounds": 3,
+  "current_round": 3,
+  "attempts": 1,
+  "created_at": "2026-09-10T22:38:14.978823Z",
+  "updated_at": "2026-09-10T22:38:16.643936Z",
+  "error": null,
+  "snapshot": {
+    "studio_data": {
+      "input": {
+        "title": "Burgers \u00b7 inspectable research attempt",
+        "text": "Worked example authored for this studio, not an imported research paper.\nConsider the inviscid Burgers equation u_t + u*u_x = 0.\nAssume a smooth classical solution while following a characteristic dx/dt = u.\nSet m = u_x along that characteristic. Differentiating the PDE yields dm/dt = -m**2.\nFor m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.\nThis reduced calculation does not solve the Navier-Stokes global regularity problem.\nOpen question: which assumptions allow a related mechanism in a different PDE?",
+        "provider": "mock",
+        "model": {
+          "name": "Burgers characteristic gradient",
+          "variables": [
+            "m"
+          ],
+          "derivatives": [
+            "-m**2"
+          ],
+          "initial": [
+            -1.0
+          ],
+          "parameters": [],
+          "horizon": 0.9,
+          "assumptions": [
+            "A smooth inviscid Burgers solution exists up to the times considered.",
+            "m follows a characteristic; this is not the full PDE simulation."
+          ],
+          "provenance": "Explicit worked example reduction; not a model learned from an external paper."
+        },
+        "parent_run_id": null
+      },
+      "stage": "numerically tested",
+      "parent_run_id": null,
+      "source": {
+        "text": "Worked example authored for this studio, not an imported research paper.\nConsider the inviscid Burgers equation u_t + u*u_x = 0.\nAssume a smooth classical solution while following a characteristic dx/dt = u.\nSet m = u_x along that characteristic. Differentiating the PDE yields dm/dt = -m**2.\nFor m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.\nThis reduced calculation does not solve the Navier-Stokes global regularity problem.\nOpen question: which assumptions allow a related mechanism in a different PDE?",
+        "sha256": "d06e1a820b5e96c8f79e69cefef1741b59429dc66d672af4cdc8beeb5cc0216c",
+        "pdf_sha256": null
+      },
+      "trace": [
+        {
+          "title": "Read the source",
+          "detail": "Preserved the imported text and its SHA-256 hash. No paper instructions are executed.",
+          "status": "recorded"
+        },
+        {
+          "title": "Extract and propose",
+          "detail": "Choose or edit an explicit model to test a method inspired by this source.",
+          "status": "hypothesis"
+        },
+        {
+          "title": "Test the proposal",
+          "detail": "Computed 200 of 200 RK4 steps and 400 of 400 refinement steps. Maximum sampled grid difference: 5.31663e-07. This does not establish a theorem.",
+          "status": "numerically tested"
+        }
+      ],
+      "analysis": {
+        "summary": "Offline extraction found candidate passages. It does not understand arbitrary papers.",
+        "findings": [
+          {
+            "kind": "equation",
+            "quote": "Consider the inviscid Burgers equation u_t + u*u_x = 0.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 73,
+            "source_end": 128,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "Assume a smooth classical solution while following a characteristic dx/dt = u.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 129,
+            "source_end": 207,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "Set m = u_x along that characteristic.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 208,
+            "source_end": 246,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "Differentiating the PDE yields dm/dt = -m**2.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 247,
+            "source_end": 292,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "equation",
+            "quote": "For m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 293,
+            "source_end": 363,
+            "status": "source-linked candidate"
+          },
+          {
+            "kind": "open_question",
+            "quote": "Open question: which assumptions allow a related mechanism in a different PDE?",
+            "interpretation": "Detected by a lexical rule; mathematical meaning and applicability need review.",
+            "source_start": 449,
+            "source_end": 527,
+            "status": "source-linked candidate"
+          }
+        ],
+        "proposed_model": null,
+        "model_rationale": "Choose or edit an explicit model to test a method inspired by this source.",
+        "limitations": [
+          "Equations in PDF text may lose symbols or layout.",
+          "Source text and extracted rules are not verified facts."
+        ],
+        "next_methods": [
+          "Check the source assumptions and units.",
+          "Design a baseline and a falsifying experiment.",
+          "Compare numerical behavior across initial values and step sizes."
+        ]
+      },
+      "model": {
+        "name": "Burgers characteristic gradient",
+        "variables": [
+          "m"
+        ],
+        "derivatives": [
+          "-m**2"
+        ],
+        "initial": [
+          -1.0
+        ],
+        "parameters": [],
+        "horizon": 0.9,
+        "assumptions": [
+          "A smooth inviscid Burgers solution exists up to the times considered.",
+          "m follows a characteristic; this is not the full PDE simulation."
+        ],
+        "provenance": "Explicit worked example reduction; not a model learned from an external paper."
+      },
+      "model_origin": "learner supplied",
+      "experiment": {
+        "method": "Classical explicit RK4",
+        "steps": 200,
+        "points": [
+          {
+            "t": 0,
+            "y": [
+              -1.0
+            ]
+          },
+          {
+            "t": 0.0045000000000000005,
+            "y": [
+              -1.0045203415368378
+            ]
+          },
+          {
+            "t": 0.009000000000000001,
+            "y": [
+              -1.0090817356204258
+            ]
+          },
+          {
+            "t": 0.013500000000000002,
+            "y": [
+              -1.0136847440443586
+            ]
+          },
+          {
+            "t": 0.018000000000000002,
+            "y": [
+              -1.018329938899873
+            ]
+          },
+          {
+            "t": 0.022500000000000003,
+            "y": [
+              -1.0230179028128783
+            ]
+          },
+          {
+            "t": 0.027000000000000003,
+            "y": [
+              -1.0277492291875634
+            ]
+          },
+          {
+            "t": 0.0315,
+            "y": [
+              -1.0325245224567965
+            ]
+          },
+          {
+            "t": 0.036000000000000004,
+            "y": [
+              -1.0373443983395365
+            ]
+          },
+          {
+            "t": 0.04050000000000001,
+            "y": [
+              -1.0422094841054885
+            ]
+          },
+          {
+            "t": 0.045000000000000005,
+            "y": [
+              -1.0471204188472425
+            ]
+          },
+          {
+            "t": 0.0495,
+            "y": [
+              -1.0520778537601412
+            ]
+          },
+          {
+            "t": 0.054000000000000006,
+            "y": [
+              -1.0570824524301363
+            ]
+          },
+          {
+            "t": 0.05850000000000001,
+            "y": [
+              -1.0621348911299
+            ]
+          },
+          {
+            "t": 0.063,
+            "y": [
+              -1.067235859123468
+            ]
+          },
+          {
+            "t": 0.0675,
+            "y": [
+              -1.0723860589797054
+            ]
+          },
+          {
+            "t": 0.07200000000000001,
+            "y": [
+              -1.0775862068948898
+            ]
+          },
+          {
+            "t": 0.07650000000000001,
+            "y": [
+              -1.0828370330247286
+            ]
+          },
+          {
+            "t": 0.08100000000000002,
+            "y": [
+              -1.088139281826129
+            ]
+          },
+          {
+            "t": 0.0855,
+            "y": [
+              -1.0934937124090593
+            ]
+          },
+          {
+            "t": 0.09000000000000001,
+            "y": [
+              -1.0989010988988497
+            ]
+          },
+          {
+            "t": 0.09450000000000001,
+            "y": [
+              -1.1043622308092964
+            ]
+          },
+          {
+            "t": 0.099,
+            "y": [
+              -1.1098779134269465
+            ]
+          },
+          {
+            "t": 0.10350000000000001,
+            "y": [
+              -1.1154489682069557
+            ]
+          },
+          {
+            "t": 0.10800000000000001,
+            "y": [
+              -1.121076233180929
+            ]
+          },
+          {
+            "t": 0.11250000000000002,
+            "y": [
+              -1.1267605633771687
+            ]
+          },
+          {
+            "t": 0.11700000000000002,
+            "y": [
+              -1.1325028312537728
+            ]
+          },
+          {
+            "t": 0.12150000000000001,
+            "y": [
+              -1.138303927145044
+            ]
+          },
+          {
+            "t": 0.126,
+            "y": [
+              -1.1441647597216889
+            ]
+          },
+          {
+            "t": 0.1305,
+            "y": [
+              -1.150086256465309
+            ]
+          },
+          {
+            "t": 0.135,
+            "y": [
+              -1.156069364157701
+            ]
+          },
+          {
+            "t": 0.1395,
+            "y": [
+              -1.16211504938551
+            ]
+          },
+          {
+            "t": 0.14400000000000002,
+            "y": [
+              -1.1682242990608014
+            ]
+          },
+          {
+            "t": 0.14850000000000002,
+            "y": [
+              -1.1743981209581387
+            ]
+          },
+          {
+            "t": 0.15300000000000002,
+            "y": [
+              -1.1806375442687822
+            ]
+          },
+          {
+            "t": 0.15750000000000003,
+            "y": [
+              -1.1869436201726482
+            ]
+          },
+          {
+            "t": 0.16200000000000003,
+            "y": [
+              -1.1933174224286964
+            ]
+          },
+          {
+            "t": 0.1665,
+            "y": [
+              -1.1997600479844426
+            ]
+          },
+          {
+            "t": 0.171,
+            "y": [
+              -1.2062726176053218
+            ]
+          },
+          {
+            "t": 0.17550000000000002,
+            "y": [
+              -1.212856276524662
+            ]
+          },
+          {
+            "t": 0.18000000000000002,
+            "y": [
+              -1.2195121951150598
+            ]
+          },
+          {
+            "t": 0.18450000000000003,
+            "y": [
+              -1.2262415695819828
+            ]
+          },
+          {
+            "t": 0.18900000000000003,
+            "y": [
+              -1.2330456226804656
+            ]
+          },
+          {
+            "t": 0.19350000000000003,
+            "y": [
+              -1.2399256044557974
+            ]
+          },
+          {
+            "t": 0.198,
+            "y": [
+              -1.2468827930091466
+            ]
+          },
+          {
+            "t": 0.2025,
+            "y": [
+              -1.2539184952891063
+            ]
+          },
+          {
+            "t": 0.20700000000000002,
+            "y": [
+              -1.2610340479101898
+            ]
+          },
+          {
+            "t": 0.21150000000000002,
+            "y": [
+              -1.268230817999353
+            ]
+          },
+          {
+            "t": 0.21600000000000003,
+            "y": [
+              -1.2755102040716713
+            ]
+          },
+          {
+            "t": 0.22050000000000003,
+            "y": [
+              -1.2828736369363452
+            ]
+          },
+          {
+            "t": 0.22500000000000003,
+            "y": [
+              -1.2903225806342737
+            ]
+          },
+          {
+            "t": 0.22950000000000004,
+            "y": [
+              -1.297858533408479
+            ]
+          },
+          {
+            "t": 0.23400000000000004,
+            "y": [
+              -1.305483028708738
+            ]
+          },
+          {
+            "t": 0.23850000000000002,
+            "y": [
+              -1.3131976362318356
+            ]
+          },
+          {
+            "t": 0.24300000000000002,
+            "y": [
+              -1.321003962998918
+            ]
+          },
+          {
+            "t": 0.24750000000000003,
+            "y": [
+              -1.328903654471505
+            ]
+          },
+          {
+            "t": 0.252,
+            "y": [
+              -1.3368983957077831
+            ]
+          },
+          {
+            "t": 0.2565,
+            "y": [
+              -1.3449899125608924
+            ]
+          },
+          {
+            "t": 0.261,
+            "y": [
+              -1.3531799729209906
+            ]
+          },
+          {
+            "t": 0.2655,
+            "y": [
+              -1.3614703880029775
+            ]
+          },
+          {
+            "t": 0.27,
+            "y": [
+              -1.3698630136818464
+            ]
+          },
+          {
+            "t": 0.2745,
+            "y": [
+              -1.3783597518777313
+            ]
+          },
+          {
+            "t": 0.279,
+            "y": [
+              -1.3869625519928226
+            ]
+          },
+          {
+            "t": 0.28350000000000003,
+            "y": [
+              -1.3956734124024288
+            ]
+          },
+          {
+            "t": 0.28800000000000003,
+            "y": [
+              -1.4044943820025828
+            ]
+          },
+          {
+            "t": 0.29250000000000004,
+            "y": [
+              -1.4134275618167076
+            ]
+          },
+          {
+            "t": 0.29700000000000004,
+            "y": [
+              -1.4224751066639894
+            ]
+          },
+          {
+            "t": 0.30150000000000005,
+            "y": [
+              -1.4316392268922407
+            ]
+          },
+          {
+            "t": 0.30600000000000005,
+            "y": [
+              -1.4409221901781792
+            ]
+          },
+          {
+            "t": 0.31050000000000005,
+            "y": [
+              -1.4503263233982056
+            ]
+          },
+          {
+            "t": 0.31500000000000006,
+            "y": [
+              -1.4598540145729173
+            ]
+          },
+          {
+            "t": 0.31950000000000006,
+            "y": [
+              -1.4695077148887765
+            ]
+          },
+          {
+            "t": 0.32400000000000007,
+            "y": [
+              -1.4792899408005236
+            ]
+          },
+          {
+            "t": 0.3285,
+            "y": [
+              -1.4892032762181266
+            ]
+          },
+          {
+            "t": 0.333,
+            "y": [
+              -1.4992503747822574
+            ]
+          },
+          {
+            "t": 0.3375,
+            "y": [
+              -1.5094339622325041
+            ]
+          },
+          {
+            "t": 0.342,
+            "y": [
+              -1.5197568388727596
+            ]
+          },
+          {
+            "t": 0.34650000000000003,
+            "y": [
+              -1.5302218821384697
+            ]
+          },
+          {
+            "t": 0.35100000000000003,
+            "y": [
+              -1.5408320492706862
+            ]
+          },
+          {
+            "t": 0.35550000000000004,
+            "y": [
+              -1.5515903801021422
+            ]
+          },
+          {
+            "t": 0.36000000000000004,
+            "y": [
+              -1.5624999999608666
+            ]
+          },
+          {
+            "t": 0.36450000000000005,
+            "y": [
+              -1.5735641226971613
+            ]
+          },
+          {
+            "t": 0.36900000000000005,
+            "y": [
+              -1.5847860538401002
+            ]
+          },
+          {
+            "t": 0.37350000000000005,
+            "y": [
+              -1.5961691938900635
+            ]
+          },
+          {
+            "t": 0.37800000000000006,
+            "y": [
+              -1.6077170417541948
+            ]
+          },
+          {
+            "t": 0.38250000000000006,
+            "y": [
+              -1.6194331983320724
+            ]
+          },
+          {
+            "t": 0.38700000000000007,
+            "y": [
+              -1.6313213702593143
+            ]
+          },
+          {
+            "t": 0.39150000000000007,
+            "y": [
+              -1.6433853738172919
+            ]
+          },
+          {
+            "t": 0.396,
+            "y": [
+              -1.655629139017616
+            ]
+          },
+          {
+            "t": 0.4005,
+            "y": [
+              -1.6680567138705782
+            ]
+          },
+          {
+            "t": 0.405,
+            "y": [
+              -1.680672268847285
+            ]
+          },
+          {
+            "t": 0.40950000000000003,
+            "y": [
+              -1.6934801015458198
+            ]
+          },
+          {
+            "t": 0.41400000000000003,
+            "y": [
+              -1.7064846415723982
+            ]
+          },
+          {
+            "t": 0.41850000000000004,
+            "y": [
+              -1.719690455649163
+            ]
+          },
+          {
+            "t": 0.42300000000000004,
+            "y": [
+              -1.7331022529609927
+            ]
+          },
+          {
+            "t": 0.42750000000000005,
+            "y": [
+              -1.7467248907544732
+            ]
+          },
+          {
+            "t": 0.43200000000000005,
+            "y": [
+              -1.760563380203019
+            ]
+          },
+          {
+            "t": 0.43650000000000005,
+            "y": [
+              -1.774622892553019
+            ]
+          },
+          {
+            "t": 0.44100000000000006,
+            "y": [
+              -1.7889087655668459
+            ]
+          },
+          {
+            "t": 0.44550000000000006,
+            "y": [
+              -1.803426510279591
+            ]
+          },
+          {
+            "t": 0.45000000000000007,
+            "y": [
+              -1.8181818180874938
+            ]
+          },
+          {
+            "t": 0.45450000000000007,
+            "y": [
+              -1.833180568187219
+            ]
+          },
+          {
+            "t": 0.4590000000000001,
+            "y": [
+              -1.8484288353864111
+            ]
+          },
+          {
+            "t": 0.4635000000000001,
+            "y": [
+              -1.863932898307322
+            ]
+          },
+          {
+            "t": 0.4680000000000001,
+            "y": [
+              -1.8796992480067911
+            ]
+          },
+          {
+            "t": 0.47250000000000003,
+            "y": [
+              -1.8957345970374355
+            ]
+          },
+          {
+            "t": 0.47700000000000004,
+            "y": [
+              -1.9120458889766274
+            ]
+          },
+          {
+            "t": 0.48150000000000004,
+            "y": [
+              -1.9286403084516759
+            ]
+          },
+          {
+            "t": 0.48600000000000004,
+            "y": [
+              -1.945525291691624
+            ]
+          },
+          {
+            "t": 0.49050000000000005,
+            "y": [
+              -1.9627085376382178
+            ]
+          },
+          {
+            "t": 0.49500000000000005,
+            "y": [
+              -1.980198019650929
+            ]
+          },
+          {
+            "t": 0.49950000000000006,
+            "y": [
+              -1.9980019978434147
+            ]
+          },
+          {
+            "t": 0.504,
+            "y": [
+              -2.0161290320915204
+            ]
+          },
+          {
+            "t": 0.5085000000000001,
+            "y": [
+              -2.034587995755862
+            ]
+          },
+          {
+            "t": 0.513,
+            "y": [
+              -2.053388090165208
+            ]
+          },
+          {
+            "t": 0.5175000000000001,
+            "y": [
+              -2.0725388599103334
+            ]
+          },
+          {
+            "t": 0.522,
+            "y": [
+              -2.092050209001746
+            ]
+          },
+          {
+            "t": 0.5265000000000001,
+            "y": [
+              -2.111932417948769
+            ]
+          },
+          {
+            "t": 0.531,
+            "y": [
+              -2.1321961618218483
+            ]
+          },
+          {
+            "t": 0.5355000000000001,
+            "y": [
+              -2.1528525293647736
+            ]
+          },
+          {
+            "t": 0.54,
+            "y": [
+              -2.1739130432286964
+            ]
+          },
+          {
+            "t": 0.5445000000000001,
+            "y": [
+              -2.1953896814055374
+            ]
+          },
+          {
+            "t": 0.549,
+            "y": [
+              -2.217294899944542
+            ]
+          },
+          {
+            "t": 0.5535000000000001,
+            "y": [
+              -2.239641657042515
+            ]
+          },
+          {
+            "t": 0.558,
+            "y": [
+              -2.262443438605631
+            ]
+          },
+          {
+            "t": 0.5625000000000001,
+            "y": [
+              -2.2857142853887735
+            ]
+          },
+          {
+            "t": 0.5670000000000001,
+            "y": [
+              -2.309468821827163
+            ]
+          },
+          {
+            "t": 0.5715000000000001,
+            "y": [
+              -2.333722286684685
+            ]
+          },
+          {
+            "t": 0.5760000000000001,
+            "y": [
+              -2.3584905656538773
+            ]
+          },
+          {
+            "t": 0.5805,
+            "y": [
+              -2.3837902260541273
+            ]
+          },
+          {
+            "t": 0.5850000000000001,
+            "y": [
+              -2.409638553787346
+            ]
+          },
+          {
+            "t": 0.5895,
+            "y": [
+              -2.4360535927243423
+            ]
+          },
+          {
+            "t": 0.5940000000000001,
+            "y": [
+              -2.463054186710487
+            ]
+          },
+          {
+            "t": 0.5985,
+            "y": [
+              -2.490660024396168
+            ]
+          },
+          {
+            "t": 0.6030000000000001,
+            "y": [
+              -2.518891687116166
+            ]
+          },
+          {
+            "t": 0.6075,
+            "y": [
+              -2.5477707000626473
+            ]
+          },
+          {
+            "t": 0.6120000000000001,
+            "y": [
+              -2.5773195870191574
+            ]
+          },
+          {
+            "t": 0.6165,
+            "y": [
+              -2.6075619289481224
+            ]
+          },
+          {
+            "t": 0.6210000000000001,
+            "y": [
+              -2.638522426752126
+            ]
+          },
+          {
+            "t": 0.6255000000000001,
+            "y": [
+              -2.670226968560034
+            ]
+          },
+          {
+            "t": 0.6300000000000001,
+            "y": [
+              -2.7027027019231835
+            ]
+          },
+          {
+            "t": 0.6345000000000001,
+            "y": [
+              -2.7359781113448114
+            ]
+          },
+          {
+            "t": 0.6390000000000001,
+            "y": [
+              -2.770083101608079
+            ]
+          },
+          {
+            "t": 0.6435000000000001,
+            "y": [
+              -2.805049087415055
+            ]
+          },
+          {
+            "t": 0.6480000000000001,
+            "y": [
+              -2.840909089901418
+            ]
+          },
+          {
+            "t": 0.6525000000000001,
+            "y": [
+              -2.8776978406501406
+            ]
+          },
+          {
+            "t": 0.657,
+            "y": [
+              -2.9154518938928398
+            ]
+          },
+          {
+            "t": 0.6615000000000001,
+            "y": [
+              -2.954209747660719
+            ]
+          },
+          {
+            "t": 0.666,
+            "y": [
+              -2.9940119747291485
+            ]
+          },
+          {
+            "t": 0.6705000000000001,
+            "y": [
+              -3.0349013642921467
+            ]
+          },
+          {
+            "t": 0.675,
+            "y": [
+              -3.0769230754067483
+            ]
+          },
+          {
+            "t": 0.6795000000000001,
+            "y": [
+              -3.120124803364035
+            ]
+          },
+          {
+            "t": 0.684,
+            "y": [
+              -3.164556960275418
+            ]
+          },
+          {
+            "t": 0.6885000000000001,
+            "y": [
+              -3.210272871311658
+            ]
+          },
+          {
+            "t": 0.6930000000000001,
+            "y": [
+              -3.257328988200696
+            ]
+          },
+          {
+            "t": 0.6975000000000001,
+            "y": [
+              -3.3057851217814833
+            ]
+          },
+          {
+            "t": 0.7020000000000001,
+            "y": [
+              -3.355704695628126
+            ]
+          },
+          {
+            "t": 0.7065000000000001,
+            "y": [
+              -3.4071550230057217
+            ]
+          },
+          {
+            "t": 0.7110000000000001,
+            "y": [
+              -3.4602076097009604
+            ]
+          },
+          {
+            "t": 0.7155000000000001,
+            "y": [
+              -3.5149384855923596
+            ]
+          },
+          {
+            "t": 0.7200000000000001,
+            "y": [
+              -3.571428568193339
+            ]
+          },
+          {
+            "t": 0.7245,
+            "y": [
+              -3.629764061823838
+            ]
+          },
+          {
+            "t": 0.7290000000000001,
+            "y": [
+              -3.6900368965517902
+            ]
+          },
+          {
+            "t": 0.7335,
+            "y": [
+              -3.75234521160522
+            ]
+          },
+          {
+            "t": 0.7380000000000001,
+            "y": [
+              -3.816793888601605
+            ]
+          },
+          {
+            "t": 0.7425,
+            "y": [
+              -3.883495140688664
+            ]
+          },
+          {
+            "t": 0.7470000000000001,
+            "y": [
+              -3.9525691645578744
+            ]
+          },
+          {
+            "t": 0.7515000000000001,
+            "y": [
+              -4.02414486330049
+            ]
+          },
+          {
+            "t": 0.7560000000000001,
+            "y": [
+              -4.098360649251724
+            ]
+          },
+          {
+            "t": 0.7605000000000001,
+            "y": [
+              -4.175365337343441
+            ]
+          },
+          {
+            "t": 0.7650000000000001,
+            "y": [
+              -4.255319141097369
+            ]
+          },
+          {
+            "t": 0.7695000000000001,
+            "y": [
+              -4.338394785285602
+            ]
+          },
+          {
+            "t": 0.7740000000000001,
+            "y": [
+              -4.424778751519551
+            ]
+          },
+          {
+            "t": 0.7785000000000001,
+            "y": [
+              -4.5146726756713935
+            ]
+          },
+          {
+            "t": 0.7830000000000001,
+            "y": [
+              -4.6082949191681895
+            ]
+          },
+          {
+            "t": 0.7875000000000001,
+            "y": [
+              -4.705882339932754
+            ]
+          },
+          {
+            "t": 0.792,
+            "y": [
+              -4.807692293206223
+            ]
+          },
+          {
+            "t": 0.7965000000000001,
+            "y": [
+              -4.9140048978359605
+            ]
+          },
+          {
+            "t": 0.801,
+            "y": [
+              -5.025125610049687
+            ]
+          },
+          {
+            "t": 0.8055000000000001,
+            "y": [
+              -5.141388154514353
+            ]
+          },
+          {
+            "t": 0.81,
+            "y": [
+              -5.263157871913777
+            ]
+          },
+          {
+            "t": 0.8145000000000001,
+            "y": [
+              -5.390835553774623
+            ]
+          },
+          {
+            "t": 0.8190000000000001,
+            "y": [
+              -5.524861849338033
+            ]
+          },
+          {
+            "t": 0.8235000000000001,
+            "y": [
+              -5.665722346570004
+            ]
+          },
+          {
+            "t": 0.8280000000000001,
+            "y": [
+              -5.81395345077187
+            ]
+          },
+          {
+            "t": 0.8325000000000001,
+            "y": [
+              -5.970149210787249
+            ]
+          },
+          {
+            "t": 0.8370000000000001,
+            "y": [
+              -6.13496927592978
+            ]
+          },
+          {
+            "t": 0.8415000000000001,
+            "y": [
+              -6.309148208348842
+            ]
+          },
+          {
+            "t": 0.8460000000000001,
+            "y": [
+              -6.493506428081689
+            ]
+          },
+          {
+            "t": 0.8505000000000001,
+            "y": [
+              -6.688963134802504
+            ]
+          },
+          {
+            "t": 0.8550000000000001,
+            "y": [
+              -6.896551635688225
+            ]
+          },
+          {
+            "t": 0.8595000000000002,
+            "y": [
+              -7.117437618850153
+            ]
+          },
+          {
+            "t": 0.8640000000000001,
+            "y": [
+              -7.352941054575337
+            ]
+          },
+          {
+            "t": 0.8685,
+            "y": [
+              -7.604562593395402
+            ]
+          },
+          {
+            "t": 0.8730000000000001,
+            "y": [
+              -7.874015576335578
+            ]
+          },
+          {
+            "t": 0.8775000000000001,
+            "y": [
+              -8.163265100472906
+            ]
+          },
+          {
+            "t": 0.8820000000000001,
+            "y": [
+              -8.474576023207817
+            ]
+          },
+          {
+            "t": 0.8865000000000001,
+            "y": [
+              -8.81057238603043
+            ]
+          },
+          {
+            "t": 0.8910000000000001,
+            "y": [
+              -9.174311557899959
+            ]
+          },
+          {
+            "t": 0.8955000000000001,
+            "y": [
+              -9.569377535232967
+            ]
+          },
+          {
+            "t": 0.9000000000000001,
+            "y": [
+              -9.999999432805318
+            ]
+          }
+        ],
+        "first_step": {
+          "t": 0.0,
+          "h": 0.0045000000000000005,
+          "before": [
+            -1.0
+          ],
+          "k1": [
+            -1.0
+          ],
+          "k2": [
+            -1.0045050625000003
+          ],
+          "k3": [
+            -1.0045253809977541
+          ],
+          "k4": [
+            -1.0090611621216117
+          ],
+          "after": [
+            -1.0045203415368378
+          ]
+        },
+        "refined_steps": 400,
+        "computed_steps": 200,
+        "refined_computed_steps": 400,
+        "grid_difference": 5.316629447804644e-07,
+        "comparison_complete": true,
+        "failure": null,
+        "conclusion": "Observed trajectories and a step-halving comparison; no proof or validated error bound.",
+        "solver_source": "mare_web/studio.py: simulate"
+      }
+    },
+    "planner_data": {},
+    "run_id": "RUN-b876ed7783",
+    "problem": {
+      "id": "P-23a45e2f19",
+      "title": "Burgers \u00b7 inspectable research attempt",
+      "canonical_statement": "Worked example authored for this studio, not an imported research paper.\nConsider the inviscid Burgers equation u_t + u*u_x = 0.\nAssume a smooth classical solution while following a characteristic dx/dt = u.\nSet m = u_x along that characteristic. Differentiating the PDE yields dm/dt = -m**2.\nFor m(0) = -1, the reduced equation gives m(t) = -1/(1-t) while t < 1.\nThis reduced calculation does not solve the Navier-Stokes global regularity problem.\nOpen question: which assumptions allow a related mechanism in a different PDE?",
+      "definitions": [],
+      "assumptions": [],
+      "success_conditions": [],
+      "disallowed_shortcuts": [],
+      "scope_constraints": [],
+      "verification_requirements": [],
+      "formal_target": null
+    },
+    "budget": {
+      "max_model_calls": 250,
+      "max_reserved_output_tokens": 1000000,
+      "max_tool_calls": 2000,
+      "max_rounds": 3,
+      "model_calls_used": 0,
+      "reserved_output_tokens_used": 0,
+      "tool_calls_used": 0
+    },
+    "policy": {
+      "enabled": false,
+      "hidden_size": 12,
+      "min_branch_examples": 12,
+      "min_question_examples": 16,
+      "training_epochs": 220,
+      "learning_rate": 0.03,
+      "l2": 0.0001,
+      "seed": 7,
+      "max_neural_blend": 0.65,
+      "blend_warmup_examples": 20,
+      "examples": [],
+      "branch_network": null,
+      "question_network": null
+    },
+    "current_round": 3,
+    "branches": [],
+    "questions": [],
+    "tasks": [],
+    "claims": [],
+    "dependency_edges": [],
+    "objections": [],
+    "failures": [],
+    "evidence": [],
+    "sources": [],
+    "source_links": [],
+    "assumption_audits": [],
+    "formalizations": [],
+    "tool_invocations": [],
+    "invocations": [],
+    "events": [
+      {
+        "id": "EV-e8b97a815b",
+        "event_type": "studio_stage",
+        "actor": "paper-studio",
+        "round_no": 1,
+        "object_id": null,
+        "payload": {
+          "phase": 1,
+          "stage": "source imported"
+        },
+        "timestamp": "2026-09-10T22:38:16.050840Z"
+      },
+      {
+        "id": "EV-d4526e7e74",
+        "event_type": "studio_stage",
+        "actor": "paper-studio",
+        "round_no": 2,
+        "object_id": null,
+        "payload": {
+          "phase": 2,
+          "stage": "model proposed"
+        },
+        "timestamp": "2026-09-10T22:38:16.324906Z"
+      },
+      {
+        "id": "EV-b58c630007",
+        "event_type": "studio_stage",
+        "actor": "paper-studio",
+        "round_no": 3,
+        "object_id": null,
+        "payload": {
+          "phase": 3,
+          "stage": "numerically tested"
+        },
+        "timestamp": "2026-09-10T22:38:16.604748Z"
+      }
+    ],
+    "synthesis_notes": []
+  }
+}

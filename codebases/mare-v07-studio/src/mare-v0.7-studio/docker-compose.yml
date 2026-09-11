@@ -1,0 +1,79 @@
+name: mare-v07-studio
+x-service: &service
+  image: mare-v07-api:local
+  build: .
+  environment: &environment
+    MARE_DATABASE_URL: postgresql+asyncpg://mare:${POSTGRES_PASSWORD:-mare-local-only}@db:5432/mare
+    MARE_ENVIRONMENT: ${MARE_ENVIRONMENT:-development}
+    MARE_AUTH_TOKEN: ${MARE_AUTH_TOKEN:-}
+    MARE_PLANNER_CAPTURE: ${MARE_PLANNER_CAPTURE:-false}
+    MARE_PLANNER_MODE: ${MARE_PLANNER_MODE:-shadow}
+    MARE_PLANNER_CHECKPOINT: ${MARE_PLANNER_CHECKPOINT:-}
+    MARE_OPENAI_ENABLED: ${MARE_OPENAI_ENABLED:-false}
+    MARE_OPENAI_MODEL: ${MARE_OPENAI_MODEL:-}
+    MARE_RATE_LIMIT_PER_MINUTE: ${MARE_RATE_LIMIT_PER_MINUTE:-120}
+    MARE_MAX_BODY_BYTES: ${MARE_MAX_BODY_BYTES:-2000000}
+    MARE_LEASE_SECONDS: ${MARE_LEASE_SECONDS:-30}
+    MARE_ROUND_TIMEOUT_SECONDS: ${MARE_ROUND_TIMEOUT_SECONDS:-600}
+    MARE_MAX_ATTEMPTS: ${MARE_MAX_ATTEMPTS:-3}
+    MARE_POLL_SECONDS: ${MARE_POLL_SECONDS:-1}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    MARE_ALLOWED_HOSTS: '["api","localhost","127.0.0.1"]'
+    MARE_CORS_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080"]'
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  mem_limit: 2g
+  pids_limit: 128
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mare
+      POSTGRES_USER: mare
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mare-local-only}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U mare -d mare"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+  migrate:
+    <<: *service
+    command: [alembic, upgrade, head]
+    depends_on:
+      db: {condition: service_healthy}
+    restart: "no"
+  api:
+    <<: *service
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  worker:
+    <<: *service
+    command: [python, -m, mare_web.worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports: ["127.0.0.1:${MARE_WEB_PORT:-8080}:8080"]
+    depends_on:
+      api: {condition: service_healthy}
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+volumes:
+  postgres_data:

@@ -1,0 +1,76 @@
+name: MARE checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: mare_test
+          POSTGRES_USER: mare
+          POSTGRES_PASSWORD: ci-test-only
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U mare -d mare_test"
+          --health-interval 3s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm, cache-dependency-path: web/package-lock.json}
+      - run: pip install -c requirements.lock -e '.[dev,openai,planner]'
+      - run: ruff check . && ruff format --check mare_web migrations tests/test_web.py
+      - run: pytest -q
+      - run: pytest tests/test_web.py -q
+        env:
+          MARE_TEST_DATABASE_URL: postgresql+asyncpg://mare:ci-test-only@localhost:5432/mare_test
+      - run: python scripts/export_openapi.py
+      - run: npm ci && npm run schemas && npm run lint && npm test && npm run build
+        working-directory: web
+      - run: git diff --exit-code docs/openapi.json web/src/schema.d.ts
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - name: Start full stack
+        run: |
+          alembic upgrade head
+          uvicorn mare_web.api:app --host 127.0.0.1 --port 8000 > /tmp/mare-api.log 2>&1 &
+          python -m mare_web.worker > /tmp/mare-worker.log 2>&1 &
+          npm run dev --prefix web > /tmp/mare-web.log 2>&1 &
+          python - <<'PY'
+          import time, urllib.request
+          for url in ['http://127.0.0.1:8000/health/ready','http://127.0.0.1:5173/']:
+              for attempt in range(60):
+                  try:
+                      urllib.request.urlopen(url,timeout=1)
+                      break
+                  except Exception:
+                      time.sleep(1)
+              else:
+                  raise RuntimeError('Service did not start: '+url)
+          PY
+      - run: npm run test:e2e
+        working-directory: web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-validation
+          path: |
+            web/test-results
+            docs/screenshots
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build api web
+      - run: docker compose up -d --no-build --wait
+      - run: curl --fail http://localhost:8080/health/ready
+      - run: docker compose logs --no-color
+        if: failure()
+      - run: docker compose down -v
+        if: always()

@@ -1,0 +1,1100 @@
+{
+  "disclaimer": "Synthetic planted contextual task. Does not establish real research improvement or mathematical correctness.",
+  "budget_per_problem": 3,
+  "candidates_per_problem": 6,
+  "seeds": [
+    {
+      "seed": 7,
+      "mean_utility": {
+        "heuristic": 1.6041666666666667,
+        "tiny_mlp": 1.5208333333333333,
+        "graph": 2.3333333333333335,
+        "no_edges": 2.3333333333333335,
+        "oracle": 2.3333333333333335
+      },
+      "test_metrics": {
+        "utility_mse": 0.000988646293990314,
+        "cost_mse": 6.130543624749407e-05,
+        "resolution_mse": 0.0003673998871818185
+      },
+      "problems": [
+        {
+          "problem_id": "f54535a970612507be2e18de151da1bd83e6bfd50a4fdca154b69d08de6846bb",
+          "heuristic": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.75,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "289e61ceeb79e23e2b753f3572ccd8d3097eb9ed6ea23e865548602a7b8de86d",
+          "heuristic": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "13d9b3e33af6560fca7935f6adedb40cc754f203c89034e0a7f44bf97dc2797d",
+          "heuristic": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.0,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "1ac21202e2b08dcff3c89ac76916e1c4d818c0179119617f8d53d47ef1b7ed85",
+          "heuristic": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "7e3b444e78680ea6e8ac0cfb8b50a8dc6092e1242057912b979e0cee11da5969",
+          "heuristic": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "76633e93a8260fd0a16f4fd6bc231a41c35ddeaae276d57281657e117b209a4d",
+          "heuristic": {
+            "utility": 0.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "bf5a4e4fcc527d0abf1fcfe38808ec9e8da9cfc0aef394910bc779cfed81ea43",
+          "heuristic": {
+            "utility": 0.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.25,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 0.75,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "5b56ab4b08ed374793f820507d8ca6b1e0d59f477ac617ff93d68478f1b96a1a",
+          "heuristic": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "113d11b36d1b35d701af531d8ba4ea6dc10d16a3d061d2b7d84a76e920000869",
+          "heuristic": {
+            "utility": 3.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 3.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 3.0,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 3.0,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 3.0,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "cefcc15a7c810f76f45af7158cf6bba8f4adeb9ffd0a05cfe1f19d02520a2ed5",
+          "heuristic": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.75,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "ed2a88f7175a16e6877dea10a206c52982ed793316c71bd7cfacf32afcd49ae8",
+          "heuristic": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "b551c5ea7d4bbec768eddfdfdc8356238ea1122f15aee101b6717bd23341ef97",
+          "heuristic": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 1.75,
+            "spent": 3
+          }
+        }
+      ],
+      "split": {
+        "train": [
+          "088fe6dcbfbef370d0ba8d8785a84a14e0fa73e81d0da4375db5f037f5914dfe",
+          "0be7475400e28a380098ecb45d6416caa709db26a5900a7b696a1b73619a45b7",
+          "1c89a5ff31912d28749d72a073ccc63c0e4770c2bfba22e518ac35701e09c08d",
+          "1da812cd90e9b5b6b0d1f4d105feae4ac63d3ff571f4acc3cd2c108e9db52b3a",
+          "29e0d506e6d494b01f11a7ae331c1a65b418e9b1eb4f473c9fc1fd3de8e30cc9",
+          "32db57414a638f953dde422f7499631e87bbf9d0a5cfdc599e39a63e08d0204e",
+          "357275ddb062f9aa885e0477238bd9c762ef81afbffb8b864db9a9eca9c7bf0b",
+          "3e71b64388c31b0d93909419f8b9c225b463d8f539936112fe58acafa6a78b9b",
+          "42bcd5ac32a7e9207b5779fbcbfdb463b3f7744587414fe9966c4fbb3992a75a",
+          "4d41486a464c47903a8e8c2279466911b8f7c469ca144bd0a3579064526ad469",
+          "50ad07c20a10cab7705d23caa35a32bbaf84f7bdfa9ab7931a1c3ddf06428c6d",
+          "5b36df12154f1634fcd1cfd5a4692fc6c87c8c54de96f7b42552a21660ebfc0a",
+          "5ce87907e99b10654a556a88ccd9fe53fc529be4c2625c1953e3e7d24ca2a94c",
+          "6af9aef7c370f77b0047bbfdb54668a92dbc876f10eaaa12d2c20c57f4bdcf86",
+          "790dc4e25c6a67fe6e5c72f2c7be0e9959594aa810bc9b40dbf4f17594418252",
+          "8098a8fcd062fd762c6606c53a91e286eb4597d1b2d7c8dc6ebe20804c28bdce",
+          "82bd8e9e362bc0ffb22c684c0aae6f621700f1a13069aecc6fc371c0f6c82b30",
+          "8cfc5af344fbd07d1585f26e705fb0e3d926ec5bd9e8257bb792a93fb5ac9f36",
+          "8e004cfe102a6c92f8ad7060833e204bce8f9437da5bce925822bc96ec76f4dd",
+          "967be6262a0eedd4781ff5568e0ee3bb9a8c08435c0f83c1f9e27a60714c4b3e",
+          "bed1cfb9599a2780d723ae0d234bd6ea81fd21f256bef2f39d42b6147fe3ac08",
+          "c09d977856c4d7693baf51713558a825a340169a61720bd7500b5e40dfd50a02",
+          "c35c45fc9f4cae74cbe304c317bb8fcd762fa5bfe65df3e76a7bc3b46526652f",
+          "c4c2546fca801ecfb393c66be8f41a10bd8e13953e8b256fa6fa5aefa4402d9b",
+          "cfae0b6f221e0f3bafec49e4a5e01fcd852539f7a6279dfcd1fbf6783b1acba8",
+          "d82ec0af884f5d9311709ac7e1d21d7f9da093e00931be678eb6350be4203d99",
+          "d840a1932e9801bec6cbcf19b67d5fab2be8484484e7ce7c93c5d076eec7da54",
+          "dd4fcdbcd63245258c2be801a70c64bf42a266039253a3db0b8841011d26f584",
+          "e0459b1245290dcb4b52c35fe1f3ee5908300908533fb7a08eab424d9536d619",
+          "e9ec1f1fd0bc95c70ff7ae0147d63c605344685e60f070a7d2e8ca590435128a",
+          "eca07cac570aafcfc775684613ed8902d7abb3d2a9fbb0dc99b20e0d838b147e",
+          "ef1319551ce80eaf199c2adcc91ff51e0f6a5a0488a66d459de72628a55761c5",
+          "f6ed67d3a4b8d5c9772745bd81a8445b80b194df56a93eae828c7067a950a148",
+          "fc41806d0c0f32fe8b63cdfd7a647a25c09bb4d73c693a93238a32a2aba52ac1",
+          "fd551d45004af5fa6663bb3ff29435e2205e87d96c0c4047858fef8e9579d7a1",
+          "fd7d23ecca423ae6dab0876aab6ffa60bd0984bc28c6c6a4638724654c284907"
+        ],
+        "validation": [
+          "0c9f2f24375e930b8e08019004f6b0e79243ba3028531023cdbcc682837d1c74",
+          "179331ef95e10affffbbef0780835ee020b0784f6ba0a85d768bab7b32b4629a",
+          "3e487023eaf4b6575cb9bdcd43f5d6a1da08b2e2aa6e189a245a6aed3335709a",
+          "405db7f4167458416b097dd5e9bad51c9cb841c240686b04175bdde3480b911f",
+          "7e45759c9657da0d437e1c924918405db365b2f24a5c677c9eb2adf0a7d0184f",
+          "808d3202c0044db5091e4d549329635ae92b9fc0836210547190cb59a4979a72",
+          "94a7fed0f8817580cde556697573be954b6619ed7f2ee7103307a0ee46527ddd",
+          "be3b12608f77334ba732d04462139e233a9d91a699ce9caed3d40607f3c5009e",
+          "d2d3adb24cd721b64e08286b087831299066676902a138d6dbdc5bb8349abca6",
+          "d44b76175310161f77493035f18679540dd359ec73b55274f1330ddec265f56a",
+          "dfad56683ea8e01c2ba90645ee02f1258c1d88a3e31aa6008ea9491492f23ac2",
+          "f2e0e8f2a718f46368b154f2894d372ea8bfa7d8f72861744ff5f3fa60c0737b"
+        ],
+        "test": [
+          "113d11b36d1b35d701af531d8ba4ea6dc10d16a3d061d2b7d84a76e920000869",
+          "13d9b3e33af6560fca7935f6adedb40cc754f203c89034e0a7f44bf97dc2797d",
+          "1ac21202e2b08dcff3c89ac76916e1c4d818c0179119617f8d53d47ef1b7ed85",
+          "289e61ceeb79e23e2b753f3572ccd8d3097eb9ed6ea23e865548602a7b8de86d",
+          "5b56ab4b08ed374793f820507d8ca6b1e0d59f477ac617ff93d68478f1b96a1a",
+          "76633e93a8260fd0a16f4fd6bc231a41c35ddeaae276d57281657e117b209a4d",
+          "7e3b444e78680ea6e8ac0cfb8b50a8dc6092e1242057912b979e0cee11da5969",
+          "b551c5ea7d4bbec768eddfdfdc8356238ea1122f15aee101b6717bd23341ef97",
+          "bf5a4e4fcc527d0abf1fcfe38808ec9e8da9cfc0aef394910bc779cfed81ea43",
+          "cefcc15a7c810f76f45af7158cf6bba8f4adeb9ffd0a05cfe1f19d02520a2ed5",
+          "ed2a88f7175a16e6877dea10a206c52982ed793316c71bd7cfacf32afcd49ae8",
+          "f54535a970612507be2e18de151da1bd83e6bfd50a4fdca154b69d08de6846bb"
+        ]
+      },
+      "best_epoch": 40
+    },
+    {
+      "seed": 19,
+      "mean_utility": {
+        "heuristic": 1.2708333333333333,
+        "tiny_mlp": 1.3958333333333333,
+        "graph": 2.1666666666666665,
+        "no_edges": 2.1666666666666665,
+        "oracle": 2.1666666666666665
+      },
+      "test_metrics": {
+        "utility_mse": 0.001151966629549861,
+        "cost_mse": 2.3622480512131006e-05,
+        "resolution_mse": 0.0002839411317836493
+      },
+      "problems": [
+        {
+          "problem_id": "94a7fed0f8817580cde556697573be954b6619ed7f2ee7103307a0ee46527ddd",
+          "heuristic": {
+            "utility": 0.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.25,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "6af9aef7c370f77b0047bbfdb54668a92dbc876f10eaaa12d2c20c57f4bdcf86",
+          "heuristic": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.0,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "50ad07c20a10cab7705d23caa35a32bbaf84f7bdfa9ab7931a1c3ddf06428c6d",
+          "heuristic": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.0,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "967be6262a0eedd4781ff5568e0ee3bb9a8c08435c0f83c1f9e27a60714c4b3e",
+          "heuristic": {
+            "utility": 0.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "1c89a5ff31912d28749d72a073ccc63c0e4770c2bfba22e518ac35701e09c08d",
+          "heuristic": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "0c9f2f24375e930b8e08019004f6b0e79243ba3028531023cdbcc682837d1c74",
+          "heuristic": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 1.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "7e3b444e78680ea6e8ac0cfb8b50a8dc6092e1242057912b979e0cee11da5969",
+          "heuristic": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "d2d3adb24cd721b64e08286b087831299066676902a138d6dbdc5bb8349abca6",
+          "heuristic": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "e9ec1f1fd0bc95c70ff7ae0147d63c605344685e60f070a7d2e8ca590435128a",
+          "heuristic": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.25,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "bf5a4e4fcc527d0abf1fcfe38808ec9e8da9cfc0aef394910bc779cfed81ea43",
+          "heuristic": {
+            "utility": 0.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 0.75,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "357275ddb062f9aa885e0477238bd9c762ef81afbffb8b864db9a9eca9c7bf0b",
+          "heuristic": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.25,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "f6ed67d3a4b8d5c9772745bd81a8445b80b194df56a93eae828c7067a950a148",
+          "heuristic": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 3.0,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 3.0,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 3.0,
+            "spent": 3
+          }
+        }
+      ],
+      "split": {
+        "train": [
+          "088fe6dcbfbef370d0ba8d8785a84a14e0fa73e81d0da4375db5f037f5914dfe",
+          "113d11b36d1b35d701af531d8ba4ea6dc10d16a3d061d2b7d84a76e920000869",
+          "13d9b3e33af6560fca7935f6adedb40cc754f203c89034e0a7f44bf97dc2797d",
+          "179331ef95e10affffbbef0780835ee020b0784f6ba0a85d768bab7b32b4629a",
+          "1da812cd90e9b5b6b0d1f4d105feae4ac63d3ff571f4acc3cd2c108e9db52b3a",
+          "29e0d506e6d494b01f11a7ae331c1a65b418e9b1eb4f473c9fc1fd3de8e30cc9",
+          "32db57414a638f953dde422f7499631e87bbf9d0a5cfdc599e39a63e08d0204e",
+          "3e487023eaf4b6575cb9bdcd43f5d6a1da08b2e2aa6e189a245a6aed3335709a",
+          "3e71b64388c31b0d93909419f8b9c225b463d8f539936112fe58acafa6a78b9b",
+          "405db7f4167458416b097dd5e9bad51c9cb841c240686b04175bdde3480b911f",
+          "5ce87907e99b10654a556a88ccd9fe53fc529be4c2625c1953e3e7d24ca2a94c",
+          "76633e93a8260fd0a16f4fd6bc231a41c35ddeaae276d57281657e117b209a4d",
+          "790dc4e25c6a67fe6e5c72f2c7be0e9959594aa810bc9b40dbf4f17594418252",
+          "808d3202c0044db5091e4d549329635ae92b9fc0836210547190cb59a4979a72",
+          "8098a8fcd062fd762c6606c53a91e286eb4597d1b2d7c8dc6ebe20804c28bdce",
+          "82bd8e9e362bc0ffb22c684c0aae6f621700f1a13069aecc6fc371c0f6c82b30",
+          "8cfc5af344fbd07d1585f26e705fb0e3d926ec5bd9e8257bb792a93fb5ac9f36",
+          "8e004cfe102a6c92f8ad7060833e204bce8f9437da5bce925822bc96ec76f4dd",
+          "b551c5ea7d4bbec768eddfdfdc8356238ea1122f15aee101b6717bd23341ef97",
+          "be3b12608f77334ba732d04462139e233a9d91a699ce9caed3d40607f3c5009e",
+          "bed1cfb9599a2780d723ae0d234bd6ea81fd21f256bef2f39d42b6147fe3ac08",
+          "c35c45fc9f4cae74cbe304c317bb8fcd762fa5bfe65df3e76a7bc3b46526652f",
+          "c4c2546fca801ecfb393c66be8f41a10bd8e13953e8b256fa6fa5aefa4402d9b",
+          "cfae0b6f221e0f3bafec49e4a5e01fcd852539f7a6279dfcd1fbf6783b1acba8",
+          "d840a1932e9801bec6cbcf19b67d5fab2be8484484e7ce7c93c5d076eec7da54",
+          "dd4fcdbcd63245258c2be801a70c64bf42a266039253a3db0b8841011d26f584",
+          "dfad56683ea8e01c2ba90645ee02f1258c1d88a3e31aa6008ea9491492f23ac2",
+          "e0459b1245290dcb4b52c35fe1f3ee5908300908533fb7a08eab424d9536d619",
+          "eca07cac570aafcfc775684613ed8902d7abb3d2a9fbb0dc99b20e0d838b147e",
+          "ed2a88f7175a16e6877dea10a206c52982ed793316c71bd7cfacf32afcd49ae8",
+          "ef1319551ce80eaf199c2adcc91ff51e0f6a5a0488a66d459de72628a55761c5",
+          "f2e0e8f2a718f46368b154f2894d372ea8bfa7d8f72861744ff5f3fa60c0737b",
+          "f54535a970612507be2e18de151da1bd83e6bfd50a4fdca154b69d08de6846bb",
+          "fc41806d0c0f32fe8b63cdfd7a647a25c09bb4d73c693a93238a32a2aba52ac1",
+          "fd551d45004af5fa6663bb3ff29435e2205e87d96c0c4047858fef8e9579d7a1",
+          "fd7d23ecca423ae6dab0876aab6ffa60bd0984bc28c6c6a4638724654c284907"
+        ],
+        "validation": [
+          "0be7475400e28a380098ecb45d6416caa709db26a5900a7b696a1b73619a45b7",
+          "1ac21202e2b08dcff3c89ac76916e1c4d818c0179119617f8d53d47ef1b7ed85",
+          "289e61ceeb79e23e2b753f3572ccd8d3097eb9ed6ea23e865548602a7b8de86d",
+          "42bcd5ac32a7e9207b5779fbcbfdb463b3f7744587414fe9966c4fbb3992a75a",
+          "4d41486a464c47903a8e8c2279466911b8f7c469ca144bd0a3579064526ad469",
+          "5b36df12154f1634fcd1cfd5a4692fc6c87c8c54de96f7b42552a21660ebfc0a",
+          "5b56ab4b08ed374793f820507d8ca6b1e0d59f477ac617ff93d68478f1b96a1a",
+          "7e45759c9657da0d437e1c924918405db365b2f24a5c677c9eb2adf0a7d0184f",
+          "c09d977856c4d7693baf51713558a825a340169a61720bd7500b5e40dfd50a02",
+          "cefcc15a7c810f76f45af7158cf6bba8f4adeb9ffd0a05cfe1f19d02520a2ed5",
+          "d44b76175310161f77493035f18679540dd359ec73b55274f1330ddec265f56a",
+          "d82ec0af884f5d9311709ac7e1d21d7f9da093e00931be678eb6350be4203d99"
+        ],
+        "test": [
+          "0c9f2f24375e930b8e08019004f6b0e79243ba3028531023cdbcc682837d1c74",
+          "1c89a5ff31912d28749d72a073ccc63c0e4770c2bfba22e518ac35701e09c08d",
+          "357275ddb062f9aa885e0477238bd9c762ef81afbffb8b864db9a9eca9c7bf0b",
+          "50ad07c20a10cab7705d23caa35a32bbaf84f7bdfa9ab7931a1c3ddf06428c6d",
+          "6af9aef7c370f77b0047bbfdb54668a92dbc876f10eaaa12d2c20c57f4bdcf86",
+          "7e3b444e78680ea6e8ac0cfb8b50a8dc6092e1242057912b979e0cee11da5969",
+          "94a7fed0f8817580cde556697573be954b6619ed7f2ee7103307a0ee46527ddd",
+          "967be6262a0eedd4781ff5568e0ee3bb9a8c08435c0f83c1f9e27a60714c4b3e",
+          "bf5a4e4fcc527d0abf1fcfe38808ec9e8da9cfc0aef394910bc779cfed81ea43",
+          "d2d3adb24cd721b64e08286b087831299066676902a138d6dbdc5bb8349abca6",
+          "e9ec1f1fd0bc95c70ff7ae0147d63c605344685e60f070a7d2e8ca590435128a",
+          "f6ed67d3a4b8d5c9772745bd81a8445b80b194df56a93eae828c7067a950a148"
+        ]
+      },
+      "best_epoch": 40
+    },
+    {
+      "seed": 41,
+      "mean_utility": {
+        "heuristic": 1.5,
+        "tiny_mlp": 1.5,
+        "graph": 2.1666666666666665,
+        "no_edges": 2.1458333333333335,
+        "oracle": 2.1666666666666665
+      },
+      "test_metrics": {
+        "utility_mse": 0.003456291975453496,
+        "cost_mse": 3.123728311038576e-05,
+        "resolution_mse": 0.0021244967356324196
+      },
+      "problems": [
+        {
+          "problem_id": "29e0d506e6d494b01f11a7ae331c1a65b418e9b1eb4f473c9fc1fd3de8e30cc9",
+          "heuristic": {
+            "utility": 0.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "50ad07c20a10cab7705d23caa35a32bbaf84f7bdfa9ab7931a1c3ddf06428c6d",
+          "heuristic": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.0,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "f54535a970612507be2e18de151da1bd83e6bfd50a4fdca154b69d08de6846bb",
+          "heuristic": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.75,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "3e71b64388c31b0d93909419f8b9c225b463d8f539936112fe58acafa6a78b9b",
+          "heuristic": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "d840a1932e9801bec6cbcf19b67d5fab2be8484484e7ce7c93c5d076eec7da54",
+          "heuristic": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.75,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.75,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "d44b76175310161f77493035f18679540dd359ec73b55274f1330ddec265f56a",
+          "heuristic": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 1.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 1.75,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "fd7d23ecca423ae6dab0876aab6ffa60bd0984bc28c6c6a4638724654c284907",
+          "heuristic": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.0,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "bed1cfb9599a2780d723ae0d234bd6ea81fd21f256bef2f39d42b6147fe3ac08",
+          "heuristic": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 1.25,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "4d41486a464c47903a8e8c2279466911b8f7c469ca144bd0a3579064526ad469",
+          "heuristic": {
+            "utility": 0.25,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 2.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "be3b12608f77334ba732d04462139e233a9d91a699ce9caed3d40607f3c5009e",
+          "heuristic": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.5,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.5,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "790dc4e25c6a67fe6e5c72f2c7be0e9959594aa810bc9b40dbf4f17594418252",
+          "heuristic": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.75,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 2.25,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 2.25,
+            "spent": 3
+          }
+        },
+        {
+          "problem_id": "5ce87907e99b10654a556a88ccd9fe53fc529be4c2625c1953e3e7d24ca2a94c",
+          "heuristic": {
+            "utility": 0.25,
+            "spent": 3
+          },
+          "tiny_mlp": {
+            "utility": 1.0,
+            "spent": 3
+          },
+          "graph": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "no_edges": {
+            "utility": 1.25,
+            "spent": 3
+          },
+          "oracle": {
+            "utility": 1.25,
+            "spent": 3
+          }
+        }
+      ],
+      "split": {
+        "train": [
+          "0c9f2f24375e930b8e08019004f6b0e79243ba3028531023cdbcc682837d1c74",
+          "13d9b3e33af6560fca7935f6adedb40cc754f203c89034e0a7f44bf97dc2797d",
+          "179331ef95e10affffbbef0780835ee020b0784f6ba0a85d768bab7b32b4629a",
+          "1ac21202e2b08dcff3c89ac76916e1c4d818c0179119617f8d53d47ef1b7ed85",
+          "1c89a5ff31912d28749d72a073ccc63c0e4770c2bfba22e518ac35701e09c08d",
+          "1da812cd90e9b5b6b0d1f4d105feae4ac63d3ff571f4acc3cd2c108e9db52b3a",
+          "32db57414a638f953dde422f7499631e87bbf9d0a5cfdc599e39a63e08d0204e",
+          "357275ddb062f9aa885e0477238bd9c762ef81afbffb8b864db9a9eca9c7bf0b",
+          "3e487023eaf4b6575cb9bdcd43f5d6a1da08b2e2aa6e189a245a6aed3335709a",
+          "5b36df12154f1634fcd1cfd5a4692fc6c87c8c54de96f7b42552a21660ebfc0a",
+          "6af9aef7c370f77b0047bbfdb54668a92dbc876f10eaaa12d2c20c57f4bdcf86",
+          "76633e93a8260fd0a16f4fd6bc231a41c35ddeaae276d57281657e117b209a4d",
+          "7e3b444e78680ea6e8ac0cfb8b50a8dc6092e1242057912b979e0cee11da5969",
+          "7e45759c9657da0d437e1c924918405db365b2f24a5c677c9eb2adf0a7d0184f",
+          "808d3202c0044db5091e4d549329635ae92b9fc0836210547190cb59a4979a72",
+          "82bd8e9e362bc0ffb22c684c0aae6f621700f1a13069aecc6fc371c0f6c82b30",
+          "8cfc5af344fbd07d1585f26e705fb0e3d926ec5bd9e8257bb792a93fb5ac9f36",
+          "8e004cfe102a6c92f8ad7060833e204bce8f9437da5bce925822bc96ec76f4dd",
+          "94a7fed0f8817580cde556697573be954b6619ed7f2ee7103307a0ee46527ddd",
+          "967be6262a0eedd4781ff5568e0ee3bb9a8c08435c0f83c1f9e27a60714c4b3e",
+          "b551c5ea7d4bbec768eddfdfdc8356238ea1122f15aee101b6717bd23341ef97",
+          "bf5a4e4fcc527d0abf1fcfe38808ec9e8da9cfc0aef394910bc779cfed81ea43",
+          "c09d977856c4d7693baf51713558a825a340169a61720bd7500b5e40dfd50a02",
+          "c35c45fc9f4cae74cbe304c317bb8fcd762fa5bfe65df3e76a7bc3b46526652f",
+          "c4c2546fca801ecfb393c66be8f41a10bd8e13953e8b256fa6fa5aefa4402d9b",
+          "d2d3adb24cd721b64e08286b087831299066676902a138d6dbdc5bb8349abca6",
+          "d82ec0af884f5d9311709ac7e1d21d7f9da093e00931be678eb6350be4203d99",
+          "dd4fcdbcd63245258c2be801a70c64bf42a266039253a3db0b8841011d26f584",
+          "dfad56683ea8e01c2ba90645ee02f1258c1d88a3e31aa6008ea9491492f23ac2",
+          "e0459b1245290dcb4b52c35fe1f3ee5908300908533fb7a08eab424d9536d619",
+          "e9ec1f1fd0bc95c70ff7ae0147d63c605344685e60f070a7d2e8ca590435128a",
+          "eca07cac570aafcfc775684613ed8902d7abb3d2a9fbb0dc99b20e0d838b147e",
+          "ed2a88f7175a16e6877dea10a206c52982ed793316c71bd7cfacf32afcd49ae8",
+          "ef1319551ce80eaf199c2adcc91ff51e0f6a5a0488a66d459de72628a55761c5",
+          "fc41806d0c0f32fe8b63cdfd7a647a25c09bb4d73c693a93238a32a2aba52ac1",
+          "fd551d45004af5fa6663bb3ff29435e2205e87d96c0c4047858fef8e9579d7a1"
+        ],
+        "validation": [
+          "088fe6dcbfbef370d0ba8d8785a84a14e0fa73e81d0da4375db5f037f5914dfe",
+          "0be7475400e28a380098ecb45d6416caa709db26a5900a7b696a1b73619a45b7",
+          "113d11b36d1b35d701af531d8ba4ea6dc10d16a3d061d2b7d84a76e920000869",
+          "289e61ceeb79e23e2b753f3572ccd8d3097eb9ed6ea23e865548602a7b8de86d",
+          "405db7f4167458416b097dd5e9bad51c9cb841c240686b04175bdde3480b911f",
+          "42bcd5ac32a7e9207b5779fbcbfdb463b3f7744587414fe9966c4fbb3992a75a",
+          "5b56ab4b08ed374793f820507d8ca6b1e0d59f477ac617ff93d68478f1b96a1a",
+          "8098a8fcd062fd762c6606c53a91e286eb4597d1b2d7c8dc6ebe20804c28bdce",
+          "cefcc15a7c810f76f45af7158cf6bba8f4adeb9ffd0a05cfe1f19d02520a2ed5",
+          "cfae0b6f221e0f3bafec49e4a5e01fcd852539f7a6279dfcd1fbf6783b1acba8",
+          "f2e0e8f2a718f46368b154f2894d372ea8bfa7d8f72861744ff5f3fa60c0737b",
+          "f6ed67d3a4b8d5c9772745bd81a8445b80b194df56a93eae828c7067a950a148"
+        ],
+        "test": [
+          "29e0d506e6d494b01f11a7ae331c1a65b418e9b1eb4f473c9fc1fd3de8e30cc9",
+          "3e71b64388c31b0d93909419f8b9c225b463d8f539936112fe58acafa6a78b9b",
+          "4d41486a464c47903a8e8c2279466911b8f7c469ca144bd0a3579064526ad469",
+          "50ad07c20a10cab7705d23caa35a32bbaf84f7bdfa9ab7931a1c3ddf06428c6d",
+          "5ce87907e99b10654a556a88ccd9fe53fc529be4c2625c1953e3e7d24ca2a94c",
+          "790dc4e25c6a67fe6e5c72f2c7be0e9959594aa810bc9b40dbf4f17594418252",
+          "be3b12608f77334ba732d04462139e233a9d91a699ce9caed3d40607f3c5009e",
+          "bed1cfb9599a2780d723ae0d234bd6ea81fd21f256bef2f39d42b6147fe3ac08",
+          "d44b76175310161f77493035f18679540dd359ec73b55274f1330ddec265f56a",
+          "d840a1932e9801bec6cbcf19b67d5fab2be8484484e7ce7c93c5d076eec7da54",
+          "f54535a970612507be2e18de151da1bd83e6bfd50a4fdca154b69d08de6846bb",
+          "fd7d23ecca423ae6dab0876aab6ffa60bd0984bc28c6c6a4638724654c284907"
+        ]
+      },
+      "best_epoch": 38
+    }
+  ],
+  "mean_utility": {
+    "heuristic": 1.4583333333333333,
+    "tiny_mlp": 1.472222222222222,
+    "graph": 2.2222222222222223,
+    "no_edges": 2.2152777777777777,
+    "oracle": 2.2222222222222223
+  }
+}

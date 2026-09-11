@@ -1340,6 +1340,68 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("mathematics in a document is matched to the layers that compute it")
+def _():
+    """The correspondence is checkable rather than rhetorical: this
+    application stores the equation each layer implements, so both statements
+    are written down and can be put side by side.
+
+    What is checked here is that it discriminates — a statistics chapter
+    matches, a recipe does not — and that every match carries the sentence
+    that produced it, so it can be dismissed in a second.
+    """
+    import mathmatch
+
+    stats = ("The expectation of a random variable X is E[X]. The variance is "
+             "E[(X-mu)^2]. Cross entropy between p and q is -sum p log q, and "
+             "the Kullback-Leibler divergence is the excess.")
+    recipe = ("Preheat the oven to 180 degrees. Cream the butter and sugar "
+              "until pale. Fold in the flour a third at a time.")
+
+    hit = mathmatch.find(stats, {}, layers.REGISTRY)
+    miss = mathmatch.find(recipe, {}, layers.REGISTRY)
+
+    names = {c["name"] for c in hit["concepts"]}
+    assert "Mean and variance" in names, names
+    assert "Entropy and divergence" in names, names
+    assert not miss["concepts"], \
+        f"a recipe matched {[c['name'] for c in miss['concepts']]}"
+
+    for concept in hit["concepts"]:
+        assert concept["quotes"], f"{concept['name']} cites nothing"
+        assert concept["why"], f"{concept['name']} does not say why they are the same"
+        for name in concept["layers"]:
+            assert name in layers.REGISTRY, \
+                f"{concept['name']} points at {name}, which is not a layer"
+
+    # a concept no single layer implements must say so rather than pick one
+    calculus = mathmatch.find(
+        "The chain rule gives the derivative of a composition.", {},
+        layers.REGISTRY)
+    chain = next(c for c in calculus["concepts"] if c["key"] == "gradient")
+    assert chain["layers"] == [], "backpropagation was attributed to one layer"
+    assert "every layer participates" in chain["why"]
+
+    # what is on the canvas is marked, and what the document misses is named
+    graph = {"nodes": [{"type": "BatchNorm2d", "label": "norm"},
+                       {"type": "Conv2d", "label": "stem"}]}
+    with_canvas = mathmatch.find(stats, graph, layers.REGISTRY)
+    marked = next(c for c in with_canvas["concepts"]
+                  if c["name"] == "Mean and variance")
+    assert marked["on_canvas"].get("BatchNorm2d") == ["norm"], marked["on_canvas"]
+    assert "Conv2d" in with_canvas["on_canvas_unmatched"], \
+        "a layer the document never mentions was not flagged"
+
+    # the page shows both equations and says what it is not claiming
+    for token in ("function renderMathsPage", "function mathCard",
+                  "implemented_by", "Silence is not agreement"):
+        assert token in PAGE, f"{token} is missing"
+
+    import main
+
+    assert "maths_in_document" in dir(main)
+
+
 @check("code is measured, not given an equation it does not have")
 def _():
     """The canvas has a Maths tab because a layer has an equation. A function

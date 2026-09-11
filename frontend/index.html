@@ -203,7 +203,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
 #pageAgents, #pagePad, #pageDomains, #pageScouts,
-#pageCodebase{background:var(--paper)}
+#pageCodebase, #pageMaths{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -1154,6 +1154,22 @@ i.covered{
   background:#E6F5EA;color:#256B39;border-radius:4px;padding:1px 5px;margin-left:5px;
   vertical-align:middle;
 }
+.mmtext{
+  width:100%;min-height:130px;margin-top:12px;padding:11px 13px;
+  border:1px solid var(--paper-3);border-radius:9px;font-size:12px;
+  line-height:1.6;resize:vertical;
+}
+.mmtext:focus{outline:none;border-color:var(--amber)}
+.mathimpl{
+  border-left:3px solid #DCD2F5;padding:8px 0 8px 11px;margin-bottom:10px;
+}
+.mathimplhead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.mathimplhead b{font-size:12.5px;font-weight:600;font-family:var(--mono)}
+.mathimplhead span{font-size:11px;color:var(--muted)}
+.mathimplhead em{
+  font-style:normal;font-size:9.5px;background:#E6F5EA;color:#256B39;
+  border-radius:5px;padding:2px 7px;
+}
 .cbwrap{max-width:1280px;margin:0 auto;padding:24px 26px 40px}
 .cbhead h3{margin:0 0 6px;font-size:20px;font-weight:600}
 .cbhead p{margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.65;
@@ -2044,6 +2060,7 @@ body.sizing{user-select:none}
     <div class="group">Executions</div>
     <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
+    <button data-page="pageMaths"><i>&#8747;</i>Maths &rarr; layers</button>
     <button data-page="pageCodebase"><i>&#9783;</i>Read a codebase</button>
     <button data-page="pageScouts"><i>&#9906;</i>Scouts</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
@@ -2289,6 +2306,10 @@ body.sizing{user-select:none}
   <div class="scroll" id="padMain"></div>
 </section>
 
+<section class="page" id="pageMaths">
+  <div class="scroll" id="mathMain"></div>
+</section>
+
 <section class="page" id="pageCodebase">
   <div class="scroll" id="codeMain"></div>
 </section>
@@ -2493,7 +2514,7 @@ const state = {
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
-  codebase:null, cbFile:null, cbMap:null, cbMapPlace:null,
+  codebase:null, cbFile:null, maths:null, cbMap:null, cbMapPlace:null,
   cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module", cbWalkAt:0,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
@@ -5018,6 +5039,7 @@ const PAGE_SETUP = {
   pageDomains: renderDomainsPage,
   pageScouts: renderScoutsPage,
   pageCodebase: renderCodebasePage,
+  pageMaths: renderMathsPage,
   pagePaper: renderPaperPage,
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
@@ -5094,6 +5116,198 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* =========================== maths to layers =========================== */
+
+/* A textbook is mostly definitions, and most of them have nothing to do with
+   neural networks. A few do, exactly — and the correspondence is checkable
+   rather than rhetorical, because this application already stores the equation
+   each layer implements. Both statements are written down here, so they can be
+   put beside each other and judged.
+
+   What it does not do is claim a book justifies a layer. It finds where the
+   same object appears in both places and shows both. */
+
+async function renderMathsPage(){
+  const host = $("mathMain");
+  host.innerHTML = `<div class="cbwrap">
+    <div class="cbhead">
+      <h3>Maths &rarr; layers</h3>
+      <p>Feed it a textbook, a paper or a chapter, and it says which of the
+      mathematics in it is already implemented by a layer here — with the
+      layer's own equation beside the passage, so the two can be compared
+      rather than taken on trust.</p>
+      <div class="cbtools">
+        <label class="btn" for="mmFile">Open a PDF</label>
+        <input type="file" id="mmFile" accept=".pdf,.txt,.md" hidden>
+        <span id="mmNote" class="hint"></span>
+      </div>
+      <textarea id="mmText" class="mmtext" spellcheck="false"
+        placeholder="or paste it — a chapter is plenty. A linear algebra text will match matrix products, eigenvalues and norms; a statistics text will match expectation and divergence."></textarea>
+      <div class="cbacts">
+        <button class="btn go" id="mmGo">Read it</button>
+        <span class="hint">Your canvas is included, so anything you are already
+        using is marked.</span>
+      </div>
+    </div>
+    <div id="mmOut"></div>
+  </div>`;
+
+  $("mmGo").addEventListener("click", () => matchMaths($("mmText").value));
+  $("mmFile").addEventListener("change", uploadForMaths);
+}
+
+async function uploadForMaths(){
+  const picker = $("mmFile");
+  if (!picker.files || !picker.files[0]) return;
+  $("mmNote").textContent = "reading the document…";
+  const form = new FormData();
+  form.append("file", picker.files[0]);
+  let r, d;
+  try{
+    r = await fetch(API + "/api/paper/pdf-text", { method: "POST", body: form });
+    d = await r.json();
+  } catch { $("mmNote").textContent = "the server did not answer"; return; }
+  if (!r.ok){
+    $("mmNote").textContent = "";
+    $("mmOut").innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "Could not read it"}</div>`;
+    return;
+  }
+  $("mmNote").textContent = `${d.passages} passages, ${d.equations} equations`;
+  $("mmText").value = d.text;
+  matchMaths(d.text);
+}
+
+async function matchMaths(text){
+  const out = $("mmOut");
+  if (!(text || "").trim()){
+    out.innerHTML = `<div class="paperwarn">Give it something to read.</div>`;
+    return;
+  }
+  out.innerHTML = `<div class="empty" style="padding:14px">reading…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/mathmatch", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, graph: state.graph }),
+    });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    out.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "It would not read"}</div>`;
+    return;
+  }
+  state.maths = d;
+
+  const used = d.concepts.filter(c => Object.keys(c.on_canvas || {}).length);
+  out.innerHTML = `
+    <div class="cbstats">
+      <b>${d.concepts.length}</b> of the concepts it names are implemented here ·
+      <b>${used.length}</b> of them by something on your canvas ·
+      read ${d.sentences} sentences
+    </div>
+    ${d.concepts.length === 0
+      ? `<div class="paperwarn">None of the mathematics in this document
+         corresponds to a layer here. That is the common case and not a
+         failure: most mathematics is not a neural network layer.</div>`
+      : d.concepts.map((c, i) => mathCard(c, i)).join("")}
+    ${(d.on_canvas_unmatched || []).length
+      ? `<div class="cbsec">on your canvas, and not in this document</div>
+         <div class="hitwhy">${d.on_canvas_unmatched.map(t =>
+           `<span>${t}</span>`).join("")}</div>
+         <p class="mathnote">Silence is not agreement. These are layers you are
+         using that this document says nothing about.</p>` : ""}`;
+
+  out.querySelectorAll("[data-place-layer]").forEach(btn =>
+    btn.addEventListener("click", () => placeMathLayer(btn.dataset.placeLayer)));
+  out.querySelectorAll("[data-show-layer]").forEach(btn =>
+    btn.addEventListener("click", () => showLayerMaths(btn.dataset.showLayer)));
+}
+
+function mathCard(c, i){
+  const onCanvas = Object.keys(c.on_canvas || {});
+  return `<div class="foundcard">
+    <div class="foundtop">
+      <b>${c.name}</b>
+      <span>${c.mentions} mention${c.mentions === 1 ? "" : "s"}${
+        onCanvas.length ? " · on your canvas" : ""}</span>
+    </div>
+    <p>${c.why}</p>
+    ${(c.quotes || []).length
+      ? `<div class="cbsec">what the document says</div>
+         ${c.quotes.map(q => `<pre class="armexpr">${
+           q.replace(/</g, "&lt;")}</pre>`).join("")}` : ""}
+    ${(c.implemented_by || []).length
+      ? `<div class="cbsec">what computes it here</div>
+         ${c.implemented_by.map(impl => `
+           <div class="mathimpl">
+             <div class="mathimplhead"><b>${impl.layer}</b>
+               <span>${impl.title}</span>
+               ${(c.on_canvas || {})[impl.layer]
+                 ? `<em>in use: ${c.on_canvas[impl.layer].join(", ")}</em>` : ""}
+             </div>
+             ${impl.equation
+               ? `<pre class="armexpr">${impl.equation.replace(/</g, "&lt;")}</pre>`
+               : ""}
+             ${(impl.freedom || []).length
+               ? `<p class="mathnote">${impl.freedom[0]}</p>` : ""}
+             <div class="cbacts">
+               <button class="btn tiny" data-place-layer="${impl.layer}">
+                 Put one on the canvas</button>
+               <button class="btn tiny" data-show-layer="${impl.layer}">
+                 What can be changed</button>
+             </div>
+           </div>`).join("")}`
+      : `<div class="paperwarn">No single layer implements this. ${c.why}</div>`}
+  </div>`;
+}
+
+/* The customisation half: what a layer's settings do, in the terms the book
+   would use. */
+function showLayerMaths(name){
+  // the catalog is already loaded and holds every layer's settings; there is
+  // no endpoint for one layer and inventing a call to a missing one would
+  // simply have failed quietly
+  const spec = (state.catalog || []).find(l => l.name === name);
+  const host = $("mmOut");
+  const params = (spec && spec.params) || [];
+  const card = document.createElement("div");
+  card.className = "foundcard";
+  card.innerHTML = `
+    <div class="foundtop"><b>${name}</b><span>what you can change</span></div>
+    ${params.length
+      ? `<table class="runtable"><thead><tr><th>setting</th><th>default</th>
+          <th>what it does</th></tr></thead><tbody>
+          ${params.map(p => `<tr><td><b>${p.name}</b></td>
+            <td class="mono">${p.default === undefined ? "" : String(p.default)}</td>
+            <td>${p.help || ""}</td></tr>`).join("")}
+        </tbody></table>`
+      : `<p class="mathnote">This layer has nothing to set.</p>`}
+    <p class="mathnote">Changing these changes the equation above — the width
+    is the size of W, the kernel is the size of the window. The Layer panel on
+    the canvas edits the same numbers with the shapes recomputed as you go.</p>`;
+  host.insertAdjacentHTML("afterbegin", card.innerHTML);
+}
+
+function placeMathLayer(name){
+  pushHistory();
+  const nodes = state.graph.nodes || [];
+  const last = nodes.length ? nodes[nodes.length - 1] : null;
+  const id = "n" + (state.seq++);
+  state.graph.nodes.push({
+    id, type: name, params: {},
+    x: last ? last.x : 0, y: last ? last.y + 130 : 0,
+  });
+  showPage("pageDesign");
+  clearSelection();
+  state.sel = id;
+  state.selection = new Set([id]);
+  render(); renderInspector(); analyze();
+  showSide("math");
+  toast(`${name} placed. The Maths tab shows its equation with your shapes.`);
+}
 
 /* ============================= codebase ============================= */
 

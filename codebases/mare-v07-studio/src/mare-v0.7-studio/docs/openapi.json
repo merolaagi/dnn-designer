@@ -1,0 +1,3868 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MARE Research API",
+    "description": "Single-workspace research service. Bearer authentication when configured.",
+    "version": "0.5.0"
+  },
+  "paths": {
+    "/health/live": {
+      "get": {
+        "summary": "Live",
+        "operationId": "live_health_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "summary": "Config",
+        "operationId": "config_api_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "summary": "Create Run",
+        "operationId": "create_run_api_runs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRun"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      },
+      "get": {
+        "summary": "List Runs",
+        "operationId": "list_runs_api_runs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunSummary"
+                  },
+                  "title": "Response List Runs Api Runs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "summary": "Detail",
+        "operationId": "detail_api_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/cancel": {
+      "post": {
+        "summary": "Cancel",
+        "operationId": "cancel_api_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/resume": {
+      "post": {
+        "summary": "Resume",
+        "operationId": "resume_api_runs__run_id__resume_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/branches": {
+      "get": {
+        "summary": "List Branches",
+        "operationId": "list_branches_api_runs__run_id__branches_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Branch"
+                  },
+                  "title": "Response List Branches Api Runs  Run Id  Branches Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/claims": {
+      "get": {
+        "summary": "List Claims",
+        "operationId": "list_claims_api_runs__run_id__claims_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Claim"
+                  },
+                  "title": "Response List Claims Api Runs  Run Id  Claims Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/evidence": {
+      "get": {
+        "summary": "List Evidence",
+        "operationId": "list_evidence_api_runs__run_id__evidence_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Evidence"
+                  },
+                  "title": "Response List Evidence Api Runs  Run Id  Evidence Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/failures": {
+      "get": {
+        "summary": "List Failures",
+        "operationId": "list_failures_api_runs__run_id__failures_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Failure"
+                  },
+                  "title": "Response List Failures Api Runs  Run Id  Failures Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/questions": {
+      "get": {
+        "summary": "List Questions",
+        "operationId": "list_questions_api_runs__run_id__questions_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchQuestion"
+                  },
+                  "title": "Response List Questions Api Runs  Run Id  Questions Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/graph": {
+      "get": {
+        "summary": "Graph",
+        "operationId": "graph_api_runs__run_id__graph_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/events": {
+      "get": {
+        "summary": "Events",
+        "operationId": "events_api_runs__run_id__events_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "After"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventOut"
+                  },
+                  "title": "Response Events Api Runs  Run Id  Events Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    },
+    "/api/runs/{run_id}/stream": {
+      "get": {
+        "summary": "Stream",
+        "operationId": "stream_api_runs__run_id__stream_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "WorkspaceBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AssumptionAudit": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AuditStatus"
+          },
+          "extra_assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Extra Assumptions"
+          },
+          "matched_problem_constraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Problem Constraints"
+          },
+          "violations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Violations"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "default": ""
+          },
+          "auditor": {
+            "type": "string",
+            "title": "Auditor",
+            "default": "assumption-firewall"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "claim_id",
+          "status",
+          "extra_assumptions",
+          "matched_problem_constraints",
+          "violations",
+          "notes",
+          "auditor",
+          "timestamp"
+        ],
+        "title": "AssumptionAudit"
+      },
+      "AuditStatus": {
+        "type": "string",
+        "enum": [
+          "pass",
+          "warn",
+          "block"
+        ],
+        "title": "AuditStatus"
+      },
+      "Branch": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "research_question": {
+            "type": "string",
+            "title": "Research Question"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "Strategy"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BranchStatus",
+            "default": "active"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "default": 0.5
+          },
+          "compute_spent": {
+            "type": "number",
+            "title": "Compute Spent",
+            "default": 0.0
+          },
+          "verified_progress": {
+            "type": "number",
+            "title": "Verified Progress",
+            "default": 0.0
+          },
+          "novelty": {
+            "type": "number",
+            "title": "Novelty",
+            "default": 0.5
+          },
+          "uncertainty": {
+            "type": "number",
+            "title": "Uncertainty",
+            "default": 1.0
+          },
+          "consecutive_low_score_rounds": {
+            "type": "integer",
+            "title": "Consecutive Low Score Rounds",
+            "default": 0
+          },
+          "created_round": {
+            "type": "integer",
+            "title": "Created Round",
+            "default": 0
+          },
+          "heuristic_score": {
+            "type": "number",
+            "title": "Heuristic Score",
+            "default": 0.5
+          },
+          "policy_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Score"
+          },
+          "policy_blend": {
+            "type": "number",
+            "title": "Policy Blend",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "research_question",
+          "strategy",
+          "parent_id",
+          "status",
+          "score",
+          "compute_spent",
+          "verified_progress",
+          "novelty",
+          "uncertainty",
+          "consecutive_low_score_rounds",
+          "created_round",
+          "heuristic_score",
+          "policy_score",
+          "policy_blend"
+        ],
+        "title": "Branch"
+      },
+      "BranchStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "promising",
+          "deprioritized",
+          "terminated",
+          "solved"
+        ],
+        "title": "BranchStatus"
+      },
+      "Claim": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          },
+          "claim_type": {
+            "type": "string",
+            "title": "Claim Type"
+          },
+          "derivation": {
+            "type": "string",
+            "title": "Derivation"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assumptions"
+          },
+          "dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dependencies"
+          },
+          "suggested_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggested Checks"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ClaimScope",
+            "default": "local_lemma"
+          },
+          "extra_assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Extra Assumptions"
+          },
+          "formal_statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formal Statement"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus",
+            "default": "proposed"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "round_no": {
+            "type": "integer",
+            "title": "Round No"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "statement",
+          "claim_type",
+          "derivation",
+          "assumptions",
+          "dependencies",
+          "suggested_checks",
+          "tags",
+          "scope",
+          "extra_assumptions",
+          "formal_statement",
+          "status",
+          "confidence",
+          "created_by",
+          "round_no",
+          "question_id"
+        ],
+        "title": "Claim"
+      },
+      "ClaimScope": {
+        "type": "string",
+        "enum": [
+          "local_lemma",
+          "restricted_result",
+          "root_candidate"
+        ],
+        "title": "ClaimScope"
+      },
+      "ClaimSourceLink": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "relevant",
+              "supports",
+              "contradicts",
+              "background"
+            ],
+            "title": "Relation",
+            "default": "relevant"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "claim_id",
+          "source_id",
+          "relation",
+          "note"
+        ],
+        "title": "ClaimSourceLink"
+      },
+      "ClaimStatus": {
+        "type": "string",
+        "enum": [
+          "proposed",
+          "contested",
+          "survived_review",
+          "verified",
+          "rejected",
+          "formalized",
+          "scope_blocked"
+        ],
+        "title": "ClaimStatus"
+      },
+      "CreateRun": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "default": "Burgers gradient blow-up"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "openai"
+            ],
+            "title": "Provider",
+            "default": "mock"
+          },
+          "statement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12000,
+                "minLength": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Assumptions"
+          },
+          "success_conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Success Conditions"
+          },
+          "rounds": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Rounds",
+            "default": 2
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "hybrid",
+              "heuristic"
+            ],
+            "title": "Policy",
+            "default": "hybrid"
+          },
+          "max_model_calls": {
+            "type": "integer",
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Max Model Calls",
+            "default": 250
+          },
+          "max_reserved_output_tokens": {
+            "type": "integer",
+            "maximum": 8000000.0,
+            "minimum": 1.0,
+            "title": "Max Reserved Output Tokens",
+            "default": 1000000
+          },
+          "max_tool_calls": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Max Tool Calls",
+            "default": 2000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CreateRun"
+      },
+      "DependencyEdge": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "parent_claim_id": {
+            "type": "string",
+            "title": "Parent Claim Id"
+          },
+          "child_claim_id": {
+            "type": "string",
+            "title": "Child Claim Id"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "requires",
+              "supports",
+              "contradicts"
+            ],
+            "title": "Relation",
+            "default": "requires"
+          },
+          "created_round": {
+            "type": "integer",
+            "title": "Created Round",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "parent_claim_id",
+          "child_claim_id",
+          "relation",
+          "created_round"
+        ],
+        "title": "DependencyEdge"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorEnvelope"
+      },
+      "EventOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "kind",
+          "payload",
+          "created_at"
+        ],
+        "title": "EventOut"
+      },
+      "Evidence": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "evidence_type": {
+            "type": "string",
+            "enum": [
+              "symbolic",
+              "numerical",
+              "citation",
+              "independent_derivation",
+              "counterexample_search",
+              "formal_proof",
+              "adversarial_review",
+              "scope_audit"
+            ],
+            "title": "Evidence Type"
+          },
+          "result": {
+            "$ref": "#/components/schemas/EvidenceResult"
+          },
+          "verifier": {
+            "type": "string",
+            "title": "Verifier"
+          },
+          "reproducible": {
+            "type": "boolean",
+            "title": "Reproducible",
+            "default": true
+          },
+          "details": {
+            "type": "string",
+            "title": "Details",
+            "default": ""
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "claim_id",
+          "evidence_type",
+          "result",
+          "verifier",
+          "reproducible",
+          "details",
+          "metadata"
+        ],
+        "title": "Evidence"
+      },
+      "EvidenceResult": {
+        "type": "string",
+        "enum": [
+          "supports",
+          "contradicts",
+          "inconclusive"
+        ],
+        "title": "EvidenceResult"
+      },
+      "Failure": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "failed_claim_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Claim Id"
+          },
+          "mechanism": {
+            "type": "string",
+            "title": "Mechanism"
+          },
+          "failure_reason": {
+            "type": "string",
+            "title": "Failure Reason"
+          },
+          "reusable_constraint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reusable Constraint"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "minor",
+              "major",
+              "fatal"
+            ],
+            "title": "Severity",
+            "default": "major"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "created_round": {
+            "type": "integer",
+            "title": "Created Round",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "failed_claim_id",
+          "mechanism",
+          "failure_reason",
+          "reusable_constraint",
+          "severity",
+          "tags",
+          "created_round"
+        ],
+        "title": "Failure"
+      },
+      "FormalizationRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FormalizationStatus"
+          },
+          "prover": {
+            "type": "string",
+            "title": "Prover"
+          },
+          "source_code": {
+            "type": "string",
+            "title": "Source Code",
+            "default": ""
+          },
+          "stdout": {
+            "type": "string",
+            "title": "Stdout",
+            "default": ""
+          },
+          "stderr": {
+            "type": "string",
+            "title": "Stderr",
+            "default": ""
+          },
+          "elapsed_ms": {
+            "type": "number",
+            "title": "Elapsed Ms",
+            "default": 0.0
+          },
+          "artifact_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Path"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "claim_id",
+          "status",
+          "prover",
+          "source_code",
+          "stdout",
+          "stderr",
+          "elapsed_ms",
+          "artifact_path",
+          "timestamp"
+        ],
+        "title": "FormalizationRecord"
+      },
+      "FormalizationStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "passed",
+          "failed",
+          "skipped"
+        ],
+        "title": "FormalizationStatus"
+      },
+      "GraphNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "completeness": {
+            "type": "number",
+            "title": "Completeness"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "statement",
+          "status",
+          "completeness"
+        ],
+        "title": "GraphNode"
+      },
+      "GraphResponse": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/DependencyEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "has_cycle": {
+            "type": "boolean",
+            "title": "Has Cycle"
+          },
+          "candidate_roots": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Candidate Roots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nodes",
+          "edges",
+          "has_cycle",
+          "candidate_roots"
+        ],
+        "title": "GraphResponse"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
+      },
+      "ModelInvocation": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "schema_name": {
+            "type": "string",
+            "title": "Schema Name"
+          },
+          "system_hash": {
+            "type": "string",
+            "title": "System Hash"
+          },
+          "prompt_hash": {
+            "type": "string",
+            "title": "Prompt Hash"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "title": "Max Tokens"
+          },
+          "temperature": {
+            "type": "number",
+            "title": "Temperature"
+          },
+          "elapsed_ms": {
+            "type": "number",
+            "title": "Elapsed Ms"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "provider",
+          "model",
+          "schema_name",
+          "system_hash",
+          "prompt_hash",
+          "max_tokens",
+          "temperature",
+          "elapsed_ms",
+          "success",
+          "error",
+          "input_tokens",
+          "output_tokens",
+          "timestamp"
+        ],
+        "title": "ModelInvocation"
+      },
+      "Objection": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "minor",
+              "major",
+              "fatal"
+            ],
+            "title": "Severity"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "resolved": {
+            "type": "boolean",
+            "title": "Resolved",
+            "default": false
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "default": "assassin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "claim_id",
+          "severity",
+          "description",
+          "resolved",
+          "created_by"
+        ],
+        "title": "Objection"
+      },
+      "PolicyExample": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PolicyExampleKind"
+          },
+          "round_no": {
+            "type": "integer",
+            "title": "Round No"
+          },
+          "object_id": {
+            "type": "string",
+            "title": "Object Id"
+          },
+          "features": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "finalized_round": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalized Round"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "round_no",
+          "object_id",
+          "features",
+          "target",
+          "finalized_round",
+          "metadata"
+        ],
+        "title": "PolicyExample"
+      },
+      "PolicyExampleKind": {
+        "type": "string",
+        "enum": [
+          "branch",
+          "question"
+        ],
+        "title": "PolicyExampleKind"
+      },
+      "PolicyNetworkState": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PolicyExampleKind"
+          },
+          "input_size": {
+            "type": "integer",
+            "title": "Input Size"
+          },
+          "hidden_size": {
+            "type": "integer",
+            "title": "Hidden Size"
+          },
+          "trained_examples": {
+            "type": "integer",
+            "title": "Trained Examples",
+            "default": 0
+          },
+          "epochs": {
+            "type": "integer",
+            "title": "Epochs",
+            "default": 0
+          },
+          "loss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loss"
+          },
+          "weights1": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Weights1"
+          },
+          "bias1": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Bias1"
+          },
+          "weights2": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Weights2"
+          },
+          "bias2": {
+            "type": "number",
+            "title": "Bias2",
+            "default": 0.0
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": false
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "input_size",
+          "hidden_size",
+          "trained_examples",
+          "epochs",
+          "loss",
+          "weights1",
+          "bias1",
+          "weights2",
+          "bias2",
+          "active",
+          "updated_at"
+        ],
+        "title": "PolicyNetworkState"
+      },
+      "ProblemSpec": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "canonical_statement": {
+            "type": "string",
+            "title": "Canonical Statement"
+          },
+          "definitions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Definitions"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assumptions"
+          },
+          "success_conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Success Conditions"
+          },
+          "disallowed_shortcuts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Disallowed Shortcuts"
+          },
+          "scope_constraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scope Constraints"
+          },
+          "verification_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Verification Requirements"
+          },
+          "formal_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formal Target"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "canonical_statement",
+          "definitions",
+          "assumptions",
+          "success_conditions",
+          "disallowed_shortcuts",
+          "scope_constraints",
+          "verification_requirements",
+          "formal_target"
+        ],
+        "title": "ProblemSpec"
+      },
+      "QuestionStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "assigned",
+          "answered",
+          "invalidated"
+        ],
+        "title": "QuestionStatus"
+      },
+      "ResearchBudget": {
+        "properties": {
+          "max_model_calls": {
+            "type": "integer",
+            "title": "Max Model Calls",
+            "default": 250
+          },
+          "max_reserved_output_tokens": {
+            "type": "integer",
+            "title": "Max Reserved Output Tokens",
+            "default": 1000000
+          },
+          "max_tool_calls": {
+            "type": "integer",
+            "title": "Max Tool Calls",
+            "default": 2000
+          },
+          "max_rounds": {
+            "type": "integer",
+            "title": "Max Rounds",
+            "default": 100
+          },
+          "model_calls_used": {
+            "type": "integer",
+            "title": "Model Calls Used",
+            "default": 0
+          },
+          "reserved_output_tokens_used": {
+            "type": "integer",
+            "title": "Reserved Output Tokens Used",
+            "default": 0
+          },
+          "tool_calls_used": {
+            "type": "integer",
+            "title": "Tool Calls Used",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ResearchBudget",
+        "description": "Hard research-run limits.\n\nV0.3 accounts for *reserved* model output tokens because provider-independent\nactual token usage is not always available. Providers may additionally report\nactual input/output usage on ModelInvocation.",
+        "required": [
+          "max_model_calls",
+          "max_reserved_output_tokens",
+          "max_tool_calls",
+          "max_rounds",
+          "model_calls_used",
+          "reserved_output_tokens_used",
+          "tool_calls_used"
+        ]
+      },
+      "ResearchEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "round_no": {
+            "type": "integer",
+            "title": "Round No"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "actor",
+          "round_no",
+          "object_id",
+          "payload",
+          "timestamp"
+        ],
+        "title": "ResearchEvent"
+      },
+      "ResearchPolicyState": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "hidden_size": {
+            "type": "integer",
+            "title": "Hidden Size",
+            "default": 12
+          },
+          "min_branch_examples": {
+            "type": "integer",
+            "title": "Min Branch Examples",
+            "default": 12
+          },
+          "min_question_examples": {
+            "type": "integer",
+            "title": "Min Question Examples",
+            "default": 16
+          },
+          "training_epochs": {
+            "type": "integer",
+            "title": "Training Epochs",
+            "default": 220
+          },
+          "learning_rate": {
+            "type": "number",
+            "title": "Learning Rate",
+            "default": 0.03
+          },
+          "l2": {
+            "type": "number",
+            "title": "L2",
+            "default": 0.0001
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed",
+            "default": 7
+          },
+          "max_neural_blend": {
+            "type": "number",
+            "title": "Max Neural Blend",
+            "default": 0.65
+          },
+          "blend_warmup_examples": {
+            "type": "integer",
+            "title": "Blend Warmup Examples",
+            "default": 20
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyExample"
+            },
+            "type": "array",
+            "title": "Examples"
+          },
+          "branch_network": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyNetworkState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question_network": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyNetworkState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResearchPolicyState",
+        "required": [
+          "enabled",
+          "hidden_size",
+          "min_branch_examples",
+          "min_question_examples",
+          "training_epochs",
+          "learning_rate",
+          "l2",
+          "seed",
+          "max_neural_blend",
+          "blend_warmup_examples",
+          "examples",
+          "branch_network",
+          "question_network"
+        ]
+      },
+      "ResearchQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale",
+            "default": ""
+          },
+          "expected_information_gain": {
+            "type": "number",
+            "title": "Expected Information Gain",
+            "default": 0.5
+          },
+          "expected_impact": {
+            "type": "number",
+            "title": "Expected Impact",
+            "default": 0.5
+          },
+          "difficulty": {
+            "type": "number",
+            "title": "Difficulty",
+            "default": 0.5
+          },
+          "novelty": {
+            "type": "number",
+            "title": "Novelty",
+            "default": 0.5
+          },
+          "spawn_new_branch": {
+            "type": "boolean",
+            "title": "Spawn New Branch",
+            "default": false
+          },
+          "suggested_branch_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Branch Title"
+          },
+          "suggested_strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Strategy"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuestionStatus",
+            "default": "open"
+          },
+          "created_round": {
+            "type": "integer",
+            "title": "Created Round",
+            "default": 0
+          },
+          "answered_by_claim_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Answered By Claim Ids"
+          },
+          "policy_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Score"
+          },
+          "policy_blend": {
+            "type": "number",
+            "title": "Policy Blend",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "question",
+          "rationale",
+          "expected_information_gain",
+          "expected_impact",
+          "difficulty",
+          "novelty",
+          "spawn_new_branch",
+          "suggested_branch_title",
+          "suggested_strategy",
+          "status",
+          "created_round",
+          "answered_by_claim_ids",
+          "policy_score",
+          "policy_blend"
+        ],
+        "title": "ResearchQuestion"
+      },
+      "ResearchState": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "problem": {
+            "$ref": "#/components/schemas/ProblemSpec"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/ResearchBudget"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ResearchPolicyState"
+          },
+          "current_round": {
+            "type": "integer",
+            "title": "Current Round",
+            "default": 0
+          },
+          "branches": {
+            "items": {
+              "$ref": "#/components/schemas/Branch"
+            },
+            "type": "array",
+            "title": "Branches"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchTask"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "type": "array",
+            "title": "Claims"
+          },
+          "dependency_edges": {
+            "items": {
+              "$ref": "#/components/schemas/DependencyEdge"
+            },
+            "type": "array",
+            "title": "Dependency Edges"
+          },
+          "objections": {
+            "items": {
+              "$ref": "#/components/schemas/Objection"
+            },
+            "type": "array",
+            "title": "Objections"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/Failure"
+            },
+            "type": "array",
+            "title": "Failures"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRecord"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "source_links": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimSourceLink"
+            },
+            "type": "array",
+            "title": "Source Links"
+          },
+          "assumption_audits": {
+            "items": {
+              "$ref": "#/components/schemas/AssumptionAudit"
+            },
+            "type": "array",
+            "title": "Assumption Audits"
+          },
+          "formalizations": {
+            "items": {
+              "$ref": "#/components/schemas/FormalizationRecord"
+            },
+            "type": "array",
+            "title": "Formalizations"
+          },
+          "tool_invocations": {
+            "items": {
+              "$ref": "#/components/schemas/ToolInvocation"
+            },
+            "type": "array",
+            "title": "Tool Invocations"
+          },
+          "invocations": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInvocation"
+            },
+            "type": "array",
+            "title": "Invocations"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "synthesis_notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Synthesis Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "problem",
+          "budget",
+          "policy",
+          "current_round",
+          "branches",
+          "questions",
+          "tasks",
+          "claims",
+          "dependency_edges",
+          "objections",
+          "failures",
+          "evidence",
+          "sources",
+          "source_links",
+          "assumption_audits",
+          "formalizations",
+          "tool_invocations",
+          "invocations",
+          "events",
+          "synthesis_notes"
+        ],
+        "title": "ResearchState"
+      },
+      "ResearchTask": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "round_no": {
+            "type": "integer",
+            "title": "Round No",
+            "default": 1
+          },
+          "token_budget": {
+            "type": "integer",
+            "title": "Token Budget",
+            "default": 4000
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "director",
+              "navigator",
+              "question_engine",
+              "human",
+              "proof_graph"
+            ],
+            "title": "Source",
+            "default": "director"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "title",
+          "objective",
+          "round_no",
+          "token_budget",
+          "question_id",
+          "source"
+        ],
+        "title": "ResearchTask"
+      },
+      "RunDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "cancelling",
+              "cancelled",
+              "completed",
+              "failed",
+              "budget_exhausted"
+            ],
+            "title": "Status"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "target_rounds": {
+            "type": "integer",
+            "title": "Target Rounds"
+          },
+          "current_round": {
+            "type": "integer",
+            "title": "Current Round"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/ResearchState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "provider",
+          "target_rounds",
+          "current_round",
+          "attempts",
+          "created_at",
+          "updated_at",
+          "error",
+          "snapshot"
+        ],
+        "title": "RunDetail"
+      },
+      "RunSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "cancelling",
+              "cancelled",
+              "completed",
+              "failed",
+              "budget_exhausted"
+            ],
+            "title": "Status"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "target_rounds": {
+            "type": "integer",
+            "title": "Target Rounds"
+          },
+          "current_round": {
+            "type": "integer",
+            "title": "Current Round"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "provider",
+          "target_rounds",
+          "current_round",
+          "attempts",
+          "created_at",
+          "updated_at",
+          "error"
+        ],
+        "title": "RunSummary"
+      },
+      "ServiceSettings": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "authentication": {
+            "type": "string",
+            "title": "Authentication"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "openai_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openai Model"
+          },
+          "max_attempts": {
+            "type": "integer",
+            "title": "Max Attempts"
+          },
+          "round_timeout_seconds": {
+            "type": "integer",
+            "title": "Round Timeout Seconds"
+          },
+          "checkpoint_boundary": {
+            "type": "string",
+            "title": "Checkpoint Boundary"
+          },
+          "workspace_mode": {
+            "type": "string",
+            "title": "Workspace Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "engine_version",
+          "authentication",
+          "providers",
+          "openai_model",
+          "max_attempts",
+          "round_timeout_seconds",
+          "checkpoint_boundary",
+          "workspace_mode"
+        ],
+        "title": "ServiceSettings"
+      },
+      "SourceRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Authors"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "abstract": {
+            "type": "string",
+            "title": "Abstract",
+            "default": ""
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retrieved At"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "provider",
+          "title",
+          "url",
+          "external_id",
+          "authors",
+          "year",
+          "abstract",
+          "retrieved_at",
+          "metadata"
+        ],
+        "title": "SourceRecord"
+      },
+      "ToolInvocation": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "claim_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Id"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "elapsed_ms": {
+            "type": "number",
+            "title": "Elapsed Ms",
+            "default": 0.0
+          },
+          "details": {
+            "type": "string",
+            "title": "Details",
+            "default": ""
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tool",
+          "operation",
+          "claim_id",
+          "success",
+          "elapsed_ms",
+          "details",
+          "timestamp"
+        ],
+        "title": "ToolInvocation"
+      }
+    },
+    "securitySchemes": {
+      "WorkspaceBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

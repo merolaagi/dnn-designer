@@ -1,0 +1,15 @@
+MARE v0.5-web — 2026-09-10
+Python full suite: 47 passed (includes 27 unchanged v0.4 tests).
+PostgreSQL web suite: 19 passed.
+Frontend unit suite: 3 passed.
+Ruff lint/format: passed.
+TypeScript/ESLint/Vite production build: passed.
+Alembic migration round-trip/schema drift check: passed.
+OpenAPI export reproducibility: passed.
+Engine preservation: 36 source/test files unchanged (SHA-256 manifest).
+npm audit: 0 vulnerabilities on 2026-09-10.
+Docker Compose: built and ran web/API/PostgreSQL/worker; four-round job completed.
+Connected-browser core journeys and desktop/mobile visual checks: performed.
+Native Playwright CLI: blocked at Chromium launch by Mac sandbox; not counted as passing.
+Live OpenAI, Lean, external queues, SSO/TLS gateway, load/soak tests: not tested.
+See TEST_RESULTS.md for details and limitations.

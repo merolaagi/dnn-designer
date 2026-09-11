@@ -1,0 +1,19 @@
+# Invoke from project root with both -f arguments documented in GRAPH-PLANNER.md.
+x-planner: &planner
+  build:
+    context: .
+    args:
+      INSTALL_PLANNER: "true"
+services:
+  api:
+    <<: *planner
+  migrate:
+    <<: *planner
+  worker:
+    <<: *planner
+    environment:
+      MARE_PLANNER_CAPTURE: "true"
+      MARE_PLANNER_MODE: shadow
+      MARE_PLANNER_CHECKPOINT: /models/planner-seed-7.pt
+    volumes:
+      - ./artifacts/benchmark-dependencies:/models:ro

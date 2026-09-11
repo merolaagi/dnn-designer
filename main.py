@@ -31,6 +31,7 @@ import codebase
 import codegen
 import importer
 import mathbook
+import mathmatch
 import needs
 import projectloader
 import recipeloader
@@ -400,6 +401,77 @@ def _hit_json(hit) -> Dict[str, Any]:
         # fail is worse than no button, so the page hides it in that case.
         "text_url": p2s.full_text(hit),
     }
+
+
+class MathMatchPayload(BaseModel):
+    text: str = ""
+    graph: Dict[str, Any] = {}
+    codebase: str = ""
+    path: str = ""
+
+
+@app.post("/api/mathmatch")
+def maths_in_document(body: MathMatchPayload):
+    """Which mathematics in this document is implemented by a layer here."""
+    text = body.text or ""
+    if body.codebase and body.path:
+        try:
+            root = _codebase_root(body.codebase)
+            text = codebase.read_file(root, body.path)["text"]
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(400, detail={"message": str(exc)})
+    if not text.strip():
+        raise HTTPException(400, detail={
+            "message": "Give it something to read — paste the text or upload a PDF."})
+
+    found = mathmatch.find(text, body.graph, REGISTRY)
+
+    # attach each layer's own equation, so the two can be read side by side.
+    # This is the whole point: both statements are written down here, and the
+    # correspondence can be checked rather than asserted.
+    for concept in found["concepts"]:
+        shown = []
+        for name in concept["layers"]:
+            spec = REGISTRY.get(name)
+            if not spec:
+                continue
+            try:
+                entry = mathbook.explain(name, _defaults_for(spec), None, None)
+            except Exception:  # noqa: BLE001
+                entry = {}
+            shown.append({
+                "layer": name,
+                "title": entry.get("title") or name,
+                "equation": entry.get("equation", ""),
+                "doc": (spec.doc or "")[:220],
+                "freedom": (entry.get("freedom") or [])[:2],
+            })
+        concept["implemented_by"] = shown
+    return found
+
+
+def _defaults_for(spec) -> Dict[str, Any]:
+    return {p["name"]: p.get("default") for p in (spec.params or [])}
+
+
+@app.post("/api/paper/pdf-text")
+async def paper_plain_text(file: UploadFile = File(...)):
+    """Pull the text out of a PDF so it can be read for mathematics."""
+    from dnn_bench import paper_to_spec as p2s
+
+    name = Path(file.filename or "document.pdf").name
+    target = T.UPLOADS / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(await file.read())
+    try:
+        paper = p2s.ingest(str(target), title=name)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail={
+            "message": f"Could not read it: {type(exc).__name__}: {exc}"})
+    parts = [p.text for p in paper.passages] + list(paper.equations or [])
+    return {"name": name, "text": "\n\n".join(parts)[:400000],
+            "passages": len(paper.passages),
+            "equations": len(paper.equations or [])}
 
 
 @app.post("/api/paper/discover")
