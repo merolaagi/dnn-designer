@@ -42,6 +42,7 @@ import workbook
 import quantize as quant
 import scouts
 import watcher
+import method
 import workbench
 import tracer
 import train as T
@@ -449,7 +450,9 @@ def problem_open(problem_id: str):
     problem = workbench.load(problem_id)
     if not problem:
         raise HTTPException(404, detail={"message": "No such problem."})
-    return {**problem, "standing": workbench.standing(problem)}
+    standing = workbench.standing(problem)
+    return {**problem, "standing": standing,
+            "method": method.where(problem, standing)}
 
 
 @app.post("/api/problems/{problem_id}/claims")
@@ -582,6 +585,8 @@ def problem_literature(problem_id: str):
             "label": label, "why": why, "papers": papers[:10],
             "error": (unreachable[0][:160] if unreachable and not papers else ""),
         })
+    problem["searched"] = True
+    workbench.save(problem)
     return out
 
 

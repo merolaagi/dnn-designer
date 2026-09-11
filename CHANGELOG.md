@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.76.0
+
+**The workbench teaches the method, by checking it against what you did.**
+
+The method is not a secret. Pólya wrote most of it down; working
+mathematicians have described the rest at length. It is the same short list
+every time and almost nobody follows it, because under pressure everyone skips
+to the part they enjoy — attacking the general case head-on.
+
+So this does not recite the list. It reads the problem as it stands and says
+which moves have been made and which were skipped:
+
+- **State it so precisely that you could be wrong** — done when the statement
+  and its granted hypotheses are both written.
+- **Get your hands dirty before you theorise** — small cases, as claims.
+- **Try to break it first** — done when every identity has been attacked
+  numerically. *"0 of 1 identities have been attacked."*
+- **Find the simplest case you cannot do.**
+- **Prove something weaker, on purpose** — and put the extra hypothesis on the
+  granted list, because it stops being smuggling the moment it is written down.
+- **Find out why other attempts failed** — done when the literature has been
+  searched from this page.
+- **Write down what did not work, and why** — the reason matters more than the
+  approach.
+- **Check what you assumed while you were not looking** — done when no claim
+  uses a hypothesis the problem never granted.
+
+**Every one of those is a test over the problem's own contents.** "Five claims
+and none tested against an example" is advice; "always test examples" is a
+poster. A step nobody can check is a step everybody claims, so none of these
+can be satisfied by agreeing with it.
+
+The order is not decoration either — examples before theory, disproof before
+proof — and the panel names the earliest skipped move as the next thing to do.
+
 ## 1.75.0
 
 Two pieces of the collaborator, both of which can be done properly rather than

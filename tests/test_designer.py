@@ -1485,6 +1485,75 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("the method is checked against what was actually done")
+def _():
+    """The method is not a secret and reciting it is worthless. What is worth
+    something is being told which move you skipped on *this* problem.
+
+    So every test behind it has to read the problem's own contents. A step
+    nobody can check is a step everybody claims, and generic advice would pass
+    that test trivially — these must not.
+    """
+    import auth
+    import method
+    import workbench as wb
+
+    token = auth._current.set("learner")
+    try:
+        p = wb.create("P", "Something hard.", [])
+        first = method.where(p, wb.standing(p))
+        assert first["next"]["id"] == "state", first["next"]["id"]
+        assert "Nothing is granted" in first["next"]["note"]
+
+        # granting hypotheses and adding claims moves it along
+        p["scope"] = ["closed", "smooth"]
+        wb.add_claim(p, "small case", [], [])
+        claim = wb.add_claim(p, "an identity", [], [],
+                             identity="diff(x**2, x) = 2*x")
+        second = method.where(p, wb.standing(p))
+        assert second["done"] > first["done"], "nothing moved"
+        assert second["next"]["id"] == "disprove", second["next"]["id"]
+        assert "0 of 1" in second["next"]["note"], second["next"]["note"]
+
+        # attacking the identity satisfies that move, and only that move
+        claim["evidence"].append(wb.probe(claim["identity"], tries=50))
+        third = method.where(p, wb.standing(p))
+        assert third["next"]["id"] != "disprove", \
+            "attacking the identity did not count"
+
+        # recording a dead end and searching are separate, checkable things
+        assert not [m for m in third["moves"]
+                    if m["id"] == "failures" and m["done"]]
+        p["failures"].append({"text": "energy methods fail", "at": 0})
+        p["searched"] = True
+        fourth = method.where(p, wb.standing(p))
+        for move_id in ("failures", "obstruction"):
+            assert [m for m in fourth["moves"] if m["id"] == move_id][0]["done"], \
+                f"{move_id} was not noticed"
+
+        # the order is not arbitrary: examples before theory, disproof first
+        order = [m["id"] for m in fourth["moves"]]
+        assert order.index("examples") < order.index("disprove") \
+            < order.index("weaken"), order
+
+        # a smuggled hypothesis fails the audit, from the critics not a opinion
+        wb.add_claim(p, "assume flatness", [], ["flatness"])
+        audited = method.where(p, wb.standing(p))
+        assert not [m for m in audited["moves"]
+                    if m["id"] == "audit"][0]["done"], \
+            "a hypothesis nobody granted passed the audit"
+    finally:
+        auth._current.reset(token)
+
+    # every move must say what it means on this problem, not in general
+    for move in method.MOVES:
+        assert move["here"], f"{move['id']} does not say what to do here"
+        assert move["why"], f"{move['id']} does not say why it matters"
+
+    assert "function paintMethod" in PAGE
+    assert "do this next" in PAGE, "the page does not name the next move"
+
+
 @check("the workbench cannot be flattered")
 def _():
     """It does not solve anything, and an application implying otherwise would

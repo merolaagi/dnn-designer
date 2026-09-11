@@ -1222,6 +1222,42 @@ i.covered{
   resize:vertical;
 }
 .wbinput:focus,.wbtext:focus{outline:none;border-color:var(--amber)}
+.wbnext{
+  background:linear-gradient(#FBFAFF, #F6F4FD);border:1px solid #E4DFF5;
+  border-radius:10px;padding:13px 15px;margin:11px 0;
+}
+.wbnext i{
+  font-style:normal;font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:#9A8FC4;
+}
+.wbnext b{display:block;font-size:14px;font-weight:600;margin:3px 0 6px}
+.wbnext p{margin:0 0 6px;font-size:11.5px;line-height:1.65;color:#3C4B5F}
+.wbhere{color:#4C3A85 !important}
+.wbstate{
+  font-size:11px !important;color:var(--muted) !important;padding-top:6px;
+  border-top:1px solid #E4DFF5;margin:6px 0 0 !important;
+}
+.methodlist{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.methodrow{
+  text-align:left;width:100%;background:#fff;border:1px solid var(--paper-3);
+  border-radius:8px;padding:8px 11px;cursor:pointer;
+}
+.methodrow:hover{border-color:#C3B8E8}
+.methodrow i{
+  font-style:normal;color:#B7C0CB;margin-right:8px;font-size:11px;
+}
+.methodrow.done i{color:#5FA46E}
+.methodrow b{font-size:12px;font-weight:500}
+.methodrow.done b{color:var(--muted);font-weight:400}
+.methodrow span{
+  display:block;font-size:10.5px;color:var(--muted);margin-top:3px;
+  padding-left:19px;
+}
+.methodrow p{
+  margin:6px 0 0;padding-left:19px;font-size:11px;line-height:1.6;
+  color:#3C4B5F;max-height:0;overflow:hidden;transition:max-height .15s;
+}
+.methodrow.open p{max-height:220px}
 .wbpaper{
   border-left:3px solid var(--paper-3);padding:6px 0 6px 11px;margin-bottom:9px;
 }
@@ -5398,6 +5434,8 @@ function paintProblem(){
         .join("") || `<span class="wbchip">no claims yet</span>`}</div>
     </div>
 
+    ${paintMethod(p.method)}
+
     ${s.verdict === "empty" ? `
       <div class="wbcard"><div class="paperwarn">No claims yet, so there is
       nothing to check. An empty argument has no faults for the same reason an
@@ -5505,8 +5543,45 @@ function paintProblem(){
       const [id, status] = b.dataset.mark.split("|");
       markClaim(id, status);
     }));
+  $("wbBody").querySelectorAll("[data-move]").forEach(row =>
+    row.addEventListener("click", () => row.classList.toggle("open")));
   $("wbAdd").addEventListener("click", addClaim);
   $("wbAddFail").addEventListener("click", addFailure);
+}
+
+/* The method is not a secret and reciting it is worthless. What is worth
+   something is being told which of its moves you have skipped on *this*
+   problem — "five claims and none tested against an example" rather than
+   "always test examples". Every test behind this reads the problem's own
+   contents, so none of it can be satisfied by agreeing with it. */
+function paintMethod(m){
+  if (!m) return "";
+  const next = m.next;
+  return `
+    <div class="wbcard">
+      <div class="wbtitle"><b>How this is usually done</b>
+        <span class="wbchip">${m.done} of ${m.total} moves made</span></div>
+      ${next ? `
+        <div class="wbnext">
+          <i>do this next</i>
+          <b>${next.name}</b>
+          <p>${next.why}</p>
+          <p class="wbhere"><b>Here:</b> ${next.here}</p>
+          <p class="wbstate">${next.note}</p>
+        </div>`
+        : `<div class="paperok">Every move has been made. That is not a
+           solution — it means the method has nothing left to offer and what
+           remains is the mathematics.</div>`}
+      <div class="methodlist">${m.moves.map(move => `
+        <button class="methodrow ${move.done ? "done" : ""}"
+          data-move="${move.id}">
+          <i>${move.done ? "\u2713" : "\u25cb"}</i>
+          <b>${move.name}</b>
+          <span>${move.note}</span>
+          <p>${move.why}</p>
+          <p class="wbhere"><b>Here:</b> ${move.here}</p>
+        </button>`).join("")}</div>
+    </div>`;
 }
 
 async function runIdentity(claimId){
