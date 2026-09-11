@@ -1485,6 +1485,70 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("a lesson sits beside the layer it explains")
+def _():
+    """Eighteen lessons written for a separate application, kept here because
+    most of them are about something this one computes.
+
+    The pairing is written down rather than guessed, so it can be wrong in a
+    way that shows: every lesson has to be accounted for, and every layer a
+    lesson names has to exist.
+    """
+    import lessons as book
+
+    cat = book.catalog()
+    assert len(cat["lessons"]) == 18, len(cat["lessons"])
+    assert cat["source"]["name"], "the curriculum does not say where it came from"
+
+    # a lesson pointing at a layer that does not exist would be a broken link
+    for entry in cat["lessons"]:
+        for name in entry["layers"]:
+            assert name in layers.REGISTRY, \
+                f"{entry['id']} names {name}, which is not a layer"
+
+    # every lesson is decided about, including the ones that name nothing
+    ids = {entry["id"] for entry in cat["lessons"]}
+    mapped = set(book._load()["map"])
+    assert ids == mapped, f"undecided lessons: {ids ^ mapped}"
+
+    # four are about training rather than structure and must name no layer
+    for lesson_id in ("gradient", "update", "bellman"):
+        assert book._load()["map"][lesson_id] == [], \
+            f"{lesson_id} was attached to a layer, but it is not one"
+
+    # the layers people actually look at are covered
+    for name, expected in (("Linear", "Linear transformation"),
+                           ("Conv2d", "Convolution"),
+                           ("LayerNorm", "Layer normalization"),
+                           ("Attention", "Scaled dot-product attention")):
+        names = [e["name"] for e in book.for_layer(name)]
+        assert expected in names, f"{name} is explained by {names}"
+
+    # prerequisites give a reading order, and a cycle cannot hang it
+    order = book.path_to("attention")
+    assert "dot" in order and "softmax" in order, order
+    assert order.index("dot") < order.index("softmax"), \
+        "softmax is offered before the dot product it is built on"
+    assert "attention" not in order, "a lesson is its own prerequisite"
+
+    # what a design is not explained by is worth saying
+    covered = book.covering({"nodes": [{"type": "Conv2d"}, {"type": "ODEBlock"}]})
+    assert "Conv2d" in covered["taught"]
+    assert "ODEBlock" in covered["silent"], \
+        "a layer nothing teaches was reported as taught"
+
+    import main
+
+    paired = main.lessons_for_layer("Attention")
+    assert paired["ours"]["equation"], \
+        "the layer's own equation is not shown beside the lesson's"
+    assert paired["lessons"], "no lesson was offered for Attention"
+
+    for token in ("function offerLesson", "function showLesson",
+                  "the lesson behind it"):
+        assert token in PAGE, f"{token} is missing"
+
+
 @check("mathematics in a document is matched to the layers that compute it")
 def _():
     """The correspondence is checkable rather than rhetorical: this

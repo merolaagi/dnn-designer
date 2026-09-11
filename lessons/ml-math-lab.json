@@ -1,0 +1,895 @@
+[
+ {
+  "id": "input",
+  "name": "Scalars & vectors",
+  "group": "Foundations",
+  "level": "Beginner",
+  "eq": "\\mathbf{x}=[x_1,\\ldots,x_d]^T",
+  "problem": "A model needs numbers, not a vague description of an object. How do we represent an observation?",
+  "why": "A scalar holds one measurement. A vector keeps related measurements together in a fixed order, so each learned weight always acts on the same feature.",
+  "symbols": [
+   "x: one numerical input",
+   "d: number of features",
+   "T: transpose; turns a row into a column"
+  ],
+  "steps": [
+   [
+    "x=2",
+    "Begin with one measurement, such as an area of 2 thousand square feet. Units matter."
+   ],
+   [
+    "\\mathbf{x}=[2,3]^T",
+    "Add a second measurement, such as 3 bedrooms. The ordering is part of the representation."
+   ],
+   [
+    "X\\in\\mathbb{R}^{n\\times d}",
+    "Stack n observations into rows of a matrix. Each column is the same feature across examples."
+   ]
+  ],
+  "example": "One observation x = [2, 3] has two features. A batch of four observations has shape 4 × 2.",
+  "code": "import numpy as np\nx = np.array([2.0, 3.0])\n# shape: (2,)\nX = np.stack([x, x])  # (2, 2)",
+  "deep": "A representation chooses coordinates. Euclidean distance depends on feature scaling: converting meters to millimeters changes that feature’s numerical contribution unless you normalize or change the metric.",
+  "trap": "A vector’s length (number of entries) is different from its norm (magnitude).",
+  "question": "A batch has 10 examples with 3 features each. Its row-major shape is…",
+  "answers": [
+   "3 × 10",
+   "10 × 3",
+   "10 × 10"
+  ],
+  "correct": 1,
+  "prereq": [],
+  "uses": [
+   "All supervised models",
+   "Embeddings",
+   "Image tensors"
+  ]
+ },
+ {
+  "id": "linear",
+  "name": "Linear transformation",
+  "group": "Foundations",
+  "level": "Beginner",
+  "eq": "z=wx+b",
+  "problem": "How can an input influence a prediction, and how can the model learn the strength of that influence?",
+  "why": "Multiplication controls sensitivity; addition moves the baseline. Together they form an affine transformation, the basic learnable operation inside a dense layer.",
+  "symbols": [
+   "x: input, supplied by the data",
+   "w: weight, learned during training",
+   "b: bias, learned baseline",
+   "z: pre-activation, before a nonlinearity"
+  ],
+  "steps": [
+   [
+    "\\Delta z=w\\,\\Delta x",
+    "Assume a constant rate of change: every extra unit of x changes z by w units."
+   ],
+   [
+    "z=wx+b",
+    "Integrate the constant slope. The integration constant b is the output when x is zero."
+   ],
+   [
+    "z=\\sum_{i=1}^{d}w_i x_i+b=\\mathbf{w}^T\\mathbf{x}+b",
+    "For several inputs, add their weighted contributions. The dot product is compact notation for this sum."
+   ],
+   [
+    "Z=XW^T+\\mathbf{1}\\mathbf{b}^T",
+    "For a batch X of shape n × d and m output neurons, W has shape m × d. The output Z has shape n × m. Bias is broadcast over rows."
+   ]
+  ],
+  "example": "x = 2, w = 0.4, b = 0.1 → z = (0.4 × 2) + 0.1 = 0.9.",
+  "code": "z = w * x + b\n\n# A dense layer for a batch\n# X: (batch, in_features)\n# W: (out_features, in_features)\nZ = X @ W.T + bias",
+  "deep": "The map is affine when b ≠ 0. Its input Jacobian is W. Composing affine maps gives another affine map: W₂(W₁x+b₁)+b₂=(W₂W₁)x+W₂b₁+b₂. This is why depth alone adds no nonlinear expressive power.",
+  "trap": "A large weight does not by itself prove a feature is important: input units, correlations, and interactions matter.",
+  "question": "If x increases by 1 while w = 0.4 stays fixed, how much does z change?",
+  "answers": [
+   "0.1",
+   "0.4",
+   "1.0"
+  ],
+  "correct": 1,
+  "prereq": [
+   "input"
+  ],
+  "uses": [
+   "Linear regression",
+   "Dense layers",
+   "Q/K/V projections"
+  ]
+ },
+ {
+  "id": "sigmoid",
+  "name": "Sigmoid activation",
+  "group": "Neural networks",
+  "level": "Intermediate",
+  "eq": "\\sigma(z)=\\frac{1}{1+e^{-z}}",
+  "problem": "An affine score can be any real number. How can we turn it into a number between zero and one?",
+  "why": "The sigmoid models a Bernoulli probability by making log-odds linear in the features. It is also a smooth gate that can regulate information flow.",
+  "symbols": [
+   "z: unrestricted real-valued score",
+   "σ(z): output between 0 and 1",
+   "e: base of the natural exponential"
+  ],
+  "steps": [
+   [
+    "\\log\\frac{p}{1-p}=z",
+    "Assume the log-odds of the positive outcome are z. Odds compare success probability to failure probability."
+   ],
+   [
+    "\\frac{p}{1-p}=e^z",
+    "Exponentiate both sides; this converts a real score into positive odds."
+   ],
+   [
+    "p=e^z(1-p)\\implies p(1+e^z)=e^z",
+    "Collect the terms involving p."
+   ],
+   [
+    "p=\\frac{e^z}{1+e^z}=\\frac{1}{1+e^{-z}}",
+    "Divide through and simplify. This is the sigmoid, not an arbitrary squashing trick."
+   ]
+  ],
+  "example": "z = 0.9 → exp(−0.9) ≈ 0.4066 → σ(0.9) ≈ 0.7109.",
+  "code": "import numpy as np\n\ndef sigmoid(z):\n    if z >= 0:\n        return 1 / (1 + np.exp(-z))\n    e = np.exp(z)\n    return e / (1 + e)",
+  "deep": "Differentiation gives σ′=σ(1−σ), which is at most 1/4. Repeated products of small derivatives can attenuate gradients. Logistic regression is a generalized linear model with the canonical logit link.",
+  "trap": "A number in [0,1] is not automatically a calibrated probability; training data and model fit determine calibration.",
+  "question": "At z = 0, what is the sigmoid output?",
+  "answers": [
+   "0",
+   "0.5",
+   "1"
+  ],
+  "correct": 1,
+  "prereq": [
+   "linear"
+  ],
+  "uses": [
+   "Logistic regression",
+   "LSTM gates",
+   "Binary classifiers"
+  ]
+ },
+ {
+  "id": "relu",
+  "name": "ReLU activation",
+  "group": "Neural networks",
+  "level": "Intermediate",
+  "eq": "a=\\max(0,z)",
+  "problem": "How do we give a stack of affine layers the ability to describe nonlinear relationships?",
+  "why": "ReLU inserts a bend at zero. Its positive-side derivative is one, so positive activations do not shrink gradients simply due to the activation.",
+  "symbols": [
+   "z: input to the activation",
+   "a: activated output"
+  ],
+  "steps": [
+   [
+    "a=0\\quad(z<0)",
+    "Discard negative scores."
+   ],
+   [
+    "a=z\\quad(z>0)",
+    "Pass positive scores through unchanged."
+   ],
+   [
+    "\\frac{da}{dz}=\\begin{cases}0&z<0\\\\1&z>0\\end{cases}",
+    "Differentiate the two linear pieces. The ordinary derivative does not exist at zero; libraries choose a convention, usually zero."
+   ]
+  ],
+  "example": "ReLU(−2) = 0; ReLU(0.9) = 0.9. Negative inputs have zero local gradient.",
+  "code": "a = max(0.0, z)\nda_dz = 1.0 if z > 0 else 0.0",
+  "deep": "A ReLU network is piecewise affine. Activation patterns partition the input space into regions; within each region, the input Jacobian is constant. Parameters move the boundaries between these regions.",
+  "trap": "A neuron that is negative for every training example receives no gradient through ReLU and can stop learning.",
+  "question": "What is the ReLU derivative at z = 2?",
+  "answers": [
+   "0",
+   "1",
+   "2"
+  ],
+  "correct": 1,
+  "prereq": [
+   "linear"
+  ],
+  "uses": [
+   "CNNs",
+   "Multilayer perceptrons"
+  ]
+ },
+ {
+  "id": "prediction",
+  "name": "Prediction & residual",
+  "group": "Foundations",
+  "level": "Beginner",
+  "eq": "e=\\hat y-y",
+  "problem": "How do we compare what the model predicts with what actually happened?",
+  "why": "The residual records signed error. Positive means an overestimate; negative means an underestimate. A loss will convert that signed error into an optimization objective.",
+  "symbols": [
+   "ŷ: model prediction",
+   "y: observed target",
+   "e: signed residual"
+  ],
+  "steps": [
+   [
+    "\\hat y=f_\\theta(x)",
+    "Run the input through the parameterized model."
+   ],
+   [
+    "e=\\hat y-y",
+    "Subtract the target from the prediction."
+   ],
+   [
+    "e=0\\iff\\hat y=y",
+    "A zero residual means the prediction matches this observation. It does not imply generalization."
+   ]
+  ],
+  "example": "Prediction 0.7109, target 1 → residual −0.2891: the model underpredicts.",
+  "code": "prediction = activation(z)\nerror = prediction - target",
+  "deep": "Residual behavior can reveal model misspecification. For squared-error regression, the population-optimal predictor is E[Y | X=x], assuming the expectation exists.",
+  "trap": "Low training error does not guarantee low error on unseen data.",
+  "question": "Prediction 3 and target 5 give residual…",
+  "answers": [
+   "2",
+   "−2",
+   "8"
+  ],
+  "correct": 1,
+  "prereq": [
+   "linear"
+  ],
+  "uses": [
+   "Regression diagnostics",
+   "Loss construction"
+  ]
+ },
+ {
+  "id": "loss",
+  "name": "Squared error",
+  "group": "Optimization",
+  "level": "Beginner",
+  "eq": "L=\\frac12(\\hat y-y)^2",
+  "problem": "Signed errors can cancel. What single nonnegative score can measure how far a prediction is from its target?",
+  "why": "Squaring prevents cancellation and increasingly penalizes large errors. The factor 1/2 is a convenience for differentiation. This lab uses one example, not a batch mean.",
+  "symbols": [
+   "L: scalar loss to minimize",
+   "ŷ − y: signed residual",
+   "1/2: derivative-simplifying constant"
+  ],
+  "steps": [
+   [
+    "e=\\hat y-y",
+    "Measure the signed error."
+   ],
+   [
+    "e^2\\geq0",
+    "Square it so underestimates and overestimates both incur cost."
+   ],
+   [
+    "L=\\frac12e^2",
+    "Scale by one half; the minimizer stays the same."
+   ],
+   [
+    "\\frac{\\partial L}{\\partial\\hat y}=\\hat y-y",
+    "Apply the power rule and chain rule. The gradient retains the error’s sign."
+   ]
+  ],
+  "example": "For ŷ = 0.9 and y = 1: e = −0.1, e² = 0.01, L = 0.005.",
+  "code": "error = prediction - target\nloss = 0.5 * error**2\ndloss_dprediction = error\n# Batch version: average over examples",
+  "deep": "Independent Gaussian noise with constant variance yields squared error as negative log-likelihood up to scale and constants. Ordinary least squares is convex in linear-model parameters; neural-network squared error need not be.",
+  "trap": "MSE usually means the average of squared errors without 1/2. Always inspect the convention and batch reduction before comparing gradients.",
+  "question": "If the residual doubles, squared error…",
+  "answers": [
+   "Doubles",
+   "Quadruples",
+   "Stays constant"
+  ],
+  "correct": 1,
+  "prereq": [
+   "prediction"
+  ],
+  "uses": [
+   "Regression",
+   "Autoencoders",
+   "Noise prediction"
+  ]
+ },
+ {
+  "id": "bce",
+  "name": "Binary cross-entropy",
+  "group": "Optimization",
+  "level": "Intermediate",
+  "eq": "L=-y\\log p-(1-y)\\log(1-p)",
+  "problem": "How should a binary classifier be penalized for assigning low probability to the observed outcome?",
+  "why": "A Bernoulli likelihood assigns probability p to y=1 and 1−p to y=0. Minimizing its negative logarithm is maximum-likelihood estimation.",
+  "symbols": [
+   "y: binary label, 0 or 1",
+   "p: sigmoid probability",
+   "log: natural logarithm"
+  ],
+  "steps": [
+   [
+    "P(y\\mid p)=p^y(1-p)^{1-y}",
+    "One expression selects p for a positive label and 1−p for a negative label."
+   ],
+   [
+    "\\log P=y\\log p+(1-y)\\log(1-p)",
+    "The logarithm turns products into sums."
+   ],
+   [
+    "L=-\\log P",
+    "Reverse the sign to turn likelihood maximization into loss minimization."
+   ],
+   [
+    "\\frac{\\partial L}{\\partial z}=p-y",
+    "Combine the loss derivative with p′=p(1−p); these factors cancel."
+   ]
+  ],
+  "example": "For y = 1 and p = 0.7109, L = −ln(0.7109) ≈ 0.3412.",
+  "code": "# Stable BCE directly from logits\nloss = max(z, 0) - z*y + np.log1p(np.exp(-abs(z)))\ndloss_dz = sigmoid(z) - y",
+  "deep": "The logit formulation avoids log(0) and overflow. In a correctly specified Bernoulli model, log loss is a strictly proper scoring rule: expected loss is minimized by reporting the true conditional probability.",
+  "trap": "Do not apply sigmoid before a framework function that already expects logits, such as BCEWithLogitsLoss.",
+  "question": "For y = 1, which prediction incurs lower BCE?",
+  "answers": [
+   "p = 0.1",
+   "p = 0.9",
+   "They are equal"
+  ],
+  "correct": 1,
+  "prereq": [
+   "sigmoid",
+   "loss"
+  ],
+  "uses": [
+   "Binary classification",
+   "Multi-label classification"
+  ]
+ },
+ {
+  "id": "gradient",
+  "name": "Chain rule & backprop",
+  "group": "Optimization",
+  "level": "Intermediate",
+  "eq": "\\frac{\\partial L}{\\partial w}=\\frac{\\partial L}{\\partial a}\\frac{\\partial a}{\\partial z}\\frac{\\partial z}{\\partial w}",
+  "problem": "The weight affects the loss indirectly through several operations. How can we assign it a precise contribution?",
+  "why": "The chain rule multiplies local sensitivities along a path. Backpropagation reuses those local derivatives in reverse graph order, avoiding redundant work.",
+  "symbols": [
+   "∂: partial derivative; other variables fixed",
+   "∂L/∂w: local rate of loss change with w",
+   "a: activation; z: affine score"
+  ],
+  "steps": [
+   [
+    "\\frac{\\partial L}{\\partial a}=a-y",
+    "For half squared error, the loss responds to the prediction with slope a−y."
+   ],
+   [
+    "\\frac{\\partial a}{\\partial z}=a(1-a)",
+    "For sigmoid, a small change in z changes a by approximately a(1−a) times that change."
+   ],
+   [
+    "\\frac{\\partial z}{\\partial w}=x",
+    "For z=wx+b, changing w by δ changes z by xδ."
+   ],
+   [
+    "\\frac{\\partial L}{\\partial w}=(a-y)a(1-a)x",
+    "Multiply the sensitivities. For the bias, replace the final x with 1."
+   ]
+  ],
+  "example": "x=2, z=0.9, a≈0.7109, y=1 → dL/dw≈(−0.2891)(0.2055)(2)=−0.1188.",
+  "code": "dloss_da = a - y\nda_dz = a * (1 - a)\ndz_dw = x\ndloss_dw = dloss_da * da_dz * dz_dw\ndloss_db = dloss_da * da_dz",
+  "deep": "For branched graphs, contributions from all downstream paths add. Reverse-mode autodiff computes vector–Jacobian products, not necessarily full Jacobians. Its cost for a scalar loss is a small multiple of the forward computation.",
+  "trap": "Backprop computes gradients; an optimizer uses them to change parameters. They are separate operations.",
+  "question": "If a weight reaches loss by two paths, their gradient contributions are…",
+  "answers": [
+   "Multiplied together",
+   "Added",
+   "The larger one only"
+  ],
+  "correct": 1,
+  "prereq": [
+   "loss",
+   "sigmoid"
+  ],
+  "uses": [
+   "Neural-network training",
+   "Automatic differentiation"
+  ]
+ },
+ {
+  "id": "update",
+  "name": "Gradient descent",
+  "group": "Optimization",
+  "level": "Intermediate",
+  "eq": "w_{t+1}=w_t-\\eta\\nabla_w L",
+  "problem": "Once we know which way the loss increases, how do we adjust the model to improve it?",
+  "why": "Move opposite the gradient. For a sufficiently small step, the first-order approximation predicts a decrease in the objective.",
+  "symbols": [
+   "η: positive learning rate",
+   "t: update index",
+   "∇w L: gradient with respect to weights"
+  ],
+  "steps": [
+   [
+    "L(w+\\Delta w)\\approx L(w)+\\nabla L(w)^T\\Delta w",
+    "Use a first-order Taylor approximation near the current weights."
+   ],
+   [
+    "\\Delta w=-\\eta\\nabla L(w)",
+    "Choose the negative gradient direction."
+   ],
+   [
+    "\\Delta L\\approx-\\eta\\|\\nabla L(w)\\|^2\\leq0",
+    "The predicted change is nonpositive. This is a local approximation, not a guarantee for arbitrary step size."
+   ],
+   [
+    "w\\leftarrow w-\\eta\\nabla_w L",
+    "Update all parameters using gradients computed at the same old parameter values."
+   ]
+  ],
+  "example": "w=0.4, gradient≈−0.1188, η=0.1 → new w≈0.4119. The negative gradient makes the weight increase.",
+  "code": "# Compute both gradients before updating\nw_new = w - learning_rate * dw\nb_new = b - learning_rate * db\nw, b = w_new, b_new",
+  "deep": "For an L-smooth objective, the descent lemma ensures a decrease for 0<η<2/L under exact gradients. Stochastic gradients add sampling noise. Nonconvex stationary points need not be global minima.",
+  "trap": "A negative gradient calls for increasing the weight. Subtracting a negative is addition.",
+  "question": "w = 1, gradient = 2, η = 0.1. New w?",
+  "answers": [
+   "1.2",
+   "0.8",
+   "−1"
+  ],
+  "correct": 1,
+  "prereq": [
+   "gradient"
+  ],
+  "uses": [
+   "Linear models",
+   "Deep learning",
+   "Fine-tuning"
+  ]
+ },
+ {
+  "id": "dot",
+  "name": "Dot product",
+  "group": "Foundations",
+  "level": "Beginner",
+  "eq": "\\mathbf{u}^T\\mathbf{v}=\\sum_i u_i v_i",
+  "problem": "How do we combine paired components into one score?",
+  "why": "A dot product measures alignment while retaining vector magnitudes. It is the primitive behind weighted sums and attention compatibility scores.",
+  "symbols": [
+   "u, v: vectors of the same dimension",
+   "i: component index"
+  ],
+  "steps": [
+   [
+    "u_i v_i",
+    "Multiply matching coordinates."
+   ],
+   [
+    "\\sum_i u_i v_i",
+    "Add every contribution."
+   ],
+   [
+    "\\mathbf{u}^T\\mathbf{v}=\\|u\\|\\|v\\|\\cos\\theta",
+    "Geometrically, this is the product of lengths times angular alignment."
+   ]
+  ],
+  "example": "[1, 2] · [3, 4] = 1×3 + 2×4 = 11.",
+  "code": "score = sum(a*b for a,b in zip(u,v))",
+  "deep": "A dot product induces a norm and orthogonality. Learned projections change which directions count as aligned, even when the original embeddings do not align.",
+  "trap": "A larger dot product can reflect larger norms rather than a smaller angle.",
+  "question": "[1, 0] · [0, 1] equals…",
+  "answers": [
+   "1",
+   "0",
+   "2"
+  ],
+  "correct": 1,
+  "prereq": [
+   "input"
+  ],
+  "uses": [
+   "Dense layers",
+   "Attention",
+   "Similarity search"
+  ]
+ },
+ {
+  "id": "softmax",
+  "name": "Softmax",
+  "group": "Transformers",
+  "level": "Intermediate",
+  "eq": "p_i=\\frac{e^{z_i/\\tau}}{\\sum_j e^{z_j/\\tau}}",
+  "problem": "How do several competing scores become a distribution over mutually exclusive choices?",
+  "why": "Exponentials give positive values; dividing by their sum normalizes them. Temperature controls how sharply the distribution favors high scores.",
+  "symbols": [
+   "zi: logit for choice i",
+   "τ: positive temperature",
+   "pi: normalized probability"
+  ],
+  "steps": [
+   [
+    "q_i=e^{z_i/\\tau}>0",
+    "Exponentiate scaled scores. Ratios become exp((zi−zj)/τ)."
+   ],
+   [
+    "S=\\sum_j q_j",
+    "Compute the total positive mass."
+   ],
+   [
+    "p_i=q_i/S",
+    "Normalize. Every entry is positive and the entries sum to one."
+   ],
+   [
+    "p_i=\\frac{e^{(z_i-m)/\\tau}}{\\sum_j e^{(z_j-m)/\\tau}}",
+    "Subtract the maximum m before exponentiating. A shared shift cancels and improves numerical stability."
+   ]
+  ],
+  "example": "Scores [1, 2], τ=1 → probabilities [0.2689, 0.7311].",
+  "code": "z = np.array(logits) / temperature\ne = np.exp(z - z.max())\np = e / e.sum()",
+  "deep": "Softmax is the gradient of log-sum-exp. Its Jacobian is (diag(p)−ppᵀ)/τ. All outputs are coupled, so increasing one logit generally reduces the probabilities of other choices.",
+  "trap": "Softmax preserves score order, but probabilities are relative to the other candidates.",
+  "question": "Adding 100 to every logit changes softmax how?",
+  "answers": [
+   "All probabilities increase",
+   "It is unchanged",
+   "It becomes uniform"
+  ],
+  "correct": 1,
+  "prereq": [
+   "sigmoid",
+   "dot"
+  ],
+  "uses": [
+   "Attention weights",
+   "Multiclass classification",
+   "Next-token prediction"
+  ]
+ },
+ {
+  "id": "attention",
+  "name": "Scaled dot-product attention",
+  "group": "Transformers",
+  "level": "Advanced",
+  "eq": "\\operatorname{Attn}(Q,K,V)=\\operatorname{softmax}\\!\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V",
+  "problem": "How can a token gather information from other tokens according to the current context?",
+  "why": "Queries ask for relevant content, keys expose matching information, and values carry the content to combine. Attention produces a context-dependent weighted average.",
+  "symbols": [
+   "Q: queries, shape n × dk",
+   "K: keys, shape m × dk",
+   "V: values, shape m × dv",
+   "dk: query/key dimension"
+  ],
+  "steps": [
+   [
+    "Q=XW_Q,\\quad K=XW_K,\\quad V=XW_V",
+    "Learn three projections with distinct roles. For self-attention, all three start from the same token representations."
+   ],
+   [
+    "S=QK^T/\\sqrt{d_k}",
+    "Each query–key dot product becomes a compatibility score. Scale to control its typical variance."
+   ],
+   [
+    "A_{ij}=\\frac{e^{S_{ij}}}{\\sum_r e^{S_{ir}}}",
+    "Apply softmax across keys in each query row. A causal mask excludes future positions before softmax."
+   ],
+   [
+    "O=AV",
+    "For each query, add the value vectors weighted by its attention probabilities."
+   ]
+  ],
+  "example": "q=[1,0], keys=[[1,0],[0,1],[1,1]], dk=2 → scores≈[0.7071,0,0.7071]. Weights≈[0.4011,0.1978,0.4011].",
+  "code": "scores = Q @ K.T / np.sqrt(Q.shape[-1])\n# Apply any mask before softmax\nA = softmax(scores, axis=-1)\noutput = A @ V",
+  "deep": "If independent query/key components have zero mean and unit variance, the dot-product variance grows with dk. Dividing by √dk restores variance near one under these assumptions. Standard dense attention forms an n×n matrix and has quadratic sequence-length cost.",
+  "trap": "Attention weights show mixing coefficients; they are not automatically a causal explanation of a model’s decision.",
+  "question": "Softmax is applied over which dimension for one query?",
+  "answers": [
+   "The feature dimension",
+   "The keys it can attend to",
+   "The batch"
+  ],
+  "correct": 1,
+  "prereq": [
+   "dot",
+   "softmax",
+   "linear"
+  ],
+  "uses": [
+   "Transformers",
+   "Cross-attention",
+   "Vision transformers"
+  ]
+ },
+ {
+  "id": "bayes",
+  "name": "Bayes’ theorem",
+  "group": "Probability",
+  "level": "Intermediate",
+  "eq": "P(A\\mid B)=\\frac{P(B\\mid A)P(A)}{P(B)}",
+  "problem": "How should evidence change our belief about a hypothesis?",
+  "why": "Bayes’ theorem reverses a conditional probability while accounting for how common the hypothesis and evidence are.",
+  "symbols": [
+   "P(A): prior",
+   "P(B | A): likelihood",
+   "P(A | B): posterior",
+   "P(B): evidence probability, nonzero"
+  ],
+  "steps": [
+   [
+    "P(A\\cap B)=P(A\\mid B)P(B)",
+    "Write the joint event using the definition of conditional probability."
+   ],
+   [
+    "P(A\\cap B)=P(B\\mid A)P(A)",
+    "Write the same event in the other order."
+   ],
+   [
+    "P(A\\mid B)=P(B\\mid A)P(A)/P(B)",
+    "Equate the expressions and divide by P(B)."
+   ]
+  ],
+  "example": "Spam prior 0.2; P(word|spam)=0.6; P(word|not spam)=0.1. P(word)=0.2×0.6+0.8×0.1=0.2. Posterior spam probability = 0.6.",
+  "code": "evidence = likelihood*prior + false_positive*(1-prior)\nposterior = likelihood*prior / evidence",
+  "deep": "For continuous variables, densities replace point probabilities. Bayesian parameter inference combines a likelihood with a prior, normalizing through a possibly intractable marginal likelihood.",
+  "trap": "P(B | A) and P(A | B) are generally different. The prior cannot be ignored.",
+  "question": "If the likelihood is uninformative, the posterior…",
+  "answers": [
+   "Must be 0.5",
+   "Equals the prior",
+   "Must be 1"
+  ],
+  "correct": 1,
+  "prereq": [
+   "input"
+  ],
+  "uses": [
+   "Naive Bayes",
+   "Bayesian inference",
+   "Latent-variable models"
+  ]
+ },
+ {
+  "id": "pca",
+  "name": "Principal components",
+  "group": "Classical ML",
+  "level": "Advanced",
+  "eq": "\\Sigma v=\\lambda v",
+  "problem": "How can high-dimensional observations be projected into fewer dimensions while retaining variation?",
+  "why": "PCA finds orthogonal directions of maximum variance in centered data. The first direction solves a constrained quadratic optimization problem.",
+  "symbols": [
+   "Σ: covariance matrix",
+   "v: unit eigenvector",
+   "λ: variance along that eigenvector"
+  ],
+  "steps": [
+   [
+    "\\max_{\\|v\\|=1}v^T\\Sigma v",
+    "Projected variance is vᵀΣv. Constrain the length so scaling v cannot increase the objective arbitrarily."
+   ],
+   [
+    "\\mathcal{L}=v^T\\Sigma v-\\lambda(v^Tv-1)",
+    "Introduce a Lagrange multiplier for unit length."
+   ],
+   [
+    "2\\Sigma v-2\\lambda v=0",
+    "Set the derivative with respect to v to zero."
+   ],
+   [
+    "\\Sigma v=\\lambda v",
+    "The optimal direction is an eigenvector with the largest eigenvalue; later directions are orthogonal."
+   ]
+  ],
+  "example": "Covariance diag(4,1) has first principal direction [1,0], retaining 4/(4+1) = 80% of variance.",
+  "code": "Xc = X - X.mean(axis=0)\nU, S, Vt = np.linalg.svd(Xc, full_matrices=False)\nprojection = Xc @ Vt[:k].T",
+  "deep": "Truncated SVD gives the best rank-k approximation in Frobenius norm (Eckart–Young). High variance is not necessarily high predictive value; PCA ignores labels and is sensitive to feature scaling.",
+  "trap": "Center the data first. Otherwise a large mean can dominate the principal direction.",
+  "question": "For eigenvalues 4 and 1, PC1 retains…",
+  "answers": [
+   "50%",
+   "80%",
+   "100%"
+  ],
+  "correct": 1,
+  "prereq": [
+   "dot",
+   "linear"
+  ],
+  "uses": [
+   "Dimensionality reduction",
+   "Compression",
+   "Visualization"
+  ]
+ },
+ {
+  "id": "conv",
+  "name": "Convolution",
+  "group": "Neural networks",
+  "level": "Intermediate",
+  "eq": "Y_{ij}=\\sum_{u,v}K_{uv}X_{i+u,j+v}+b",
+  "problem": "How can the same local pattern detector scan every location in an image?",
+  "why": "Weight sharing reuses one small kernel across spatial positions. Local connectivity drastically reduces parameters compared with a fully connected image layer.",
+  "symbols": [
+   "X: input image or feature map",
+   "K: learned kernel",
+   "Yij: output at position (i,j)"
+  ],
+  "steps": [
+   [
+    "P_{uv}=K_{uv}X_{i+u,j+v}",
+    "Overlay a kernel on an input patch and multiply matching entries."
+   ],
+   [
+    "Y_{ij}=\\sum_{u,v}P_{uv}+b",
+    "Sum the patch contributions and add a bias."
+   ],
+   [
+    "H_{out}=\\left\\lfloor\\frac{H+2p-d(k-1)-1}{s}+1\\right\\rfloor",
+    "Slide by stride s; padding p and dilation d determine the output shape."
+   ]
+  ],
+  "example": "Patch [[1,2],[3,4]], kernel [[1,0],[0,−1]], b=0 → 1−4=−3.",
+  "code": "# ML libraries use cross-correlation\ny = (patch * kernel).sum() + bias\n# PyTorch: nn.Conv2d(cin, cout, 3, padding=1)",
+  "deep": "Most ML libraries implement cross-correlation, without flipping the kernel. Convolution is translation equivariant away from boundary effects; padding and strides modify this behavior. Channels add a further summation.",
+  "trap": "A convolution does not inherently make a network invariant to translation. Equivariance and invariance are different.",
+  "question": "What is shared across spatial locations?",
+  "answers": [
+   "Input pixel values",
+   "Kernel weights",
+   "Output activations"
+  ],
+  "correct": 1,
+  "prereq": [
+   "dot"
+  ],
+  "uses": [
+   "Image classifiers",
+   "Audio models",
+   "Feature extraction"
+  ]
+ },
+ {
+  "id": "layernorm",
+  "name": "Layer normalization",
+  "group": "Transformers",
+  "level": "Advanced",
+  "eq": "y_i=\\gamma_i\\frac{x_i-\\mu}{\\sqrt{\\sigma^2+\\epsilon}}+\\beta_i",
+  "problem": "How can a layer control the scale and offset of a token’s features?",
+  "why": "Normalize across the chosen feature dimensions within each example, then restore learnable scale and offset. Unlike batch normalization, this does not rely on batch statistics.",
+  "symbols": [
+   "μ, σ²: mean and population variance across features",
+   "ε: positive numerical stabilizer",
+   "γ, β: learned scale and shift"
+  ],
+  "steps": [
+   [
+    "\\mu=\\frac1d\\sum_i x_i",
+    "Compute the mean of this token’s d features."
+   ],
+   [
+    "\\sigma^2=\\frac1d\\sum_i(x_i-\\mu)^2",
+    "Compute population variance across those same features."
+   ],
+   [
+    "\\hat x_i=(x_i-\\mu)/\\sqrt{\\sigma^2+\\epsilon}",
+    "Center and scale. Epsilon prevents division by zero."
+   ],
+   [
+    "y_i=\\gamma_i\\hat x_i+\\beta_i",
+    "Give each feature a learned scale and offset."
+   ]
+  ],
+  "example": "x=[1,3] → μ=2, variance=1 → normalized values approximately [−1,1].",
+  "code": "mean = x.mean(axis=-1, keepdims=True)\nvar = ((x-mean)**2).mean(axis=-1, keepdims=True)\ny = gamma*(x-mean)/np.sqrt(var+1e-5)+beta",
+  "deep": "LayerNorm couples all normalized features through its mean and variance. Its Jacobian includes these dependencies; treating statistics as constants yields incorrect training gradients.",
+  "trap": "LayerNorm normalizes features; BatchNorm uses batch statistics. They are not interchangeable operations.",
+  "question": "For x=[1,3], the population variance is…",
+  "answers": [
+   "2",
+   "1",
+   "4"
+  ],
+  "correct": 1,
+  "prereq": [
+   "input",
+   "gradient"
+  ],
+  "uses": [
+   "Transformers",
+   "Recurrent networks"
+  ]
+ },
+ {
+  "id": "bellman",
+  "name": "Bellman optimality",
+  "group": "Reinforcement learning",
+  "level": "Advanced",
+  "eq": "Q^*(s,a)=\\mathbb{E}[r+\\gamma\\max_{aprime}Q^*(sprime,aprime)\\mid s,a]",
+  "problem": "How do we judge an action whose benefits may arrive much later?",
+  "why": "Separate immediate reward from discounted future value. This recursive relationship makes long-horizon decision problems tractable.",
+  "symbols": [
+   "s, a: current state and action",
+   "s′: next state",
+   "γ: discount, usually 0 ≤ γ < 1",
+   "Q*: optimal expected discounted return"
+  ],
+  "steps": [
+   [
+    "G_t=r_{t+1}+\\gamma G_{t+1}",
+    "Split the discounted reward sum after the first reward."
+   ],
+   [
+    "Q^*(s,a)=\\mathbb E[G_t\\mid s,a]",
+    "Define optimal action value as expected return."
+   ],
+   [
+    "Q^*(s,a)=\\mathbb E[r_{t+1}+\\gamma\\max_{aprime}Q^*(s_{t+1},aprime)\\mid s,a]",
+    "An optimal policy chooses a next action with maximal action value. Average over transition and reward randomness."
+   ]
+  ],
+  "example": "A deterministic transition gives reward 1 and best next value 4. With γ=0.9, the Bellman target is 1+0.9×4=4.6.",
+  "code": "target = reward + gamma * max(next_q)\n# Terminal state: target = reward\nq += alpha * (target - q)",
+  "deep": "In a discounted finite MDP, the Bellman optimality operator is a γ-contraction in the sup norm. Its unique fixed point is Q*. Sample-based Q-learning needs additional assumptions for convergence.",
+  "trap": "The expected Bellman equation is not the same as one noisy sample target. Terminal transitions have no future-value term.",
+  "question": "With γ = 0, an action is valued by…",
+  "answers": [
+   "Only future rewards",
+   "Only immediate reward",
+   "All rewards equally"
+  ],
+  "correct": 1,
+  "prereq": [
+   "bayes",
+   "update"
+  ],
+  "uses": [
+   "Q-learning",
+   "Value iteration",
+   "Deep Q networks"
+  ]
+ },
+ {
+  "id": "diffusion",
+  "name": "Forward diffusion",
+  "group": "Generative models",
+  "level": "Advanced",
+  "eq": "x_t=\\sqrt{\\bar\\alpha_t}x_0+\\sqrt{1-\\bar\\alpha_t}\\epsilon",
+  "problem": "How can we gradually replace structured data with Gaussian noise in a mathematically controlled way?",
+  "why": "A Gaussian corruption process gives a known conditional distribution at every step. A learned denoiser can use this structure to support a reverse generative process.",
+  "symbols": [
+   "x0: clean data",
+   "ε: standard Gaussian noise",
+   "ᾱt: product of noise-retention factors through t"
+  ],
+  "steps": [
+   [
+    "x_t=\\sqrt{\\alpha_t}x_{t-1}+\\sqrt{1-\\alpha_t}\\epsilon_t",
+    "Each step scales the previous sample and adds independent Gaussian noise."
+   ],
+   [
+    "\\bar\\alpha_t=\\prod_{s=1}^t\\alpha_s",
+    "Repeated scaling multiplies the signal-retention factors."
+   ],
+   [
+    "q(x_t\\mid x_0)=\\mathcal N(\\sqrt{\\bar\\alpha_t}x_0,(1-\\bar\\alpha_t)I)",
+    "Independent Gaussian noise terms combine into a Gaussian with this mean and variance."
+   ],
+   [
+    "L=\\mathbb E\\|\\epsilon-\\epsilon_\\theta(x_t,t)\\|^2",
+    "A common simplified objective trains a network to predict the injected noise."
+   ]
+  ],
+  "example": "x0=2, ᾱt=0.64, ε=1 → xt=0.8×2+0.6×1=2.2.",
+  "code": "noise = np.random.randn(*x0.shape)\nxt = np.sqrt(alpha_bar)*x0 + np.sqrt(1-alpha_bar)*noise\nloss = ((noise - predicted_noise)**2).mean()",
+  "deep": "The reverse conditional is generally unknown and learned. The simplified noise-prediction MSE relates to a weighted variational bound, but drops specific weighting; reversing a noising animation is not itself learned generation.",
+  "trap": "A reverse sampler needs a trained model and a sampling rule; subtracting arbitrary noise does not generate meaningful data.",
+  "question": "As ᾱt approaches zero, xt approaches…",
+  "answers": [
+   "The clean data",
+   "Standard Gaussian noise",
+   "Always zero"
+  ],
+  "correct": 1,
+  "prereq": [
+   "bayes",
+   "loss"
+  ],
+  "uses": [
+   "Diffusion image models",
+   "Audio generation"
+  ]
+ }
+]

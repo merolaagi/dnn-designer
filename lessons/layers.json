@@ -1,0 +1,64 @@
+{
+ "input": [
+  "Input"
+ ],
+ "linear": [
+  "Linear",
+  "Embedding"
+ ],
+ "sigmoid": [
+  "Activation"
+ ],
+ "relu": [
+  "Activation"
+ ],
+ "prediction": [
+  "Output"
+ ],
+ "loss": [
+  "Output"
+ ],
+ "bce": [
+  "Output"
+ ],
+ "gradient": [],
+ "update": [],
+ "dot": [
+  "Linear",
+  "Attention",
+  "SelfAttention"
+ ],
+ "softmax": [
+  "Activation",
+  "Attention",
+  "SelfAttention"
+ ],
+ "attention": [
+  "Attention",
+  "SelfAttention",
+  "TransformerEncoder",
+  "GPTStack"
+ ],
+ "bayes": [
+  "Sampling"
+ ],
+ "pca": [
+  "ImplicitEquilibrium"
+ ],
+ "conv": [
+  "Conv2d",
+  "Conv1d",
+  "SeparableConv2d",
+  "ConvTranspose2d"
+ ],
+ "layernorm": [
+  "LayerNorm",
+  "BatchNorm2d",
+  "BatchNorm1d",
+  "GroupNorm"
+ ],
+ "bellman": [],
+ "diffusion": [
+  "Sampling"
+ ]
+}

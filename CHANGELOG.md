@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.72.0
+
+**The ML Math Lab curriculum, integrated rather than bolted on.**
+
+Eighteen lessons — each with the problem it answers, why the answer is what it
+is, a derivation in steps, a worked example, code, a deeper note, the mistake
+people make, and a question to check yourself on.
+
+They are not a separate section, because that would be a second application
+living inside the first. **A lesson appears beside the layer it explains**, in
+the Maths tab you are already in: *Linear transformation* under `Linear`,
+*Convolution* under `Conv2d`, and `Attention` offers *Dot product*, *Softmax*
+and *Scaled dot-product attention* in that order.
+
+What makes this worth having rather than merely nice: **both equations are on
+the same screen**. The lesson's, and the one `mathbook` says this layer computes
+with your shapes. They were written independently about the same object, so if
+they ever disagree that is the most useful thing on the panel.
+
+- **Prerequisites give a reading order.** Attention asks for input → dot →
+  linear → sigmoid → softmax, walked from the curriculum's own declarations.
+- **The check-yourself question works**, and a wrong answer shows the lesson's
+  own note on the usual mistake.
+- **Layers that do this** is clickable: place one on the canvas from inside the
+  lesson.
+- **Four lessons name no layer, on purpose.** The chain rule, gradient descent
+  and Bellman optimality are about training rather than structure, and
+  attaching them to a layer would be tidy and wrong. A test requires that.
+
+Every lesson-to-layer pairing is written down rather than guessed, and checked:
+every lesson is accounted for, and every layer a lesson names exists.
+
 ## 1.71.1
 
 **Where scout results are saved: your account's workspace**, beside its designs

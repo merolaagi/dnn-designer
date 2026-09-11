@@ -31,6 +31,7 @@ import codebase
 import codegen
 import importer
 import mathbook
+import lessons as lessonbook
 import mathmatch
 import needs
 import projectloader
@@ -408,6 +409,43 @@ class MathMatchPayload(BaseModel):
     graph: Dict[str, Any] = {}
     codebase: str = ""
     path: str = ""
+
+
+@app.get("/api/lessons")
+def lesson_catalog():
+    return lessonbook.catalog()
+
+
+@app.get("/api/lessons/{lesson_id}")
+def lesson_one(lesson_id: str):
+    entry = lessonbook.lesson(lesson_id)
+    if not entry:
+        raise HTTPException(404, detail={"message": "No such lesson."})
+    return {**entry, "read_first": lessonbook.path_to(lesson_id)}
+
+
+@app.get("/api/lessons/for-layer/{layer}")
+def lessons_for_layer(layer: str):
+    """What explains this layer, with the layer's own equation beside it.
+
+    Two statements about the same object, written independently — the lesson's
+    and the one this application computes. Showing them together is the point;
+    if they ever disagree, that is worth knowing.
+    """
+    found = lessonbook.for_layer(layer)
+    spec = REGISTRY.get(layer)
+    ours = {}
+    if spec:
+        try:
+            ours = mathbook.explain(
+                layer, {p["name"]: p.get("default") for p in (spec.params or [])},
+                None, None)
+        except Exception:  # noqa: BLE001
+            ours = {}
+    return {"layer": layer, "lessons": found,
+            "ours": {"title": ours.get("title", ""),
+                     "equation": ours.get("equation", "")},
+            "source": lessonbook.SOURCE}
 
 
 @app.post("/api/mathmatch")

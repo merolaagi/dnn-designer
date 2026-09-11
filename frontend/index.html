@@ -1225,6 +1225,35 @@ i.covered{
 .cbwalkline.on b{font-weight:600;color:#16202E}
 .cbwalkline:hover{background:var(--paper-2)}
 table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
+.lessonlist{display:flex;flex-direction:column;gap:6px}
+.lessonrow{
+  text-align:left;background:#fff;border:1px solid var(--paper-3);
+  border-radius:9px;padding:9px 11px;cursor:pointer;
+}
+.lessonrow:hover{border-color:#8A5CF6;background:#FCFBFF}
+.lessonrow b{display:block;font-size:12.5px;font-weight:600}
+.lessonrow span{display:block;font-size:9.5px;color:var(--muted);margin:1px 0 4px}
+.lessonrow p{margin:0;font-size:11px;line-height:1.55;color:#3C4B5F}
+.lessonhead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+.lessonhead b{font-size:15px;font-weight:600}
+.lessonhead span{font-size:10.5px;color:var(--muted)}
+.lessonwhy{margin:8px 0 0;font-size:11.5px;line-height:1.65;color:#3C4B5F}
+.lessonwhy b{color:var(--text)}
+.lessonsteps{margin:0;padding-left:20px}
+.lessonsteps li{margin-bottom:9px}
+.lessonsteps span{
+  display:block;font-size:11px;line-height:1.6;color:var(--muted);margin-top:3px;
+}
+.lessonq{
+  background:var(--paper-2);border-radius:9px;padding:11px 13px;
+}
+.lessonq b{display:block;font-size:11.5px;margin-bottom:8px}
+.lessonans{
+  display:block;width:100%;text-align:left;background:#fff;
+  border:1px solid var(--paper-3);border-radius:7px;padding:7px 10px;
+  margin-bottom:5px;font-size:11.5px;cursor:pointer;
+}
+.lessonans:hover{border-color:var(--amber);background:#FFFDF7}
 .cbjump{cursor:pointer}
 .cbjump:hover{background:#EAE3FC}
 .cbtree{
@@ -2518,7 +2547,7 @@ const state = {
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
-  codebase:null, cbFile:null, maths:null, cbMap:null, cbMapPlace:null,
+  codebase:null, cbFile:null, maths:null, lesson:null, cbMap:null, cbMapPlace:null,
   cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module", cbWalkAt:0,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
@@ -9153,6 +9182,114 @@ function diagramReshape(){
 
 /* ---------- the panel ---------- */
 
+/* The curriculum explains what a layer is for; mathbook says what this one
+   computes with these shapes. They were written independently, about the same
+   object, so they belong on the same screen — and if they ever disagree that
+   is the most useful thing on it. */
+async function offerLesson(layerType){
+  const host = $("mathBody");
+  if (!host || !layerType) return;
+  let d;
+  try{
+    d = await (await fetch(API + "/api/lessons/for-layer/"
+      + encodeURIComponent(layerType))).json();
+  } catch { return; }
+  if (!d.lessons || !d.lessons.length) return;
+
+  host.insertAdjacentHTML("beforeend", `
+    <div class="mathsec">the lesson behind it</div>
+    <div class="lessonlist">${d.lessons.map(e => `
+      <button class="lessonrow" data-lesson="${e.id}">
+        <b>${e.name}</b>
+        <span>${e.group} · ${e.level}</span>
+        <p>${e.problem}</p>
+      </button>`).join("")}</div>
+    <p class="mathnote">From <b>${d.source.name}</b>.</p>`);
+
+  host.querySelectorAll("[data-lesson]").forEach(row =>
+    row.addEventListener("click", () => showLesson(row.dataset.lesson)));
+}
+
+async function showLesson(id){
+  const host = $("mathBody");
+  host.innerHTML = `<div class="empty" style="padding:14px">reading…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/lessons/" + encodeURIComponent(id));
+    d = await r.json();
+  } catch { host.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    host.innerHTML = `<div class="runfail">No such lesson.</div>`;
+    return;
+  }
+  state.lesson = d;
+
+  host.innerHTML = `
+    <div class="lessonhead">
+      <b>${d.name}</b>
+      <span>${d.group} · ${d.level}</span>
+    </div>
+    <pre class="armexpr">${d.eq.replace(/</g, "&lt;")}</pre>
+    <p class="lessonwhy"><b>The problem.</b> ${d.problem}</p>
+    <p class="lessonwhy"><b>Why this answers it.</b> ${d.why}</p>
+
+    ${(d.symbols || []).length ? `<div class="mathsec">symbols</div>
+      <table class="armfacts">${d.symbols.map(sym => {
+        const cut = sym.indexOf(":");
+        return `<tr><td class="v">${cut > 0 ? sym.slice(0, cut) : ""}</td>
+          <td class="k">${cut > 0 ? sym.slice(cut + 1).trim() : sym}</td></tr>`;
+      }).join("")}</table>` : ""}
+
+    <div class="mathsec">derivation</div>
+    <ol class="lessonsteps">${(d.steps || []).map(([eq, why]) => `
+      <li><pre class="armexpr">${eq.replace(/</g, "&lt;")}</pre>
+        <span>${why}</span></li>`).join("")}</ol>
+
+    ${d.example ? `<div class="mathsec">worked example</div>
+      <p class="mathnote">${d.example}</p>` : ""}
+    ${d.code ? `<div class="mathsec">in code</div>
+      <pre class="cbsource">${d.code.replace(/</g, "&lt;")}</pre>` : ""}
+    ${d.deep ? `<div class="mathsec">deeper</div>
+      <p class="mathnote">${d.deep}</p>` : ""}
+    ${d.trap ? `<div class="paperwarn"><b>The usual mistake.</b> ${d.trap}</div>`
+      : ""}
+
+    ${d.question ? `<div class="mathsec">check yourself</div>
+      <div class="lessonq"><b>${d.question}</b>
+        ${(d.answers || []).map((a, i) =>
+          `<button class="lessonans" data-ans="${i}">${a}</button>`).join("")}
+        <div id="lessonVerdict"></div></div>` : ""}
+
+    ${(d.read_first || []).length ? `<div class="mathsec">read first</div>
+      <div class="hitwhy">${d.read_first.map(x =>
+        `<span class="cbjump" data-lesson="${x}">${x}</span>`).join("")}</div>`
+      : ""}
+    ${(d.uses || []).length ? `<div class="mathsec">used by</div>
+      <div class="hitwhy">${d.uses.map(u => `<span>${u}</span>`).join("")}</div>`
+      : ""}
+    ${(d.layers || []).length ? `<div class="mathsec">layers here that do this</div>
+      <div class="hitwhy">${d.layers.map(l =>
+        `<span class="cbjump" data-place-l="${l}">${l}</span>`).join("")}</div>`
+      : ""}
+    <button class="btn" id="lessonBack">back to this layer</button>`;
+
+  host.querySelectorAll("[data-ans]").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const right = +btn.dataset.ans === d.correct;
+      $("lessonVerdict").innerHTML = right
+        ? `<div class="paperok">Yes.</div>`
+        : `<div class="paperwarn">Not that one. ${d.trap || ""}</div>`;
+    }));
+  host.querySelectorAll("[data-lesson]").forEach(chip =>
+    chip.addEventListener("click", () => showLesson(chip.dataset.lesson)));
+  host.querySelectorAll("[data-place-l]").forEach(chip =>
+    chip.addEventListener("click", () => placeMathLayer(chip.dataset.placeL)));
+  $("lessonBack").addEventListener("click", () => {
+    state.mathFor = null;
+    renderMathPanel();
+  });
+}
+
 async function renderMathPanel(){
   const host = $("mathBody");
   const node = nodeById(state.sel);
@@ -9164,6 +9301,7 @@ async function renderMathPanel(){
   }
   if (state.mathFor === node.id && state.mathEntry){
     paintMath(state.mathEntry);
+    offerLesson(node.type);
     return;
   }
   host.innerHTML = `<div class="empty" style="padding:14px">working it through…</div>`;
