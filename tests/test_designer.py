@@ -1176,6 +1176,15 @@ def _():
     assert over_the_wire["tried"][0]["graph"]["nodes"], \
         "the graph does not survive serialisation"
 
+    # every kind that produces a button must be counted, or the banner
+    # contradicts the cards under it — which it did, saying nothing could go
+    # on the canvas above two imports that could
+    counter_all = PAGE[PAGE.index("function openableCount"):]
+    counter_all = counter_all[: counter_all.index("\nfunction scoutCard")]
+    for kind in ("draft", "importable", "repo"):
+        assert f'"{kind}"' in counter_all, \
+            f"{kind} findings are not counted, so the banner will contradict them"
+
     # the page counts what can reach the canvas, and says when nothing can
     assert "function openableCount" in PAGE
     counter = PAGE[PAGE.index("function openableCount"):]
@@ -1287,6 +1296,59 @@ def _():
         assert token in PAGE, f"{token} is missing from the scouts page"
 
 
+@check("an errand belongs to the account that sent it")
+def _():
+    """Scout results go beside that account's designs and run history, in its
+    own workspace — the same place, resolved the same way.
+
+    The catch is that a scout runs in a thread, and the account lives in a
+    ContextVar the thread cannot see. Asking for it later files every errand
+    into the machine's folder instead, silently and wrongly, which is the
+    mistake run history already learned to avoid.
+    """
+    import auth
+    import scouts
+
+    g = build([("i", "Input", {"shape": [8]}),
+               ("o", "Output", {"task": "classification"})],
+              [("i", "o", 0)], "Owned")
+
+    token = auth._current.set("someone")
+    try:
+        theirs = scouts.history_dir()
+        scout = scouts.start("maths", "", {}, g)
+    finally:
+        auth._current.reset(token)      # the request ends; the thread runs on
+
+    assert scout.settled.wait(timeout=60), "the errand never settled"
+    assert scout.home == theirs, \
+        f"the errand was filed to {scout.home}, not the account's {theirs}"
+    assert (theirs / f"{scout.id}.json").exists(), \
+        "it was written somewhere else"
+
+    token = auth._current.set("someone")
+    try:
+        assert scout.id in {h["id"] for h in scouts.history()}
+    finally:
+        auth._current.reset(token)
+
+    # and another account does not see it
+    assert scout.id not in {h["id"] for h in scouts.history()}, \
+        "an errand is visible outside the account that ran it"
+
+    # the resolution must happen at start, not inside the thread
+    body = inspect.getsource(scouts.start)
+    assert "home=history_dir()" in body, \
+        "the account is resolved inside the worker, where it is not visible"
+
+    scouts.forget(scout.id)
+    token = auth._current.set("someone")
+    try:
+        scouts.forget(scout.id)
+    finally:
+        auth._current.reset(token)
+
+
 @check("an errand survives leaving the page")
 def _():
     """Forty seconds of searching the internet should not be lost by clicking
@@ -1308,7 +1370,9 @@ def _():
     assert scout.settled.wait(timeout=20), "the errand never settled"
     assert scout.status == "done", scout.error
 
-    kept = scouts.HISTORY / f"{scout.id}.json"
+    # HISTORY is a function now, because where an errand belongs depends on
+    # who sent it
+    kept = scouts.history_dir() / f"{scout.id}.json"
     assert kept.exists(), "a finished errand was not written down"
 
     # and it is readable after the register is emptied, which is what a

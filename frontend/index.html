@@ -6246,8 +6246,12 @@ function paintScout(d){
 /* How many findings could actually reach the canvas. Zero is a fact about the
    search worth stating, because an absent button looks like a broken one. */
 function openableCount(d){
+  // Every kind that can produce a button has to be counted here, or the
+  // banner contradicts the cards below it — which it did for a whole version,
+  // saying nothing could go on the canvas above two that could.
   return (d.findings || []).reduce((n, f) => {
     if (f.kind === "draft") return n + (f.ok ? 1 : 0);
+    if (f.kind === "importable") return n + (f.works ? 1 : 0);
     if (f.kind === "repo")
       return n + (f.tried || []).filter(t => t.imported && t.exact !== false).length;
     return n;

@@ -57,6 +57,11 @@ class Scout:
     stop: threading.Event = field(default_factory=threading.Event)
     #: set once the errand is finished *and* written down
     settled: threading.Event = field(default_factory=threading.Event)
+    #: Where to file it, resolved while the request is still around. The
+    #: account lives in a ContextVar, which a worker thread cannot see — so
+    #: asking later would file every errand into the machine's own folder
+    #: rather than the account's, silently.
+    home: Optional[Path] = None
 
     def say(self, text: str, detail: str = "") -> None:
         self.steps.append({"at": round(time.time() - self.started, 1),
@@ -73,15 +78,21 @@ class Scout:
 
 SCOUTS: Dict[str, Scout] = {}
 
-#: Finished scouts are written here. An errand that took forty seconds and
-#: reached the internet should survive leaving the page — and two searches for
-#: the same thing return slightly different repositories, which is worth being
-#: able to compare rather than only regret.
-HISTORY = Path(__file__).resolve().parent / "scouts"
+#: Finished scouts are written into the signed-in account's workspace, beside
+#: its designs and run history — the same place, resolved the same way, so an
+#: errand belongs to whoever sent it out rather than to the machine. An errand
+#: that took forty seconds and reached the internet should survive leaving the
+#: page, and two searches for the same thing return slightly different
+#: repositories, which is worth being able to compare rather than only regret.
+def history_dir() -> Path:
+    import auth
+
+    return auth.sub("scouts")
 
 
 def _keep(scout: "Scout") -> None:
     try:
+        HISTORY = scout.home or history_dir()
         HISTORY.mkdir(parents=True, exist_ok=True)
         blob = scout.snapshot()
         blob["kept_at"] = time.time()
@@ -93,6 +104,7 @@ def _keep(scout: "Scout") -> None:
 def history(limit: int = 40) -> List[Dict[str, Any]]:
     """Past errands, newest first, without their findings."""
     out = []
+    HISTORY = history_dir()
     if not HISTORY.exists():
         return out
     for path in sorted(HISTORY.glob("*.json"),
@@ -114,7 +126,7 @@ def recall(scout_id: str) -> Optional[Dict[str, Any]]:
     live = SCOUTS.get(scout_id)
     if live:
         return live.snapshot()
-    path = HISTORY / f"{scout_id}.json"
+    path = history_dir() / f"{scout_id}.json"
     if not path.exists():
         return None
     try:
@@ -124,7 +136,7 @@ def recall(scout_id: str) -> Optional[Dict[str, Any]]:
 
 
 def forget(scout_id: str) -> bool:
-    path = HISTORY / f"{scout_id}.json"
+    path = history_dir() / f"{scout_id}.json"
     if path.exists():
         path.unlink()
         return True
@@ -173,7 +185,8 @@ CATALOG = [
 
 def start(kind: str, goal: str, config: Dict[str, Any],
           graph: Optional[Dict[str, Any]] = None) -> Scout:
-    scout = Scout(id=uuid.uuid4().hex[:12], kind=kind, goal=goal)
+    scout = Scout(id=uuid.uuid4().hex[:12], kind=kind, goal=goal,
+                  home=history_dir())
     SCOUTS[scout.id] = scout
     runner = {"code": _scout_code, "papers": _scout_papers,
               "imports": _scout_imports, "draft": _scout_draft,

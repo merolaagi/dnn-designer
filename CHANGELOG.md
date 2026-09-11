@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.71.1
+
+**Where scout results are saved: your account's workspace**, beside its designs
+and run history, resolved the same way. They already persisted — under *already
+sent out* on the Scouts page — but into the machine's folder rather than
+anyone's in particular, so two accounts shared one list.
+
+The catch, and it would have been silent: a scout runs in a thread, and the
+signed-in account lives in a ContextVar that a thread cannot see. Asking for it
+inside the worker files every errand into the machine's folder and looks like it
+worked. It is resolved when the errand starts, while the request is still
+around — the same fix run history already carries, for the same reason.
+
+**Fixed: the banner contradicted the cards under it.** Your screenshot shows
+*"Nothing here can go on the canvas"* directly above two `ResidualBlock` cards
+with **Open on the canvas** buttons. The counter knew about drafted designs and
+scanned repositories and had never been told about imported classes, so it
+counted zero while the cards counted two. Every kind that can produce a button
+is now counted, and a test lists them so the next kind cannot be forgotten.
+
 ## 1.71.0
 
 **The agent, which 1.70.0 was not.** Last version put the config-working-out
