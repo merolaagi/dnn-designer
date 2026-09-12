@@ -1222,6 +1222,36 @@ i.covered{
   resize:vertical;
 }
 .wbinput:focus,.wbtext:focus{outline:none;border-color:var(--amber)}
+.dossier{border-color:#DCD2F5}
+.dossone{
+  margin:7px 0 0;font-size:14px;line-height:1.55;color:#231C3D;font-weight:500;
+}
+.lineage{position:relative;padding-left:18px;margin-top:4px}
+.lineage::before{
+  content:"";position:absolute;left:4px;top:6px;bottom:6px;width:1px;
+  background:linear-gradient(#DCD2F5, #E4E9F0);
+}
+.lineagestep{
+  position:relative;padding:0 0 12px 0;
+  animation:lineagein .34s ease-out both;
+}
+@keyframes lineagein{
+  from{opacity:0;transform:translateX(-6px)}
+  to{opacity:1;transform:none}
+}
+.lineagestep i{
+  position:absolute;left:-18px;top:5px;width:9px;height:9px;border-radius:50%;
+  background:#fff;border:2px solid #8A5CF6;
+}
+.lineagestep b{display:block;font-size:12.5px;font-weight:600}
+.lineagestep span{
+  display:block;font-size:11.5px;line-height:1.6;color:#3C4B5F;margin-top:2px;
+}
+.attempt{
+  border-left:3px solid #E7C3C3;padding:5px 0 5px 11px;margin-bottom:10px;
+}
+.attempt b{display:block;font-size:12px;font-weight:600}
+.attempt p{margin:2px 0 0;font-size:11.5px;line-height:1.6;color:#3C4B5F}
 .wbnext{
   background:linear-gradient(#FBFAFF, #F6F4FD);border:1px solid #E4DFF5;
   border-radius:10px;padding:13px 15px;margin:11px 0;
@@ -5434,6 +5464,7 @@ function paintProblem(){
         .join("") || `<span class="wbchip">no claims yet</span>`}</div>
     </div>
 
+    ${paintDossier(p.dossier)}
     ${paintMethod(p.method)}
 
     ${s.verdict === "empty" ? `
@@ -5554,6 +5585,43 @@ function paintProblem(){
    problem — "five claims and none tested against an example" rather than
    "always test examples". Every test behind this reads the problem's own
    contents, so none of it can be satisfied by agreeing with it. */
+/* What the problem actually says, what it stands on, and what has been tried.
+   The failed attempts are the expensive half: the literature records what
+   worked, and the folklore records what did not. Each is named with its
+   theorem and its reason, because "it is hard" is not information. */
+function paintDossier(d){
+  if (!d) return "";
+  return `
+    <div class="wbcard dossier">
+      <div class="wbtitle"><b>${d.name}</b>
+        <span class="${d.status === "solved" ? "wb-closed" : "wb-open"}">${
+          d.status}</span></div>
+      <p class="dossone">${d.one_line}</p>
+
+      <div class="mathsec">what it says, exactly</div>
+      <p class="wbstatement">${d.statement}</p>
+
+      <div class="mathsec">why it resists</div>
+      <p class="wbstatement">${d.why_hard}</p>
+
+      <div class="mathsec">what it stands on</div>
+      <div class="lineage">${d.lineage.map(([what, why], i) => `
+        <div class="lineagestep" style="animation-delay:${i * 70}ms">
+          <i></i><b>${what}</b><span>${why}</span></div>`).join("")}</div>
+
+      <div class="mathsec">what has been tried, and why it failed</div>
+      ${d.attempts.map(([what, why]) => `
+        <div class="attempt"><b>${what}</b><p>${why}</p></div>`).join("")}
+
+      ${d.settled_by ? `<div class="paperok"><b>Settled.</b>
+        ${d.settled_by}</div>` : ""}
+      ${d.open_relative ? `<div class="paperwarn">${d.open_relative}</div>` : ""}
+
+      <div class="mathsec">where machine learning stands on this</div>
+      <p class="wbstatement">${d.ml_note}</p>
+    </div>`;
+}
+
 function paintMethod(m){
   if (!m) return "";
   const next = m.next;

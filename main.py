@@ -42,6 +42,7 @@ import workbook
 import quantize as quant
 import scouts
 import watcher
+import dossier
 import method
 import workbench
 import tracer
@@ -431,6 +432,19 @@ class StatusPayload(BaseModel):
     note: str = ""
 
 
+@app.get("/api/dossiers")
+def dossier_list():
+    return {"dossiers": dossier.listing()}
+
+
+@app.get("/api/dossiers/{dossier_id}")
+def dossier_one(dossier_id: str):
+    entry = dossier.get(dossier_id)
+    if not entry:
+        raise HTTPException(404, detail={"message": "No briefing for that."})
+    return entry
+
+
 @app.get("/api/problems")
 def problem_list():
     return {"problems": workbench.listing()}
@@ -451,8 +465,15 @@ def problem_open(problem_id: str):
     if not problem:
         raise HTTPException(404, detail={"message": "No such problem."})
     standing = workbench.standing(problem)
+    # If what was stated is a problem there is a briefing for, say so: the
+    # lineage and the failed attempts are the expensive part to find, and
+    # somebody who has just typed "Poincaré conjecture" should not have to
+    # go looking for them.
+    known = dossier.suggest(problem.get("title", ""),
+                            problem.get("statement", ""))
     return {**problem, "standing": standing,
-            "method": method.where(problem, standing)}
+            "method": method.where(problem, standing),
+            "dossier": known}
 
 
 @app.post("/api/problems/{problem_id}/claims")

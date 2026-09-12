@@ -1,0 +1,188 @@
+{
+ "id": "1d88a1ae6fae",
+ "kind": "imports",
+ "goal": "/var/folders/m1/n3wh4h6n5n15n9xnx0bppgwm0000gn/T/tmptd1_d_i9/proj",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Reading /private/var/folders/m1/n3wh4h6n5n15n9xnx0bppgwm0000gn/T/tmptd1_d_i9/proj",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "3 files, 3 nn.Module classes",
+   "detail": "looking at 3 of them"
+  },
+  {
+   "at": 0.0,
+   "text": "   Plain: 3 layers, 68 parameters, matching torch",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Configured: 3 layers, 544 parameters, matching torch \u2014 with config_cfg",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Impossible: needs something that cannot be worked out",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "2 of 3 can be imported",
+   "detail": "Each one below carries the argument and the Setup block that made it work, checked by importing with them."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "importable",
+   "cls": "Configured",
+   "file": "pkg/nets.py",
+   "foreign": "",
+   "works": true,
+   "args": "config_cfg",
+   "setup": "from pkg.configs import BlockConfig\nconfig_cfg = BlockConfig(input_dims=16, hidden_dims=32)",
+   "graph": {
+    "name": "Configured",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        16
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Linear",
+      "params": {
+       "units": 32,
+       "bias": true
+      },
+      "label": "fc",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 216
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 3,
+   "parameters": 544,
+   "torch": 544,
+   "exact": true,
+   "summary": "3 layers, 544 parameters, matching torch \u2014 with config_cfg"
+  },
+  {
+   "kind": "importable",
+   "cls": "Plain",
+   "file": "pkg/nets.py",
+   "foreign": "",
+   "works": true,
+   "args": "",
+   "setup": "",
+   "graph": {
+    "name": "Plain",
+    "nodes": [
+     {
+      "id": "i1",
+      "type": "Input",
+      "params": {
+       "shape": [
+        16
+       ],
+       "dtype": "float"
+      },
+      "label": "x",
+      "x": 0,
+      "y": 0
+     },
+     {
+      "id": "i2",
+      "type": "Linear",
+      "params": {
+       "units": 4,
+       "bias": true
+      },
+      "label": "fc",
+      "x": 0,
+      "y": 108
+     },
+     {
+      "id": "i3",
+      "type": "Output",
+      "params": {
+       "task": "classification"
+      },
+      "label": "",
+      "x": 0,
+      "y": 216
+     }
+    ],
+    "edges": [
+     {
+      "id": "e1",
+      "source": "i1",
+      "target": "i2",
+      "port": 0
+     },
+     {
+      "id": "e2",
+      "source": "i2",
+      "target": "i3",
+      "port": 0
+     }
+    ]
+   },
+   "layers": 3,
+   "parameters": 68,
+   "torch": 68,
+   "exact": true,
+   "summary": "3 layers, 68 parameters, matching torch"
+  },
+  {
+   "kind": "importable",
+   "cls": "Impossible",
+   "file": "pkg/nets.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "needs something that cannot be worked out",
+   "why": "Could not work out tokenizer: no type given. Those are decisions rather than values."
+  }
+ ],
+ "error": "",
+ "seconds": 0.0,
+ "kept_at": 1789184500.7522979
+}

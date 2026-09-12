@@ -1485,6 +1485,59 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("a briefing names its barriers, and does not invent one")
+def _():
+    """Written for somebody who can read mathematics. The failed attempts are
+    the expensive half — the literature records what worked, the folklore
+    records what did not — and each has to be named with its theorem, because
+    "it is hard" is not information.
+    """
+    import dossier
+
+    entries = dossier.listing()
+    assert len(entries) >= 6, len(entries)
+
+    for entry in entries:
+        full = dossier.get(entry["id"])
+        assert full["statement"] and len(full["statement"]) > 120, \
+            f"{entry['id']} has no real statement"
+        assert full["lineage"], f"{entry['id']} stands on nothing"
+        assert full["attempts"], f"{entry['id']} records no failed attempts"
+        for what, why in full["attempts"]:
+            assert len(why) > 60, f"{entry['id']}: '{what}' gives no reason"
+        assert full["ml_note"], f"{entry['id']} does not say where ML stands"
+        if full["status"] == "solved":
+            assert full.get("settled_by"), \
+                f"{entry['id']} is solved and does not say by whom"
+
+    # the barriers are named with their results, not described as difficulty
+    p_np = dossier.get("p_np")
+    attempts = " ".join(why for _, why in p_np["attempts"])
+    for barrier in ("Baker", "Razborov", "Aaronson"):
+        assert barrier in attempts, f"{barrier} barrier is not named"
+
+    poincare = dossier.get("poincare")
+    assert "Whitehead manifold" in " ".join(w for _, w in poincare["attempts"])
+    assert "Perelman" in poincare["settled_by"]
+    # and it does not pretend the solved case is open
+    assert poincare["status"] == "solved"
+    assert "smooth 4-dimensional" in poincare.get("open_relative", "")
+
+    # recognising a problem from what the user typed, and refusing to guess
+    assert dossier.suggest("poincare conjecture", "loops shrink to a point")["id"] \
+        == "poincare"
+    assert dossier.suggest("3n+1", "hailstone")["id"] == "collatz"
+    assert dossier.suggest("my own thing", "about graphs") is None, \
+        "a briefing was invented for a problem it does not have"
+
+    # the machine learning notes must include the honest negatives
+    assert "Claiming otherwise would be selling" in poincare["ml_note"]
+    assert dossier.get("p_np")["ml_note"].startswith("Nothing")
+
+    assert "function paintDossier" in PAGE
+    assert "what has been tried, and why it failed" in PAGE
+
+
 @check("the method is checked against what was actually done")
 def _():
     """The method is not a secret and reciting it is worthless. What is worth

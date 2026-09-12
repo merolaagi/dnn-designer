@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.77.0
+
+**Briefings, written for somebody who can read mathematics.** State a problem
+the workbench recognises and it produces the dossier: the statement with its
+quantifiers, what it stands on, and what has been tried with the reason each
+attempt failed.
+
+Six so far — Poincaré, Riemann, Navier–Stokes, P vs NP, Collatz, Fermat.
+
+The failed attempts are the expensive half. The literature records what worked;
+the folklore records what did not, and a newcomer rediscovers it slowly. Each
+one is named with its result:
+
+- **P vs NP** — relativization (Baker–Gill–Solovay 1975), natural proofs
+  (Razborov–Rudich 1994), algebrization (Aaronson–Wigderson 2008). Three
+  barriers, each ruling out a style of argument, and any proof must evade all
+  three.
+- **Poincaré** — Whitehead's 1934 announcement and his own counterexample to
+  it, the Whitehead manifold: contractible does not imply standard, which is
+  the whole difficulty in miniature. Surgery theory stops at n ≥ 5 because the
+  Whitney trick needs 2 + 2 < n.
+- **Navier–Stokes** — Tao's 2016 averaged equation blows up while obeying the
+  same energy identity and scaling, so energy methods alone cannot succeed.
+  That is a theorem about the method, not a difficulty.
+
+**Poincaré is reported as solved**, because it is, and the method that closed
+it is the interesting part: Ricci flow with surgery, the W-entropy, κ-non
+collapsing. The smooth four-dimensional case is flagged separately as the one
+still open.
+
+**Where machine learning stands is stated per problem, including the
+negatives.** For P vs NP: nothing. For Poincaré: the difficulty was analytic
+control of a geometric flow near singularities, and claiming ML addresses that
+would be selling something. For Navier–Stokes it is honestly plausible —
+searching initial data for blow-up has a computable objective — and for Collatz
+it is not absurd. Davies et al. (Nature 2021) is cited as the real shape of a
+contribution: machine-generated conjecture, human proof.
+
+The lineage draws as a timeline, each result arriving in turn.
+
 ## 1.76.0
 
 **The workbench teaches the method, by checking it against what you did.**
