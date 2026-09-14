@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.80.0
+
+**The layer palette can no longer be docked under the canvas**, and anyone
+already saved there is moved back to the side on the next load.
+
+You are right that it does not work there. The palette is a vertical list of
+layer types with a filter box; underneath the canvas it becomes a wide strip
+with one item per row, and the filter runs the width of the screen. Offering
+the option was the mistake, not choosing it — so it is gone, and only left and
+right remain.
+
+The inspector keeps its bottom dock, where a wide Code or Train panel is the
+right shape.
+
+**The migration matters as much as the removal.** Somebody already docked at
+the bottom could not reach a usable control to change it, and the preference is
+restored on every visit — so removing the button alone would have left them
+exactly where they were. A saved `bottom` palette now loads as `left`, with the
+sizes and the folded state untouched.
+
+Between this and the strip in 1.79.0, the panel behaves the way it was asked
+to: on the side, collapsible, and with something left to click when it is
+collapsed.
+
 ## 1.79.1
 
 **Your desktop layout can be put back: the reset control in the canvas

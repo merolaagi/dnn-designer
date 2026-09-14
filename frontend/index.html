@@ -2403,7 +2403,6 @@ body.sizing{user-select:none}
       <button class="panelfold" data-fold="palette" title="Hide the layers">&#171;</button>
       <span class="dockctl" data-panel="palette">
         <button data-dock="left" title="Dock left">&#9612;</button>
-        <button data-dock="bottom" title="Dock bottom">&#9604;</button>
         <button data-dock="right" title="Dock right">&#9616;</button>
       </span></div>
     <input id="search" placeholder="Filter layers" spellcheck="false">
@@ -5339,8 +5338,16 @@ function saveLayout(){
 async function loadLayout(){
   let saved = {};
   try { saved = await (await fetch(API + "/api/prefs")).json(); } catch {}
+  const dock = { ...DEFAULT_LAYOUT.dock, ...(saved.dock || {}) };
+  // The palette is a vertical list of layer types. Under the canvas it becomes
+  // a wide strip with one item per row and a filter box across the top, which
+  // is unusable — so bottom is no longer offered, and anyone already saved
+  // there is moved back rather than left stuck with a preference they cannot
+  // reach the control to change.
+  if (dock.palette === "bottom") dock.palette = "left";
+
   state.layout = {
-    dock: { ...DEFAULT_LAYOUT.dock, ...(saved.dock || {}) },
+    dock,
     sizes: { ...DEFAULT_LAYOUT.sizes, ...(saved.sizes || {}) },
     hidden: { palette: false, inspector: false, ...(saved.hidden || {}) },
     importDialog: saved.importDialog || null,

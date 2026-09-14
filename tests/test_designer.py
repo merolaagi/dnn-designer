@@ -6053,6 +6053,41 @@ def _():
     assert "scrollbar-color" in css, "Firefox scrollbars are unstyled"
 
 
+@check("the layer palette cannot be docked where it does not work")
+def _():
+    """It is a vertical list of layer types. Under the canvas it becomes a wide
+    strip with one item per row and a filter box across the top — the shape is
+    wrong, and offering the option was the mistake rather than choosing it.
+
+    Anyone already saved there has to be moved back, because the control to
+    change it is on the panel they cannot use.
+    """
+    import re
+
+    # the palette offers left and right only; the inspector keeps bottom,
+    # where a wide Code or Train panel is the right shape
+    palette = PAGE[PAGE.index('<span class="dockctl" data-panel="palette">'):]
+    palette = palette[: palette.index("</span>")]
+    assert 'data-dock="left"' in palette and 'data-dock="right"' in palette
+    assert 'data-dock="bottom"' not in palette, \
+        "the palette can still be docked under the canvas"
+
+    assert PAGE.count('data-dock="bottom"') == 1, \
+        "the inspector lost its bottom dock, or the palette kept one"
+
+    # and a saved bottom palette is migrated on load
+    script = PAGE[PAGE.index("<script>"):]
+    loader = script[script.index("async function loadLayout"):]
+    loader = loader[: loader.index("\n}")]
+    assert 'dock.palette === "bottom"' in loader, \
+        "somebody already saved there stays stuck"
+    assert 'dock.palette = "left"' in loader
+
+    # the migration must not disturb anything else
+    assert "DEFAULT_LAYOUT.dock" in loader
+    assert "saved.hidden" in loader, "the folded state is discarded"
+
+
 @check("a layout that can be dragged wrong can be put back")
 def _():
     """Docking the palette to the bottom and hiding the inspector is two drags
