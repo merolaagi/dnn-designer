@@ -2221,10 +2221,94 @@ body.sizing{user-select:none}
 }
 .toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ------------------------------------------------------------------ *
+ * Small screens.
+ *
+ * This is laid out as a desktop tool — a rail, a canvas, two docked
+ * panels — and none of that survives a phone unchanged. Rather than
+ * rebuild it, the shell folds: the rail becomes a drawer, the panels
+ * become full-width sheets under the canvas, and every multi-column
+ * grid collapses to one column.
+ *
+ * The canvas keeps its own gestures. Pinch and drag were already
+ * pointer-based rather than mouse-based, so they work on a touch
+ * screen without changes — which is why this is a stylesheet and not
+ * a rewrite.
+ * ------------------------------------------------------------------ */
+
+#railToggle{display:none}
+
+@media (max-width: 880px){
+  #railToggle{
+    display:block;position:fixed;left:10px;top:10px;z-index:130;
+    width:38px;height:38px;border-radius:10px;border:1px solid var(--paper-3);
+    background:#fff;font-size:16px;line-height:1;color:var(--text);
+    box-shadow:0 2px 6px rgba(22,32,46,.12);
+  }
+  header{padding-left:56px}
+  header .grow{min-width:0}
+
+  /* the rail slides over rather than taking a fifth of the screen */
+  #rail{
+    position:fixed;left:0;top:0;bottom:0;z-index:129;width:232px;
+    transform:translateX(-100%);transition:transform .18s ease-out;
+    box-shadow:0 0 40px rgba(22,32,46,.18);
+  }
+  body.railopen #rail{transform:none}
+  body.railopen::after{
+    content:"";position:fixed;inset:0;z-index:128;background:rgba(22,32,46,.34);
+  }
+
+  /* canvas first, panels beneath it: a phone is one column */
+  .shell{flex-direction:column;overflow-y:auto}
+  #stage{min-height:58vh}
+  .panel{
+    width:auto !important;max-width:none;flex:none;
+    border-left:none;border-right:none;border-top:1px solid var(--paper-3);
+    max-height:none;
+  }
+  #splitter, .splitter{display:none}
+  #minimap{display:none}
+
+  /* one column everywhere a grid was two or more */
+  .cbsplit,.padgrid,.padtry,.paperflow,.scoutpick,.armrow,.domrow,
+  .qgrid,.kv{grid-template-columns:1fr !important}
+  .cbpanel{position:static}
+  .cbtree{max-height:240px}
+
+  /* the assistant is a sheet, not a floating window */
+  .dock{
+    left:8px;right:8px;bottom:64px;width:auto;max-width:none;
+    max-height:min(70vh, 560px);
+  }
+  #dockTab{right:12px;bottom:12px}
+
+  /* a table wider than the screen scrolls rather than squeezing */
+  table.runtable,table.armfacts,.mathtab{display:block;overflow-x:auto}
+
+  /* room to tap */
+  #rail button, .btn, .cbtabs button, .mathtabs button, .wbchip{
+    min-height:38px;
+  }
+  .btn.tiny{min-height:30px}
+  .toolbar{flex-wrap:wrap;max-width:calc(100vw - 24px)}
+  .provenance{left:12px;right:12px;transform:none;justify-content:center}
+  .wbwrap,.cbwrap,.scoutwrap,.domwrap,.padwrap{padding:16px 12px 32px}
+  .eqbig{font-size:15px}
+}
+
+@media (max-width: 520px){
+  header h1,.gname{font-size:15px}
+  .padhead h2{font-size:22px}
+  #stage{min-height:46vh}
+  .lessonsteps{padding-left:16px}
+}
 </style>
 </head>
 <body>
 
+<button id="railToggle" aria-label="Menu">&#9776;</button>
 <header>
   <div class="topline">
     <div class="brand"><b>Deep Network Designer</b><span id="ver">v</span></div>
@@ -3046,6 +3130,52 @@ svg.addEventListener("wheel", e => {
   const r = svg.getBoundingClientRect();
   zoomBy(e.deltaY < 0 ? 1.08 : 1/1.08, e.clientX - r.left, e.clientY - r.top);
 }, { passive:false });
+
+/* Pinch to zoom. Everything else on the canvas was already pointer-based and
+   worked by touch without changes, but zoom was bound to the wheel alone — so
+   a phone could pan around a network and never see more of it than it started
+   with. Two fingers are tracked here rather than by gesture events, which
+   Safari has and nothing else does. */
+const pinching = new Map();
+let pinchSpan = 0;
+
+svg.addEventListener("pointerdown", e => {
+  if (e.pointerType !== "touch") return;
+  pinching.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinching.size === 2) pinchSpan = pinchGap();
+});
+
+svg.addEventListener("pointermove", e => {
+  if (e.pointerType !== "touch" || !pinching.has(e.pointerId)) return;
+  pinching.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinching.size !== 2 || !pinchSpan) return;
+  e.preventDefault();
+  const span = pinchGap();
+  if (!span) return;
+  const r = svg.getBoundingClientRect();
+  const mid = pinchMiddle();
+  zoomBy(span / pinchSpan, mid.x - r.left, mid.y - r.top);
+  pinchSpan = span;
+}, { passive:false });
+
+const pinchEnd = e => {
+  pinching.delete(e.pointerId);
+  if (pinching.size < 2) pinchSpan = 0;
+};
+svg.addEventListener("pointerup", pinchEnd);
+svg.addEventListener("pointercancel", pinchEnd);
+svg.addEventListener("pointerleave", pinchEnd);
+
+function pinchGap(){
+  const [a, b] = [...pinching.values()];
+  if (!a || !b) return 0;
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function pinchMiddle(){
+  const [a, b] = [...pinching.values()];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
 
 /* Dragging the whole graph.
 
@@ -10473,6 +10603,14 @@ async function openImportDialog(){
 
 $("btnImport").addEventListener("click", openImportDialog);
 $("dockTab").addEventListener("click", () => toggleDock());
+
+/* The rail is a drawer below 880px. It closes on any navigation, because a
+   menu that stays open over the thing you just chose is worse than no menu. */
+$("railToggle").addEventListener("click", () =>
+  document.body.classList.toggle("railopen"));
+document.querySelectorAll("#rail [data-page]").forEach(btn =>
+  btn.addEventListener("click", () =>
+    document.body.classList.remove("railopen")));
 $("btnImportCancel").addEventListener("click", () => $("modal").classList.remove("on"));
 $("modal").addEventListener("click", e => {
   if (e.target.id === "modal") $("modal").classList.remove("on");

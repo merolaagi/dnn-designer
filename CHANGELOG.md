@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.78.0
+
+**It works on a phone.**
+
+This is laid out as a desktop tool — a rail, a canvas, two docked panels — and
+none of that survives a small screen unchanged. Rather than rebuild it, the
+shell folds: the rail becomes a drawer that closes on navigating, the panels
+become full-width sheets beneath the canvas, every multi-column grid collapses
+to one, wide tables scroll rather than squeeze, and the assistant becomes a
+sheet instead of a 620px window.
+
+That could only be a stylesheet because the canvas was already pointer-driven
+rather than mouse-driven, with `touch-action: none` — so dragging nodes, drawing
+edges and panning all worked by touch without a line of change. There is a test
+now forbidding a mouse-only listener from creeping back in, since it would fail
+silently on a phone and work perfectly on the machine of whoever added it.
+
+**Except zoom, which did not work at all.** It was bound to the wheel alone, so
+a phone could pan around a network and never see more of it than it started
+with. Pinch is implemented by tracking two pointers rather than by gesture
+events, which Safari has and nothing else does. Verified in isolation: spreading
+zooms in, pinching zooms out, one finger does nothing, and a mouse is not a
+pinch.
+
+Tap targets are 38px on small screens, which is the part that makes the
+difference between usable and technically working.
+
 ## 1.77.0
 
 **Briefings, written for somebody who can read mathematics.** State a problem

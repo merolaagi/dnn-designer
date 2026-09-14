@@ -5991,6 +5991,53 @@ def _():
         assert effect in collapse, f"folding does not deal with {effect}"
 
 
+@check("the app folds onto a phone")
+def _():
+    """Laid out as a desktop tool — a rail, a canvas, two docked panels — and
+    none of that survives a phone unchanged. The shell folds rather than being
+    rebuilt, which is only honest if the interactions were already
+    touch-capable. Most were; zoom was not.
+    """
+    import re
+
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    assert 'name="viewport"' in PAGE, "no viewport, so a phone renders it at 980px"
+    assert "@media (max-width: 880px)" in css, "there is no small-screen layout"
+
+    # the rail becomes a drawer rather than eating a fifth of the width
+    small = css[css.index("@media (max-width: 880px)"):]
+    assert "body.railopen" in small, "the rail has no open state"
+    assert "translateX(-100%)" in small, "the rail is not tucked away"
+    assert "#railToggle" in PAGE, "there is nothing to open it with"
+
+    # and it closes on navigating, or it covers what you just chose
+    script = PAGE[PAGE.index("<script>"):]
+    closing = script[script.index('$("railToggle")'):]
+    closing = closing[: closing.index("\n\n")]
+    assert 'classList.remove("railopen")' in closing, \
+        "the drawer stays open over the page it opened"
+
+    # every multi-column grid has to collapse
+    for grid in (".cbsplit", ".padgrid", ".paperflow", ".scoutpick", ".armrow"):
+        assert grid in small, f"{grid} keeps its columns on a phone"
+
+    # the canvas was pointer-driven already, which is what makes this a
+    # stylesheet rather than a rewrite — so no mouse-only listener may creep in
+    assert 'addEventListener("mousedown"' not in script, \
+        "a mouse-only listener would not fire on a touch screen"
+    assert "touch-action:none" in css, "the canvas would scroll instead of pan"
+
+    # zoom was bound to the wheel alone, so a phone could pan and never zoom
+    assert "const pinching = new Map()" in script, "there is no pinch to zoom"
+    pinch = script[script.index("const pinching = new Map()"):]
+    pinch = pinch[: pinch.index("function pinchMiddle")]
+    assert 'e.pointerType !== "touch"' in pinch, \
+        "a mouse drag would be treated as a pinch"
+    assert "pinching.size !== 2" in pinch, "one finger would zoom"
+    assert "gesturestart" not in script, \
+        "relies on a Safari-only event instead of pointers"
+
+
 @check("nothing renders against a system-coloured default")
 def _():
     """The scrollbar track was never styled, only the thumb.
