@@ -148,6 +148,29 @@ header{
   border-left:2px solid var(--amber);padding:7px 9px;border-radius:0 4px 4px 0;
   margin-top:6px}
 .shell{flex:1;display:flex;min-height:0;position:relative}
+/* A folded panel collapses to a strip rather than to nothing, so the control
+   that brings it back is where the panel was. The width is animated, not the
+   display, which is why it is instant and does not reflow the canvas twice. */
+.panel{transition:width .16s ease-out, min-width .16s ease-out}
+.panel.folded{
+  width:0 !important;min-width:0 !important;padding:0;overflow:hidden;
+  border-left-width:0;border-right-width:0;
+}
+.foldstrip{
+  display:none;flex:none;width:26px;background:var(--paper-2);
+  border-right:1px solid var(--paper-3);cursor:pointer;
+  flex-direction:column;align-items:center;gap:9px;padding:11px 0;
+  color:var(--muted);
+}
+.foldstrip.right{border-right:none;border-left:1px solid var(--paper-3)}
+.foldstrip.on{display:flex}
+.foldstrip:hover{background:#fff;color:var(--text)}
+.foldstrip i{font-style:normal;font-size:12px}
+.foldstrip span{
+  writing-mode:vertical-rl;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;font-weight:600;
+}
+.foldstrip.left span{transform:rotate(180deg)}
 
 /* one page at a time: Design shows the canvas, everything else takes the width */
 .page{flex:1;display:none;min-width:0;min-height:0}
@@ -2369,6 +2392,8 @@ body.sizing{user-select:none}
 
   <section class="page" id="pageDesign">
   <div id="mainRow">
+  <button class="foldstrip left" id="paletteStrip" data-fold="palette"
+    title="Show the layers"><i>&#187;</i><span>Layers</span></button>
   <aside class="panel" id="palette">
     <div class="panelhead">
       <div class="paltabs">
@@ -2391,6 +2416,8 @@ body.sizing{user-select:none}
 
     <div class="toolbar" id="canvasTools">
       <button id="zhome" title="Reset the view">&#8962;</button>
+      <button id="zlayout"
+        title="Put the panels back where they started">&#9109;</button>
       <button id="zfit" title="Fit to view">&#8982;</button>
       <button id="zout" title="Zoom out">&minus;</button>
       <span class="zoomval" id="zoomVal">100%</span>
@@ -2451,6 +2478,8 @@ body.sizing{user-select:none}
   </main>
 
   <div class="splitter" data-panel="inspector" id="splitInspector"></div>
+  <button class="foldstrip right" id="inspectorStrip" data-fold="inspector"
+    title="Show the panel"><i>&#171;</i><span>Panel</span></button>
   <aside class="panel" id="inspector">
     <div class="panelhead"><h2 id="inspTitle">Panel</h2>
       <button class="panelfold" data-fold="inspector" title="Hide the panel">&#187;</button>
@@ -3098,6 +3127,7 @@ function zoomBy(f, cx, cy){
 $("zin").onclick  = () => zoomBy(1.2);
 $("zout").onclick = () => zoomBy(1/1.2);
 $("zfit").onclick = fitView;
+$("zlayout").onclick = resetLayout;
 
 function fitView(){
   const ns = state.graph.nodes;
@@ -5225,21 +5255,32 @@ function collapseGlyph(name){
 }
 
 function applyCollapse(){
-  // A folded panel leaves nothing behind. The rail is where panels are opened
-  // from — Layers and Files for the left one, Code, Maths, Train, Assistant and
-  // Checks for the right — so a strip beside the canvas would be a second
-  // control for a job the rail already does.
+  // A folded panel used to vanish outright, taking its own unfold button with
+  // it — so it could be closed and then only reopened from the rail, which
+  // opens a *tab* rather than the panel. That is why it felt stuck: the
+  // control disappeared at exactly the moment it was needed.
+  //
+  // Now it leaves a strip. The strip is the control, it is always there, and
+  // it says which panel it is.
   ["palette", "inspector"].forEach(name => {
     const panel = $(name);
     const hidden = !!state.layout.hidden[name];
-    panel.style.display = hidden ? "none" : "";
+    panel.classList.toggle("folded", hidden);
+    panel.style.display = "";
     const splitter = $(name === "palette" ? "splitPalette" : "splitInspector");
     if (splitter){
       splitter.classList.toggle("hidden",
         hidden || state.layout.dock[name] === "bottom");
     }
     const toggle = panel.querySelector(".panelfold");
-    if (toggle) toggle.textContent = collapseGlyph(name);
+    if (toggle){
+      toggle.textContent = collapseGlyph(name);
+      toggle.title = hidden
+        ? `Show the ${name === "palette" ? "layers" : "panel"}`
+        : `Hide the ${name === "palette" ? "layers" : "panel"}`;
+    }
+    const strip = $(name + "Strip");
+    if (strip) strip.classList.toggle("on", hidden);
   });
 
   const bottom = $("bottomRow");
@@ -5248,8 +5289,32 @@ function applyCollapse(){
   bottom.classList.toggle("on", anyBottom);
   $("splitBottom").classList.toggle("hidden", !anyBottom);
   markRailPalette();
-  render();
-  drawMinimap();
+  // The canvas does not change when a panel folds — only how much of it is
+  // visible. Redrawing every node and edge on each toggle is what made this
+  // feel slow on a large design; the SVG scales itself, so one frame later is
+  // soon enough for the minimap.
+  requestAnimationFrame(drawMinimap);
+}
+
+/* A layout that can be dragged into a state with no way back is a trap, and
+   this one had no reset: docking the palette to the bottom and hiding the
+   inspector is two drags to reach and nothing to undo, because the saved
+   preference is restored on every visit. */
+async function resetLayout(){
+  state.layout = {
+    dock: { ...DEFAULT_LAYOUT.dock },
+    sizes: { ...DEFAULT_LAYOUT.sizes },
+    hidden: { palette: false, inspector: false },
+    importDialog: null,
+  };
+  applyLayout();
+  applyCollapse();
+  try{
+    await fetch(API + "/api/prefs", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state.layout) });
+  } catch { /* the screen is right either way; the next visit may not be */ }
+  toast("Panels back where they started.");
 }
 
 function toggleCollapse(name){
@@ -5258,7 +5323,7 @@ function toggleCollapse(name){
   saveLayout();
 }
 
-document.querySelectorAll(".panelfold, .tabfold").forEach(button =>
+document.querySelectorAll(".panelfold, .tabfold, .foldstrip").forEach(button =>
   button.addEventListener("click", () => toggleCollapse(button.dataset.fold)));
 let layoutSaveTimer = null;
 function saveLayout(){

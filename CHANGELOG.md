@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.79.1
+
+**Your desktop layout can be put back: the reset control in the canvas
+toolbar**, beside the zoom buttons.
+
+What the screenshot showed was a saved layout, not a regression from the mobile
+work — the palette docked to the bottom and the inspector hidden. I checked
+before answering: every rule added for small screens sits inside its media
+query, and a test now asserts that, because a desktop regression caused by a
+phone stylesheet is exactly the failure worth pinning.
+
+But the layout being *saved* is what made it feel permanent. Docking the palette
+to the bottom is two drags to reach, the preference is restored on every visit,
+and there was no way back — a layout that can be dragged into a state with no
+reset is a trap, and that part is mine.
+
+The reset restores the docking, the sizes and the folded state together, and
+writes it to the server, so a reload does not bring the old one back.
+
+## 1.79.0
+
+**Fixed: a folded panel could not be unfolded.**
+
+It removed itself with `display: none`, which took its own unfold button away
+with it. After that the only way back was the rail — and the rail opens a *tab*,
+not the panel, so if the panel was closed the rail appeared to do nothing. That
+is what "stuck in one frame, doesn't respond to the collapsing arrow" was: the
+control vanished at exactly the moment it was needed.
+
+**Each panel now folds to a strip**, on its own side, labelled *Layers* or
+*Panel*, with a chevron pointing the way it will open. The strip is always
+there, it is the control, and clicking it brings the panel back. The fold
+button's tooltip says which way it will go rather than always saying "hide".
+
+**And folding is instant now.** It was calling `render()`, redrawing every node
+and edge of the design on each toggle — on a large network that is the whole
+canvas twice per click, which is exactly the slowness you were feeling. The
+canvas does not change when a panel folds; only how much of it you can see. The
+width animates, the SVG scales itself, and the minimap catches up one frame
+later. Verified: zero canvas redraws caused by folding.
+
 ## 1.78.0
 
 **It works on a phone.**

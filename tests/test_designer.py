@@ -6053,6 +6053,84 @@ def _():
     assert "scrollbar-color" in css, "Firefox scrollbars are unstyled"
 
 
+@check("a layout that can be dragged wrong can be put back")
+def _():
+    """Docking the palette to the bottom and hiding the inspector is two drags
+    to reach, and the preference is restored on every visit — so without a
+    reset it is permanent. A layout with no way back is a trap."""
+    script = PAGE[PAGE.index("<script>"):]
+    assert "async function resetLayout" in PAGE, "there is no reset"
+    body = script[script.index("async function resetLayout"):]
+    body = body[: body.index("\nfunction toggleCollapse")]
+
+    # it must restore every part, not only the visible one
+    for part in ("dock", "sizes", "hidden"):
+        assert f"{part}:" in body, f"{part} is not restored"
+    assert "DEFAULT_LAYOUT.dock" in body, "it invents defaults of its own"
+
+    # and write it back, or the next reload undoes the fix
+    assert '"/api/prefs"' in body and '"PUT"' in body, \
+        "the reset is not saved, so a reload brings the bad layout back"
+
+    # reachable without knowing it exists
+    assert 'id="zlayout"' in PAGE, "the reset has no control"
+    assert '$("zlayout").onclick = resetLayout' in PAGE, \
+        "the control is not wired"
+
+    # the mobile stylesheet must stay inside its media query: a desktop
+    # regression from a phone layout is the failure this follows
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    after = css[css.index("#railToggle{display:none}"):]
+    import re
+
+    leaked = []
+    for match in re.finditer(r"(^|\})\s*([^@{}]+)\{", after):
+        selector = match.group(2).strip()
+        before = after[: match.start()]
+        if before.count("@media") > before.count("\n}\n"):
+            continue
+        if selector and not selector.startswith("/*"):
+            leaked.append(selector)
+    assert leaked == ["#railToggle"], \
+        f"these mobile rules apply at desktop width too: {leaked}"
+
+
+@check("a folded panel leaves something to unfold it with")
+def _():
+    """It vanished outright, taking its own unfold button with it — so it
+    could be closed and then reopened only from the rail, which opens a tab
+    rather than the panel. That is what "stuck in one frame" was: the control
+    disappeared at the moment it was needed.
+    """
+    script = PAGE[PAGE.index("<script>"):]
+    body = script[script.index("function applyCollapse"):]
+    body = body[: body.index("\nfunction toggleCollapse")]
+
+    assert 'panel.style.display = hidden ? "none" : ""' not in body, \
+        "the panel still removes itself, and its unfold button with it"
+    assert 'classList.toggle("folded", hidden)' in body, \
+        "folding is not a class, so it cannot animate or leave a strip"
+    assert "Strip" in body, "nothing is left behind when a panel folds"
+
+    # the strips exist, on both sides, and are wired to the same toggle
+    for strip in ('id="paletteStrip"', 'id="inspectorStrip"'):
+        assert strip in PAGE, f"{strip} is missing"
+    assert '.panelfold, .tabfold, .foldstrip' in PAGE, \
+        "the strip is not wired to the fold action"
+    assert ".foldstrip.on{display:flex}" in PAGE, \
+        "the strip never becomes visible"
+
+    # folding must not redraw the canvas: that is what made it slow
+    assert "\n  render();" not in body, \
+        "folding a panel redraws every node and edge"
+    assert "requestAnimationFrame(drawMinimap)" in body, \
+        "the minimap is redrawn synchronously on every toggle"
+
+    # and the button says which way it will go
+    assert 'toggle.title = hidden' in body, \
+        "the fold button does not say what it will do"
+
+
 @check("panels can be docked and resized")
 def _():
     for token in ('id="mainRow"', 'id="bottomRow"', 'class="splitter"',
