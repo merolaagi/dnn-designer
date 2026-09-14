@@ -5991,6 +5991,41 @@ def _():
         assert effect in collapse, f"folding does not deal with {effect}"
 
 
+@check("the panel strips work on a phone too")
+def _():
+    """The strips were added after the mobile layout and never met it. The
+    mobile rule sets `width: auto !important` on a panel, which beats
+    `.panel.folded{width:0}` — so on a phone a folded panel did not fold, and
+    the strip was a 26px column of sideways text in a stacked layout.
+
+    Folding is a width when panels sit side by side and a height when they are
+    stacked. Both have to be said.
+    """
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    mobile = css[css.index("@media (max-width: 880px)"):
+                 css.index("@media (max-width: 520px)")]
+
+    assert ".panel.folded{" in mobile, \
+        "the desktop fold rule is overridden on mobile and nothing replaces it"
+    folded = mobile[mobile.index(".panel.folded{"):]
+    folded = folded[: folded.index("}")]
+    assert "height:0" in folded, "a folded panel keeps its height when stacked"
+
+    assert ".foldstrip{" in mobile, "the strip keeps its desktop shape"
+    strip = mobile[mobile.index(".foldstrip{"):]
+    strip = strip[: strip.index("}")]
+    assert "flex-direction:row" in strip, "the strip is still a column"
+    assert "writing-mode:horizontal-tb" in mobile, \
+        "the label is still sideways on a phone"
+
+    # the toolbar has fifteen buttons and half a screen to sit over
+    assert "#zsnap,#zgrid,#zroute,#zmap,#zflow,#btnTidy,#zlayout{display:none}" \
+        in mobile, "all fifteen toolbar buttons wrap over the canvas"
+    for kept in ("#zin", "#zout", "#zfit", "#zpan", "#btnUndo"):
+        assert f"{kept}{{display:none}}" not in mobile, \
+            f"{kept} was hidden, and it is needed on a phone"
+
+
 @check("the app folds onto a phone")
 def _():
     """Laid out as a desktop tool — a rail, a canvas, two docked panels — and

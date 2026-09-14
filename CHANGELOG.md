@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.80.1
+
+**The panel strips did not work on a phone**, which is worth admitting rather
+than answering "yes" to.
+
+They arrived in 1.79.0, after the mobile layout in 1.78.0, and the two had never
+met. The mobile rule sets `width: auto !important` on a panel, which beats
+`.panel.folded{width:0}` — so on a phone a folded panel did not fold at all, and
+the strip was a 26px column of sideways text sitting in a stacked layout.
+
+Folding is a width when the panels sit beside each other and a height when they
+are stacked, and only the first had been said. Now both are: a folded panel
+collapses to nothing, and the strip becomes a bar across the top of where the
+panel was, with its label the right way up and its chevron pointing down.
+
+**The toolbar is trimmed too.** Fifteen buttons wrapped to three rows over a
+canvas that is already only half the screen. Snapping, grid weight, wire
+routing, tidy and the minimap are hidden below 880px — they are adjustments you
+make while arranging a design with a mouse, and the stacked layout ignores
+docking anyway. Zoom, fit, home, undo, redo, find and pan stay.
+
 ## 1.80.0
 
 **The layer palette can no longer be docked under the canvas**, and anyone

@@ -2291,6 +2291,23 @@ body.sizing{user-select:none}
     border-left:none;border-right:none;border-top:1px solid var(--paper-3);
     max-height:none;
   }
+  /* Folding is a width on a desktop and a height here, because the panels are
+     stacked rather than beside each other. Without this the mobile rule above
+     wins on width and a folded panel does not fold at all. */
+  .panel.folded{
+    width:auto !important;height:0;min-height:0;border-top-width:0;
+  }
+  /* And the strip is a bar across the top of where the panel was, not a
+     26px column of sideways text. */
+  .foldstrip{
+    width:auto;flex-direction:row;justify-content:center;gap:8px;
+    padding:11px 0;border-left:none;border-right:none;
+    border-top:1px solid var(--paper-3);
+  }
+  .foldstrip span{writing-mode:horizontal-tb}
+  .foldstrip.left span,.foldstrip.right span{transform:none}
+  .foldstrip.left i{transform:rotate(90deg)}
+  .foldstrip.right i{transform:rotate(-90deg)}
   #splitter, .splitter{display:none}
   #minimap{display:none}
 
@@ -2315,7 +2332,14 @@ body.sizing{user-select:none}
     min-height:38px;
   }
   .btn.tiny{min-height:30px}
-  .toolbar{flex-wrap:wrap;max-width:calc(100vw - 24px)}
+  /* Fifteen buttons wrap to three rows over a canvas that is already only
+     half the screen. These are the ones a phone cannot use well anyway —
+     snapping, grid weight, wire routing and the minimap are all adjustments
+     you make while arranging a design with a mouse. Zoom, fit, undo, find and
+     pan stay. */
+  .toolbar{flex-wrap:wrap;max-width:calc(100vw - 24px);gap:2px;padding:4px 6px}
+  #zsnap,#zgrid,#zroute,#zmap,#zflow,#btnTidy,#zlayout{display:none}
+  .toolbar .sep{display:none}
   .provenance{left:12px;right:12px;transform:none;justify-content:center}
   .wbwrap,.cbwrap,.scoutwrap,.domwrap,.padwrap{padding:16px 12px 32px}
   .eqbig{font-size:15px}
