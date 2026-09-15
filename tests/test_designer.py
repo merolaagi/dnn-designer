@@ -6026,6 +6026,50 @@ def _():
             f"{kept} was hidden, and it is needed on a phone"
 
 
+@check("the mobile stacking targets the element that holds the panels")
+def _():
+    """I stacked `.shell`, which holds the rail and the page. The panels are
+    children of the *page*, so the rule did nothing at all — everything stayed
+    side by side and the canvas was squeezed out of sight.
+
+    The test reads the markup rather than trusting the selector: whichever
+    element is the panels' parent is the one that has to be stacked.
+    """
+    import re
+
+    markup = PAGE[: PAGE.index("<script>")]
+    start = markup.index('<div class="shell">')
+    region = markup[start: markup.index('<aside class="panel" id="inspector"')]
+
+    # what actually encloses the panels
+    opened = re.findall(r'<(?:div|section|main|aside)[^>]*(?:id|class)="([^"]+)"',
+                        region)
+    assert "page" in " ".join(opened), \
+        "the panels are not inside a page element any more; re-read this test"
+
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    at = css.index("@media (max-width: 880px)")
+    depth, end = 0, at
+    for i in range(css.index("{", at), len(css)):
+        if css[i] == "{":
+            depth += 1
+        elif css[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    mobile = css[at:end]
+
+    assert ".page.on{flex-direction:column" in mobile, \
+        "the page is not stacked, so the panels stay beside the canvas"
+
+    # and the canvas must keep a share, or sixty layer types push it off screen
+    assert "#stage{min-height:56vh" in mobile, "the canvas has no reserved height"
+    assert "order:-1" in mobile, "the canvas is not first"
+    assert "#palette,#inspector{max-height" in mobile, \
+        "a panel can run to its full content height and bury the canvas"
+
+
 @check("the app folds onto a phone")
 def _():
     """Laid out as a desktop tool — a rail, a canvas, two docked panels — and

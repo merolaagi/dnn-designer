@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.80.2
+
+**Fixed: the mobile layout never stacked, because I stacked the wrong element.**
+
+`.shell` holds the rail and the page. The panels are children of the **page**.
+So the rule that was supposed to put the canvas above the panels applied to a
+container with two children that were already stacked, and did nothing — the
+palette and the panel stayed side by side, each about half the width, and the
+canvas was squeezed out of sight entirely.
+
+Everything else in the mobile block worked, which is what made it convincing:
+the hamburger appeared, the rail became a drawer, the grids collapsed. One
+selector was wrong and the most visible thing on the page went missing.
+
+Two fixes:
+
+- **The page is what stacks now**, and the canvas is ordered first with 56vh
+  reserved.
+- **The panels are capped at 46vh and scroll within themselves.** Without that
+  the palette runs to its full content height — sixty layer types — and pushes
+  the canvas below the fold even once the stacking works.
+
+The test for this reads the markup to find which element actually encloses the
+panels, rather than trusting the selector I wrote. Checking the rule exists
+would have passed on the broken version.
+
 ## 1.80.1
 
 **The panel strips did not work on a phone**, which is worth admitting rather

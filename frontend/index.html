@@ -2283,9 +2283,20 @@ body.sizing{user-select:none}
     content:"";position:fixed;inset:0;z-index:128;background:rgba(22,32,46,.34);
   }
 
-  /* canvas first, panels beneath it: a phone is one column */
-  .shell{flex-direction:column;overflow-y:auto}
-  #stage{min-height:58vh}
+  /* Canvas first, panels beneath it: a phone is one column.
+     The panels are children of the page, not of the shell — the shell holds
+     the rail and the page. Stacking the shell therefore did nothing at all,
+     which is why everything stayed side by side and the canvas was squeezed
+     out of sight. */
+  .shell{overflow-y:auto}
+  .page.on{flex-direction:column;overflow-y:auto}
+  /* The canvas is the point of the page, so it gets a fixed share and the
+     panels scroll within their own. Without a cap the palette runs to its
+     full content height — sixty layer types — and pushes the canvas below
+     the fold, which is where it went. */
+  #stage{min-height:56vh;flex:none;order:-1}
+  #palette,#inspector{max-height:46vh;overflow-y:auto}
+  #palette .scroll,#inspector .scroll{max-height:none}
   .panel{
     width:auto !important;max-width:none;flex:none;
     border-left:none;border-right:none;border-top:1px solid var(--paper-3);
