@@ -2288,8 +2288,13 @@ body.sizing{user-select:none}
      the rail and the page. Stacking the shell therefore did nothing at all,
      which is why everything stayed side by side and the canvas was squeezed
      out of sight. */
+  /* The row that actually holds the panels is #mainRow, inside the page,
+     inside the shell. I stacked the shell, then the page, and neither was it.
+     Reading the markup first would have taken a minute and saved two
+     versions. */
   .shell{overflow-y:auto}
-  .page.on{flex-direction:column;overflow-y:auto}
+  .page.on{flex-direction:column}
+  #mainRow{flex-direction:column;overflow-y:auto;min-height:0}
   /* The canvas is the point of the page, so it gets a fixed share and the
      panels scroll within their own. Without a cap the palette runs to its
      full content height — sixty layer types — and pushes the canvas below

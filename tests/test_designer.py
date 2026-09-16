@@ -6028,24 +6028,35 @@ def _():
 
 @check("the mobile stacking targets the element that holds the panels")
 def _():
-    """I stacked `.shell`, which holds the rail and the page. The panels are
-    children of the *page*, so the rule did nothing at all — everything stayed
-    side by side and the canvas was squeezed out of sight.
+    """Three versions of this were wrong because I guessed the container.
 
-    The test reads the markup rather than trusting the selector: whichever
-    element is the panels' parent is the one that has to be stacked.
+    I stacked `.shell`, which holds the rail and the page. Then `.page`, which
+    holds three rows. The panels live in `#mainRow`, inside both. So the test
+    does not take my word for which element it is: it walks the markup from the
+    palette outwards, finds the nearest enclosing element, and requires *that*
+    one to be stacked.
     """
     import re
 
     markup = PAGE[: PAGE.index("<script>")]
-    start = markup.index('<div class="shell">')
-    region = markup[start: markup.index('<aside class="panel" id="inspector"')]
 
-    # what actually encloses the panels
-    opened = re.findall(r'<(?:div|section|main|aside)[^>]*(?:id|class)="([^"]+)"',
-                        region)
-    assert "page" in " ".join(opened), \
-        "the panels are not inside a page element any more; re-read this test"
+    # walk outwards from the palette to its parent element
+    at = markup.index('<aside class="panel" id="palette"')
+    before = markup[:at]
+    depth, parent = 0, None
+    for match in reversed(list(re.finditer(
+            r'<(/?)(?:div|section|main|aside|nav)([^>]*)>', before))):
+        if match.group(1):
+            depth += 1
+        elif depth:
+            depth -= 1
+        else:
+            parent = match.group(2)
+            break
+    assert parent is not None, "could not find what encloses the palette"
+    ident = re.search(r'id="([^"]+)"', parent)
+    assert ident, f"the palette's parent has no id: {parent}"
+    holder = ident.group(1)
 
     css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
     at = css.index("@media (max-width: 880px)")
@@ -6060,10 +6071,11 @@ def _():
                 break
     mobile = css[at:end]
 
-    assert ".page.on{flex-direction:column" in mobile, \
-        "the page is not stacked, so the panels stay beside the canvas"
+    assert f"#{holder}{{flex-direction:column" in mobile, (
+        f"the panels live in #{holder}, and the mobile layout does not stack "
+        f"it — so they stay side by side and the canvas is squeezed out")
 
-    # and the canvas must keep a share, or sixty layer types push it off screen
+    # the canvas must keep a share, or sixty layer types push it off screen
     assert "#stage{min-height:56vh" in mobile, "the canvas has no reserved height"
     assert "order:-1" in mobile, "the canvas is not first"
     assert "#palette,#inspector{max-height" in mobile, \

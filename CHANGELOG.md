@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.80.3
+
+**The panels live in `#mainRow`.** Not the shell, not the page — both of which I
+stacked in turn, across two versions, without once opening the markup to check.
+
+The nesting is shell → page → mainRow → palette, canvas, inspector. Stacking
+the shell rearranged the rail and the page, which were already stacked.
+Stacking the page rearranged its three rows, which were already stacked. Both
+changed nothing visible, and both times the rule was present and looked right.
+
+`#mainRow` is stacked now, so the canvas sits above the panels.
+
+**The test no longer takes my word for which element it is.** It walks the
+markup outwards from the palette, finds the nearest enclosing element with an
+id, and requires that one to be stacked — reporting it by name when it is not.
+Checked against the broken version: it fails with *"the panels live in
+#mainRow, and the mobile layout does not stack it"*, which is the sentence I
+needed two versions ago.
+
+Two versions of the same mistake, both avoidable by reading the markup first.
+
 ## 1.80.2
 
 **Fixed: the mobile layout never stacked, because I stacked the wrong element.**
