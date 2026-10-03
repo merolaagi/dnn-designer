@@ -1508,6 +1508,110 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("an Equation layer's maths and code are one thing")
+def _():
+    """Written once as an expression; the code, the rendered equation, the
+    shape and the count all derive from the same tree, so they cannot
+    disagree. And the canvas must not become a place where arbitrary code
+    runs, so anything outside the small language is refused by name."""
+    if not HAVE_TORCH:
+        return
+    import codegen
+    import equation as E
+    import graph as G
+    import mathbook
+    import train as T
+
+    spec = {"parameters": "W: [16, in]; b: [16]; gamma: [1] = 1.0",
+            "forward": "tanh(W @ x + b) * sigmoid(gamma * (W @ x)) - 0.5 * x**2"}
+
+    def design(params, width=8):
+        return build([("i", "Input", {"shape": [width]}),
+                      ("e", "Equation", params),
+                      ("o", "Output", {"task": "regression"})],
+                     [("i", "e", 0), ("e", "o", 0)], "Eq")
+
+    tree = E.parse_forward(spec["forward"], ["W", "b", "gamma"])
+    maths, code = E.to_maths(tree), E.to_torch(tree)
+    assert maths == "tanh(Wx + b) ⊙ σ(γ ⊙ Wx) − 0.5x²", maths
+    for piece in ("torch.tanh", "_mm(W, x)", "torch.sigmoid", "(x ** 2)"):
+        assert piece in code, (piece, code)
+
+    # the node: shape by running it, a count torch agrees with, and the code
+    # the canvas emits is the code the expression prints
+    linear = {"parameters": "W: [16, in]; b: [16]", "forward": "tanh(W @ x + b)"}
+    g = G.parse(design(linear))
+    rep = G.analyze(g)
+    assert rep["nodes"]["e"]["out_shape"] == [16]
+    source = codegen.to_pytorch(g, rep)
+    model = T.build_model(source, codegen.model_class_name(g))
+    assert rep["total_learnables"] == sum(p.numel() for p in model.parameters()) == 144
+    assert E.to_torch(E.parse_forward("tanh(W @ x + b)", ["W", "b"])) in source
+
+    shown = mathbook.explain("Equation", linear, [[8]], [16])
+    assert shown["equation"] == "y = tanh(Wx + b)", shown["equation"]
+
+    # refusals, each by name, none of them run
+    for params, words in (
+            ({"parameters": "W: [16, in]", "forward": "W @ x + q"}, "never declared"),
+            ({"parameters": "W: [16, 4]", "forward": "W @ x"}, "does not run"),
+            ({"parameters": "W: [16, in]", "forward": "__import__('os')"}, "not one of"),
+            ({"parameters": "W: [16, in]", "forward": "x.__class__"}, "not something"),
+            ({"parameters": "W: [16, in]", "forward": "x @ W"}, "right-hand side"),
+            ({"parameters": "W: [16, in]", "forward": "tanh(W @ b)"}, "right-hand side"),
+            ({"parameters": "x: [3]", "forward": "x"}, "reserved")):
+        error = G.analyze(G.parse(design(params)))["nodes"]["e"]["error"] or ""
+        assert words in error, (params["forward"], error)
+
+
+@check("the pendulum asks the question the design answers")
+def _():
+    """A HamiltonianField in flow mode predicts the state t_end later; in
+    field mode the derivative. Targets at any other step train the model on a
+    different question, and it would just fail to fit — silently."""
+    if not HAVE_TORCH:
+        return
+    import torch
+
+    import conservation as C
+    import train as T
+
+    def loaders(mid, shape=(2,), task="regression"):
+        graph = {"nodes": [{"type": "Input"}] + ([mid] if mid else [])}
+        return T._pendulum_loaders({"graph": graph}, [list(shape)], task, 256,
+                                   "pendulum", None)
+
+    field, _ = C._truth(0.0)
+
+    tr, _, _ = loaders({"type": "HamiltonianField", "params": {"mode": "field"}})
+    x, y = next(iter(tr))
+    x = x[0] if isinstance(x, (list, tuple)) else x
+    assert torch.allclose(y, field(x), atol=1e-6), "field mode was not given dz/dt"
+
+    tr, _, _ = loaders({"type": "HamiltonianField",
+                        "params": {"mode": "flow", "t_end": 0.3}})
+    x, y = next(iter(tr))
+    x = x[0] if isinstance(x, (list, tuple)) else x
+    later = C._rk4(field, x, 0.01, 30)[-1]
+    assert torch.allclose(y, later, atol=1e-5), "flow mode ignored its t_end"
+
+    for shape, task, words in (((4,), "regression", "set it to [2]"),
+                               ((2,), "classification", "regression")):
+        try:
+            loaders(None, shape, task)
+        except T.DataError as exc:
+            assert words in str(exc), exc
+        else:
+            raise AssertionError(f"{shape} {task} was accepted")
+
+    # a loss of a millionth must not display as zero
+    assert T._sig(1.2345678e-06) == 1.2346e-06
+    assert T._sig(0.0) == 0.0
+    assert "round(run_loss" not in Path(T.__file__).read_text(), \
+        "a loss is still rounded to fixed decimal places"
+    assert "pendulum" in T.BUILTIN_DATASETS
+
+
 @check("one Hopfield update is one attention step, and lowers an energy")
 def _():
     """Ramsauer et al. (2021). Three consequences of the equivalence, each

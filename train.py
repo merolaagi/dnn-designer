@@ -46,6 +46,19 @@ def runs_dir() -> Path:
 
     return auth.sub("runs")
 
+
+def _sig(value: float, digits: int = 5) -> float:
+    """Round to significant figures, not decimal places.
+
+    Losses were rounded to five decimal places, so anything under 5e-6 read as
+    0.0 — and a physics model predicting the next state of a pendulum lives
+    exactly there. "0.0" reads as either a perfect model or a broken metric,
+    and it was neither.
+    """
+    if not value or not math.isfinite(value):
+        return value
+    return round(value, digits - 1 - int(math.floor(math.log10(abs(value)))))
+
 BUILTIN_DATASETS = {
     "synthetic": {"label": "Synthetic noise (sanity check)", "shape": None, "classes": 10},
     "mnist": {"label": "MNIST digits", "shape": [1, 28, 28], "classes": 10},
@@ -56,6 +69,10 @@ BUILTIN_DATASETS = {
              "classes": None},
     "microlean": {"label": "Micro-Lean tactic prediction", "shape": None,
                   "classes": None},
+    "pendulum": {"label": "Pendulum trajectories (physics)", "shape": [2],
+                 "classes": None},
+    "damped_pendulum": {"label": "Damped pendulum, friction 0.1 (physics)",
+                        "shape": [2], "classes": None},
 }
 
 AUGMENTATIONS = [
@@ -436,6 +453,71 @@ def _wrap_builtin(base, n_inputs: int):
     return Fanout()
 
 
+def _pendulum_loaders(cfg, in_shapes, task, batch, name, job):
+    """States (q, p) of a pendulum, and what the design is asked to predict.
+
+    The question has to match the model. A HamiltonianField in flow mode
+    predicts the state t_end later, in field mode the time derivative; a plain
+    network gets the state 0.1 later. Generating targets at any other step
+    would train the model on a different question from the one it answers,
+    and it would simply fail to fit — so the step is read from the design.
+    """
+    import torch
+    from torch.utils.data import DataLoader
+
+    import conservation as C
+
+    if len(in_shapes) != 1 or list(in_shapes[0]) != [2]:
+        raise DataError(
+            f"The pendulum gives a state of two numbers, angle and momentum. "
+            f"This design's Input is {in_shapes[0] if in_shapes else 'missing'}; "
+            f"set it to [2].")
+    if task != "regression":
+        raise DataError("Predicting a state is regression. Set the Output "
+                        "layer's task to regression.")
+
+    target, step, source = "next", 0.1, "the default for a plain network"
+    for node in (cfg.get("graph") or {}).get("nodes", []):
+        if node.get("type") == "HamiltonianField":
+            params = node.get("params") or {}
+            if params.get("mode", "field") == "field":
+                target = "derivative"
+            else:
+                step = float(params.get("t_end", 1.0))
+                source = "the HamiltonianField's t_end"
+            break
+
+    damping = 0.1 if name == "damped_pendulum" else 0.0
+    field, _ = C._truth(damping)
+    torch.manual_seed(int(cfg.get("seed", 0)))
+    starts = torch.cat([(torch.rand(400, 1) * 2 - 1) * 1.6,
+                        (torch.rand(400, 1) * 2 - 1) * 1.0], dim=1)
+    with torch.no_grad():
+        path = C._rk4(field, starts, 0.05, 120)
+    states = path.reshape(-1, 2)
+    with torch.no_grad():
+        if target == "derivative":
+            y = field(states)
+        else:
+            sub = max(1, int(round(step / 0.01)))
+            y = C._rk4(field, states, step / sub, sub)[-1]
+
+    order = torch.randperm(states.shape[0])
+    states, y = states[order], y[order]
+    split = int(states.shape[0] * 0.85)
+    if job is not None and hasattr(job, "notes"):
+        job.notes.append(
+            f"Pendulum{' with friction 0.1' if damping else ''}: "
+            f"{states.shape[0]:,} states; the target is "
+            + ("dz/dt, because the HamiltonianField is in field mode."
+               if target == "derivative" else
+               f"the state {step:g} later, from {source}."))
+    tr = _tensor_dataset([states[:split]], y[:split])
+    va = _tensor_dataset([states[split:]], y[split:])
+    return (DataLoader(tr, batch_size=batch, shuffle=True),
+            DataLoader(va, batch_size=batch), {"classes": None})
+
+
 def _csv_loaders(cfg, in_shapes, in_ids, task, job: Optional[Job]):
     import numpy as np
     import pandas as pd
@@ -766,6 +848,9 @@ def _make_loaders(cfg, in_shapes, in_ids, out_shape, task, job: Optional[Job] = 
     if name == "microlean":
         return _microlean_loaders(cfg, in_shapes, job)
 
+    if name in ("pendulum", "damped_pendulum"):
+        return _pendulum_loaders(cfg, in_shapes, task, batch, name, job)
+
     if name == "synthetic":
         n = limit or 2048
         classes = out_shape[-1] if out_shape else 10
@@ -1078,7 +1163,7 @@ def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
     def aggregate(rows, weights):
         total = sum(weights) or 1
         keys = {k for r in rows for k in r}
-        return {k: round(sum(r.get(k, 0.0) * w for r, w in zip(rows, weights)) / total, 5)
+        return {k: _sig(sum(r.get(k, 0.0) * w for r, w in zip(rows, weights)) / total)
                 for k in keys}
 
     for epoch in range(1, job.epochs + 1):
@@ -1099,7 +1184,7 @@ def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
                 weights.append(1)
                 if index % 20 == 0 and rows:
                     job.emit("step", epoch=epoch, step=index,
-                             loss=round(rows[-1].get(recipe.objective, 0.0), 5))
+                             loss=_sig(rows[-1].get(recipe.objective, 0.0)))
         else:
             for index, (xs, y) in enumerate(train_loader):
                 if job.stop.is_set():
@@ -1111,7 +1196,7 @@ def _run_recipe(job: Job, model, cfg, in_shapes, out_shape, graph_blob,
                 weights.append(xs[0].size(0))
                 if index % 10 == 0 and rows:
                     job.emit("step", epoch=epoch, step=index,
-                             loss=round(rows[-1].get(recipe.objective, 0.0), 5))
+                             loss=_sig(rows[-1].get(recipe.objective, 0.0)))
 
         train_metrics = aggregate(rows, weights)
 
@@ -1338,7 +1423,7 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                     correct += (primary.argmax(1) == yb).sum().item()
                 if step % 10 == 0:
                     job.emit("step", epoch=epoch, step=step,
-                             loss=round(run_loss / max(seen, 1), 5))
+                             loss=_sig(run_loss / max(seen, 1)))
 
             model.eval()
             v_loss, v_seen, v_correct = 0.0, 0, 0
@@ -1357,8 +1442,8 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
 
             row = {
                 "epoch": epoch,
-                "train_loss": round(run_loss / max(seen, 1), 5),
-                "val_loss": round(v_loss / max(v_seen, 1), 5),
+                "train_loss": _sig(run_loss / max(seen, 1)),
+                "val_loss": _sig(v_loss / max(v_seen, 1)),
             }
             if primary_is_class:
                 row["train_acc"] = round(correct / max(seen, 1), 4)

@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.85.0
+
+**The Equation layer: write a layer as its mathematics.** On the palette under
+Custom. Declare parameters and write the forward pass:
+
+```text
+parameters   W: [16, in]; b: [16]; gamma: [1] = 1.0
+forward      tanh(W @ x + b) * sigmoid(gamma * (W @ x)) - 0.5 * x**2
+```
+
+and the Maths tab shows `y = tanh(Wx + b) ⊙ σ(γ ⊙ Wx) − 0.5x²`. The code, the
+rendered equation, the output shape and the parameter count all derive from one
+syntax tree, so they cannot disagree — edit the expression and every one of
+them changes. The shape comes from running it, so a mismatch shows on the node
+as you type; the count is checked against torch like every other layer.
+
+The language is deliberately small: arithmetic, `@` for a matrix product,
+eleven functions, x, your parameters and π. Anything else is refused by name —
+`__import__('os')` is refused, not run — because an expression the printer
+cannot render faithfully would make the equation a lie, and the canvas should
+not be a place where arbitrary code runs.
+
+**Physics datasets in the Train panel: pendulum, and damped pendulum.** A
+physics model now goes from canvas to trained without leaving the app. The
+dataset reads the question from the design — a HamiltonianField in flow mode is
+given the state `t_end` later, in field mode the derivative — because targets
+at any other step would train the model on a different question from the one
+it answers, and it would simply fail to fit. The run's notes say which question
+was asked and where the step came from.
+
+Trained through the real Train endpoint for four epochs:
+
+```text
+Input → HamiltonianField (flow) → Output     2.9e-6 → 4.6e-7
+Input → Equation (residual step) → Output    1.4e-5 → 2.3e-6
+```
+
+**Fixed: losses below 5×10⁻⁶ displayed as 0.0.** They were rounded to five
+decimal places, and a next-step pendulum prediction lives exactly there — every
+number in that table read 0.0, which looks like either a perfect model or a
+broken metric. Losses are rounded to significant figures now, everywhere.
+
 ## 1.84.0
 
 **Attention is a memory** — the modern Hopfield network (Ramsauer et al.,

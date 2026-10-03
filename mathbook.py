@@ -883,6 +883,12 @@ ENTRIES: Dict[str, Callable] = {
 def explain(node_type: str, params: Dict[str, Any],
             in_shapes: List[Any], out_shape: Optional[List[int]]) -> Dict[str, Any]:
     """The mathematics of one layer, with this node's numbers substituted."""
+    if node_type == "Equation":
+        # its maths is whatever was written, rendered from the same tree the
+        # code is generated from
+        import equation
+
+        return equation.explain(params, in_shapes, out_shape)
     builder = ENTRIES.get(node_type)
     if builder is None:
         spec = layers.REGISTRY.get(node_type)
