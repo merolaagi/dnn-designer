@@ -1508,6 +1508,45 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("one Hopfield update is one attention step, and lowers an energy")
+def _():
+    """Ramsauer et al. (2021). Three consequences of the equivalence, each
+    measured: the same numbers, an energy that never rises, and β deciding
+    between retrieving one memory and averaging many."""
+    if not HAVE_TORCH:
+        return
+    import hopfield as H
+
+    r = H.experiment(d=64, patterns=32)
+    assert r["max_difference"] < 1e-12, \
+        f"the Hopfield update and attention disagree by {r['max_difference']}"
+    assert r["worst_energy_rise"] <= 1e-9, \
+        f"an update raised the energy by {r['worst_energy_rise']}"
+
+    sweep = {round(s["beta"], 4): s for s in r["sweep"]}
+    low, transformer = sweep[0.02], next(s for s in r["sweep"]
+                                         if s["is_transformer_beta"])
+    assert low["patterns_mixed"] > 10, "small β did not average"
+    assert transformer["patterns_mixed"] < 2, "1/√d did not retrieve"
+    assert transformer["cosine_to_target"] > 0.95
+
+    # it is taught beside the layers it explains, with its own attribution
+    import lessons as book
+
+    names = [e["name"] for e in book.for_layer("Attention")]
+    assert names[-1] == "Attention is a memory", names
+    assert "attention" in book.path_to("hopfield"), \
+        "the lesson does not ask for attention to be read first"
+    assert "Ramsauer" in book.lesson("hopfield")["source"]["name"]
+    assert book.lesson("linear")["source"]["name"] == "ML Math Lab", \
+        "the second file's attribution leaked onto the first's lessons"
+
+    import main
+
+    assert main.physics_hopfield(d=16, patterns=8)["max_difference"] < 1e-12
+    assert "function runHopfield" in PAGE
+
+
 @check("a Hamiltonian layer keeps energy because of its shape, not its data")
 def _():
     """The guarantee is exact for the network's own energy, for any weights —
@@ -2060,7 +2099,10 @@ def _():
     import lessons as book
 
     cat = book.catalog()
-    assert len(cat["lessons"]) == 18, len(cat["lessons"])
+    # eighteen from ML Math Lab, and any written here, kept apart by source
+    from_lab = [e for e in cat["lessons"]
+                if book.lesson(e["id"])["source"]["name"] == "ML Math Lab"]
+    assert len(from_lab) == 18, len(from_lab)
     assert cat["source"]["name"], "the curriculum does not say where it came from"
 
     # a lesson pointing at a layer that does not exist would be a broken link

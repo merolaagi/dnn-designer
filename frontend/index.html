@@ -1318,6 +1318,7 @@ i.covered{
 .physchart{margin-top:6px;background:#FBFCFD;border:1px solid var(--paper-3);border-radius:8px}
 .physkey{display:flex;gap:14px;font-size:10.5px;color:var(--muted);margin-top:5px}
 .physkey i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
+table.runtable tr.hl td{background:#F4F1FE;font-weight:600}
 .physmaps{display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;margin-top:12px}
 .physmaps figure{margin:0}
 .physmaps canvas{width:100%;height:auto;image-rendering:pixelated;
@@ -5722,6 +5723,23 @@ async function renderPhysicsPage(){
       <div class="cbacts"><button class="btn go" id="consGo">Train both</button></div>
       <div id="consOut"></div>
     </div>
+
+    <div class="wbcard">
+      <div class="wbtitle"><b>Is attention a memory?</b>
+        <span class="wbchip">Ramsauer et al. 2021</span></div>
+      <p class="wbstatement">A modern Hopfield network stores patterns and has
+      an energy that its update rule, ξ ← X softmax(βXᵀξ), can only lower. That
+      rule is attention, with β = 1/√d. Three things follow, and each is
+      measured here: the two formulas give the same numbers, the energy never
+      rises, and β decides between retrieving one memory and averaging many.</p>
+      <div class="physrow">
+        <label>dimension d<input class="wbinput" id="hopD" value="64"></label>
+        <label>stored patterns<input class="wbinput" id="hopN" value="32"></label>
+        <label>&nbsp;</label><label>&nbsp;</label>
+      </div>
+      <div class="cbacts"><button class="btn go" id="hopGo">Measure it</button></div>
+      <div id="hopOut"></div>
+    </div>
   </div>`;
 
   host.querySelectorAll("[data-preset]").forEach(chip =>
@@ -5732,6 +5750,7 @@ async function renderPhysicsPage(){
   $("physGo").addEventListener("click", startPhysics);
   $("scaleGo").addEventListener("click", startScaling);
   $("consGo").addEventListener("click", startConservation);
+  $("hopGo").addEventListener("click", runHopfield);
   $("physStop").addEventListener("click", () => {
     if (state.physRun) fetch(API + `/api/physics/run/${state.physRun}/stop`,
                              { method: "POST" });
@@ -5910,6 +5929,42 @@ function paintConservation(res){
     <p class="mathnote">Both fit the training data; the difference appears only
     beyond it, where small errors compound. The layer is on the palette as
     <b>HamiltonianField</b>, under Numerical.</p>`;
+}
+
+async function runHopfield(){
+  const out = $("hopOut");
+  let r;
+  try{
+    r = await (await fetch(API + `/api/physics/hopfield?d=${+$("hopD").value}`
+      + `&patterns=${+$("hopN").value}`)).json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  const one = r.energy_trace.map(row => row[0]);
+  out.innerHTML = `
+    <table class="mathtab" style="margin-top:8px">
+      <tr><td class="key">Hopfield update against attention, largest difference</td>
+        <td class="val">${r.max_difference.toExponential(1)}
+        ${r.max_difference < 1e-10 ? "— the same computation" : ""}</td></tr>
+      <tr><td class="key">worst change in energy over any update</td>
+        <td class="val">${r.worst_energy_rise.toExponential(1)}
+        ${r.worst_energy_rise <= 1e-9 ? "— it never rose" : "— it ROSE"}</td></tr>
+      <tr><td class="key">one query's energy, update by update</td>
+        <td class="val">${one.slice(0, 6).map(v => v.toFixed(1)).join(" → ")}</td></tr>
+    </table>
+    <div class="mathsec">what β retrieves from a corrupted memory</div>
+    <table class="runtable">
+      <thead><tr><th>β</th><th class="num">weight on the top pattern</th>
+        <th class="num">patterns mixed</th><th class="num">cosine to the memory</th></tr></thead>
+      <tbody>${r.sweep.map(s => `<tr${s.is_transformer_beta ? ' class="hl"' : ""}>
+        <td>${s.beta}${s.is_transformer_beta ? " · 1/√d" : ""}</td>
+        <td class="num">${s.top_weight.toFixed(2)}</td>
+        <td class="num">${s.patterns_mixed.toFixed(1)}</td>
+        <td class="num">${s.cosine_to_target.toFixed(2)}</td></tr>`).join("")}</tbody>
+    </table>
+    <p class="mathnote">Small β settles on an average of many stored patterns —
+    a metastable state, which is what an attention head that averages is
+    doing. Large β retrieves one memory in a single step. A real transformer
+    projects queries, keys and values separately, so its attention is this
+    update in a learned space rather than over the raw tokens.</p>`;
 }
 
 function lossChart(rows){
@@ -10506,7 +10561,8 @@ async function offerLesson(layerType){
         <span>${e.group} · ${e.level}</span>
         <p>${e.problem}</p>
       </button>`).join("")}</div>
-    <p class="mathnote">From <b>${d.source.name}</b>.</p>`);
+    <p class="mathnote">From ${[...new Set(d.lessons.map(e =>
+      (e.source || d.source).name))].map(n => `<b>${n}</b>`).join(" and ")}.</p>`);
 
   slot.querySelectorAll("[data-lesson]").forEach(row =>
     row.addEventListener("click", () => showLesson(row.dataset.lesson)));

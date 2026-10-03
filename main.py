@@ -41,6 +41,7 @@ import graph as G
 import workbook
 import quantize as quant
 import scouts
+import hopfield
 import physics
 import watcher
 import dossier
@@ -474,6 +475,13 @@ class ConservationPayload(BaseModel):
 def physics_conservation(body: ConservationPayload):
     return physics.start_conservation(body.damping, body.train_steps,
                                       body.horizon)
+
+
+@app.get("/api/physics/hopfield")
+def physics_hopfield(d: int = 64, patterns: int = 32, seed: int = 0):
+    """One Hopfield update against one attention step, measured."""
+    return hopfield.experiment(max(4, min(512, d)), max(2, min(2048, patterns)),
+                               seed)
 
 
 @app.get("/api/physics/run/{run_id}")

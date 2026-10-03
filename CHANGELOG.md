@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.84.0
+
+**Attention is a memory** — the modern Hopfield network (Ramsauer et al.,
+*Hopfield Networks is All You Need*, ICLR 2021), measured on the physics page
+and taught beside every attention layer.
+
+A modern Hopfield network stores patterns as the columns of X and has an
+energy that its update, ξ ← X softmax(βXᵀξ), can only lower. That update is
+attention with keys and values X and β = 1/√d. Three consequences, measured
+with 32 patterns in 64 dimensions:
+
+```text
+Hopfield update against attention     largest difference 6.7e-16
+energy over twelve updates            never rose; 122.6 → 30.6 for one query
+what β retrieves from a corrupted memory
+    β = 0.02         27 patterns mixed     cosine 0.64
+    β = 1/√64        1.1 patterns mixed    cosine 1.00
+```
+
+The last line is the interesting one: the transformer's own scaling sits just
+past the point where averaging turns into retrieval. A head that averages is in
+a metastable state of the memory, not doing something different in kind.
+
+**The lesson** appears under Attention, SelfAttention, TransformerEncoder and
+GPTStack in the Maths tab, after the dot product, softmax and attention lessons
+it builds on. It lives in its own file, `lessons/physics.json`, and carries its
+own attribution — so nothing written here is presented as ML Math Lab content,
+and a test checks the two never mix. Its trap says plainly that a real
+transformer projects queries, keys and values separately, so the equivalence is
+exact in a learned space rather than over the raw tokens.
+
 ## 1.83.0
 
 **HamiltonianField — a layer whose shape conserves energy.** On the palette under

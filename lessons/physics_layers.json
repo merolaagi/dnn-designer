@@ -1,0 +1,8 @@
+{
+ "hopfield": [
+  "Attention",
+  "SelfAttention",
+  "TransformerEncoder",
+  "GPTStack"
+ ]
+}

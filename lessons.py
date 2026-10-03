@@ -47,6 +47,17 @@ def _load() -> Dict[str, Any]:
         _cache.update({"lessons": [], "by_layer": {}, "by_id": {}})
         return _cache
 
+    # Lessons written for this application live in their own file, so they
+    # are never mistaken for the ML Math Lab curriculum; each carries its own
+    # source and is shown with it.
+    try:
+        extra = json.loads((HERE / "physics.json").read_text())
+        extra_map = json.loads((HERE / "physics_layers.json").read_text())
+        lessons = lessons + extra
+        mapping = {**mapping, **extra_map}
+    except Exception:  # noqa: BLE001
+        pass
+
     by_layer: Dict[str, List[str]] = {}
     for lesson_id, layers in mapping.items():
         for name in layers:
@@ -84,7 +95,7 @@ def lesson(lesson_id: str) -> Optional[Dict[str, Any]]:
     if not entry:
         return None
     return {**entry, "layers": data["map"].get(lesson_id, []),
-            "source": SOURCE}
+            "source": entry.get("source") or SOURCE}
 
 
 def for_layer(layer: str) -> List[Dict[str, Any]]:

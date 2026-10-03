@@ -1,0 +1,61 @@
+[
+ {
+  "id": "hopfield",
+  "name": "Attention is a memory",
+  "group": "Transformers",
+  "level": "Advanced",
+  "eq": "\\xi^{new}=X\\,\\operatorname{softmax}(\\beta X^T\\xi)",
+  "problem": "Why does attention work as retrieval — and why do some heads average instead of choosing?",
+  "why": "A modern Hopfield network stores patterns as the columns of X and has an energy that the update ξ ← X softmax(βXᵀξ) can only lower. That update is attention, with keys and values X and β = 1/√d. So attention is one step of energy minimisation in an associative memory, and β decides whether that step lands on one stored pattern or an average of many.",
+  "symbols": [
+   "ξ: the state, or query",
+   "X: stored patterns, one per column — the keys and values",
+   "β: inverse temperature; the transformer uses 1/√d",
+   "E: the Hopfield energy, lowered by every update"
+  ],
+  "steps": [
+   [
+    "E(\\xi)=-\\beta^{-1}\\log\\sum_i e^{\\beta x_i^T\\xi}+\\tfrac12\\xi^T\\xi+\\text{const}",
+    "The energy: a log-sum-exp that pulls ξ toward the stored patterns, and a quadratic that keeps it bounded."
+   ],
+   [
+    "\\nabla_\\xi\\,\\mathrm{lse}=X\\,\\operatorname{softmax}(\\beta X^T\\xi)",
+    "The gradient of log-sum-exp is a softmax-weighted sum of the patterns."
+   ],
+   [
+    "\\xi^{new}=X\\,\\operatorname{softmax}(\\beta X^T\\xi)",
+    "The concave–convex procedure sets the quadratic's gradient equal to that one: ξ_new is exactly the weighted sum. The energy cannot rise."
+   ],
+   [
+    "\\operatorname{Attn}(Q,K,V)=\\operatorname{softmax}(QK^T/\\sqrt d)\\,V",
+    "With Q = ξᵀ, K = V = Xᵀ and β = 1/√d this is the same expression."
+   ]
+  ],
+  "example": "Measured in this app with 32 patterns in 64 dimensions: the two formulas differ by 6.7×10⁻¹⁶; the energy of one query fell from 122.6 to 30.6 over twelve updates and never rose; at β = 0.02 the result mixed 27 patterns, at β = 1/√64 it mixed 1.1 — retrieval in a single step.",
+  "code": "def hopfield_update(xi, X, beta):\n    return X @ torch.softmax(beta * (X.T @ xi), dim=0)\n\n# the same numbers as\ntorch.softmax(Q @ K.T / d ** 0.5, dim=-1) @ V   # Q = xi.T, K = V = X.T",
+  "deep": "Storage capacity is exponential in the dimension, unlike the classical Hopfield network's linear capacity — the reason a modern network can hold far more patterns than it has dimensions. Small β produces metastable states that average many patterns; Ramsauer et al. found heads in trained BERT models at both ends, some retrieving and some averaging.",
+  "trap": "The equivalence is exact for one update with K = V = X. A transformer projects queries, keys and values separately, so a real attention layer is a Hopfield update in a learned space, not literally a memory over the raw tokens.",
+  "question": "At small β, what does one Hopfield update return?",
+  "answers": [
+   "The single nearest stored pattern",
+   "A softmax-weighted average of many stored patterns",
+   "The query unchanged",
+   "A pattern at random"
+  ],
+  "correct": 1,
+  "prereq": [
+   "dot",
+   "softmax",
+   "attention"
+  ],
+  "uses": [
+   "Transformers",
+   "Associative memory",
+   "Retrieval"
+  ],
+  "source": {
+   "name": "Ramsauer et al., Hopfield Networks is All You Need (ICLR 2021)",
+   "note": "Written for this application; measured on the Physics page."
+  }
+ }
+]
