@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.83.0
+
+**HamiltonianField — a layer whose shape conserves energy.** On the palette under
+Numerical. It learns one scalar, the energy H(q, p), and returns the motion that
+energy implies: dq/dt = ∂H/∂p, dp/dt = −∂H/∂q (Greydanus et al., 2019). Along
+that motion dH/dt is zero for any weights — conservation is a property of the
+architecture, not something learned from data. Mode `field` returns the
+derivative; mode `flow` integrates it with RK4.
+
+**With dissipation on, it is port-Hamiltonian**: a learned friction γ ≥ 0 acts
+on the momenta, so dH/dt = −γ|∂H/∂p|² — energy can fall and can never rise.
+
+Measured on a pendulum, trained on six time units and rolled out to sixty:
+
+```text
+ideal      true energy drift      plain 4.87%    Hamiltonian 0.09%
+           distance from path     plain 0.029    Hamiltonian 0.014
+damped     learned friction       0.1000 (true 0.1)
+           own energy rate        ≤ −1.9e−8 everywhere probed
+           true energy rose on    plain 11%      Hamiltonian 4.4% of steps
+```
+
+The learned friction recovering the physical coefficient is the payoff a plain
+network cannot offer: it has no parameter you could read.
+
+**The limit of the guarantee, stated where it is shown.** What is conserved —
+or kept from rising — is the network's *own* energy. The true energy behaves
+only as well as the learned one matches it, which is why it still rose on 4.4%
+of steps. The physics page says so beside the button, and a test requires that
+sentence to be there.
+
+The palette block and the experiment execute the same source text, and a test
+checks that the generated code contains it verbatim — so the layer on the
+canvas is the layer that was measured.
+
 ## 1.82.0
 
 **From Moseley's thesis, chapter 6: FBPINNs and hard constraints.**

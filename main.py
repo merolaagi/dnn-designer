@@ -464,6 +464,18 @@ def physics_scaling(body: ScalingPayload):
     return physics.start_scaling(body.omega, body.steps)
 
 
+class ConservationPayload(BaseModel):
+    damping: float = 0.0
+    train_steps: int = 2000
+    horizon: float = 60.0
+
+
+@app.post("/api/physics/conservation")
+def physics_conservation(body: ConservationPayload):
+    return physics.start_conservation(body.damping, body.train_steps,
+                                      body.horizon)
+
+
 @app.get("/api/physics/run/{run_id}")
 def physics_status(run_id: str):
     run = physics.RUNS.get(run_id)

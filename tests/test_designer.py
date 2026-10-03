@@ -1508,6 +1508,75 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("a Hamiltonian layer keeps energy because of its shape, not its data")
+def _():
+    """The guarantee is exact for the network's own energy, for any weights —
+    so it is checked on an untrained layer as well as a trained one. What the
+    true energy does is a separate, measured question, and the page must not
+    claim more than that."""
+    if not HAVE_TORCH:
+        return
+    import torch
+
+    import conservation as C
+
+    Ham = C.layer_class()
+    for dissipative in (False, True):
+        layer = Ham(4, 16, dissipative=dissipative)
+        if dissipative:
+            with torch.no_grad():
+                layer.raw_friction.fill_(0.3)
+        z = torch.randn(2000, 4) * 2
+        with torch.enable_grad():
+            zz = z.clone().requires_grad_(True)
+            grad = torch.autograd.grad(layer.hamiltonian(zz).sum(), zz)[0]
+        rate = (grad * layer.field(z)).sum(-1)
+        if dissipative:
+            assert float(rate.max()) <= 1e-6, \
+                f"an untrained port-Hamiltonian layer gained energy: {rate.max()}"
+        else:
+            assert float(rate.abs().max()) < 1e-5, \
+                f"an untrained Hamiltonian layer does not conserve its energy"
+
+    # trained: far less drift than a plain network beyond the training window
+    ideal = C.experiment(damping=0.0, train_steps=600, horizon=40)
+    plain, ham = ideal["plain"], ideal["hamiltonian"]
+    assert ham["final_energy_drift"] < 0.2 * plain["final_energy_drift"], \
+        (ham["final_energy_drift"], plain["final_energy_drift"])
+
+    # damped: the one interpretable parameter is the physical one
+    damped = C.experiment(damping=0.1, train_steps=600, horizon=40)
+    assert abs(damped["hamiltonian"]["learned_friction"] - 0.1) < 0.02, \
+        damped["hamiltonian"]["learned_friction"]
+    assert damped["hamiltonian"]["own_energy_rate_max"] <= 1e-6
+
+    # the palette block is the same class, counted the same way torch counts
+    import codegen
+    import graph as G
+    import train as T
+
+    g = build([("i", "Input", {"shape": [2]}),
+               ("h", "HamiltonianField", {"hidden": 32, "dissipative": True,
+                                          "mode": "flow"}),
+               ("o", "Output", {"task": "regression"})],
+              [("i", "h", 0), ("h", "o", 0)], "Pend")
+    rep = G.analyze(G.parse(g))
+    model = T.build_model(codegen.to_pytorch(G.parse(g), rep),
+                          codegen.model_class_name(G.parse(g)))
+    assert rep["total_learnables"] == sum(p.numel() for p in model.parameters())
+    assert C.SOURCE.strip() in codegen.to_pytorch(G.parse(g), rep), \
+        "the canvas emits a different class from the one that was measured"
+
+    odd = G.analyze(G.parse(build(
+        [("i", "Input", {"shape": [3]}), ("h", "HamiltonianField", {}),
+         ("o", "Output", {"task": "regression"})],
+        [("i", "h", 0), ("h", "o", 0)], "Odd")))
+    assert not odd["ok"] and "even" in odd["nodes"]["h"]["error"]
+
+    # the page states the limit of the guarantee, not just the guarantee
+    assert "What is guaranteed is the network's <i>own</i>" in PAGE
+
+
 @check("an FBPINN scales with frequency where a PINN does not")
 def _():
     """Moseley (2022), chapter 6. The thesis's own numbers are the first

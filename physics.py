@@ -675,6 +675,33 @@ def start_scaling(omega: float, steps: int, big_width: int = 128,
     return snapshot(run)
 
 
+def start_conservation(damping: float, train_steps: int,
+                       horizon: float) -> Dict[str, Any]:
+    """A plain network against a (port-)Hamiltonian one, rolled far past the
+    window they were trained on, judged by the true energy."""
+    import conservation as C
+
+    spec = {"damping": max(0.0, min(1.0, float(damping))),
+            "train_steps": max(100, min(20000, int(train_steps))),
+            "horizon": max(10.0, min(500.0, float(horizon)))}
+    run = {"id": uuid.uuid4().hex[:12], "status": "running", "progress": [],
+           "result": None, "error": "", "spec": spec,
+           "network": "plain against Hamiltonian", "started": time.time(),
+           "stop": threading.Event(), "folder": home()}
+    RUNS[run["id"]] = run
+
+    def work():
+        try:
+            run["result"] = C.experiment(**spec)
+            run["status"] = "done"
+        except Exception as exc:  # noqa: BLE001
+            run["error"] = f"{type(exc).__name__}: {exc}"
+            run["status"] = "error"
+
+    threading.Thread(target=work, daemon=True).start()
+    return snapshot(run)
+
+
 def snapshot(run: Dict[str, Any]) -> Dict[str, Any]:
     return {k: run[k] for k in ("id", "status", "result", "error",
                                 "network", "spec", "started")} | {

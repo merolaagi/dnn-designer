@@ -5699,6 +5699,29 @@ async function renderPhysicsPage(){
       <div class="cbacts"><button class="btn go" id="scaleGo">Compare them</button></div>
       <div id="scaleOut"></div>
     </div>
+
+    <div class="wbcard">
+      <div class="wbtitle"><b>Can it keep energy?</b>
+        <span class="wbchip">Greydanus et al. 2019</span></div>
+      <p class="wbstatement">A pendulum, trained on six time units and then
+      rolled out far beyond them. A plain network learns the motion directly.
+      A Hamiltonian network learns one number, the energy, and reads the
+      motion off its gradient — so its own energy is conserved for any
+      weights. With friction on, the port-Hamiltonian version can only lose
+      energy, and its friction is a parameter you can read.</p>
+      <div class="physrow">
+        <label>friction<input class="wbinput" id="consDamp" value="0"></label>
+        <label>training steps<input class="wbinput" id="consSteps" value="2000"></label>
+        <label>roll out to t =<input class="wbinput" id="consHorizon" value="60"></label>
+        <label>&nbsp;</label>
+      </div>
+      <p class="mathnote">What is guaranteed is the network's <i>own</i>
+      energy. The true energy is kept only as well as the learned one matches
+      it — measured on the damped pendulum, true energy still rose on 4% of
+      steps for the Hamiltonian network, against 11% for the plain one.</p>
+      <div class="cbacts"><button class="btn go" id="consGo">Train both</button></div>
+      <div id="consOut"></div>
+    </div>
   </div>`;
 
   host.querySelectorAll("[data-preset]").forEach(chip =>
@@ -5708,6 +5731,7 @@ async function renderPhysicsPage(){
     }));
   $("physGo").addEventListener("click", startPhysics);
   $("scaleGo").addEventListener("click", startScaling);
+  $("consGo").addEventListener("click", startConservation);
   $("physStop").addEventListener("click", () => {
     if (state.physRun) fetch(API + `/api/physics/run/${state.physRun}/stop`,
                              { method: "POST" });
@@ -5815,6 +5839,77 @@ function paintScaling(res){
     </table>
     <p class="mathnote">Same steps for all three, ω = ${res.omega}. Error is
     relative L1 against the exact solution on 5,000 points, never the loss.</p>`;
+}
+
+async function startConservation(){
+  const out = $("consOut");
+  let r, d;
+  try{
+    r = await fetch(API + "/api/physics/conservation", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ damping: +$("consDamp").value,
+        train_steps: +$("consSteps").value, horizon: +$("consHorizon").value }) });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  $("consGo").disabled = true;
+  out.innerHTML = `<p class="mathnote">training both networks…</p>`;
+  const poll = async () => {
+    let s;
+    try{ s = await (await fetch(API + `/api/physics/run/${d.id}`)).json(); }
+    catch { setTimeout(poll, 1500); return; }
+    if (s.status === "running"){ setTimeout(poll, 1200); return; }
+    $("consGo").disabled = false;
+    if (s.error){ out.innerHTML = `<div class="runfail">${s.error}</div>`; return; }
+    paintConservation(s.result);
+  };
+  poll();
+}
+
+function paintConservation(res){
+  const W = 640, H = 170, pad = 26;
+  const series = [["true", res.true.energy, "#16202E", 2.2],
+                  ["plain network", res.plain.energy, "#C77B30", 1.4],
+                  [res.damping > 0 ? "port-Hamiltonian" : "Hamiltonian",
+                   res.hamiltonian.energy, "#8A5CF6", 1.4]];
+  const all = series.flatMap(s => s[1]);
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const n = res.true.energy.length;
+  const X = i => pad + (W - 2 * pad) * i / Math.max(1, n - 1);
+  const Y = v => H - pad - (H - 2 * pad) * (v - lo) / Math.max(hi - lo, 1e-12);
+  const h = res.hamiltonian, p = res.plain;
+  const trainedTo = X((res.train_window / res.horizon) * (n - 1));
+  $("consOut").innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" class="physchart">
+      <rect x="${pad}" y="${pad - 6}" width="${trainedTo - pad}" height="${H - 2 * pad + 6}"
+        fill="#F4F1FE"/>
+      <text x="${pad + 4}" y="${pad + 6}" font-size="9" fill="#8A94A2">trained here</text>
+      ${series.map(([, vals, c, w]) => `<polyline fill="none" stroke="${c}"
+        stroke-width="${w}" points="${vals.map((v, i) => `${X(i)},${Y(v)}`).join(" ")}"/>`).join("")}
+    </svg>
+    <div class="physkey">${series.map(([label, , c]) =>
+      `<span><i style="background:${c}"></i>${label}</span>`).join("")}</div>
+    <table class="mathtab" style="margin-top:10px">
+      <tr><td class="key"></td><td class="val">plain · Hamiltonian</td></tr>
+      ${res.damping > 0
+        ? `<tr><td class="key">steps where true energy rose</td><td class="val">
+            ${(p.energy_rising_fraction * 100).toFixed(1)}% ·
+            ${(h.energy_rising_fraction * 100).toFixed(1)}%</td></tr>
+           <tr><td class="key">learned friction</td><td class="val">— ·
+            ${h.learned_friction.toFixed(4)} (true ${res.damping})</td></tr>`
+        : `<tr><td class="key">true energy drift at the end</td><td class="val">
+            ${(p.final_energy_drift * 100).toFixed(2)}% ·
+            ${(h.final_energy_drift * 100).toFixed(2)}%</td></tr>`}
+      <tr><td class="key">mean distance from the true path</td><td class="val">
+        ${p.state_error.toFixed(3)} · ${h.state_error.toFixed(3)}</td></tr>
+      <tr><td class="key">largest rate of the network's own energy</td><td class="val">
+        — · ${h.own_energy_rate_max.toExponential(1)}
+        (${res.damping > 0 ? "must be ≤ 0" : "must be 0"})</td></tr>
+      <tr><td class="key">parameters</td><td class="val">
+        ${p.parameters.toLocaleString()} · ${h.parameters.toLocaleString()}</td></tr>
+    </table>
+    <p class="mathnote">Both fit the training data; the difference appears only
+    beyond it, where small errors compound. The layer is on the palette as
+    <b>HamiltonianField</b>, under Numerical.</p>`;
 }
 
 function lossChart(rows){
