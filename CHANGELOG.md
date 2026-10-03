@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.81.2
+
+**Fixed: scout errands were being committed to the public repository.**
+
+`.gitignore` was written before scouts, the workbench and physics training
+existed, and was never updated when they arrived. An account that adopts the
+legacy layout keeps its workspace in the project folder itself — so every scout
+errand, workbench problem and physics run landed beside the source, and
+`git add` took them. Worse, `codebases/` — where *Read a codebase* unpacks an
+uploaded archive — was uncovered too, so somebody else's source code could have
+been published under this repository.
+
+All four are ignored now. The test that guards it does not keep a list, because
+a list is what went stale: it reads the source for every folder the app writes
+into and requires the ignore file to cover each one. Checked against the old
+ignore file, it fails naming `codebases` and `scouts`.
+
+Files already committed stay in the history until removed; the release notes
+say how.
+
 ## 1.81.1
 
 **Twenty failures, one cause: the tests were run outside the virtual

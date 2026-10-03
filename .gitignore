@@ -19,6 +19,15 @@ studies/*.json
 prefs.json
 .seeded
 
+# An account that adopts the legacy layout keeps its workspace in the project
+# folder itself, so everything it writes lands beside the source. None of it
+# is source: scout errands, workbench problems, physics runs, and unpacked
+# archives of other people's code.
+scouts/
+problems/
+physics/
+codebases/
+
 # datasets pulled or uploaded at runtime
 data/
 uploads/*

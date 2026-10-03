@@ -4331,6 +4331,49 @@ def _():
         "Maths belongs with the design, not with status"
 
 
+@check("every folder the app writes at runtime is kept out of git")
+def _():
+    """scout errands were committed to a public repository, because the ignore
+    file was written before scouts existed and nobody updated it when they did.
+
+    So this does not keep a list. It reads the source for every folder the app
+    writes into — each `auth.sub("...")` and each folder constant beside the
+    code — and requires the ignore file to cover it. A new feature that writes
+    somewhere new fails here until it is ignored.
+    """
+    import re
+
+    root = Path(__file__).resolve().parent.parent
+    ignored = (root / ".gitignore").read_text()
+    lines = [l.strip() for l in ignored.splitlines()
+             if l.strip() and not l.startswith("#")]
+
+    def covered(folder: str) -> bool:
+        return any(l.rstrip("/").split("/")[0] == folder and
+                   (l.endswith("/") or "*" in l or l == folder) for l in lines)
+
+    written = set()
+    for source in root.glob("*.py"):
+        text = source.read_text(errors="replace")
+        written |= set(re.findall(r'auth\.sub\("([a-z_]+)"\)', text))
+        written |= set(re.findall(
+            r'Path\(__file__\)\.resolve\(\)\.parent / "([a-z_]+)"\s*$',
+            text, re.M))
+
+    # folders that hold source that ships, which are written only by hand
+    shipped = {"frontend", "examples", "specs", "blocks", "recipes", "projects",
+               "lessons", "dnn_bench", "tests"}
+    runtime = written - shipped
+    assert {"scouts", "codebases"} <= runtime, \
+        f"the scan did not find the folders it exists to find: {runtime}"
+
+    missing = sorted(f for f in runtime if not covered(f))
+    assert not missing, (
+        f"the app writes into {', '.join(missing)} at runtime and git would "
+        f"commit it — with an account that adopts the legacy layout, those "
+        f"folders sit inside the repository")
+
+
 @check("workspace state cannot ride along in a release")
 def _():
     """The seeding marker shipped inside a release and suppressed delivery.
