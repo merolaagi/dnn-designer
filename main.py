@@ -41,6 +41,7 @@ import graph as G
 import workbook
 import quantize as quant
 import scouts
+import physics
 import watcher
 import dossier
 import method
@@ -430,6 +431,42 @@ class ClaimPayload(BaseModel):
 class StatusPayload(BaseModel):
     status: str
     note: str = ""
+
+
+class PhysicsPayload(BaseModel):
+    spec: Dict[str, Any]
+    graph: Dict[str, Any] = {}
+
+
+@app.get("/api/physics/presets")
+def physics_presets():
+    return {"presets": physics.PRESETS}
+
+
+@app.post("/api/physics/run")
+def physics_run(body: PhysicsPayload):
+    """Start a physics-informed run. It is compared with a finite-difference
+    solution when it finishes, and the verdict comes from that comparison."""
+    try:
+        return physics.start(body.spec, body.graph or None)
+    except physics.PhysicsError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/physics/run/{run_id}")
+def physics_status(run_id: str):
+    run = physics.RUNS.get(run_id)
+    if not run:
+        raise HTTPException(404, detail={"message": "No such run."})
+    return physics.snapshot(run)
+
+
+@app.post("/api/physics/run/{run_id}/stop")
+def physics_stop(run_id: str):
+    run = physics.RUNS.get(run_id)
+    if run:
+        run["stop"].set()
+    return {"ok": True}
 
 
 @app.get("/api/dossiers")

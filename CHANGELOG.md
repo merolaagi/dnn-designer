@@ -1,5 +1,81 @@
 # Changelog
 
+## 1.81.1
+
+**Twenty failures, one cause: the tests were run outside the virtual
+environment.** fastapi, torch, numpy and sympy were all missing because the
+interpreter was the system one. The suite now notices that before running
+anything, says which interpreter it is, finds the project's `.venv` if it has
+the packages, and stops with:
+
+```text
+This is /usr/bin/python3, which does not have the app's packages installed.
+They are installed for .../new_dnn/.venv/bin/python3.
+The project's virtual environment is not active: run `source .venv/bin/activate` first.
+```
+
+**`doctor.py` could not have found it either.** It searched `PATH` and the base
+interpreter, and an unactivated venv's Python is on neither — so the commonest
+case of all, a fresh terminal, slipped past the tool written for it. It looks in
+the project's `.venv`, `venv` and `env` first now.
+
+**And one genuine omission, which the investigation turned up: `sympy` was never
+in `requirements.txt`.** The workbench and physics training both import it. It
+has worked only because torch depends on it — a transitive dependency I never
+declared, which a future torch could drop. It is listed now, as is numpy, and
+the doctor says what each one gates: without numpy the implicit-equilibrium
+layers do not load, which is the `implicit.py` failure at the top of that run.
+
+## 1.81.0
+
+**Physics-informed training** — a network learns u(x, t) by being penalised
+wherever it breaks an equation, its initial condition or its boundary, with
+every derivative taken by autograd with respect to the network's *inputs*.
+
+That last part is why this is a new training mode rather than a new layer. The
+ordinary loss here is built from outputs and targets only; a PINN's loss
+differentiates the output with respect to x and t, and samples points from a
+domain rather than reading a dataset.
+
+Write the equation as residual = 0 — `u_t + u*u_x - 0.01/pi*u_xx` — with the
+same parser the workbench uses. Initial condition, fixed or periodic boundary,
+network size, Adam then L-BFGS, and optionally the design on the canvas as the
+network, if it maps two inputs to one output.
+
+**A falling loss is not evidence that the equation was solved.** So every run is
+compared with the same problem solved by finite differences, and the verdict
+comes from that comparison. The referee was checked before it was trusted:
+5×10⁻⁶ from the exact heat solution, 4×10⁻⁴ from exact advection, and the
+Burgers shock forms at x ≈ 0.002. A wave equation gets no reference and is
+reported as unverified rather than compared with nothing.
+
+Measured on the three presets:
+
+```text
+heat          matched   0.8%
+Burgers       matched   2.4%, 5.0%, 1.3% on three seeds
+convection    failed    84%, residual 1e-3
+```
+
+The convection case is the documented failure (Krishnapriyan et al., 2021): the
+residual falls to 10⁻³ — the equation looks solved — while the answer is 84%
+wrong, because a nearly flat function satisfies every transport equation. The
+verdict names it, and it is keyed to the residual term, because keying it to the
+total missed exactly this case: the boundary term kept the total high.
+
+**What Burgers actually needed, measured rather than assumed.** I expected
+float64 to rescue L-BFGS on the shock; it did not — float32 ran 1,652 L-BFGS
+evaluations without stalling, and float64 did worse. What worked was depth and
+adaptive refinement *together*: eight layers of 20 with points added where the
+residual is worst reached 2.4%. The same network without refinement: 31%. Four
+layers of 32 with refinement: 20%. Neither ingredient is enough alone, and the
+preset notes say so.
+
+Each loss term is drawn on its own line, because a boundary condition the
+network is ignoring is exactly what a single loss curve hides. A ReLU network is
+caught by measuring its second derivative — exactly zero, so a diffusion term
+would contribute nothing — and the run says so.
+
 ## 1.80.3
 
 **The panels live in `#mainRow`.** Not the shell, not the page — both of which I

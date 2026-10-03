@@ -66,8 +66,12 @@ MATTERS = [
      "importing .onnx exports",
      "the other import routes are unaffected"),
     ("numpy", "numpy",
-     "loading CSV and array datasets",
-     "the built-in and image datasets still work"),
+     "the implicit-equilibrium layers, and loading CSV and array datasets",
+     "the implicit layers do not load, and the rest of the palette is "
+     "unaffected"),
+    ("sympy", "sympy",
+     "the workbench's symbolic checks and physics-informed training",
+     "both pages open, and neither can read an equation"),
 ]
 
 
@@ -80,6 +84,13 @@ def _found_elsewhere(module: str) -> str:
     import subprocess
 
     candidates = []
+    # The project's own environment first. When it is not activated its
+    # interpreter is not on PATH, so searching PATH alone misses the commonest
+    # case of all: running the tests from a fresh terminal.
+    here = Path(__file__).resolve().parent
+    for folder in (".venv", "venv", "env"):
+        for name in ("bin/python3", "bin/python", "Scripts/python.exe"):
+            candidates.append(str(here / folder / name))
     base = getattr(sys, "base_prefix", sys.prefix)
     if base != sys.prefix:
         candidates.append(str(Path(base) / "bin" / "python3"))

@@ -17,6 +17,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# Running the suite with the wrong interpreter produces twenty failures that
+# look unrelated — fastapi here, sympy there, an implicit layer that will not
+# load — when there is one cause. Say the cause once and stop.
+try:
+    import fastapi  # noqa: F401
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    try:
+        import doctor
+        elsewhere = doctor._found_elsewhere("fastapi")
+    except Exception:  # noqa: BLE001
+        elsewhere = ""
+    print(f"\nThis is {sys.executable}, which does not have the app's "
+          f"packages installed.")
+    if elsewhere:
+        print(f"They are installed for {elsewhere}.")
+        if "/.venv/" in elsewhere or "/venv/" in elsewhere:
+            print("The project's virtual environment is not active: run "
+                  "`source .venv/bin/activate` first.")
+    else:
+        print("Install them with `pip install -r requirements.txt`.")
+    sys.exit(2)
+
 import blockloader  # noqa: E402
 import codegen  # noqa: E402
 import graph as G  # noqa: E402
@@ -1483,6 +1506,99 @@ def _():
     import main
 
     assert "codebase_run" in dir(main)
+
+
+@check("physics-informed training is judged against a reference, not its loss")
+def _():
+    """A falling loss is not evidence that an equation was solved — PINNs
+    stall on wrong answers in documented ways. So the referee has to be right
+    first, and then the verdict has to come from it.
+    """
+    if not HAVE_TORCH:
+        return
+    import numpy as np
+    import torch.nn as nn
+
+    import physics as P
+
+    # the referee, against exact solutions
+    heat = P.parse("u_t - 0.1*u_xx", "sin(pi*x)",
+                   {"kind": "dirichlet", "left": "0", "right": "0"})
+    ref = P.reference(heat, [-1, 1], [0, 1], nx=128)
+    X, T = np.meshgrid(ref["x"], ref["t"])
+    exact = np.exp(-0.1 * np.pi ** 2 * T) * np.sin(np.pi * X)
+    assert np.linalg.norm(ref["u"] - exact) / np.linalg.norm(exact) < 1e-3, \
+        "the reference solver is wrong about the heat equation"
+
+    wave = P.parse("u_tt - u_xx", "sin(pi*x)",
+                   {"kind": "dirichlet", "left": "0", "right": "0"})
+    refused = P.reference(wave, [-1, 1], [0, 1])
+    assert not refused["ok"] and "cannot be verified" in refused["why"], \
+        "a problem the referee cannot solve was given a reference anyway"
+
+    # what is not a differential equation is refused
+    for bad, why in (("u + 3", "no derivative"), ("u_t + q", "q")):
+        try:
+            P.parse(bad, "x", {})
+        except P.PhysicsError as exc:
+            assert why in str(exc), exc
+        else:
+            raise AssertionError(f"{bad} was accepted")
+
+    # a short run on the forgiving problem matches, and says so
+    preset = {**next(x for x in P.PRESETS if x["id"] == "heat"),
+              "iterations": 400, "lbfgs": 100, "adaptive": False}
+    run = P.train(preset)
+    assert run["verdict"]["kind"] == "matched", run["verdict"]
+    assert run["relative_l2"] < 0.05
+    last = run["history"][-1]
+    assert {"pde", "ic", "bc"} <= set(last), "the terms are not reported apart"
+
+    # the documented failure is reported as one, whatever the loss did
+    conv = {**next(x for x in P.PRESETS if x["id"] == "convection"),
+            "iterations": 600, "lbfgs": 0}
+    failed = P.train(conv)
+    assert failed["verdict"]["kind"] == "failed", failed["verdict"]
+    assert failed["relative_l2"] > 0.2
+
+    # and when the residual alone looks solved, that is named — checked on
+    # the residual, because the total hid it once already
+    import inspect
+
+    body = inspect.getsource(P.train)
+    assert 'error >= 0.2 and residual_term < 1e-2' in body, \
+        "the warning is keyed to the total loss, which hides this failure"
+
+    # ReLU has no second derivative: measured, and said
+    relu = nn.Sequential(nn.Linear(2, 16), nn.ReLU(), nn.Linear(16, 1))
+    quiet = P.train({**preset, "iterations": 10, "lbfgs": 0}, model=relu)
+    assert any("second derivative is exactly zero" in w
+               for w in quiet["warnings"]), quiet["warnings"]
+
+    # the design on the canvas can be the network, if it is shaped for u(x, t)
+    shaped = build([("i", "Input", {"shape": [2]}),
+                    ("a", "Linear", {"units": 16}),
+                    ("t", "Activation", {"kind": "tanh"}),
+                    ("b", "Linear", {"units": 1}),
+                    ("o", "Output", {"task": "regression"})],
+                   [("i", "a", 0), ("a", "t", 0), ("t", "b", 0), ("b", "o", 0)],
+                   "Field")
+    assert P.network_from_design(shaped) is not None
+
+    wide = build([("i", "Input", {"shape": [2]}),
+                  ("b", "Linear", {"units": 3}),
+                  ("o", "Output", {"task": "regression"})],
+                 [("i", "b", 0), ("b", "o", 0)], "Wide")
+    try:
+        P.network_from_design(wide)
+    except P.PhysicsError as exc:
+        assert "single output" in str(exc)
+    else:
+        raise AssertionError("a design with three outputs was accepted as u(x, t)")
+
+    assert "function renderPhysicsPage" in PAGE
+    assert "pagePhysics" in PAGE
+    assert "never from the loss" in PAGE or "not evidence that the equation" in PAGE
 
 
 @check("a briefing names its barriers, and does not invent one")

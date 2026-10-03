@@ -226,7 +226,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
 #pageAgents, #pagePad, #pageDomains, #pageScouts,
-#pageCodebase, #pageMaths, #pageWorkbench{background:var(--paper)}
+#pageCodebase, #pageMaths, #pageWorkbench, #pagePhysics{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -1311,6 +1311,18 @@ i.covered{
   color:#3C4B5F;max-height:0;overflow:hidden;transition:max-height .15s;
 }
 .methodrow.open p{max-height:220px}
+.physrow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-top:6px}
+.physrow label{font-size:10.5px;color:var(--muted);display:flex;flex-direction:column}
+.physrow .wbinput{margin-top:3px}
+.physcheck{display:flex;gap:7px;align-items:center;font-size:11.5px;color:#3C4B5F;margin-top:9px}
+.physchart{margin-top:6px;background:#FBFCFD;border:1px solid var(--paper-3);border-radius:8px}
+.physkey{display:flex;gap:14px;font-size:10.5px;color:var(--muted);margin-top:5px}
+.physkey i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
+.physmaps{display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;margin-top:12px}
+.physmaps figure{margin:0}
+.physmaps canvas{width:100%;height:auto;image-rendering:pixelated;
+  border:1px solid var(--paper-3);border-radius:6px}
+.physmaps figcaption{font-size:10.5px;color:var(--muted);text-align:center;margin-top:4px}
 .wbpaper{
   border-left:3px solid var(--paper-3);padding:6px 0 6px 11px;margin-bottom:9px;
 }
@@ -2328,7 +2340,7 @@ body.sizing{user-select:none}
   #minimap{display:none}
 
   /* one column everywhere a grid was two or more */
-  .cbsplit,.padgrid,.padtry,.paperflow,.scoutpick,.armrow,.domrow,
+  .cbsplit,.padgrid,.padtry,.paperflow,.scoutpick,.armrow,.domrow,.physrow,
   .qgrid,.kv{grid-template-columns:1fr !important}
   .cbpanel{position:static}
   .cbtree{max-height:240px}
@@ -2359,6 +2371,7 @@ body.sizing{user-select:none}
   .provenance{left:12px;right:12px;transform:none;justify-content:center}
   .wbwrap,.cbwrap,.scoutwrap,.domwrap,.padwrap{padding:16px 12px 32px}
   .eqbig{font-size:15px}
+  .physmaps{grid-template-columns:1fr 1fr}
 }
 
 @media (max-width: 520px){
@@ -2417,6 +2430,7 @@ body.sizing{user-select:none}
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
     <button data-page="pageMaths"><i>&#8747;</i>Maths &rarr; layers</button>
     <button data-page="pageWorkbench"><i>&#9635;</i>The workbench</button>
+    <button data-page="pagePhysics"><i>&#8706;</i>Physics-informed</button>
     <button data-page="pageCodebase"><i>&#9783;</i>Read a codebase</button>
     <button data-page="pageScouts"><i>&#9906;</i>Scouts</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
@@ -2667,6 +2681,10 @@ body.sizing{user-select:none}
   <div class="scroll" id="padMain"></div>
 </section>
 
+<section class="page" id="pagePhysics">
+  <div class="scroll" id="physMain"></div>
+</section>
+
 <section class="page" id="pageWorkbench">
   <div class="scroll" id="wbMain"></div>
 </section>
@@ -2879,7 +2897,7 @@ const state = {
   trace:null, traceAt:null, traceBatch:4, traceTimer:null, runView:"layers",
   quant:null, quantWeights:"", needsFit:false,
   scout:null, scoutTimer:null, scoutCatalog:null,
-  codebase:null, cbFile:null, maths:null, problem:null, lesson:null, mathTab:"understand", mathType:null, lessonCache:null, cbMap:null, cbMapPlace:null,
+  codebase:null, cbFile:null, maths:null, problem:null, physSpec:null, physRun:null, physPresets:null, lesson:null, mathTab:"understand", mathType:null, lessonCache:null, cbMap:null, cbMapPlace:null,
   cbTrace:null, cbTraceEntry:null, cbPicked:null, cbDiagram:null, cbTab:"module", cbWalkAt:0,
   story:null, storyAt:0, storyTimer:null, storyFocus:null,
   importSize:{ w:null, h:null, x:null, y:null, peek:null }, importSizeTimer:null,
@@ -5496,6 +5514,7 @@ const PAGE_SETUP = {
   pageCodebase: renderCodebasePage,
   pageMaths: renderMathsPage,
   pageWorkbench: renderWorkbenchPage,
+  pagePhysics: renderPhysicsPage,
   pagePaper: renderPaperPage,
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
@@ -5572,6 +5591,249 @@ $("statusToggle").addEventListener("click", () => {
   $("statusToggle").textContent =
     $("problemPanel").classList.contains("on") ? "hide" : "details";
 });
+
+/* =========================== physics-informed =========================== */
+
+/* Learn u(x, t) by being penalised wherever it breaks an equation — and then
+   check it against a solution computed without a network. The loss is shown
+   term by term because a falling total can hide a boundary condition that is
+   being ignored, and the verdict comes from the comparison, never the loss. */
+
+async function renderPhysicsPage(){
+  const host = $("physMain");
+  let presets = [];
+  try{
+    presets = (await (await fetch(API + "/api/physics/presets")).json()).presets || [];
+  } catch { /* the form still works by hand */ }
+  state.physPresets = presets;
+  const p = state.physSpec || presets[0] || {};
+
+  host.innerHTML = `<div class="wbwrap">
+    <div class="wbhead">
+      <h3>Physics-informed training</h3>
+      <p>A network learns u(x, t) by being penalised wherever it breaks the
+      equation, the initial condition or the boundary. When it finishes, it is
+      compared with the same problem solved by finite differences — because a
+      falling loss is not evidence that the equation was solved, and the
+      literature is full of cases where it was not.</p>
+    </div>
+
+    <div class="wbcard">
+      <div class="mathsec">start from</div>
+      <div class="hitwhy">${presets.map(x =>
+        `<span class="cbjump" data-preset="${x.id}">${x.name}</span>`).join("")}</div>
+      <p class="mathnote" id="physNote">${p.note || ""}</p>
+
+      <div class="mathsec">the equation, as residual = 0</div>
+      <input class="wbinput mono" id="physPde" value="${(p.pde || "").replace(/"/g, "&quot;")}"
+        placeholder="u_t + u*u_x - 0.01/pi*u_xx">
+      <p class="mathnote">Use u, x, t and the derivatives u_t, u_x, u_xx, u_tt,
+      u_xt.</p>
+
+      <div class="physrow">
+        <label>initial u(x, 0)<input class="wbinput mono" id="physIc"
+          value="${(p.ic || "").replace(/"/g, "&quot;")}"></label>
+        <label>x from<input class="wbinput" id="physX0" value="${(p.x || [-1, 1])[0]}"></label>
+        <label>to<input class="wbinput" id="physX1" value="${(p.x || [-1, 1])[1]}"></label>
+        <label>t to<input class="wbinput" id="physT1" value="${(p.t || [0, 1])[1]}"></label>
+      </div>
+      <div class="physrow">
+        <label>boundary<select class="wbinput" id="physBc">
+          <option value="dirichlet"${(p.bc || {}).kind !== "periodic" ? " selected" : ""}>fixed values</option>
+          <option value="periodic"${(p.bc || {}).kind === "periodic" ? " selected" : ""}>periodic</option>
+        </select></label>
+        <label>u at left<input class="wbinput mono" id="physLeft" value="${(p.bc || {}).left ?? "0"}"></label>
+        <label>u at right<input class="wbinput mono" id="physRight" value="${(p.bc || {}).right ?? "0"}"></label>
+      </div>
+
+      <div class="mathsec">the network and the optimiser</div>
+      <div class="physrow">
+        <label>layers<input class="wbinput" id="physDepth" value="${p.depth || 4}"></label>
+        <label>width<input class="wbinput" id="physWidth" value="${p.width || 32}"></label>
+        <label>Adam steps<input class="wbinput" id="physIters" value="${p.iterations || 2000}"></label>
+        <label>then L-BFGS<input class="wbinput" id="physLbfgs" value="${p.lbfgs ?? 500}"></label>
+      </div>
+      <label class="physcheck"><input type="checkbox" id="physAdaptive"
+        ${p.adaptive === false ? "" : "checked"}> add points where the residual
+        is worst, as training goes</label>
+      <label class="physcheck"><input type="checkbox" id="physDesign">
+        train the design on the canvas instead (needs Input [2] and one output)</label>
+      <div class="cbacts">
+        <button class="btn go" id="physGo">Train it</button>
+        <button class="btn" id="physStop" style="display:none">Stop</button>
+      </div>
+    </div>
+    <div id="physOut"></div>
+  </div>`;
+
+  host.querySelectorAll("[data-preset]").forEach(chip =>
+    chip.addEventListener("click", () => {
+      state.physSpec = presets.find(x => x.id === chip.dataset.preset);
+      renderPhysicsPage();
+    }));
+  $("physGo").addEventListener("click", startPhysics);
+  $("physStop").addEventListener("click", () => {
+    if (state.physRun) fetch(API + `/api/physics/run/${state.physRun}/stop`,
+                             { method: "POST" });
+  });
+}
+
+async function startPhysics(){
+  const bcKind = $("physBc").value;
+  const spec = {
+    pde: $("physPde").value, ic: $("physIc").value,
+    x: [+$("physX0").value, +$("physX1").value], t: [0, +$("physT1").value],
+    bc: bcKind === "periodic" ? { kind: "periodic" }
+      : { kind: "dirichlet", left: $("physLeft").value, right: $("physRight").value },
+    depth: +$("physDepth").value, width: +$("physWidth").value,
+    iterations: +$("physIters").value, lbfgs: +$("physLbfgs").value,
+    adaptive: $("physAdaptive").checked, use_design: $("physDesign").checked,
+  };
+  const out = $("physOut");
+  let r, d;
+  try{
+    r = await fetch(API + "/api/physics/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec, graph: state.graph }) });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    out.innerHTML = `<div class="runfail">${
+      (d.detail && d.detail.message) || "It would not start"}</div>`;
+    return;
+  }
+  state.physRun = d.id;
+  $("physGo").disabled = true;
+  $("physStop").style.display = "";
+  pollPhysics();
+}
+
+async function pollPhysics(){
+  let d;
+  try{
+    d = await (await fetch(API + `/api/physics/run/${state.physRun}`)).json();
+  } catch { setTimeout(pollPhysics, 1500); return; }
+  paintPhysics(d);
+  if (d.status === "running") setTimeout(pollPhysics, 1000);
+  else {
+    const go = $("physGo"); if (go) go.disabled = false;
+    const st = $("physStop"); if (st) st.style.display = "none";
+  }
+}
+
+function lossChart(rows){
+  if (!rows.length) return "";
+  const W = 640, H = 170, pad = 30;
+  const terms = [["pde", "#8A5CF6", "residual"], ["ic", "#C77B30", "initial"],
+                 ["bc", "#3A8A57", "boundary"]];
+  const vals = rows.flatMap(r => terms.map(([k]) => r[k])).filter(v => v > 0);
+  const lo = Math.log10(Math.min(...vals)), hi = Math.log10(Math.max(...vals));
+  const last = rows[rows.length - 1].step || 1;
+  const X = s => pad + (W - 2 * pad) * (s / last);
+  const Y = v => H - pad - (H - 2 * pad) *
+    ((Math.log10(Math.max(v, 1e-12)) - lo) / Math.max(hi - lo, 1e-9));
+  const lbfgsAt = (rows.find(r => r.phase === "lbfgs") || {}).step;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="physchart">
+    ${lbfgsAt ? `<line x1="${X(lbfgsAt)}" x2="${X(lbfgsAt)}" y1="${pad - 8}"
+       y2="${H - pad}" stroke="#CBD5E1" stroke-dasharray="3 3"/>
+       <text x="${X(lbfgsAt) + 4}" y="${pad - 10}" font-size="9" fill="#8A94A2">L-BFGS</text>` : ""}
+    ${terms.map(([k, colour]) => `<polyline fill="none" stroke="${colour}"
+      stroke-width="1.6" points="${rows.map(r => `${X(r.step)},${Y(r[k])}`).join(" ")}"/>`).join("")}
+    <text x="${pad}" y="${H - 8}" font-size="9" fill="#8A94A2">step 0</text>
+    <text x="${W - pad}" y="${H - 8}" font-size="9" fill="#8A94A2" text-anchor="end">${last}</text>
+    <text x="4" y="${pad}" font-size="9" fill="#8A94A2">1e${hi.toFixed(0)}</text>
+    <text x="4" y="${H - pad}" font-size="9" fill="#8A94A2">1e${lo.toFixed(0)}</text>
+  </svg>
+  <div class="physkey">${terms.map(([k, c, label]) =>
+    `<span><i style="background:${c}"></i>${label}</span>`).join("")}</div>`;
+}
+
+function paintPhysics(d){
+  const out = $("physOut");
+  if (!out) return;
+  const rows = d.status === "running" ? d.progress
+    : ((d.result && d.result.history) || d.progress);
+  const res = d.result;
+  const last = rows[rows.length - 1];
+
+  out.innerHTML = `
+    <div class="wbcard">
+      <div class="wbtitle"><b>${d.status === "running" ? "Training" : "Finished"}</b>
+        <span class="wbchip">${d.network}</span></div>
+      ${last ? `<p class="mathnote">step ${last.step}${last.of ? ` of ${last.of}` : ""}
+        · residual ${last.pde.toExponential(1)} · initial
+        ${last.ic.toExponential(1)} · boundary ${last.bc.toExponential(1)}</p>` : ""}
+      ${lossChart(rows)}
+      <p class="mathnote">Each term on its own line. The total can fall while one
+      of these refuses to — and a boundary condition the network is ignoring is
+      exactly what a single loss curve hides.</p>
+      ${d.error ? `<div class="runfail">${d.error}</div>` : ""}
+    </div>
+    ${res ? paintPhysicsResult(res) : ""}`;
+  if (res && res.grids) drawPhysicsMaps(res.grids);
+}
+
+function paintPhysicsResult(res){
+  const v = res.verdict || {};
+  const box = v.kind === "matched" ? "paperok"
+    : v.kind === "rough" || v.kind === "unverified" ? "paperwarn" : "runfail";
+  return `<div class="wbcard">
+    <div class="${box}"><b>${{matched: "Matches the reference.",
+      rough: "Roughly right.", failed: "Not solved.",
+      unverified: "Unverified."}[v.kind] || ""}</b> ${v.text || ""}</div>
+    ${(res.warnings || []).map(w => `<div class="paperwarn">${w}</div>`).join("")}
+    ${res.grids ? `
+      <div class="physmaps">
+        <figure><canvas id="mapPinn" width="64" height="51"></canvas>
+          <figcaption>the network</figcaption></figure>
+        <figure><canvas id="mapRef" width="64" height="51"></canvas>
+          <figcaption>finite differences</figcaption></figure>
+        <figure><canvas id="mapErr" width="64" height="51"></canvas>
+          <figcaption>where they differ</figcaption></figure>
+      </div>
+      <p class="mathnote">x runs across, t runs down, from ${res.grids.t[0]} to
+      ${res.grids.t[1]}.</p>` : ""}
+    <table class="mathtab">
+      <tr><td class="key">relative L2 error</td><td class="val">${
+        res.relative_l2 !== undefined ? (res.relative_l2 * 100).toFixed(2) + "%" : "—"}</td></tr>
+      <tr><td class="key">residual on unseen points</td><td class="val">${
+        (res.residual_rms_unseen ?? 0).toExponential(2)}</td></tr>
+      <tr><td class="key">reference</td><td class="val">${
+        (res.reference || {}).how || (res.reference || {}).why || ""}</td></tr>
+      <tr><td class="key">collocation points at the end</td><td class="val">${
+        res.collocation_final ?? ""}</td></tr>
+      <tr><td class="key">time</td><td class="val">${res.seconds}s</td></tr>
+    </table>
+  </div>`;
+}
+
+function drawPhysicsMaps(g){
+  const all = g.pinn.flat().concat(g.reference.flat());
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const errHi = Math.max(...g.error.flat(), 1e-9);
+  const paint = (id, grid, scale) => {
+    const c = $(id);
+    if (!c || !c.getContext) return;
+    const ctx = c.getContext("2d");
+    const img = ctx.createImageData(64, 51);
+    grid.forEach((row, j) => row.forEach((v, i) => {
+      const k = (j * 64 + i) * 4;
+      const [r, gg, b] = scale(v);
+      img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255;
+    }));
+    ctx.putImageData(img, 0, 0);
+  };
+  const diverging = v => {
+    const s = (v - lo) / Math.max(hi - lo, 1e-9) * 2 - 1;
+    return s < 0 ? [255 + s * 175, 255 + s * 120, 255]
+                 : [255, 255 - s * 140, 255 - s * 190];
+  };
+  const heat = v => { const s = Math.min(1, v / errHi);
+    return [255 - s * 75, 255 - s * 200, 255 - s * 210]; };
+  paint("mapPinn", g.pinn, diverging);
+  paint("mapRef", g.reference, diverging);
+  paint("mapErr", g.error, heat);
+}
 
 /* =========================== the workbench =========================== */
 

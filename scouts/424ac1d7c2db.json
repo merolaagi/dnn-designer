@@ -1,0 +1,76 @@
+{
+ "id": "424ac1d7c2db",
+ "kind": "imports",
+ "goal": "/var/folders/m1/n3wh4h6n5n15n9xnx0bppgwm0000gn/T/tmppjx07ydw/proj",
+ "status": "done",
+ "steps": [
+  {
+   "at": 0.0,
+   "text": "Reading /private/var/folders/m1/n3wh4h6n5n15n9xnx0bppgwm0000gn/T/tmppjx07ydw/proj",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "3 files, 3 nn.Module classes",
+   "detail": "looking at 3 of them"
+  },
+  {
+   "at": 0.0,
+   "text": "   Plain: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Configured: the plan did not import",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "   Impossible: needs something that cannot be worked out",
+   "detail": ""
+  },
+  {
+   "at": 0.0,
+   "text": "None of them import.",
+   "detail": "Each card says why. The commonest reasons are a config that cannot be built from its field names, a forward() that branches on tensor values, and another framework entirely."
+  }
+ ],
+ "findings": [
+  {
+   "kind": "importable",
+   "cls": "Plain",
+   "file": "pkg/nets.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "the plan did not import",
+   "why": "pkg/nets.py did not import: ModuleNotFoundError: No module named 'torch'."
+  },
+  {
+   "kind": "importable",
+   "cls": "Configured",
+   "file": "pkg/nets.py",
+   "foreign": "",
+   "works": false,
+   "args": "config_cfg",
+   "setup": "from pkg.configs import BlockConfig\nconfig_cfg = BlockConfig(input_dims=16, hidden_dims=32)",
+   "summary": "the plan did not import",
+   "why": "pkg/nets.py did not import: ModuleNotFoundError: No module named 'torch'."
+  },
+  {
+   "kind": "importable",
+   "cls": "Impossible",
+   "file": "pkg/nets.py",
+   "foreign": "",
+   "works": false,
+   "args": "",
+   "setup": "",
+   "summary": "needs something that cannot be worked out",
+   "why": "Could not work out tokenizer: no type given. Those are decisions rather than values."
+  }
+ ],
+ "error": "",
+ "seconds": 0.0,
+ "kept_at": 1791037512.259286
+}
