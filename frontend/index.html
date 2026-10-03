@@ -5653,6 +5653,21 @@ async function renderPhysicsPage(){
         <label>Adam steps<input class="wbinput" id="physIters" value="${p.iterations || 2000}"></label>
         <label>then L-BFGS<input class="wbinput" id="physLbfgs" value="${p.lbfgs ?? 500}"></label>
       </div>
+      <div class="physrow">
+        <label>conditions<select class="wbinput" id="physHard">
+          <option value="soft"${p.constraints === "hard" ? "" : " selected"}>in the loss (soft)</option>
+          <option value="hard"${p.constraints === "hard" ? " selected" : ""}>in the solution (hard)</option>
+        </select></label>
+        <label>subdomains in x<input class="wbinput" id="physSubX" value="${(p.subdomains || [])[0] || ""}"
+          placeholder="none"></label>
+        <label>subdomains in t<input class="wbinput" id="physSubT" value="${(p.subdomains || [])[1] || ""}"
+          placeholder="none"></label>
+        <label>&nbsp;</label>
+      </div>
+      <p class="mathnote">Hard conditions are written into the solution
+      (Lagaris, 1998), so they hold exactly and leave the loss. Subdomains
+      split the problem across small overlapping networks — an FBPINN,
+      Moseley (2022), chapter 6.</p>
       <label class="physcheck"><input type="checkbox" id="physAdaptive"
         ${p.adaptive === false ? "" : "checked"}> add points where the residual
         is worst, as training goes</label>
@@ -5664,6 +5679,26 @@ async function renderPhysicsPage(){
       </div>
     </div>
     <div id="physOut"></div>
+
+    <div class="wbcard">
+      <div class="wbtitle"><b>Does it scale with frequency?</b>
+        <span class="wbchip">Moseley 2022, §6.3</span></div>
+      <p class="wbstatement">du/dx = cos(ωx), u(0) = 0, whose exact solution is
+      sin(ωx)/ω. At ω = 1 a tiny PINN solves it. As ω rises it needs more
+      parameters, more points and many more steps, and spectral bias means
+      the high frequencies arrive last. Three models get the same number of
+      steps: a small PINN, a large one, and an FBPINN built from small
+      networks over overlapping subdomains.</p>
+      <div class="physrow">
+        <label>ω<input class="wbinput" id="scaleOmega" value="15"></label>
+        <label>steps each<input class="wbinput" id="scaleSteps" value="3000"></label>
+        <label>&nbsp;</label><label>&nbsp;</label>
+      </div>
+      <p class="mathnote">Measured here at ω = 15 and 8,000 steps: small PINN
+      160% error, 5×128 PINN (66,433 parameters) 65%, FBPINN (9,630) 0.26%.</p>
+      <div class="cbacts"><button class="btn go" id="scaleGo">Compare them</button></div>
+      <div id="scaleOut"></div>
+    </div>
   </div>`;
 
   host.querySelectorAll("[data-preset]").forEach(chip =>
@@ -5672,6 +5707,7 @@ async function renderPhysicsPage(){
       renderPhysicsPage();
     }));
   $("physGo").addEventListener("click", startPhysics);
+  $("scaleGo").addEventListener("click", startScaling);
   $("physStop").addEventListener("click", () => {
     if (state.physRun) fetch(API + `/api/physics/run/${state.physRun}/stop`,
                              { method: "POST" });
@@ -5688,7 +5724,10 @@ async function startPhysics(){
     depth: +$("physDepth").value, width: +$("physWidth").value,
     iterations: +$("physIters").value, lbfgs: +$("physLbfgs").value,
     adaptive: $("physAdaptive").checked, use_design: $("physDesign").checked,
+    constraints: $("physHard").value,
   };
+  const sx = +$("physSubX").value, st = +$("physSubT").value;
+  if (sx > 0 && st > 0){ spec.subdomains = [sx, st]; spec.replace_network = true; }
   const out = $("physOut");
   let r, d;
   try{
@@ -5719,6 +5758,63 @@ async function pollPhysics(){
     const go = $("physGo"); if (go) go.disabled = false;
     const st = $("physStop"); if (st) st.style.display = "none";
   }
+}
+
+async function startScaling(){
+  const out = $("scaleOut");
+  let r, d;
+  try{
+    r = await fetch(API + "/api/physics/scaling", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ omega: +$("scaleOmega").value,
+                             steps: +$("scaleSteps").value }) });
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  $("scaleGo").disabled = true;
+  const poll = async () => {
+    let s;
+    try{ s = await (await fetch(API + `/api/physics/run/${d.id}`)).json(); }
+    catch { setTimeout(poll, 1500); return; }
+    const last = s.progress[s.progress.length - 1];
+    if (s.status === "running"){
+      out.innerHTML = `<p class="mathnote">${last ? `${last.model}: step
+        ${last.step}, error ${last.l1.toExponential(1)}` : "starting…"}</p>`;
+      setTimeout(poll, 1000);
+      return;
+    }
+    $("scaleGo").disabled = false;
+    if (s.error){ out.innerHTML = `<div class="runfail">${s.error}</div>`; return; }
+    paintScaling(s.result);
+  };
+  poll();
+}
+
+function paintScaling(res){
+  const models = res.models || [];
+  const W = 640, H = 180, pad = 26;
+  const xs = models[0] ? models[0].x : [];
+  const lo = Math.min(...xs), hi = Math.max(...xs);
+  const amp = Math.max(...models[0].exact.map(Math.abs)) * 1.3;
+  const X = v => pad + (W - 2 * pad) * (v - lo) / (hi - lo);
+  const Y = v => H / 2 - (H / 2 - pad) * v / amp;
+  const line = (vals, colour, width, dash) => `<polyline fill="none"
+    stroke="${colour}" stroke-width="${width}" ${dash ? `stroke-dasharray="${dash}"` : ""}
+    points="${xs.map((x, i) => `${X(x)},${Y(vals[i])}`).join(" ")}"/>`;
+  const colours = ["#C77B30", "#3A8A57", "#8A5CF6"];
+  $("scaleOut").innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" class="physchart">
+      ${line(models[0].exact, "#16202E", 2.2)}
+      ${models.map((m, i) => line(m.u, colours[i], 1.3, i === 2 ? "" : "4 3")).join("")}
+    </svg>
+    <div class="physkey"><span><i style="background:#16202E"></i>exact</span>
+      ${models.map((m, i) => `<span><i style="background:${colours[i]}"></i>${m.label}</span>`).join("")}</div>
+    <table class="mathtab" style="margin-top:10px">
+      ${models.map(m => `<tr><td class="key">${m.label}</td>
+        <td class="val">${m.parameters.toLocaleString()} parameters ·
+        ${(m.relative_l1 * 100).toFixed(m.relative_l1 < 0.01 ? 2 : 1)}% error</td></tr>`).join("")}
+    </table>
+    <p class="mathnote">Same steps for all three, ω = ${res.omega}. Error is
+    relative L1 against the exact solution on 5,000 points, never the loss.</p>`;
 }
 
 function lossChart(rows){

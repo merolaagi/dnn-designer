@@ -339,25 +339,53 @@ def train(spec: Dict[str, Any], model=None,
     t0, t1 = map(float, spec["t"])
     sym = parsed["symbols"]
 
-    model = model or default_network(int(spec.get("width", 32)),
-                                     int(spec.get("depth", 4)))
+    if model is None and not spec.get("subdomains"):
+        model = default_network(int(spec.get("width", 32)),
+                                int(spec.get("depth", 4)))
     # float32 by default. I expected float64 to rescue L-BFGS on Burgers and
     # measured otherwise: float32 ran 1,652 L-BFGS evaluations without
     # stalling and reached 16%, float64 reached 32% and took longer. The
     # shock was not a precision problem. float64 stays available.
     dtype = torch.float64 if spec.get("precision", "float32") == "float64" \
         else torch.float32
-    model = model.to(dtype)
-    iterations = max(10, min(20000, int(spec.get("iterations", 3000))))
-    n_pde = max(100, min(20000, int(spec.get("collocation", 2000))))
-    n_edge = max(20, min(2000, int(spec.get("edge_points", 200))))
-    w = {"pde": 1.0, "ic": 1.0, "bc": 1.0, **(spec.get("weights") or {})}
-
     residual_fn = _torch_fn(parsed["residual"],
                             tuple(sym[n] for n in NAMES))
     ic_fn = _torch_fn(parsed["ic"], (sym["x"],))
     bc_fns = {side: _torch_fn(expr, (sym["t"],))
               for side, expr in parsed["bc"].items()}
+
+    w = {"pde": 1.0, "ic": 1.0, "bc": 1.0, **(spec.get("weights") or {})}
+
+    # Moseley's thesis, chapter 6: a finite-basis network over a grid of
+    # overlapping subdomains, and/or the conditions written into the solution.
+    import fbpinn as FB
+
+    grid = spec.get("subdomains")
+    if grid and model is None or (grid and spec.get("replace_network")):
+        nx_, nt_ = int(grid[0]), int(grid[1])
+        model = FB.FBPINN([(x0, x1), (t0, t1)], [nx_, nt_],
+                          [0.3 * (x1 - x0) / nx_, 0.3 * (t1 - t0) / nt_],
+                          int(spec.get("width", 16)), int(spec.get("depth", 2)))
+    hard = spec.get("constraints") == "hard"
+    if hard:
+        if parsed["bc_kind"] != "dirichlet":
+            raise PhysicsError(
+                "Hard constraints here are written for fixed boundary values. "
+                "A periodic boundary needs a different construction, so this "
+                "run has to use soft constraints.")
+        try:
+            model = FB.hard_constrained(model, ic_fn, bc_fns["left"],
+                                        bc_fns["right"], x0, x1, t0, t1)
+        except ValueError as exc:
+            raise PhysicsError(str(exc))
+        # Satisfied by construction, so they leave the loss. They are still
+        # measured and reported, which is how anyone can see they are zero.
+        w["ic"] = w["bc"] = 0.0
+    model = model.to(dtype)
+    iterations = max(10, min(20000, int(spec.get("iterations", 3000))))
+    n_pde = max(100, min(20000, int(spec.get("collocation", 2000))))
+    n_edge = max(20, min(2000, int(spec.get("edge_points", 200))))
+
 
     def uniform(n, lo, hi):
         return lo + (hi - lo) * torch.rand(n, 1, dtype=dtype)
@@ -601,6 +629,47 @@ def start(spec: Dict[str, Any], graph: Optional[Dict[str, Any]] = None
                 json.dumps(snapshot(run)))
         except Exception:  # noqa: BLE001
             pass
+
+    threading.Thread(target=work, daemon=True).start()
+    return snapshot(run)
+
+
+def start_scaling(omega: float, steps: int, big_width: int = 128,
+                  big_depth: int = 5) -> Dict[str, Any]:
+    """Moseley's motivating experiment (thesis §6.3, §6.5.2): the same
+    frequency, solved by a small PINN, a large PINN and an FBPINN of small
+    networks, each for the same number of steps, against the exact answer."""
+    import fbpinn as FB
+
+    omega = max(0.5, min(40.0, float(omega)))
+    steps = max(100, min(50000, int(steps)))
+    run = {"id": uuid.uuid4().hex[:12], "status": "running", "progress": [],
+           "result": None, "error": "", "spec": {"omega": omega,
+                                                 "steps": steps},
+           "network": "three models, same steps", "started": time.time(),
+           "stop": threading.Event(), "folder": home()}
+    RUNS[run["id"]] = run
+
+    def work():
+        results = []
+        try:
+            for kind, width, depth in (("pinn", 16, 2),
+                                       ("pinn", big_width, big_depth),
+                                       ("fbpinn", 16, 2)):
+                if run["stop"].is_set():
+                    break
+                label = f"{kind} {depth}x{width}"
+                out = FB.motivating(
+                    omega, kind, steps=steps, width=width, depth=depth,
+                    progress=lambda row, label=label: run["progress"].append(
+                        {"model": label, **row}))
+                results.append(out)
+            run["result"] = {"models": results, "omega": omega,
+                             "steps": steps}
+            run["status"] = "stopped" if run["stop"].is_set() else "done"
+        except Exception as exc:  # noqa: BLE001
+            run["error"] = f"{type(exc).__name__}: {exc}"
+            run["status"] = "error"
 
     threading.Thread(target=work, daemon=True).start()
     return snapshot(run)

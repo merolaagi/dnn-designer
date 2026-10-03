@@ -1508,6 +1508,89 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("an FBPINN scales with frequency where a PINN does not")
+def _():
+    """Moseley (2022), chapter 6. The thesis's own numbers are the first
+    check: a 2×16 PINN has 321 parameters and thirty 2×16 subdomains have
+    9,630. Then its central claim, measured against the exact solution
+    sin(ωx)/ω rather than read off a loss."""
+    if not HAVE_TORCH:
+        return
+    import math
+
+    import torch
+
+    import fbpinn as F
+
+    plain = F.Normalised([(-2 * math.pi, 2 * math.pi)], 16, 2)
+    assert sum(p.numel() for p in plain.parameters()) == 321
+    many = F.FBPINN([(-2 * math.pi, 2 * math.pi)], [30], [0.3], 16, 2)
+    assert many.parameter_count() == 9630, many.parameter_count()
+
+    # windows confine each network to its subdomain (§6.4.2)
+    cell = many.cells[10]
+    far = torch.tensor([[cell[0]["hi"] + 1.0]])
+    near = torch.tensor([[(cell[0]["a"] + cell[0]["b"]) / 2]])
+    assert float(many.window(far, cell)) < 1e-3, "a window leaks far outside"
+    assert float(many.window(near, cell)) > 0.9, "a window is weak at its centre"
+
+    # the claim itself, with a wide margin at a short budget
+    pinn = F.motivating(15, "pinn", steps=500)
+    fb = F.motivating(15, "fbpinn", steps=500)
+    assert pinn["relative_l1"] > 1.0, pinn["relative_l1"]
+    assert fb["relative_l1"] < 0.5 * pinn["relative_l1"], \
+        (fb["relative_l1"], pinn["relative_l1"])
+    assert fb["relative_l1"] < 0.5, fb["relative_l1"]
+
+
+@check("hard constraints hold exactly, and refuse what they cannot hold")
+def _():
+    """Written into the solution, the conditions hold for every value of the
+    weights — so they leave the loss. The tanh ansatz matters: the linear one
+    was measured at 20% on Burgers against 1.2% for tanh, because the network
+    spent itself undoing the ansatz near the boundary."""
+    if not HAVE_TORCH:
+        return
+    import torch
+
+    import fbpinn as F
+    import physics as P
+
+    heat = {**next(x for x in P.PRESETS if x["id"] == "heat"),
+            "iterations": 30, "lbfgs": 0, "adaptive": False,
+            "constraints": "hard"}
+    run = P.train(heat)
+    last = run["history"][-1]
+    assert last["ic"] < 1e-12, f"initial condition not exact: {last['ic']}"
+    assert last["bc"] < 1e-12, f"boundary not exact: {last['bc']}"
+
+    # conditions that disagree at a corner have no smooth solution
+    try:
+        F.hard_constrained(torch.nn.Linear(2, 1), lambda x: x * 0 + 1.0,
+                           lambda t: t * 0, lambda t: t * 0, -1.0, 1.0)
+    except ValueError as exc:
+        assert "disagree at a corner" in str(exc)
+    else:
+        raise AssertionError("incompatible conditions were hard-coded anyway")
+
+    # periodic boundaries need a different construction, and say so
+    conv = {**next(x for x in P.PRESETS if x["id"] == "convection"),
+            "iterations": 10, "lbfgs": 0, "constraints": "hard"}
+    try:
+        P.train(conv)
+    except P.PhysicsError as exc:
+        assert "periodic" in str(exc)
+    else:
+        raise AssertionError("a periodic problem was given fixed-value hard constraints")
+
+    import inspect
+
+    assert "torch.tanh((t - t0) / tau)" in inspect.getsource(F.hard_constrained), \
+        "the ansatz went back to linear factors"
+
+    assert "function startScaling" in PAGE and 'id="physHard"' in PAGE
+
+
 @check("physics-informed training is judged against a reference, not its loss")
 def _():
     """A falling loss is not evidence that an equation was solved — PINNs

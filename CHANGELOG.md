@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.82.0
+
+**From Moseley's thesis, chapter 6: FBPINNs and hard constraints.**
+*Physics-informed machine learning: from concepts to real-world applications*,
+DPhil, Oxford, 2022.
+
+**The motivating experiment, reproduced (§6.3, §6.5.2).** du/dx = cos(ωx),
+u(0) = 0, exact solution sin(ωx)/ω. The parameter counts match the thesis's
+own — 321 for a 2×16 PINN, 9,630 for thirty 2×16 subdomains — and so does the
+result, measured against the exact solution at ω = 15 and 8,000 steps each:
+
+```text
+PINN 2×16              321 parameters    160%  error
+PINN 5×128          66,433 parameters     65%
+FBPINN 30 × (2×16)   9,630 parameters      0.26%
+```
+
+Seven times fewer parameters than the large PINN, and 250 times more accurate.
+It runs from the physics page as *Does it scale with frequency?*, all three
+models for the same number of steps.
+
+**FBPINNs for u(x, t).** Subdomains in x and t, each with a small network
+normalised to its own region and blended with sigmoid windows. Each network is
+evaluated only where its window is not negligible, as in §6.4.4 — evaluating
+every network everywhere gave the same answer three times slower.
+
+**Hard constraints (§6.2.4, Lagaris 1998).** The initial and boundary
+conditions are written into the solution, so they hold exactly — 0 and 10⁻¹⁴ —
+and leave the loss along with the competition between terms.
+
+The shape of the ansatz decides whether this helps, which the thesis argues and
+the measurements confirm. My first version used linear factors,
+t·(x−a)(b−x), and Burgers came out at **20%** — worse than soft constraints —
+because the network spent its capacity undoing the ansatz near t = 0 and at the
+walls. With tanh factors, which sit near 1 away from the boundary: **1.2%, 2.7%,
+1.4%** on three seeds, against 2.4%, 5.0%, 1.3% for soft. Better on two of three
+and more consistent — a modest gain on Burgers, stated as one.
+
+Conditions that disagree at a corner have no smooth solution and are refused
+rather than hard-coded; periodic boundaries need a different construction and
+say so.
+
 ## 1.81.2
 
 **Fixed: scout errands were being committed to the public repository.**

@@ -453,6 +453,17 @@ def physics_run(body: PhysicsPayload):
         raise HTTPException(400, detail={"message": str(exc)})
 
 
+class ScalingPayload(BaseModel):
+    omega: float = 15.0
+    steps: int = 3000
+
+
+@app.post("/api/physics/scaling")
+def physics_scaling(body: ScalingPayload):
+    """Moseley's motivating experiment: does the method scale with frequency?"""
+    return physics.start_scaling(body.omega, body.steps)
+
+
 @app.get("/api/physics/run/{run_id}")
 def physics_status(run_id: str):
     run = physics.RUNS.get(run_id)
