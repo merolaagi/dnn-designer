@@ -1508,6 +1508,49 @@ def _():
     assert "codebase_run" in dir(main)
 
 
+@check("a leak is found the way the regulator asks, in simulation")
+def _():
+    """40 CFR 280.43(h): at 0.2 gal/h, detect at least 95% with at most 5%
+    false alarms, threshold no more than half that rate. Each claim on the
+    physics page is pinned here, including the two bugs that shaped it."""
+    import numpy as np
+
+    import wetstock as W
+
+    # the book lagging the gauge by an hour made a truckload-sized spike at
+    # every delivery; aligned, the variance moves by gallons, not thousands
+    month = W.simulate(0.0, np.random.default_rng(3))
+    variance, _ = W._variance(month)
+    assert np.abs(np.diff(variance)).max() < 100, \
+        "the book and the gauge are out of step around deliveries"
+
+    # identical days make sales collinear with time; real days differ
+    t = np.arange(W.HOURS)
+    assert np.corrcoef(t, np.cumsum(month["sales"]))[0, 1] < 0.9999
+
+    # the overnight balance meets the standard, with room to spare at n=150
+    r = W.evaluate(months=150, leaks=(0.0, 0.2), methods=("classical", "quiet"))
+    quiet, classical = r["methods"]["quiet"], r["methods"]["classical"]
+    assert quiet["false_alarms"] <= 0.06, quiet["false_alarms"]
+    assert quiet["detection"]["0.2"] >= 0.95, quiet["detection"]
+    assert abs(quiet["bias_at"]["0.2"]) < 0.02, "the overnight estimate is biased"
+
+    # and the whole-month regression does not, in this simulator — the page
+    # says so, and says why
+    assert classical["false_alarms"] > 0.3, \
+        "classical now passes; the page's explanation of why it fails is stale"
+
+    # the same tank month to month, so the plain network's reference is fair
+    tk = W.tank(np.random.default_rng(1))
+    a = W.simulate(0.0, np.random.default_rng(2), fixed=tk)
+    b = W.simulate(0.0, np.random.default_rng(3), fixed=tk)
+    assert a["meter"] == b["meter"] and a["tank"] == b["tank"]
+
+    assert "function startWetstock" in PAGE
+    assert "only real gauge data settles anything" in PAGE, \
+        "the page presents a simulation as though it were evidence about tanks"
+
+
 @check("an Equation layer's maths and code are one thing")
 def _():
     """Written once as an expression; the code, the rendered equation, the

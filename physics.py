@@ -702,6 +702,32 @@ def start_conservation(damping: float, train_steps: int,
     return snapshot(run)
 
 
+def start_wetstock(months: int) -> Dict[str, Any]:
+    """Simulated tanks with known leaks, three detectors, the regulator's test."""
+    import wetstock as W
+
+    months = max(10, min(400, int(months)))
+    run = {"id": uuid.uuid4().hex[:12], "status": "running", "progress": [],
+           "result": None, "error": "", "spec": {"months": months},
+           "network": "three leak detectors", "started": time.time(),
+           "stop": threading.Event(), "folder": home()}
+    RUNS[run["id"]] = run
+
+    def work():
+        try:
+            run["result"] = W.evaluate(
+                months=months, leaks=(0.0, 0.1, 0.2),
+                methods=("classical", "quiet", "plain"),
+                progress=lambda row: run["progress"].append(row))
+            run["status"] = "done"
+        except Exception as exc:  # noqa: BLE001
+            run["error"] = f"{type(exc).__name__}: {exc}"
+            run["status"] = "error"
+
+    threading.Thread(target=work, daemon=True).start()
+    return snapshot(run)
+
+
 def snapshot(run: Dict[str, Any]) -> Dict[str, Any]:
     return {k: run[k] for k in ("id", "status", "result", "error",
                                 "network", "spec", "started")} | {

@@ -484,6 +484,11 @@ def physics_hopfield(d: int = 64, patterns: int = 32, seed: int = 0):
                                seed)
 
 
+@app.post("/api/physics/wetstock")
+def physics_wetstock(months: int = 40):
+    return physics.start_wetstock(months)
+
+
 @app.get("/api/physics/run/{run_id}")
 def physics_status(run_id: str):
     run = physics.RUNS.get(run_id)

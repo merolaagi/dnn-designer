@@ -5740,6 +5740,33 @@ async function renderPhysicsPage(){
       <div class="cbacts"><button class="btn go" id="hopGo">Measure it</button></div>
       <div id="hopOut"></div>
     </div>
+
+    <div class="wbcard">
+      <div class="wbtitle"><b>Can it find a leak?</b>
+        <span class="wbchip">40 CFR 280.43(h)</span></div>
+      <p class="wbstatement">A fuel tank is a conservation law: what was there,
+      plus deliveries, minus sales, minus anything lost. Simulated tank-months
+      with leaks of known size, judged the way the federal standard judges a
+      leak detection method: at 0.2 gal/h, detect at least 95% of leaks with
+      no more than 5% false alarms, threshold at half that rate.</p>
+      <p class="mathnote">Three methods. A whole-month regression of the
+      inventory variance — the shape of classical statistical reconciliation.
+      The same balance read only overnight, when there are no deliveries and
+      barely any sales. And a plain network, trained on the previous tight
+      month, with no conservation law. Measured on 400 months each: the
+      overnight method had 2.8% false alarms and caught 98.5% of 0.2 gal/h
+      leaks; the whole-month regression had 80% false alarms, because within a
+      delivery cycle a leak, a meter error and a chart error all grow together.
+      Adding a network to correct the chart did not help — the confound was
+      the meter, not the chart. All of this is a simulator with my
+      assumptions; only real gauge data settles anything.</p>
+      <div class="physrow">
+        <label>tank-months per leak rate<input class="wbinput" id="wsMonths" value="40"></label>
+        <label>&nbsp;</label><label>&nbsp;</label><label>&nbsp;</label>
+      </div>
+      <div class="cbacts"><button class="btn go" id="wsGo">Run the test</button></div>
+      <div id="wsOut"></div>
+    </div>
   </div>`;
 
   host.querySelectorAll("[data-preset]").forEach(chip =>
@@ -5751,6 +5778,7 @@ async function renderPhysicsPage(){
   $("scaleGo").addEventListener("click", startScaling);
   $("consGo").addEventListener("click", startConservation);
   $("hopGo").addEventListener("click", runHopfield);
+  $("wsGo").addEventListener("click", startWetstock);
   $("physStop").addEventListener("click", () => {
     if (state.physRun) fetch(API + `/api/physics/run/${state.physRun}/stop`,
                              { method: "POST" });
@@ -5965,6 +5993,50 @@ async function runHopfield(){
     doing. Large β retrieves one memory in a single step. A real transformer
     projects queries, keys and values separately, so its attention is this
     update in a learned space rather than over the raw tokens.</p>`;
+}
+
+async function startWetstock(){
+  const out = $("wsOut");
+  let d;
+  try{
+    d = await (await fetch(API + `/api/physics/wetstock?months=${+$("wsMonths").value}`,
+                           { method: "POST" })).json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  $("wsGo").disabled = true;
+  const poll = async () => {
+    let s;
+    try{ s = await (await fetch(API + `/api/physics/run/${d.id}`)).json(); }
+    catch { setTimeout(poll, 1500); return; }
+    const last = s.progress[s.progress.length - 1];
+    if (s.status === "running"){
+      out.innerHTML = `<p class="mathnote">${last ? `leak ${last.leak} gal/h:
+        month ${last.month} of ${last.of}` : "simulating…"}</p>`;
+      setTimeout(poll, 1000);
+      return;
+    }
+    $("wsGo").disabled = false;
+    if (s.error){ out.innerHTML = `<div class="runfail">${s.error}</div>`; return; }
+    const names = { classical: "whole-month regression",
+                    quiet: "overnight balance", plain: "plain network" };
+    const r = s.result;
+    out.innerHTML = `
+      <table class="runtable" style="margin-top:8px">
+        <thead><tr><th>method</th><th class="num">false alarms</th>
+          <th class="num">caught at 0.1</th><th class="num">caught at 0.2</th>
+          <th class="num">smallest detectable</th><th>meets the standard</th></tr></thead>
+        <tbody>${Object.entries(r.methods).map(([k, row]) => `<tr${row.meets_standard ? ' class="hl"' : ""}>
+          <td>${names[k] || k}</td>
+          <td class="num">${(row.false_alarms * 100).toFixed(1)}%</td>
+          <td class="num">${(row.detection["0.1"] * 100).toFixed(0)}%</td>
+          <td class="num">${(row.detection["0.2"] * 100).toFixed(0)}%</td>
+          <td class="num">${row.min_detectable.toFixed(2)} gal/h</td>
+          <td>${row.meets_standard ? "yes" : "no"}</td></tr>`).join("")}</tbody>
+      </table>
+      <p class="mathnote">${r.months} simulated tank-months at each of 0, 0.1
+      and 0.2 gal/h. With few months the rates are rough — 2 false alarms in 40
+      is exactly 5% — so run more before reading the edge of the standard.</p>`;
+  };
+  poll();
 }
 
 function lossChart(rows){

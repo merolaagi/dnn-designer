@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.86.0
+
+**Can it find a leak?** A fuel tank simulator and three leak detectors, judged
+the way 40 CFR 280.43(h) judges a statistical inventory reconciliation method:
+at 0.2 gal/h, detect at least 95% of leaks with no more than 5% false alarms,
+threshold at half that rate. On the physics page, and in `wetstock.py`.
+
+Measured on simulated tank-months with leaks of known size:
+
+```text
+                          false alarms   caught at 0.2   smallest detectable
+overnight balance          2.8%           98.5%           0.15 gal/h   (400 months)
+whole-month regression     80%            65%             1.7 gal/h    (40 months)
+  + neural chart correction 82%           65%             1.7 gal/h
+plain neural network       92%            48%             23 gal/h
+```
+
+**What decided it was physics, not a network.** Within a delivery cycle, a
+leak, a dispenser meter error and a level-dependent chart error all grow
+together, so a regression over the whole month cannot pull them apart. A leak
+does not stop at night; sales almost do. Reading the balance only across each
+night's quiet stretch removes the meter and the chart from the question, and
+puts the gauge's noise in twice a night rather than every hour. That is the
+idea behind continuous in-tank leak detection, and it met the standard here
+with both confidence intervals clear of the limits.
+
+**The negative results are kept, because they are the useful part.** Adding a
+network to correct the tank chart made no difference — the confound was the
+meter, not the chart. A plain network, with the same inputs and no
+conservation law, could not produce a usable leak rate at all.
+
+**Two bugs shaped the result and are pinned by tests.** The book inventory
+lagged the gauge by one hour, so every delivery appeared as a 6,000-gallon
+spike; and with every day's sales alike, cumulative sales were collinear with
+time, so classical SIR estimated −7.6 gal/h for a 0.2 leak. Real days differ;
+the simulator now has weekday and day-to-day variation.
+
+This is a simulator with my assumptions, and the page says so. Certified
+methods are third-party evaluated against standard procedures, and the only
+test that settles anything is real gauge data.
+
 ## 1.85.1
 
 **Two ready-made physics designs**, so trying the Equation layer and the
