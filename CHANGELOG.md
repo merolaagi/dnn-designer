@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.89.0
+
+**CoupledHamiltonian — subsystems joined so that together they can only lose
+energy.** On the palette under Numerical. Each subsystem has its own energy,
+there is an optional interaction term, a learned coupling A − Aᵀ that is
+skew-symmetric by construction, and a non-negative friction per subsystem:
+dz/dt = (J − R)∇H, so dH/dt ≤ 0 for any weights. Tested on untrained layers
+with deliberately arbitrary couplings and frictions, three seeds, never once
+gaining energy.
+
+**What this is not, measured.** Wiring port-Hamiltonian blocks together on the
+canvas itself would need edges that carry power both ways; the canvas's edges
+carry data one way, so the composition lives inside one block.
+
+And on two pendulums joined by a spring, with friction on only one, it did not
+beat a plain network once both were trained properly:
+
+```text
+                         1,500 steps        3,000 steps (two seeds)
+path error   plain       0.380              0.055, 0.027
+             coupled     0.145              0.122, 0.179
+true energy rose         plain 11%          9%, 15%
+                         coupled 31%        27%, 27%
+learned friction         [0.034, 0.079]     [0.038, 0.077], [0.017, 0.107]
+                                            true [0, 0.1]
+```
+
+The early accuracy "win" was the plain network being undertrained. The friction
+landed in the right order but leaked into the frictionless pendulum, unlike the
+single pendulum, where it was recovered to four places — a friction coefficient
+only means something relative to the scale of the learned energy, and an
+interaction term spanning both subsystems leaves that scale less pinned down.
+The true energy rose more often because the guarantee covers the learned
+energy, which an interaction term lets drift from the true one.
+
+So the block is shipped for its guarantee, not for accuracy, and nothing in the
+app claims otherwise.
+
 ## 1.88.0
 
 **Your own tanks.** A card on the physics page that takes three exports — tank

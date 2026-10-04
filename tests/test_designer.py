@@ -1762,6 +1762,57 @@ def _():
     assert "function runHopfield" in PAGE
 
 
+@check("coupled subsystems can only lose energy, whatever the weights")
+def _():
+    """The coupling A − Aᵀ is skew-symmetric by construction and the friction
+    is non-negative, so the combined energy cannot rise for any weights. That
+    is the whole claim: on coupled pendulums it did not beat a plain network
+    on accuracy once both were trained properly, and nothing here says it
+    does."""
+    if not HAVE_TORCH:
+        return
+    import torch
+
+    import codegen
+    import conservation as C
+    import graph as G
+    import train as T
+
+    Coupled = C.coupled_class()
+    for seed in range(3):
+        torch.manual_seed(seed)
+        layer = Coupled([2, 4, 2], 16)
+        with torch.no_grad():
+            layer.coupling.normal_(0, 2.0)           # an arbitrary coupling
+            layer.raw_friction.normal_(0, 2.0)       # arbitrary frictions
+        z = torch.randn(1500, 8) * 2
+        with torch.enable_grad():
+            zz = z.clone().requires_grad_(True)
+            grad = torch.autograd.grad(layer.hamiltonian(zz).sum(), zz)[0]
+        rate = (grad * layer.field(z)).sum(-1)
+        assert float(rate.max()) <= 1e-5, \
+            f"an untrained coupled layer gained energy: {float(rate.max())}"
+        J, R = layer.structure()
+        assert torch.allclose(J, -J.T), "the coupling is not skew-symmetric"
+        assert bool((torch.diag(R) >= 0).all())
+
+    g = build([("i", "Input", {"shape": [4]}),
+               ("c", "CoupledHamiltonian", {"parts": "2,2", "hidden": 16}),
+               ("o", "Output", {"task": "regression"})],
+              [("i", "c", 0), ("c", "o", 0)], "Pair")
+    rep = G.analyze(G.parse(g))
+    model = T.build_model(codegen.to_pytorch(G.parse(g), rep),
+                          codegen.model_class_name(G.parse(g)))
+    assert rep["total_learnables"] == sum(p.numel() for p in model.parameters())
+
+    wrong = G.analyze(G.parse(build(
+        [("i", "Input", {"shape": [5]}),
+         ("c", "CoupledHamiltonian", {"parts": "2,2"}),
+         ("o", "Output", {"task": "regression"})],
+        [("i", "c", 0), ("c", "o", 0)], "Wrong")))
+    assert not wrong["ok"] and "add up to 4" in wrong["nodes"]["c"]["error"]
+
+
 @check("a Hamiltonian layer keeps energy because of its shape, not its data")
 def _():
     """The guarantee is exact for the network's own energy, for any weights —
