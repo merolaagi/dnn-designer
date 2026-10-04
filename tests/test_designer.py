@@ -1762,6 +1762,66 @@ def _():
     assert "function runHopfield" in PAGE
 
 
+@check("a tensor train is exact at full rank, and wins only under hard compression")
+def _():
+    """The honest rival is ordinary low-rank compression at the same size.
+    Measured on a trained layer, the tensor train is better only below about
+    1/16 of the dense size; above that, truncated SVD wins — and the block's
+    own description says so."""
+    if not HAVE_TORCH:
+        return
+    import torch
+
+    import codegen
+    import graph as G
+    import tensornet as N
+    import train as T
+
+    W = torch.randn(64, 256, dtype=torch.float64)
+    full = N.from_cores(N.tt_svd(W, [4, 4, 2, 2], [4, 4, 4, 4], 1000),
+                        [4, 4, 2, 2], [4, 4, 4, 4])
+    assert float((full - W).abs().max()) < 1e-10, "full rank is not exact"
+
+    r = N.experiment(ranks=(3, 12))
+    hard, gentle = r["rows"]
+    # rank 3 is 288 parameters against the smallest SVD there is, 320 —
+    # the closest matched pair, and the train is clearly better there. (Rank
+    # 2, at 144 against 320, is not a matched comparison; there they tie.)
+    assert hard["tt_parameters"] <= hard["svd_parameters"]
+    assert hard["tt_error"] < 0.9 * hard["svd_error"], hard
+    # at ~2,000 parameters SVD wins, so nothing should claim otherwise
+    assert gentle["svd_error"] < gentle["tt_error"], gentle
+
+    layer = N.layer_class()([4, 4, 4, 4], [4, 4, 2, 2], rank=3)
+    x = torch.randn(5, 256)
+    with torch.no_grad():
+        assert torch.allclose(layer(x), x @ layer.weight().T + layer.bias,
+                              atol=1e-6)
+
+    g = build([("i", "Input", {"shape": [256]}),
+               ("t", "TensorTrainLinear", {"in_modes": "4,4,4,4",
+                                           "out_modes": "4,4,2,2", "rank": 4}),
+               ("o", "Output", {"task": "regression"})],
+              [("i", "t", 0), ("t", "o", 0)], "Train")
+    parsed = G.parse(g)
+    rep = G.analyze(parsed)
+    assert rep["nodes"]["t"]["out_shape"] == [64]
+    model = T.build_model(codegen.to_pytorch(parsed, rep),
+                          codegen.model_class_name(parsed))
+    assert rep["total_learnables"] == sum(p.numel() for p in model.parameters())
+
+    wrong = G.analyze(G.parse(build(
+        [("i", "Input", {"shape": [200]}),
+         ("t", "TensorTrainLinear", {"in_modes": "4,4,4,4", "out_modes": "4,4,2,2"}),
+         ("o", "Output", {"task": "regression"})],
+        [("i", "t", 0), ("t", "o", 0)], "Wrong")))
+    assert not wrong["ok"] and "multiply to 256" in wrong["nodes"]["t"]["error"]
+
+    import layers as L
+
+    assert "truncated SVD wins" in L.REGISTRY["TensorTrainLinear"].doc
+
+
 @check("an equivariant layer is exactly equivariant, and it pays off")
 def _():
     """Checked on an untrained layer, so the symmetry is shown to come from

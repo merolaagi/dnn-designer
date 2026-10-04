@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.91.0
+
+**TensorTrainLinear** — a linear layer stored as a chain of small cores
+(Novikov et al., *Tensorizing Neural Networks*, 2015), on the palette under
+Dense. Parameters grow with the sum of the mode sizes rather than their
+product. At full rank it reproduces any matrix (1.6e−14); below that, what
+survives depends on the matrix having structure across its modes.
+
+**Judged against the real rival.** Not the uncompressed layer, but ordinary
+low-rank compression — a truncated SVD of the same matrix at a matched size. A
+trained 256→64 layer on structured 16×16 inputs, compressed both ways, on two
+seeds; test error of the whole model:
+
+```text
+parameters (of 16,384)     tensor train      truncated SVD
+~300                       0.153 / 0.170     0.206 / 0.254
+~700–960                   0.088 / 0.112     0.100 / 0.115
+~1,300                     0.063 / 0.080     0.065 / 0.081
+~1,600–1,700               0.047 / 0.057     0.037 / 0.040
+~2,100–2,200               0.035 / 0.036     0.014 / 0.026
+```
+
+**The tensor train wins only under hard compression** — below about 1/16 of
+the dense size. Above roughly 1,300 parameters, plain low-rank compression is
+better and pulls away. The block's description says so, and a test pins both
+sides of the crossover.
+
+It saves parameters, not arithmetic: the forward pass rebuilds the full matrix.
+
 ## 1.90.0
 
 **EquivariantLayer** — E(n)-equivariant message passing (Satorras, Hoogeboom &
