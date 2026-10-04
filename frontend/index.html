@@ -5774,6 +5774,29 @@ async function renderPhysicsPage(){
       <div class="cbacts"><button class="btn go" id="wsGo">Run the test</button></div>
       <div id="wsOut"></div>
     </div>
+
+    <div class="wbcard">
+      <div class="wbtitle"><b>Your own tanks</b>
+        <span class="wbchip">real data</span></div>
+      <p class="wbstatement">Three exports: tank gauge readings (hourly, with
+      temperature and preferably temperature-compensated volume), gallons sold
+      by hour, and deliveries. Columns are recognised by name, and the mapping
+      is shown first — check it before reading any number below it.</p>
+      <div class="physrow">
+        <label>gauge readings<input type="file" id="wsGauge" accept=".csv,.txt"></label>
+        <label>hourly sales<input type="file" id="wsSales" accept=".csv,.txt"></label>
+        <label>deliveries<input type="file" id="wsDeliv" accept=".csv,.txt"></label>
+        <label>&nbsp;</label>
+      </div>
+      <p class="mathnote">Real data has no ground truth, so nothing here says a
+      tank is or is not leaking. Each 30-day window gets an estimate; a large
+      one needs a look, and may be a chart error or a missing delivery as easily
+      as a leak. The spike-in columns subtract a known leak from your real
+      readings and ask whether it would have been caught against your tank's
+      own noise.</p>
+      <div class="cbacts"><button class="btn go" id="wsRealGo">Analyse</button></div>
+      <div id="wsRealOut"></div>
+    </div>
   </div>`;
 
   host.querySelectorAll("[data-preset]").forEach(chip =>
@@ -5786,6 +5809,7 @@ async function renderPhysicsPage(){
   $("consGo").addEventListener("click", startConservation);
   $("hopGo").addEventListener("click", runHopfield);
   $("wsGo").addEventListener("click", startWetstock);
+  $("wsRealGo").addEventListener("click", analyseRealTanks);
   $("physStop").addEventListener("click", () => {
     if (state.physRun) fetch(API + `/api/physics/run/${state.physRun}/stop`,
                              { method: "POST" });
@@ -6044,6 +6068,59 @@ async function startWetstock(){
       is exactly 5% — so run more before reading the edge of the standard.</p>`;
   };
   poll();
+}
+
+async function analyseRealTanks(){
+  const out = $("wsRealOut");
+  const g = $("wsGauge").files[0], s = $("wsSales").files[0], d = $("wsDeliv").files[0];
+  if (!g || !s){
+    out.innerHTML = `<div class="paperwarn">The gauge readings and the hourly
+      sales are both needed; deliveries are optional but make the balance
+      much better.</div>`;
+    return;
+  }
+  const form = new FormData();
+  form.append("gauge", g); form.append("sales", s);
+  if (d) form.append("deliveries", d);
+  out.innerHTML = `<p class="mathnote">reading the exports…</p>`;
+  let r, rep;
+  try{
+    r = await fetch(API + "/api/physics/wetstock/real", { method: "POST", body: form });
+    rep = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  if (!r.ok){
+    out.innerHTML = `<div class="runfail">${(rep.detail && rep.detail.message) || "It could not be read"}</div>`;
+    return;
+  }
+  const map = rep.mapping;
+  const mapRow = (name, m) => `<tr><td class="key">${name}</td><td class="val">${
+    Object.entries(m).map(([k, v]) => `${k} ← <b>${v}</b>`).join(" · ") || "not given"}</td></tr>`;
+  out.innerHTML = `
+    <div class="mathsec">how your columns were read — check this first</div>
+    <table class="mathtab">${mapRow("gauge", map.gauge)}${mapRow("sales", map.sales)}${
+      mapRow("deliveries", map.deliveries)}</table>
+    <p class="mathnote">${rep.compensated
+      ? "Volumes look temperature-compensated already, so they are not compensated again."
+      : "Volumes do not look temperature-compensated; they are compensated using the temperature column."}</p>
+    ${Object.entries(rep.tanks).map(([name, t]) => `
+      <div class="mathsec">tank ${name}</div>
+      <p class="wbstatement">Overnight sales are <b>${(t.overnight_share * 100).toFixed(0)}%</b>
+      of the average hour — ${t.regime}. ${t.hours.toLocaleString()} hours of data${
+      t.gaps ? `, ${t.gaps} hours missing and filled from their neighbours` : ""}.</p>
+      ${t.note ? `<p class="mathnote">${t.note}</p>` : ""}
+      ${t.windows.length ? `<table class="runtable"><thead><tr><th>30-day window</th>
+        <th class="num">overnight estimate</th><th class="num">hourly estimate</th>
+        <th class="num">0.1 added: caught?</th><th class="num">0.2 added: caught?</th></tr></thead>
+        <tbody>${t.windows.map((w, i) => `<tr${w.needs_a_look ? ' class="hl"' : ""}>
+          <td>${i + 1}${w.needs_a_look ? " · needs a look" : ""}</td>
+          <td class="num">${w.overnight == null ? "—" : w.overnight.toFixed(3)} gal/h</td>
+          <td class="num">${w.hourly == null ? "—" : w.hourly.toFixed(3)} gal/h</td>
+          <td class="num">${w.spike["0.1"].flagged ? "yes" : "no"}</td>
+          <td class="num">${w.spike["0.2"].flagged ? "yes" : "no"}</td></tr>`).join("")}</tbody></table>` : ""}`).join("")}
+    <p class="mathnote">An estimate is not a verdict. A window marked for a look
+    may be a leak, a chart error, a meter drifting or a delivery missing from
+    the records. Certified methods are evaluated by a third party; this is
+    for understanding your own tanks.</p>`;
 }
 
 function lossChart(rows){

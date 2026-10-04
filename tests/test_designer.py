@@ -1569,6 +1569,56 @@ def _():
         "the page presents a simulation as though it were evidence about tanks"
 
 
+@check("real tank exports are read, mapped visibly and analysed")
+def _():
+    """No ground truth exists in real data, so the importer is tested on a
+    simulated month written out as a gauge and a till would write it — the
+    one case where the answer is known."""
+    import numpy as np
+
+    import wetstock as W
+    import wetstock_real as R
+
+    month = W.simulate(0.2, np.random.default_rng(7), night=0.25)
+    files = R.to_csv(month)
+    loaded = R.load(files["gauge"], files["sales"], files["deliveries"])
+    assert loaded["mapping"]["gauge"] == {"time": "Date/Time", "tank": "Tank",
+                                          "volume": "TC Volume",
+                                          "temp": "Temperature"}
+    assert loaded["temperature_compensated"], \
+        "a TC volume would be compensated twice"
+
+    report = R.analyse(loaded)
+    tank = report["tanks"]["1"]
+    assert abs(tank["overnight_share"] - 0.25) < 0.05, tank["overnight_share"]
+    window = tank["windows"][0]
+    assert abs(window["overnight"] - W.quiet_hours(month)) < 0.005, \
+        "the CSV path does not give the answer the direct path gives"
+    assert window["needs_a_look"]
+
+    # the spike-in reports only what it measures: whether a leak would cross
+    # the threshold against this month's noise — not a "recovered" amount,
+    # which a linear estimator makes 100% by construction
+    assert set(window["spike"]["0.2"]) == {"estimate", "flagged"}
+
+    # an export whose columns cannot be recognised says how to fix the file
+    try:
+        R.load("when,level\n1,2\n", files["sales"])
+    except R.RealDataError as exc:
+        assert "Renaming the column" in str(exc) and "“volume”" in str(exc), exc
+    else:
+        raise AssertionError("an unreadable gauge export was accepted")
+
+    # a gap is filled and counted, never read as fuel lost
+    gappy = "\n".join(l for i, l in enumerate(files["gauge"].splitlines())
+                       if i == 0 or i % 50)
+    filled = R.load(gappy, files["sales"], files["deliveries"])["tanks"]["1"]
+    assert filled["gaps"] > 0
+
+    assert "function analyseRealTanks" in PAGE
+    assert "check it before reading any number" in PAGE
+
+
 @check("an Equation layer's maths and code are one thing")
 def _():
     """Written once as an expression; the code, the rendered equation, the

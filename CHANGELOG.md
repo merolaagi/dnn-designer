@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.88.0
+
+**Your own tanks.** A card on the physics page that takes three exports — tank
+gauge readings, gallons sold by hour, deliveries — and analyses them.
+
+**The mapping comes first.** Export formats differ by gauge and by method, so
+columns are recognised by name and the page shows exactly which header was read
+as what, before any number. A guessed column would make everything after it
+meaningless. If a column is not recognised, the error lists the headers it
+found and the names it would accept, because the fix is renaming a column in
+the file. Volumes that are already temperature-compensated are recognised and
+not compensated twice.
+
+**Three things, careful about which is evidence:**
+
+- **Where the station sits**: overnight sales as a share of the average hour,
+  measured from your own sales — the number the simulator said decides which
+  method works.
+- **An estimate per tank per 30-day window**, by the overnight and hourly
+  methods. An estimate, not a verdict: a window marked *needs a look* may be a
+  leak, a chart error, a drifting meter or a delivery missing from the records.
+- **The spike-in test**: a leak of known size subtracted from your real
+  readings, then looked for — detection against your tanks' real noise.
+
+**Caught before it shipped:** the spike-in first reported how much of the
+injected leak was "recovered". The overnight estimator is linear in the
+readings, so that figure is always exactly 100% and measures nothing. It now
+reports only whether the leak would have crossed the threshold.
+
+Tested by writing a simulated month — whose leak is known — out as a gauge and
+a till would export it, and reading it back: the estimate matches the direct
+calculation to within 0.005 gal/h. Hours missing from the gauge are filled from
+their neighbours and counted, never read as fuel lost.
+
 ## 1.87.0
 
 **Leak detection at a 24-hour station.** The overnight method depends on a

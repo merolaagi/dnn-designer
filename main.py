@@ -484,6 +484,25 @@ def physics_hopfield(d: int = 64, patterns: int = 32, seed: int = 0):
                                seed)
 
 
+@app.post("/api/physics/wetstock/real")
+async def physics_wetstock_real(gauge: UploadFile = File(...),
+                                sales: UploadFile = File(...),
+                                deliveries: Optional[UploadFile] = File(None)):
+    """Your own tank history: mapped, aligned hourly, analysed. The mapping is
+    returned with the result so a wrongly recognised column is visible."""
+    import wetstock_real as R
+
+    try:
+        loaded = R.load((await gauge.read()).decode("utf-8", "replace"),
+                        (await sales.read()).decode("utf-8", "replace"),
+                        (await deliveries.read()).decode("utf-8", "replace")
+                        if deliveries else "")
+        report = R.analyse(loaded)
+    except R.RealDataError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    return {"mapping": loaded["mapping"], **report}
+
+
 @app.post("/api/physics/wetstock")
 def physics_wetstock(months: int = 40):
     return physics.start_wetstock(months)
