@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.92.0
+
+**Can it learn without backpropagation?** Predictive coding (Rao & Ballard
+1999; Whittington & Bogacz 2017), on the physics page and in `predictive.py`.
+Each layer predicts the next; inference relaxes the hidden activity to lower
+the total prediction error; each weight changes using only the activity below
+it and the error above it. The implementation is written out by hand, and a
+test checks the weight update never reaches for a global gradient.
+
+Measured:
+
+- **The energy falls at every relaxation step**, 2.34 → 1.33, never rising.
+- **The local updates point where backpropagation's do** — cosine 0.997,
+  0.993, 0.96 by layer after five steps — **and align worse with longer
+  relaxation**, 0.79 at the last layer after a hundred. Against intuition, and
+  consistent with the equivalence holding in the small-error regime rather
+  than at equilibrium.
+- **They are much shorter**: 7%, 32% and 72% of backpropagation's length, layer
+  by layer, because the errors shrink on their way to the input.
+
+That last point explained a puzzle. Pointing almost the same way, predictive
+coding still trained four times worse at the same learning rate (0.146 against
+0.034). At ten times the rate it reached 0.038 — nearly matching. One global
+rate compensates unevenly, since the first layer's updates are fifteen times
+shorter and the last's barely shorter at all.
+
+It is not faster in software — each training step pays for the relaxation,
+about twice backpropagation's time at five steps. Its interest is that every
+update is local, which is what neuroscience and some hardware need.
+
 ## 1.91.0
 
 **TensorTrainLinear** — a linear layer stored as a chain of small cores

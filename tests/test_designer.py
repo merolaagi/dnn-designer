@@ -1762,6 +1762,42 @@ def _():
     assert "function runHopfield" in PAGE
 
 
+@check("predictive coding learns with local rules, and says what that costs")
+def _():
+    """Each claim on the page, measured: the energy never rises during
+    relaxation; the local updates align with backpropagation, and better
+    early than late; they are shorter towards the input; and with a step that
+    allows for that, training nearly matches backpropagation."""
+    if not HAVE_TORCH:
+        return
+    import inspect
+
+    import predictive as P
+
+    r = P.experiment(epochs=150)
+    assert r["worst_energy_rise"] <= 1e-9, "relaxation raised the energy"
+
+    five = next(a for a in r["alignment"] if a["relax_steps"] == 5)
+    hundred = next(a for a in r["alignment"] if a["relax_steps"] == 100)
+    assert min(five["cosine_by_layer"]) > 0.9, five
+    assert hundred["cosine_by_layer"][-1] < five["cosine_by_layer"][-1], \
+        "longer relaxation aligned better, so the page's claim is wrong"
+    assert five["length_by_layer"][0] < five["length_by_layer"][-1] < 1.0, \
+        "the updates do not shrink towards the input"
+
+    pc = r["training"]["predictive_coding"]["test_error"]
+    bp = r["training"]["backprop"]["test_error"]
+    assert pc < 3 * bp, (pc, bp)
+
+    # the weight update uses nothing but the two ends of the weight
+    source = inspect.getsource(P.PredictiveCoding.updates)
+    assert "autograd" not in source and "backward" not in source, \
+        "the local rule reaches for a global gradient"
+
+    assert "function runPredictive" in PAGE
+    assert "not faster in software" in PAGE
+
+
 @check("a tensor train is exact at full rank, and wins only under hard compression")
 def _():
     """The honest rival is ordinary low-rank compression at the same size.

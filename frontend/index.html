@@ -5742,6 +5742,26 @@ async function renderPhysicsPage(){
     </div>
 
     <div class="wbcard">
+      <div class="wbtitle"><b>Can it learn without backpropagation?</b>
+        <span class="wbchip">Whittington &amp; Bogacz 2017</span></div>
+      <p class="wbstatement">Predictive coding: each layer predicts the next,
+      inference relaxes the hidden activity to lower the total prediction
+      error, and each weight changes using only the activity below it and the
+      error above it. No error is carried backwards through the network.</p>
+      <p class="mathnote">Measured: the energy falls at every relaxation step.
+      The local updates point almost exactly where backpropagation's do —
+      cosine 0.997, 0.993, 0.96 by layer after five steps — and, against
+      intuition, align <i>worse</i> with longer relaxation (0.79 at the last
+      layer after a hundred). They are also much shorter, 7%, 32% and 72% of
+      backpropagation's length, because the errors shrink on their way to the
+      input; at the same learning rate it learned four times worse, at ten
+      times the rate nearly as well. It is not faster in software — each step
+      pays for the relaxation. Its interest is that every update is local.</p>
+      <div class="cbacts"><button class="btn go" id="pcGo">Measure it</button></div>
+      <div id="pcOut"></div>
+    </div>
+
+    <div class="wbcard">
       <div class="wbtitle"><b>Can it find a leak?</b>
         <span class="wbchip">40 CFR 280.43(h)</span></div>
       <p class="wbstatement">A fuel tank is a conservation law: what was there,
@@ -5808,6 +5828,7 @@ async function renderPhysicsPage(){
   $("scaleGo").addEventListener("click", startScaling);
   $("consGo").addEventListener("click", startConservation);
   $("hopGo").addEventListener("click", runHopfield);
+  $("pcGo").addEventListener("click", runPredictive);
   $("wsGo").addEventListener("click", startWetstock);
   $("wsRealGo").addEventListener("click", analyseRealTanks);
   $("physStop").addEventListener("click", () => {
@@ -6121,6 +6142,36 @@ async function analyseRealTanks(){
     may be a leak, a chart error, a meter drifting or a delivery missing from
     the records. Certified methods are evaluated by a third party; this is
     for understanding your own tanks.</p>`;
+}
+
+async function runPredictive(){
+  const out = $("pcOut");
+  out.innerHTML = `<p class="mathnote">relaxing and training both ways…</p>`;
+  let r;
+  try{ r = await (await fetch(API + "/api/physics/predictive")).json(); }
+  catch { out.innerHTML = `<div class="runfail">No answer.</div>`; return; }
+  const t = r.training, pc = t.predictive_coding, bp = t.backprop;
+  out.innerHTML = `
+    <table class="mathtab" style="margin-top:8px">
+      <tr><td class="key">energy during relaxation</td><td class="val">${
+        r.energy_trace[0].toFixed(3)} → ${r.energy_trace[r.energy_trace.length - 1].toFixed(3)};
+        worst single step ${r.worst_energy_rise.toExponential(1)}</td></tr>
+    </table>
+    <div class="mathsec">local updates against backpropagation</div>
+    <table class="runtable"><thead><tr><th>relaxation steps</th>
+      <th>direction (cosine) by layer</th><th>length by layer</th></tr></thead>
+      <tbody>${r.alignment.map(a => `<tr><td>${a.relax_steps}</td>
+        <td>${a.cosine_by_layer.map(c => c.toFixed(3)).join(" · ")}</td>
+        <td>${a.length_by_layer.map(c => (c * 100).toFixed(0) + "%").join(" · ")}</td></tr>`).join("")}</tbody>
+    </table>
+    <table class="mathtab" style="margin-top:10px">
+      <tr><td class="key">predictive coding, rate ${t.pc_lr}</td><td class="val">
+        error ${pc.test_error.toFixed(4)} in ${pc.seconds}s</td></tr>
+      <tr><td class="key">backpropagation, rate ${t.bp_lr}</td><td class="val">
+        error ${bp.test_error.toFixed(4)} in ${bp.seconds}s</td></tr>
+    </table>
+    <p class="mathnote">Error is relative to always predicting the mean.
+    ${t.relax_steps} relaxation steps per batch, ${t.epochs} epochs.</p>`;
 }
 
 function lossChart(rows){

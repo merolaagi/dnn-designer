@@ -477,6 +477,14 @@ def physics_conservation(body: ConservationPayload):
                                       body.horizon)
 
 
+@app.get("/api/physics/predictive")
+def physics_predictive(seed: int = 0):
+    """Predictive coding against backpropagation, on the same network."""
+    import predictive
+
+    return predictive.experiment(seed=seed)
+
+
 @app.get("/api/physics/hopfield")
 def physics_hopfield(d: int = 64, patterns: int = 32, seed: int = 0):
     """One Hopfield update against one attention step, measured."""
