@@ -55,14 +55,15 @@ def tank(rng: np.random.Generator) -> Dict[str, float]:
 
 def simulate(leak_gph: float, rng: np.random.Generator,
              chart_error: float = 0.003,
-             fixed: Dict[str, float] = None) -> Dict[str, np.ndarray]:
+             fixed: Dict[str, float] = None,
+             night: float = 0.08) -> Dict[str, np.ndarray]:
     """One tank-month, hourly, with everything a station actually records."""
     hours = np.arange(HOURS)
     hour_of_day = hours % 24
     # trading hours carry the sales; nights are almost quiet, which is what
     # lets a leak (constant) be told apart from a meter error (per gallon sold)
     shape = np.where((hour_of_day >= 6) & (hour_of_day <= 22),
-                     1.0 + 0.6 * np.sin((hour_of_day - 6) / 16 * math.pi), 0.08)
+                     1.0 + 0.6 * np.sin((hour_of_day - 6) / 16 * math.pi), night)
     shape = shape / shape.mean()
     # Days differ — weekends, weather, a busy Friday. That variation is what
     # separates a meter error (proportional to gallons sold) from a leak
@@ -144,7 +145,19 @@ def classical_sir(month) -> float:
     return float(coef[1])
 
 
-def quiet_hours(month) -> float:
+def meter_error(month) -> float:
+    """The meter error, from the hourly balance's slope on hourly sales —
+    pinned down by the day, when sales swing widely."""
+    variance, _ = _variance(month)
+    change = np.diff(variance)
+    sold = month["sales"][1:]
+    keep = (month["delivery"][1:] == 0) & (month["delivery"][:-1] == 0)
+    X = np.column_stack([np.ones(keep.sum()), sold[keep]])
+    coef, *_ = np.linalg.lstsq(X, change[keep], rcond=None)
+    return float(coef[1])
+
+
+def quiet_hours(month, correct_meter: bool = False) -> float:
     """The balance, read only when almost nothing moves.
 
     Overnight there are no deliveries and only a trickle of sales, so the
@@ -162,6 +175,12 @@ def quiet_hours(month) -> float:
     measured = _net(month)
     hour = month["hour"]
     quiet = ((hour >= 23) | (hour <= 5)) & (month["delivery"] == 0)
+    # At a 24-hour station the night is not empty, and every gallon sold
+    # overnight carries the meter's error with it. The day says what that
+    # error is; the night is corrected for it. The variance's slope on sales
+    # is the meter error expressed as variance per gallon sold, which is
+    # exactly the extra loss per gallon the night's balance would show.
+    meter = meter_error(month) if correct_meter else 0.0
     rates, weights = [], []
     t = 0
     while t < HOURS:
@@ -175,12 +194,44 @@ def quiet_hours(month) -> float:
         span = end - start
         if span >= 4:
             sold = month["sales"][start + 1:end + 1].sum()
-            lost = measured[start] - measured[end] - sold
+            lost = measured[start] - measured[end] - sold * (1 + meter)
             rates.append(lost / span)
             weights.append(span)
     if not rates:
         return float("nan")
     return float(np.average(rates, weights=weights))
+
+
+def hourly_balance(month, level_terms: int = 0) -> float:
+    """The balance hour by hour: each hour's unexplained loss is the leak
+    plus a meter error proportional to that hour's sales,
+
+        Δvariance(t) = L + m · sales(t) + noise,
+
+    so a regression of hourly losses on hourly sales has the meter error as
+    its slope and the leak as its intercept. It needs no quiet hours, only
+    that sales vary from hour to hour — which they do at any station.
+
+    A chart error enters the same way: as the level falls by what was sold,
+    a chart wrong by e(level) adds e'(level) per gallon sold. It looks like a
+    meter error that depends on the level. With level_terms > 0 the slope is
+    allowed to vary with level (a polynomial of that degree), which is the
+    one place a learned function belongs: correcting the gauge, never the
+    leak, which stays a single explicit constant.
+
+    Delivery hours, and the hour after, are left out.
+    """
+    variance, measured = _variance(month)
+    change = np.diff(variance)
+    sold = month["sales"][1:]
+    keep = (month["delivery"][1:] == 0) & (month["delivery"][:-1] == 0)
+    level = (measured[:-1] / CAPACITY - 0.5)[keep]
+    columns = [np.ones(keep.sum()), sold[keep]]
+    for k in range(1, level_terms + 1):
+        columns.append(sold[keep] * level ** k)
+    X = np.column_stack(columns)
+    coef, *_ = np.linalg.lstsq(X, change[keep], rcond=None)
+    return float(coef[0])
 
 
 def conserving(month, steps: int = 300, seed: int = 0) -> float:
@@ -278,7 +329,7 @@ def plain_network(month, reference, steps: int = 300, seed: int = 0) -> float:
 
 def evaluate(months: int = 60, leaks=(0.0, 0.1, 0.2), seed: int = 0,
              methods=("classical", "quiet", "plain", "conserving"),
-             progress=None) -> Dict[str, Any]:
+             progress=None, night: float = 0.08) -> Dict[str, Any]:
     """Each method, on the same simulated months, judged as 40 CFR 280.43(h)
     judges: threshold 0.1 gal/h (half of 0.2), false alarms at no leak,
     detection at 0.2 gal/h, and how far off the reported rate is.
@@ -294,18 +345,25 @@ def evaluate(months: int = 60, leaks=(0.0, 0.1, 0.2), seed: int = 0,
     for L in leaks:
         for k in range(months):
             month_rng = np.random.default_rng(rng.integers(1 << 31))
-            month = simulate(L, month_rng)
+            month = simulate(L, month_rng, night=night)
             if "classical" in methods:
                 estimates["classical"][L].append(classical_sir(month))
             if "quiet" in methods:
                 estimates["quiet"][L].append(quiet_hours(month))
+            if "combined" in methods:
+                estimates["combined"][L].append(quiet_hours(month, True))
+            if "hourly" in methods:
+                estimates["hourly"][L].append(hourly_balance(month))
+            if "hourly_level" in methods:
+                estimates["hourly_level"][L].append(hourly_balance(month, 2))
             if "conserving" in methods:
                 estimates["conserving"][L].append(conserving(month, seed=k))
             if "plain" in methods:
                 # the previous month at the same station: same tank, same
                 # meters, same chart — and tight
                 ref_rng = np.random.default_rng(month_rng.integers(1 << 31))
-                reference = simulate(0.0, ref_rng, fixed=month["tank"])
+                reference = simulate(0.0, ref_rng, fixed=month["tank"],
+                                     night=night)
                 estimates["plain"][L].append(plain_network(month, reference, seed=k))
             if progress:
                 progress({"leak": L, "month": k + 1, "of": months})

@@ -1546,6 +1546,24 @@ def _():
     b = W.simulate(0.0, np.random.default_rng(3), fixed=tk)
     assert a["meter"] == b["meter"] and a["tank"] == b["tank"]
 
+    # a 24-hour station: the night is quieter, not empty
+    busy = W.evaluate(months=150, leaks=(0.0, 0.2), night=0.25,
+                      methods=("quiet", "hourly"))
+    assert busy["methods"]["quiet"]["false_alarms"] <= 0.06
+    assert busy["methods"]["quiet"]["detection"]["0.2"] >= 0.95
+
+    # at a busy night the chart is what limits it, and removing it shows so
+    rng = np.random.default_rng(0)
+    spreads = {}
+    for chart in (0.003, 0.0):
+        values = [W.quiet_hours(W.simulate(
+            0.0, np.random.default_rng(rng.integers(1 << 31)),
+            chart_error=chart, night=0.45)) for _ in range(150)]
+        spreads[chart] = float(np.std(values))
+    assert spreads[0.0] < spreads[0.003], spreads
+
+    assert "At a 24-hour station" in PAGE
+
     assert "function startWetstock" in PAGE
     assert "only real gauge data settles anything" in PAGE, \
         "the page presents a simulation as though it were evidence about tanks"

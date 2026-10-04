@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.87.0
+
+**Leak detection at a 24-hour station.** The overnight method depends on a
+quiet night, and a 24-hour station has a quieter night rather than an empty
+one. So the simulator takes the overnight sales level as a setting, and every
+method was measured across it (150 tank-months per leak rate, 400 at the edge):
+
+```text
+overnight sales, as a share of the average hour        8%      25%      45%
+overnight balance        false alarms / caught       2.7/98.7  2.7/98.7  6.8/97.0
+hourly balance           false alarms / caught       3.3/97.3  6.0/95.3  12/90
+whole-month regression   false alarms                79%       79%       81%
+```
+
+**The hourly balance** is new: each hour's unexplained loss is the leak plus a
+meter error proportional to that hour's sales, so regressing hourly losses on
+hourly sales gives the meter as the slope and the leak as the intercept. It
+needs no quiet hours, and met the standard at 8%; from 25% up it was marginal.
+
+**Correcting the night for the meter did not help** — 8.0% false alarms against
+6.8% without it. The daytime meter estimate added more noise than the bias it
+removed.
+
+**At a busy night, the tank chart is the limit.** With 45% overnight sales the
+level falls about 75 gallons a night, enough for the chart's level-dependent
+error to matter. Removing the chart error took the false alarms from 6.8% to
+4.2%, which meets the standard. That gives a learned chart correction a
+legitimate job — fitted from deliveries, each one a known volume across a known
+span of levels, rather than from one month's balance, which cannot tell a chart
+error from a leak.
+
 ## 1.86.0
 
 **Can it find a leak?** A fuel tank simulator and three leak detectors, judged
