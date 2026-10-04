@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.93.0
+
+**The wave equation is verified now, not reported as unverified.** Problems
+second order in time get their own reference solver: displacement and velocity
+marched together, central differences in space, RK4 in time, with the step
+read off the equation's own wave speed so it satisfies the CFL condition for
+whatever speed is written.
+
+Checked against exact solutions before it was trusted as a referee:
+
+```text
+                     released from rest      struck from flat
+wave speed 1         1.0e-5                  1.5e-5
+wave speed 2         2.2e-5                  2.5e-5
+```
+
+**A starting velocity**, alongside the starting shape, on the physics page and
+in the loss. A string released from rest and one struck into motion obey the
+same equation and do entirely different things, so a second-order problem
+needs both — and a network given only the shape is free to set the string
+moving any way it likes.
+
+**A wave preset**, which matched its reference at 0.54%. And the case that
+proves the velocity term matters: a string struck from flat has zero starting
+shape, so without the velocity "nothing ever moves" satisfies the equation, the
+shape and the boundary exactly. With it, the network matched at 4.3% on a short
+budget, peaking at 0.317 against the exact 1/π = 0.318.
+
+Hard constraints still refuse second-order problems, saying why: the ansatz
+fixes the starting shape and not the starting velocity.
+
 ## 1.92.0
 
 **Can it learn without backpropagation?** Predictive coding (Rao & Ballard

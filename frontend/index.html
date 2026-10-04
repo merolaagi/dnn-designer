@@ -1312,6 +1312,7 @@ i.covered{
 }
 .methodrow.open p{max-height:220px}
 .physrow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-top:6px}
+.physrow:has(#physIcT){grid-template-columns:2fr 1.4fr 1fr 1fr 1fr}
 .physrow label{font-size:10.5px;color:var(--muted);display:flex;flex-direction:column}
 .physrow .wbinput{margin-top:3px}
 .physcheck{display:flex;gap:7px;align-items:center;font-size:11.5px;color:#3C4B5F;margin-top:9px}
@@ -5634,6 +5635,9 @@ async function renderPhysicsPage(){
       <div class="physrow">
         <label>initial u(x, 0)<input class="wbinput mono" id="physIc"
           value="${(p.ic || "").replace(/"/g, "&quot;")}"></label>
+        <label>initial u_t(x, 0)<input class="wbinput mono" id="physIcT"
+          value="${(p.ic_t || "0").replace(/"/g, "&quot;")}"
+          title="Only used when the equation has u_tt"></label>
         <label>x from<input class="wbinput" id="physX0" value="${(p.x || [-1, 1])[0]}"></label>
         <label>to<input class="wbinput" id="physX1" value="${(p.x || [-1, 1])[1]}"></label>
         <label>t to<input class="wbinput" id="physT1" value="${(p.t || [0, 1])[1]}"></label>
@@ -5840,7 +5844,7 @@ async function renderPhysicsPage(){
 async function startPhysics(){
   const bcKind = $("physBc").value;
   const spec = {
-    pde: $("physPde").value, ic: $("physIc").value,
+    pde: $("physPde").value, ic: $("physIc").value, ic_t: $("physIcT").value,
     x: [+$("physX0").value, +$("physX1").value], t: [0, +$("physT1").value],
     bc: bcKind === "periodic" ? { kind: "periodic" }
       : { kind: "dirichlet", left: $("physLeft").value, right: $("physRight").value },

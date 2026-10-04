@@ -67,6 +67,18 @@ PRESETS: List[Dict[str, Any]] = [
                 "the method.",
     },
     {
+        "id": "wave",
+        "name": "Wave equation",
+        "pde": "u_tt - u_xx",
+        "x": [-1.0, 1.0], "t": [0.0, 1.0],
+        "ic": "sin(pi*x)", "ic_t": "0",
+        "bc": {"kind": "dirichlet", "left": "0", "right": "0"},
+        "note": "A string released from rest. Second order in time, so it "
+                "needs a starting velocity as well as a starting shape, and "
+                "the reference marches displacement and velocity together. "
+                "Exact solution: sin(πx)·cos(πt).",
+    },
+    {
         "id": "convection",
         "name": "Fast convection (a documented failure)",
         "pde": "u_t + 30*u_x",
@@ -89,7 +101,7 @@ class PhysicsError(Exception):
 # the equation
 # --------------------------------------------------------------------------
 
-def parse(pde: str, ic: str, bc: Dict[str, Any]):
+def parse(pde: str, ic: str, bc: Dict[str, Any], ic_t: str = "0"):
     """Read the equation and conditions, refusing anything ambiguous."""
     import sympy
     from sympy.parsing.sympy_parser import parse_expr, standard_transformations
@@ -119,6 +131,10 @@ def parse(pde: str, ic: str, bc: Dict[str, Any]):
         raise PhysicsError("The equation has no derivative in it, so it is "
                            "not a differential equation.")
     initial = read(ic, ("x", "pi"), "initial condition")
+    # Second order in time needs the starting velocity as well as the starting
+    # shape: a string released from rest and one struck into motion obey the
+    # same equation and do entirely different things.
+    velocity = read(ic_t or "0", ("x", "pi"), "initial velocity")
 
     kind = (bc or {}).get("kind", "dirichlet")
     if kind not in ("dirichlet", "periodic"):
@@ -129,6 +145,7 @@ def parse(pde: str, ic: str, bc: Dict[str, Any]):
             sides[side] = read(str(bc.get(side, "0")), ("t", "pi"),
                                f"{side} boundary value")
     return {"residual": residual, "used": used, "ic": initial,
+            "ic_t": velocity, "second_order": "u_tt" in used,
             "bc_kind": kind, "bc": sides, "symbols": local}
 
 
@@ -152,6 +169,106 @@ def _numpy_fn(expr, args):
 # the reference: the same problem, solved without a neural network
 # --------------------------------------------------------------------------
 
+def _reference_second_order(parsed, x_range, t_range, nx, nt, max_steps):
+    """u_tt = F(u, u_x, u_xx, u_t, u_xt, x, t), marched as a first-order
+    system in (u, v = u_t): central differences in space, RK4 in time.
+
+    The step comes from the wave speed, read as √(∂F/∂u_xx), so it satisfies
+    the CFL condition for whatever speed the equation states rather than for
+    one assumed in advance.
+    """
+    import sympy
+
+    sym = parsed["symbols"]
+    solved = sympy.solve(parsed["residual"], sym["u_tt"])
+    if len(solved) != 1:
+        return {"ok": False, "why": "The equation cannot be written as "
+                "u_tt = F(…), so the reference solver cannot march it."}
+    rhs = solved[0]
+    args = (sym["u"], sym["u_x"], sym["u_xx"], sym["u_t"], sym["u_xt"],
+            sym["x"], sym["t"])
+    F = _numpy_fn(rhs, args)
+    speed2 = _numpy_fn(sympy.diff(rhs, sym["u_xx"]), args)
+
+    x0, x1 = map(float, x_range)
+    t0, t1 = map(float, t_range)
+    periodic = parsed["bc_kind"] == "periodic"
+    x = (np.linspace(x0, x1, nx, endpoint=False) if periodic
+         else np.linspace(x0, x1, nx))
+    dx = x[1] - x[0]
+    u = np.broadcast_to(np.asarray(_numpy_fn(parsed["ic"], (sym["x"],))(x),
+                                   dtype=float), x.shape).astype(float).copy()
+    v = np.broadcast_to(np.asarray(_numpy_fn(parsed["ic_t"], (sym["x"],))(x),
+                                   dtype=float), x.shape).astype(float).copy()
+    left = right = None
+    if not periodic:
+        left = _numpy_fn(parsed["bc"]["left"], (sym["t"],))
+        right = _numpy_fn(parsed["bc"]["right"], (sym["t"],))
+
+    def d1(w):
+        if periodic:
+            return (np.roll(w, -1) - np.roll(w, 1)) / (2 * dx)
+        out = np.zeros_like(w)
+        out[1:-1] = (w[2:] - w[:-2]) / (2 * dx)
+        return out
+
+    def d2(w):
+        if periodic:
+            return (np.roll(w, -1) - 2 * w + np.roll(w, 1)) / dx ** 2
+        out = np.zeros_like(w)
+        out[1:-1] = (w[2:] - 2 * w[1:-1] + w[:-2]) / dx ** 2
+        return out
+
+    def rate(state, tt):
+        uu, vv = state
+        acc = np.broadcast_to(F(uu, d1(uu), d2(uu), vv, d1(vv), x, tt),
+                              uu.shape).astype(float)
+        if not periodic:
+            acc = acc.copy()
+            acc[0] = acc[-1] = 0.0
+            vv = vv.copy()
+            vv[0] = vv[-1] = 0.0
+        return np.stack([vv, acc])
+
+    c2 = float(np.max(np.abs(np.broadcast_to(
+        speed2(u, d1(u), d2(u), v, d1(v), x, t0), x.shape))))
+    if c2 <= 0:
+        return {"ok": False, "why": "The equation has no u_xx term to set a "
+                "wave speed, so the reference solver cannot choose a stable "
+                "step. The result cannot be verified."}
+    dt_max = min(t1 - t0, 0.5 * dx / math.sqrt(c2))
+    steps = int(math.ceil((t1 - t0) / dt_max))
+    steps = int(math.ceil(steps / (nt - 1))) * (nt - 1)
+    if steps > max_steps:
+        return {"ok": False, "why": f"Too many steps for the reference solver "
+                f"({steps:,}). The result cannot be verified at this "
+                f"resolution."}
+    dt = (t1 - t0) / steps
+    every = steps // (nt - 1)
+    state = np.stack([u, v])
+    frames = [u.copy()]
+    tt = t0
+    for step in range(1, steps + 1):
+        k1 = rate(state, tt)
+        k2 = rate(state + 0.5 * dt * k1, tt + 0.5 * dt)
+        k3 = rate(state + 0.5 * dt * k2, tt + 0.5 * dt)
+        k4 = rate(state + dt * k3, tt + dt)
+        state = state + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        tt = t0 + step * dt
+        if not periodic:
+            state[0, 0] = float(left(tt))
+            state[0, -1] = float(right(tt))
+        if not np.all(np.isfinite(state)):
+            return {"ok": False, "why": "The reference solver diverged, so "
+                    "the result cannot be verified."}
+        if step % every == 0:
+            frames.append(state[0].copy())
+    return {"ok": True, "x": x, "t": np.linspace(t0, t1, nt),
+            "u": np.stack(frames), "steps": steps, "nx": nx,
+            "how": f"second order in time: (u, u_t) on {nx} points, RK4 with "
+                   f"{steps:,} steps"}
+
+
 def reference(parsed, x_range, t_range, nx: int = 512, nt: int = 101,
               max_steps: int = 400_000) -> Dict[str, Any]:
     """Method of lines: central differences in space, RK4 in time.
@@ -165,10 +282,13 @@ def reference(parsed, x_range, t_range, nx: int = 512, nt: int = 101,
     import sympy
 
     sym = parsed["symbols"]
-    if "u_tt" in parsed["used"] or "u_xt" in parsed["used"]:
-        return {"ok": False, "why": "The equation is second order in time, "
-                "and the reference solver here is first order. There is "
-                "nothing to compare with, so the result cannot be verified."}
+    if parsed.get("second_order"):
+        return _reference_second_order(parsed, x_range, t_range, nx, nt,
+                                       max_steps)
+    if "u_xt" in parsed["used"]:
+        return {"ok": False, "why": "The equation mixes x and t derivatives "
+                "in a first-order problem, which the reference solver does "
+                "not handle. The result cannot be verified."}
     solved = sympy.solve(parsed["residual"], sym["u_t"])
     if len(solved) != 1:
         return {"ok": False, "why": "The equation cannot be written as "
@@ -334,7 +454,8 @@ def train(spec: Dict[str, Any], model=None,
     import torch
 
     torch.manual_seed(int(spec.get("seed", 0)))
-    parsed = parse(spec["pde"], spec["ic"], spec.get("bc") or {})
+    parsed = parse(spec["pde"], spec["ic"], spec.get("bc") or {},
+                   spec.get("ic_t", "0"))
     x0, x1 = map(float, spec["x"])
     t0, t1 = map(float, spec["t"])
     sym = parsed["symbols"]
@@ -367,6 +488,11 @@ def train(spec: Dict[str, Any], model=None,
                           [0.3 * (x1 - x0) / nx_, 0.3 * (t1 - t0) / nt_],
                           int(spec.get("width", 16)), int(spec.get("depth", 2)))
     hard = spec.get("constraints") == "hard"
+    if hard and parsed["second_order"]:
+        raise PhysicsError(
+            "Hard constraints here fix the starting shape but not the starting "
+            "velocity, which a second-order problem also needs. This run has "
+            "to use soft constraints.")
     if hard:
         if parsed["bc_kind"] != "dirichlet":
             raise PhysicsError(
@@ -400,6 +526,8 @@ def train(spec: Dict[str, Any], model=None,
         return v if torch.is_tensor(v) else torch.full_like(arg, float(v))
 
     ui_target = values(ic_fn, xi)
+    if parsed["second_order"]:
+        vi_target = values(_torch_fn(parsed["ic_t"], (sym["x"],)), xi)
     if parsed["bc_kind"] == "dirichlet":
         left_target = values(bc_fns["left"], tb)
         right_target = values(bc_fns["right"], tb)
@@ -413,8 +541,16 @@ def train(spec: Dict[str, Any], model=None,
         r = residual_fn(*feed)
         r = r if torch.is_tensor(r) else torch.zeros_like(d["u"])
         pde = torch.mean(r ** 2)
-        ui = model(torch.cat([xi, ti0], dim=1)).reshape(-1, 1)
-        ic = torch.mean((ui - ui_target) ** 2)
+        if parsed["second_order"]:
+            # the starting shape and the starting velocity, both: a second-
+            # order problem left without the second is free to set the string
+            # moving any way it likes and still satisfy the equation
+            start = derivatives(model, xi, ti0, ["u_t"])
+            ic = (torch.mean((start["u"] - ui_target) ** 2)
+                  + torch.mean((start["u_t"] - vi_target) ** 2))
+        else:
+            ui = model(torch.cat([xi, ti0], dim=1)).reshape(-1, 1)
+            ic = torch.mean((ui - ui_target) ** 2)
         lo = model(torch.cat([torch.full_like(tb, x0), tb], 1)).reshape(-1, 1)
         hi = model(torch.cat([torch.full_like(tb, x1), tb], 1)).reshape(-1, 1)
         if parsed["bc_kind"] == "periodic":
@@ -600,7 +736,8 @@ def home() -> Path:
 
 def start(spec: Dict[str, Any], graph: Optional[Dict[str, Any]] = None
           ) -> Dict[str, Any]:
-    parse(spec.get("pde", ""), spec.get("ic", ""), spec.get("bc") or {})
+    parse(spec.get("pde", ""), spec.get("ic", ""), spec.get("bc") or {},
+          spec.get("ic_t", "0"))
     model = None
     used = (f"a tanh network, {int(spec.get('depth', 4))} layers of "
             f"{int(spec.get('width', 32))}")

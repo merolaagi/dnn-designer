@@ -2131,11 +2131,44 @@ def _():
     assert np.linalg.norm(ref["u"] - exact) / np.linalg.norm(exact) < 1e-3, \
         "the reference solver is wrong about the heat equation"
 
-    wave = P.parse("u_tt - u_xx", "sin(pi*x)",
-                   {"kind": "dirichlet", "left": "0", "right": "0"})
-    refused = P.reference(wave, [-1, 1], [0, 1])
+    # second order: displacement and velocity marched together, checked
+    # against both exact standing waves before it is trusted as a referee
+    for c in (1.0, 2.0):
+        rest = P.reference(P.parse(f"u_tt - {c * c}*u_xx", "sin(pi*x)",
+                                   {"kind": "dirichlet", "left": "0", "right": "0"}),
+                           [-1, 1], [0, 1], nx=128)
+        X, T = np.meshgrid(rest["x"], rest["t"])
+        exact = np.sin(np.pi * X) * np.cos(c * np.pi * T)
+        assert np.linalg.norm(rest["u"] - exact) / np.linalg.norm(exact) < 1e-3, c
+        struck = P.reference(P.parse(f"u_tt - {c * c}*u_xx", "0",
+                                     {"kind": "dirichlet", "left": "0", "right": "0"},
+                                     ic_t="sin(pi*x)"), [-1, 1], [0, 1], nx=128)
+        exact = np.sin(np.pi * X) * np.sin(c * np.pi * T) / (c * np.pi)
+        assert np.linalg.norm(struck["u"] - exact) / np.linalg.norm(exact) < 1e-3, c
+
+    # still refused where it genuinely cannot march
+    plain = P.parse("u_tt - u", "sin(pi*x)",
+                    {"kind": "dirichlet", "left": "0", "right": "0"})
+    refused = P.reference(plain, [-1, 1], [0, 1])
     assert not refused["ok"] and "cannot be verified" in refused["why"], \
         "a problem the referee cannot solve was given a reference anyway"
+
+    # a string struck from flat moves only because of its starting velocity;
+    # without that term in the loss, "nothing ever moves" would fit perfectly
+    struck_run = P.train({**next(x for x in P.PRESETS if x["id"] == "wave"),
+                          "ic": "0", "ic_t": "sin(pi*x)",
+                          "iterations": 400, "lbfgs": 100})
+    assert struck_run["verdict"]["kind"] in ("matched", "rough"), struck_run["verdict"]
+    assert np.abs(np.array(struck_run["grids"]["pinn"])).max() > 0.2, \
+        "the network learned that nothing moves"
+
+    try:
+        P.train({**next(x for x in P.PRESETS if x["id"] == "wave"),
+                 "iterations": 5, "lbfgs": 0, "constraints": "hard"})
+    except P.PhysicsError as exc:
+        assert "starting velocity" in str(exc)
+    else:
+        raise AssertionError("hard constraints were applied without the velocity")
 
     # what is not a differential equation is refused
     for bad, why in (("u + 3", "no derivative"), ("u_t + q", "q")):
@@ -2198,6 +2231,7 @@ def _():
         raise AssertionError("a design with three outputs was accepted as u(x, t)")
 
     assert "function renderPhysicsPage" in PAGE
+    assert 'id="physIcT"' in PAGE, "there is no way to give a starting velocity"
     assert "pagePhysics" in PAGE
     assert "never from the loss" in PAGE or "not evidence that the equation" in PAGE
 
