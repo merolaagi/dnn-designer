@@ -1,0 +1,51 @@
+{
+ "name": "PendulumEquation",
+ "nodes": [
+  {
+   "id": "in",
+   "type": "Input",
+   "label": "state (q, p)",
+   "params": {
+    "shape": [
+     2
+    ]
+   },
+   "x": 0,
+   "y": 0
+  },
+  {
+   "type": "Equation",
+   "params": {
+    "label": "residual step",
+    "parameters": "W1: [32, in]; b1: [32]; W2: [2, 32]",
+    "forward": "x + 0.1 * (W2 @ tanh(W1 @ x + b1))"
+   },
+   "id": "mid",
+   "label": "x + 0.1\u00b7W\u2082 tanh(W\u2081x + b\u2081)",
+   "x": 0,
+   "y": 170
+  },
+  {
+   "id": "out",
+   "type": "Output",
+   "label": "next state",
+   "params": {
+    "task": "regression"
+   },
+   "x": 0,
+   "y": 340
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "source": "in",
+   "target": "mid"
+  },
+  {
+   "id": "e2",
+   "source": "mid",
+   "target": "out"
+  }
+ ]
+}

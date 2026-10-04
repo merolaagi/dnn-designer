@@ -1,0 +1,53 @@
+{
+ "name": "PendulumHamiltonian",
+ "nodes": [
+  {
+   "id": "in",
+   "type": "Input",
+   "label": "state (q, p)",
+   "params": {
+    "shape": [
+     2
+    ]
+   },
+   "x": 0,
+   "y": 0
+  },
+  {
+   "type": "HamiltonianField",
+   "params": {
+    "hidden": 32,
+    "dissipative": false,
+    "mode": "flow",
+    "steps": 2,
+    "t_end": 0.1
+   },
+   "id": "mid",
+   "label": "energy H(q, p)",
+   "x": 0,
+   "y": 170
+  },
+  {
+   "id": "out",
+   "type": "Output",
+   "label": "next state",
+   "params": {
+    "task": "regression"
+   },
+   "x": 0,
+   "y": 340
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "source": "in",
+   "target": "mid"
+  },
+  {
+   "id": "e2",
+   "source": "mid",
+   "target": "out"
+  }
+ ]
+}

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.85.1
+
+**Two ready-made physics designs**, so trying the Equation layer and the
+HamiltonianField takes three clicks rather than a recipe:
+
+- **PendulumHamiltonian** — Input [2] → HamiltonianField (flow, t_end 0.1) →
+  Output (regression). 1,185 parameters.
+- **PendulumEquation** — Input [2] → Equation `x + 0.1·W₂ tanh(W₁x + b₁)` →
+  Output (regression). 160 parameters.
+
+Both resolve, generate code and train on *Pendulum trajectories (physics)*.
+They are delivered to every account on its next visit, existing ones included,
+because examples are offered per design rather than once overall.
+
 ## 1.85.0
 
 **The Equation layer: write a layer as its mathematics.** On the palette under
