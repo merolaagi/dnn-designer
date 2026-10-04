@@ -1762,6 +1762,54 @@ def _():
     assert "function runHopfield" in PAGE
 
 
+@check("an equivariant layer is exactly equivariant, and it pays off")
+def _():
+    """Checked on an untrained layer, so the symmetry is shown to come from
+    the structure rather than from training — and with reflections, since
+    E(n) includes them and rotations alone would be a weaker test."""
+    if not HAVE_TORCH:
+        return
+    import torch
+
+    import codegen
+    import equivariant as E
+    import graph as G
+    import train as T
+
+    Layer = E.layer_class()
+    for seed in range(3):
+        torch.manual_seed(seed)
+        errors = E.symmetry_error(Layer(3, 4, 16, 8), seed=seed)
+        for kind, value in errors.items():
+            assert value < 1e-10, f"{kind} is broken by {value}"
+
+    # a reflection really is in the test set, not only rotations
+    found_reflection = any(
+        float(torch.det(E.random_orthogonal(3, torch.Generator().manual_seed(k)))) < 0
+        for k in range(20))
+    assert found_reflection, "the test never reflects, so it only checks rotations"
+
+    # the payoff, at a short budget with a wide margin
+    r = E.experiment(train_sizes=(64,), steps=500)
+    row = r["rows"][0]
+    assert row["equivariant"]["test_error"] < 0.2 * row["plain"]["test_error"], row
+    assert row["equivariant"]["rotation_spread"] < 1e-3, row
+    assert row["plain"]["rotation_spread"] > 0.1, row
+
+    g = build([("i", "Input", {"shape": [5, 4]}),
+               ("e", "EquivariantLayer", {"coords": 3, "hidden": 16,
+                                          "out_features": 8}),
+               ("o", "Output", {"task": "regression"})],
+              [("i", "e", 0), ("e", "o", 0)], "Cloud")
+    parsed = G.parse(g)
+    rep = G.analyze(parsed)
+    assert rep["nodes"]["e"]["out_shape"] == [5, 11]
+    model = T.build_model(codegen.to_pytorch(parsed, rep),
+                          codegen.model_class_name(parsed))
+    assert rep["total_learnables"] == sum(p.numel() for p in model.parameters())
+    assert E.SOURCE.strip() in codegen.to_pytorch(parsed, rep)
+
+
 @check("coupled subsystems can only lose energy, whatever the weights")
 def _():
     """The coupling A − Aᵀ is skew-symmetric by construction and the friction

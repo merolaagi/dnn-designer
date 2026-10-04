@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.90.0
+
+**EquivariantLayer** — E(n)-equivariant message passing (Satorras, Hoogeboom &
+Welling, ICML 2021), on the palette under Graphs. Input is a set of points,
+`[N, coords + features]`. Messages see only features and squared distances;
+coordinates move only along differences between points; sums ignore order. So
+rotating, reflecting or translating the input moves the output coordinates the
+same way and leaves the features alone, and relabelling the points relabels the
+output — exactly, for any weights.
+
+**Checked on an untrained layer, in double precision**, across random
+rotations, reflections, translations and relabellings: largest errors 8.9e−16,
+1.3e−15 and 6.7e−16. Reflections are in the test on purpose — E(n) includes
+them, and checking rotations alone would be a weaker claim.
+
+**What it buys, measured** on the energy of five particles joined by springs,
+error relative to the target's variance:
+
+```text
+training examples     plain network     equivariant
+       64              0.635             0.0001
+      512              0.041             < 0.0001
+answer drift when the same input is rotated:   plain 8.5    equivariant 2e−6
+parameters:                                    plain 18,689 equivariant 11,843
+```
+
+**A qualifier that belongs beside those numbers.** The target is a sum of
+functions of pairwise distances — exactly the shape of what this layer
+computes — so it is close to a best case. The rotation result is general; the
+size of the accuracy gap is specific to this task, and real molecular data
+will be less tidy.
+
 ## 1.89.0
 
 **CoupledHamiltonian — subsystems joined so that together they can only lose
