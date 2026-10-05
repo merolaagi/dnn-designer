@@ -2358,6 +2358,52 @@ def _():
     assert "do this next" in PAGE, "the page does not name the next move"
 
 
+@check("the workbench reads mathematics as it is written, within its scope")
+def _():
+    """The checks are the one kind of evidence the workbench says cannot be
+    argued with, so a check that rejects a true statement breaks its premise.
+    Euler's identity was "disproved at e = −9/4, i = −14"; √(x²) = x was
+    rejected on a problem that granted x ≥ 0."""
+    import workbench as W
+
+    assert W.assumptions(["x > 0", "a, b positive", "n integer", "t >= 0",
+                          "smooth initial data"]) == {
+        "x": {"positive": True}, "a": {"positive": True},
+        "b": {"positive": True}, "n": {"integer": True},
+        "t": {"nonnegative": True}}
+
+    euler = W.probe("e**(i*pi) = -1", 100)
+    assert euler["ok"] and W.check_identity("e**(i*pi) = -1")["ok"], euler
+    assert "Euler's number" in euler["detail"], "the reading was made silently"
+
+    assert W.check_identity("x^2 = x**2")["ok"], "^ is read as exclusive-or"
+    assert W.check_identity("sum(k, (k, 1, n)) = n*(n+1)/2",
+                            ["n integer", "n > 0"])["ok"]
+
+    # true within the scope, and only within it
+    for identity, scope in (("sqrt(x**2) = x", ["x >= 0"]),
+                            ("log(a*b) = log(a) + log(b)", ["a, b positive"])):
+        assert not W.probe(identity, 200)["ok"], f"{identity} passed with no scope"
+        assert W.probe(identity, 200, scope)["ok"], f"{identity} failed within {scope}"
+        assert W.check_identity(identity, scope)["ok"], identity
+
+    # assumptions narrow where a counterexample may come from; they do not
+    # excuse a false claim
+    wrong = W.probe("(x + y)**2 = x**2 + y**2", 200, ["x, y positive"])
+    assert not wrong["ok"] and wrong.get("counterexample"), wrong
+
+    # an i used as a summation index stays an index
+    assert W.check_identity("sum(i, (i, 1, 4)) = 10")["ok"]
+
+    import inspect
+
+    import main
+
+    for fn in (main.problem_check_claim, main.problem_probe_claim):
+        assert 'problem.get("scope"' in inspect.getsource(fn), \
+            f"{fn.__name__} checks a claim without the problem's assumptions"
+
+
 @check("the workbench cannot be flattered")
 def _():
     """It does not solve anything, and an application implying otherwise would
@@ -2905,6 +2951,128 @@ def _():
         "the module diagram touches the design graph"
 
 
+@check("a scout that cannot run is refused at once, not after its timeout")
+def _():
+    import time
+
+    import scouts
+
+    started = time.time()
+    for kind, goal, words in (("nonsense", "x", "No scout called"),
+                              ("draft", "   ", "something to look for")):
+        try:
+            scouts.start(kind, goal, {}, {})
+        except ValueError as exc:
+            assert words in str(exc), exc
+        else:
+            raise AssertionError(f"{kind!r} with {goal!r} was sent out")
+    assert time.time() - started < 2, "a refusal waited for something"
+
+    import main
+
+    for payload in ({"kind": "nonsense", "goal": "x"},
+                    {"kind": "draft", "goal": ""}):
+        try:
+            main.scout_start(main.ScoutPayload(**payload))
+        except main.HTTPException as exc:
+            assert exc.status_code == 400, exc.status_code
+        else:
+            raise AssertionError(f"{payload} reached a thread")
+
+
+@check("the layers whose maths is the point have it, and never for a broken node")
+def _():
+    """A review of the scouts found the maths scout reporting "0 of 3 layers
+    have a write-up" on a Hamiltonian design: over half the palette had no
+    Maths-tab entry, including every physics layer built for its equation.
+    And the tab once explained a node the canvas had rejected, with a
+    confident 9,432 parameters against the canvas's zero."""
+    if not HAVE_TORCH:
+        return
+    import graph as G
+    import main
+    import mathbook
+
+    designs = {
+        "HamiltonianField": ([2], {"hidden": 32, "dissipative": True}),
+        "CoupledHamiltonian": ([4], {"parts": "2,2", "hidden": 16}),
+        "EquivariantLayer": ([5, 4], {"coords": 3, "hidden": 16, "out_features": 8}),
+        "TensorTrainLinear": ([256], {"in_modes": "4,4,4,4",
+                                      "out_modes": "4,4,2,2", "rank": 4}),
+        "ODEBlock": ([8], {"field": "mlp"}),
+    }
+    for kind, (shape, params) in designs.items():
+        assert kind in mathbook.covered(), f"{kind} has no Maths-tab entry"
+        g = build([("i", "Input", {"shape": shape}), ("n", kind, params),
+                   ("o", "Output", {"task": "regression"})],
+                  [("i", "n", 0), ("n", "o", 0)], "M")
+        rep = G.analyze(G.parse(g))
+        assert rep["ok"], (kind, rep["nodes"]["n"])
+        entry = main.layer_math(main.MathPayload(graph=g, node="n"))
+        shown = next(a[1] for a in entry["arithmetic"] if a[0] == "parameters")
+        assert shown.split(",")[0].replace(",", "") in f"{rep['total_learnables']:,}".replace(",", "") \
+            or f"{rep['total_learnables']:,}" in shown, \
+            f"{kind}: the tab says {shown}, the canvas {rep['total_learnables']}"
+
+    # a node the canvas rejects is never explained with numbers
+    broken = build([("i", "Input", {"shape": [8]}), ("n", "ODEBlock", {}),
+                    ("o", "Output", {"task": "regression"})],
+                   [("i", "n", 0), ("n", "o", 0)], "Broken")
+    entry = main.layer_math(main.MathPayload(graph=broken, node="n"))
+    assert "does not resolve" in entry.get("missing", ""), entry
+
+
+@check("the codebase reader counts modules, and draws every certain call")
+def _():
+    """Two defects found by reviewing it on MARE. Imports were counted per
+    imported name, so mare.models showed as "imported by 130" in a project of
+    36 modules. And calls to imported names were never drawn, though a name an
+    import bound is as certain as one defined in the file — engine.py calls 24
+    of them and the diagram showed none."""
+    import tempfile
+
+    import codebase as C
+
+    work = Path(tempfile.mkdtemp())
+    root = work / "p"
+    (root / "pkg" / "sub").mkdir(parents=True)
+    (root / "pkg" / "__init__.py").write_text("")
+    (root / "pkg" / "sub" / "__init__.py").write_text("")
+    (root / "pkg" / "models.py").write_text(
+        "class Claim:\n    pass\ndef make():\n    return 1\n")
+    (root / "pkg" / "sub" / "deep.py").write_text(
+        "from ..models import Claim, make\nfrom .. import models as M\n"
+        "import json\n\ndef run(a):\n    make()\n    M.make()\n"
+        "    json.dumps({})\n    a.go()\n    return Claim()\n")
+
+    survey = C.survey(root)
+    pairs = [(e["from"], e["to"]) for e in survey["edges"]]
+    assert len(pairs) == len(set(pairs)), f"an import is counted twice: {pairs}"
+    for module in {e["to"] for e in survey["edges"]}:
+        importers = sum(1 for e in survey["edges"] if e["to"] == module)
+        assert importers <= len(survey["modules"]), \
+            f"{module} is imported by more modules than exist"
+
+    own = {C._module_name(root / m["path"], root) for m in survey["modules"]}
+    d = C.diagram(root, "pkg/sub/deep.py", own)
+    names = {n["id"]: n["name"] for n in d["nodes"]}
+    drawn = {f"{names[e['from']]}->{names[e['to']]}" for e in d["edges"]}
+    assert "run->pkg.models.make" in drawn, drawn
+    assert "run->pkg.models.Claim" in drawn, drawn
+    # make() and M.make() are the same call, drawn once
+    assert sum(1 for x in drawn if x.endswith(".make")) == 1, drawn
+    # json.dumps goes somewhere known; only a.go() goes through a variable
+    assert d["unresolved"] == 1, d["unresolved"]
+    assert d["external"] == 2
+
+    # and the page draws them, opening the module on a press — through the
+    # draggable's pick callback, since a captured pointer makes the svg the
+    # target of every click
+    assert 'n.kind === "external"' in PAGE
+    assert "makeDraggable(svg, place, paint, pickModule)" in PAGE
+    assert "data-cbjump" not in PAGE, "the jump uses a click the capture eats"
+
+
 @check("an archive of source can be laid out and described")
 def _():
     """Reading somebody else's project is not the same job as importing a
@@ -3207,9 +3375,13 @@ def _():
     assert conv["parameters"] == 3 * 3 * 3 * 32 + 32, conv["parameters"]
     assert conv["share"] > 50, "the share of parameters is not reported"
 
-    # an unknown kind is refused rather than started
-    bad = scouts.start("nonsense", "x", {}, {})
-    assert bad.status == "error" and "nonsense" in bad.error
+    # an unknown kind is refused before any thread exists
+    try:
+        scouts.start("nonsense", "x", {}, {})
+    except ValueError as exc:
+        assert "nonsense" in str(exc)
+    else:
+        raise AssertionError("an unknown scout was sent out")
 
     # the two fitting boxes exist and are read when the button is pressed
     assert 'id="draftShape"' in PAGE and 'id="draftClasses"' in PAGE
@@ -4956,9 +5128,16 @@ def _():
             continue
         if not entry.get("missing"):
             families.add(entry["family"])
+    # every family the tab can return, including the Equation layer's, which
+    # lives outside the table and once went unnoticed
+    families.add("equation")
+    import mathbook as _mb
+
     for family in sorted(families):
-        assert f'kind === "{family}"' in PAGE, \
-            f"the panel has no diagram for the {family} family"
+        declared = f'"{family}"' in PAGE[PAGE.index("const NO_DIAGRAM"):][:300]
+        assert f'kind === "{family}"' in PAGE or (
+            family in _mb.NO_DIAGRAM and declared), \
+            f"the {family} family is neither drawn nor declared as having no diagram"
     assert 'data-side="math"' in PAGE and 'id="mathBody"' in PAGE
     assert "function renderMathPanel" in PAGE
     # reachable from the sidebar, and grouped with the design rather than status

@@ -130,41 +130,117 @@ def add_claim(problem: Dict[str, Any], text: str, depends: List[str],
 # the one kind of evidence that is not an opinion
 # --------------------------------------------------------------------------
 
-def check_identity(identity: str, timeout_note: str = "") -> Dict[str, Any]:
+
+# --------------------------------------------------------------------------
+# reading an identity the way it was meant
+# --------------------------------------------------------------------------
+
+_ASSUME = {"positive": {"positive": True}, "negative": {"negative": True},
+           "nonnegative": {"nonnegative": True}, "integer": {"integer": True},
+           "integers": {"integer": True}, "real": {"real": True},
+           "reals": {"real": True}, "natural": {"integer": True, "positive": True}}
+
+
+def assumptions(scope: List[str]) -> Dict[str, Dict[str, bool]]:
+    """What the problem's granted assumptions say about named quantities.
+
+    "x > 0", "a, b positive", "n integer", "x >= 0". A check that ignores
+    these finds "counterexamples" outside the problem — √(x²) = x fails at
+    x = −5 — and rejects a claim the problem's own hypotheses make true.
+    """
+    import re
+
+    found: Dict[str, Dict[str, bool]] = {}
+    for entry in scope or []:
+        text = entry.strip().lower().replace("≥", ">=")
+        m = re.fullmatch(r"([a-z_][\w ,]*?)\s*(>=|>)\s*0", text)
+        if m:
+            kind = {"nonnegative": True} if m.group(2) == ">=" else {"positive": True}
+        else:
+            m = re.fullmatch(r"([a-z_][\w ,]*?)\s+(?:is |are |in |all )?"
+                             r"(positive|negative|nonnegative|integers?|reals?|natural)", text)
+            if not m:
+                continue
+            kind = _ASSUME[m.group(2)]
+        for name in re.split(r"[ ,]+", m.group(1).strip()):
+            if name and name not in ("and",):
+                found.setdefault(name, {}).update(kind)
+    return found
+
+
+def _read(identity: str, scope: List[str]):
+    """Both sides as sympy, plus a plain account of every reading made.
+
+    e is Euler's number and i is √−1 unless i is a summation index; ^ is a
+    power, not exclusive-or; sum and product are the mathematical ones.
+    Each of these is said in the result, because a silent reading is how a
+    check ends up disagreeing with the person who wrote the claim.
+    """
+    import re
+
+    import sympy
+    from sympy.parsing.sympy_parser import (convert_xor, parse_expr,
+                                            implicit_multiplication_application,
+                                            standard_transformations)
+
+    if "=" not in identity:
+        raise ValueError("Not an identity. Write it as lhs = rhs.")
+    left, _, right = identity.partition("=")
+    granted = assumptions(scope)
+    local: Dict[str, Any] = {"pi": sympy.pi, "sum": sympy.summation,
+                             "product": sympy.product, "E": sympy.E,
+                             "I": sympy.I}
+    readings: List[str] = []
+    if re.search(r"\be\b", identity) and "e" not in granted:
+        local["e"] = sympy.E
+        readings.append("e as Euler's number")
+    if (re.search(r"\bi\b", identity) and "i" not in granted
+            and not re.search(r"\(\s*i\s*,", identity)):
+        local["i"] = sympy.I
+        readings.append("i as √−1")
+    for name, kind in granted.items():
+        local[name] = sympy.Symbol(name, **kind)
+    if granted:
+        readings.append("; ".join(f"{n} as {', '.join(k)}" for n, k in granted.items())
+                        + " (from the problem's assumptions)")
+    rules = standard_transformations + (implicit_multiplication_application,
+                                        convert_xor)
+    lhs = parse_expr(left.strip(), local_dict=local, transformations=rules)
+    rhs = parse_expr(right.strip(), local_dict=local, transformations=rules)
+    return lhs, rhs, granted, readings
+
+
+def _note(readings: List[str]) -> str:
+    return f" Read {'; '.join(readings)}." if readings else ""
+
+def check_identity(identity: str, scope: List[str] = None) -> Dict[str, Any]:
     """Decide whether a stated identity is actually true, with sympy.
 
     `lhs = rhs` is checked by simplifying the difference. This is the only
     thing in the whole workbench that can move a claim to verified on its own,
     because it is the only thing here that cannot be argued with.
     """
-    if "=" not in identity:
-        return {"ok": False, "kind": "symbolic",
-                "detail": "Not an identity. Write it as lhs = rhs."}
-    left, _, right = identity.partition("=")
     try:
         import sympy
-        from sympy.parsing.sympy_parser import (parse_expr,
-                                                standard_transformations,
-                                                implicit_multiplication_application)
 
-        rules = standard_transformations + (implicit_multiplication_application,)
-        lhs = parse_expr(left.strip(), transformations=rules)
-        rhs = parse_expr(right.strip(), transformations=rules)
+        lhs, rhs, _, readings = _read(identity, scope or [])
         difference = sympy.simplify(lhs - rhs)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "kind": "symbolic",
                 "detail": f"Could not read it: {type(exc).__name__}: {exc}"}
-
+    left, right = identity.partition("=")[0], identity.partition("=")[2]
     if difference == 0:
         return {"ok": True, "kind": "symbolic",
-                "detail": f"{left.strip()} − {right.strip()} simplifies to 0."}
+                "detail": f"{left.strip()} − {right.strip()} simplifies to 0."
+                          + _note(readings)}
     return {"ok": False, "kind": "symbolic",
             "detail": f"The difference simplifies to {difference}, not 0. "
                       f"Either the identity is wrong or it needs conditions "
                       f"that are not written down."}
 
 
-def probe(identity: str, tries: int = 400) -> Dict[str, Any]:
+def probe(identity: str, tries: int = 400,
+          scope: List[str] = None) -> Dict[str, Any]:
     """Hunt for a counterexample by putting numbers in.
 
     Simplification failing to reach zero does not prove an identity false — it
@@ -176,25 +252,32 @@ def probe(identity: str, tries: int = 400) -> Dict[str, Any]:
     surviving four hundred random points is not proof of anything. It is a
     reason to keep going, which is a different sentence.
     """
-    if "=" not in identity:
-        return {"ok": False, "kind": "numeric",
-                "detail": "Not an identity. Write it as lhs = rhs."}
-    left, _, right = identity.partition("=")
     try:
         import random
 
         import sympy
-        from sympy.parsing.sympy_parser import (parse_expr,
-                                                standard_transformations,
-                                                implicit_multiplication_application)
 
-        rules = standard_transformations + (implicit_multiplication_application,)
-        lhs = parse_expr(left.strip(), transformations=rules)
-        rhs = parse_expr(right.strip(), transformations=rules)
+        lhs, rhs, granted, readings = _read(identity, scope or [])
         difference = lhs - rhs
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "kind": "numeric",
                 "detail": f"Could not read it: {type(exc).__name__}: {exc}"}
+
+    def sample(sym):
+        """A random rational where the problem allows one: a counterexample
+        outside the granted assumptions is not a counterexample to anything
+        the problem claims."""
+        kind = granted.get(str(sym), {})
+        if kind.get("integer"):
+            low = 1 if kind.get("positive") else 0 if kind.get("nonnegative") else -30
+            high = -1 if kind.get("negative") else 30
+            return sympy.Integer(random.randint(low, high))
+        value = sympy.Rational(random.randint(1, 400), random.randint(1, 9))
+        if kind.get("positive") or kind.get("nonnegative"):
+            return value
+        if kind.get("negative"):
+            return -value
+        return value if random.random() < 0.5 else -value
 
     free = sorted(difference.free_symbols, key=str)
     if not free:
@@ -202,13 +285,13 @@ def probe(identity: str, tries: int = 400) -> Dict[str, Any]:
         near = abs(value) < 1e-9
         return {"ok": near, "kind": "numeric",
                 "detail": ("Both sides are the same number."
-                           if near else f"The two sides differ by {value}.")}
+                           if near else f"The two sides differ by {value}.")
+                          + _note(readings)}
 
     worst = None
     checked = 0
     for _ in range(max(10, min(5000, tries))):
-        point = {sym: sympy.Rational(random.randint(-40, 40), random.randint(1, 9))
-                 for sym in free}
+        point = {sym: sample(sym) for sym in free}
         try:
             value = complex(sympy.N(difference.subs(point)))
         except Exception:  # noqa: BLE001 - a singular point is not a counterexample
@@ -225,12 +308,13 @@ def probe(identity: str, tries: int = 400) -> Dict[str, Any]:
         where = ", ".join(f"{sym} = {val}" for sym, val in point.items())
         return {"ok": False, "kind": "numeric", "counterexample": where,
                 "detail": f"False at {where}: the two sides differ by "
-                          f"{value:.6g}. One counterexample is enough."}
+                          f"{value:.6g}. One counterexample is enough."
+                          + _note(readings)}
 
     return {"ok": True, "kind": "numeric",
             "detail": f"Held at {checked} random points. That is not a proof — "
                       f"it is a reason to keep going rather than evidence that "
-                      f"it is true."}
+                      f"it is true." + _note(readings)}
 
 
 # --------------------------------------------------------------------------

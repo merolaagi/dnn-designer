@@ -1,5 +1,90 @@
 # Changelog
 
+## 1.96.0
+
+**The scouts, reviewed — and what the maths scout exposed.**
+
+Run on the pendulum design, the maths scout reported **"0 of 3 layers have a
+write-up."** Over half the palette, 36 of 68 layers, had no Maths-tab entry —
+including every physics layer built around its equation. Entries now exist for
+HamiltonianField, CoupledHamiltonian, EquivariantLayer, TensorTrainLinear,
+ODEBlock, GraphConv and Sampling, each written from the layer's implementation
+rather than the textbook: GraphConv's normalisation is D^−½ A D^−½ with **no**
+self-loops added, ODEBlock is fixed-step RK4 with one shared field, Sampling
+returns the mean at evaluation. Each entry carries what was measured about the
+layer, limits included. Parameter counts come from the block's own counting
+function, so the tab cannot disagree with the canvas. RMSNorm and
+PositionalEncoding are left without entries rather than written from memory.
+
+**The Maths tab explained nodes the canvas had rejected.** An ODEBlock left on
+its default convolutional field cannot take a flat input; the canvas counted it
+as zero parameters and the tab confidently said 9,432. A node with a shape
+error now gets "this layer does not resolve yet" and the reason, never numbers.
+
+**Families without a diagram are declared, not fallen through to.** The
+Equation layer's family had no diagram and no test noticed, because it lives
+outside the main table. Every family is now either drawn or listed as having
+no picture, and the test covers the Equation layer too.
+
+**Scouts that cannot run are refused at once.** An unknown kind failed inside
+its thread before signalling completion, so anything waiting on it waited out
+its full timeout — 200 seconds in the probe. It and an empty goal are now
+refused before a thread exists. The papers scout's handling of an unreachable
+literature search was already right: it says so plainly.
+
+## 1.95.0
+
+**The workbench, reviewed by feeding it mathematics as people write it.** Its
+checks are the one kind of evidence it says cannot be argued with, so a check
+that rejects a true statement breaks its premise. Four did:
+
+- **Euler's identity was "disproved".** `e**(i*pi) = -1` read e and i as
+  unknowns, and the probe reported a counterexample at e = −9/4, i = −14 —
+  which sets a claim to *rejected*. e is now Euler's number and i is √−1
+  (unless i is a summation index).
+- **The problem's assumptions were decoration.** `√(x²) = x` was rejected on a
+  problem that granted x ≥ 0, from a "counterexample" at x = −5 that the problem
+  had ruled out. Granted assumptions — "x > 0", "a, b positive", "n integer",
+  "t >= 0" — now give the symbols those properties, and the probe draws its
+  random points only from where they allow.
+- `x^2` was read as exclusive-or, and `sum(…)` did not parse.
+
+**Assumptions narrow, they do not excuse.** With x and y positive,
+`(x + y)² = x² + y²` is still rejected, by a counterexample inside the allowed
+domain. That case is a test.
+
+**Every reading is stated in the result** — "read e as Euler's number; i as
+√−1", "read x as nonnegative (from the problem's assumptions)" — because a
+silent interpretation is how a check ends up disagreeing with the person who
+wrote the claim, without either of them noticing.
+
+## 1.94.0
+
+**The codebase reader, reviewed on a real project.** Two defects found by
+running it on MARE rather than reading its code:
+
+**Imports were counted per imported name, not per module.** `from x import A, B`
+records `x.A` and `x.B` — two strings, one module — and the deduplication ran
+before resolving them. So the module map reported **mare.models as "imported by
+130" in a project of 36 modules**, a number that could not be true and that went
+unremarked, including by me. Deduplicated after resolving: MARE has 81
+module-to-module imports, not 247, and mare.models is imported by 25.
+
+**Calls to imported names were never drawn.** The file diagrams claim to show
+every call that is certain, and a name bound by an import is as certain as one
+defined in the file. `engine.py` calls 24 imported classes and functions
+directly, and its diagram showed none of them. They are drawn now, in their own
+column, and pressing one opens the module it lives in: `engine.py` shows 97
+calls, 24 into other modules.
+
+"Unresolved" now means what it says: calls through runtime variables. A call on
+any imported module — `json.dumps` — goes somewhere known and is no longer
+counted. `agents.py` still shows 25 calls through variables, which is true of it:
+its providers are injected.
+
+Also checked on the way, and fine: files in other encodings, and files that do
+not parse.
+
 ## 1.93.0
 
 **The wave equation is verified now, not reported as unverified.** Problems

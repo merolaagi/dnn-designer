@@ -331,6 +331,14 @@ def layer_math(body: MathPayload):
     in_shapes = [report["nodes"].get(e.source, {}).get("out_shape")
                  for e in inc[node.id]]
     out_shape = report["nodes"].get(node.id, {}).get("out_shape")
+    problem = report["nodes"].get(node.id, {}).get("error")
+    if problem:
+        # The canvas has rejected this node, so there are no true numbers to
+        # put in its mathematics. Explaining it anyway produced a confident
+        # 9,432-parameter count for an ODEBlock the canvas counted as zero.
+        return {"label": node.label or node.type, "missing":
+                f"This layer does not resolve yet, so there are no numbers to "
+                f"show: {problem}"}
     entry = mathbook.explain(node.type, G.resolved_params(node),
                              in_shapes, out_shape)
     entry["type"] = node.type
@@ -604,7 +612,8 @@ def problem_check_claim(problem_id: str, claim_id: str):
             "message": "This claim states no identity, so there is nothing to "
                        "run. Write one as lhs = rhs, or record why it is "
                        "believed instead."})
-    result = workbench.check_identity(claim["identity"])
+    result = workbench.check_identity(claim["identity"],
+                                      problem.get("scope", []))
     result["at"] = time.time()
     claim["evidence"] = [e for e in claim["evidence"]
                          if e.get("kind") != "symbolic"] + [result]
@@ -644,7 +653,8 @@ def problem_probe_claim(problem_id: str, claim_id: str):
     if not claim or not claim["identity"]:
         raise HTTPException(400, detail={
             "message": "This claim states no identity to put numbers into."})
-    result = workbench.probe(claim["identity"])
+    result = workbench.probe(claim["identity"],
+                             scope=problem.get("scope", []))
     result["at"] = time.time()
     claim["evidence"] = [e for e in claim["evidence"]
                          if e.get("kind") != "numeric"] + [result]
@@ -1230,10 +1240,11 @@ def scout_start(body: ScoutPayload):
     """Send a scout out. It reports as it goes and verifies what it finds."""
     if body.kind != "maths" and not (body.goal or "").strip():
         raise HTTPException(400, detail={"message": "Give it something to look for."})
-    scout = scouts.start(body.kind, (body.goal or "").strip(),
-                         body.config or {}, body.graph or {})
-    if scout.status == "error":
-        raise HTTPException(400, detail={"message": scout.error})
+    try:
+        scout = scouts.start(body.kind, (body.goal or "").strip(),
+                             body.config or {}, body.graph or {})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
     return scout.snapshot()
 
 

@@ -198,12 +198,18 @@ def survey(root: Path) -> Dict[str, Any]:
     own = {_module_name(root / m.path, root): m for m in modules}
     edges = []
     for name, module in own.items():
-        for target in set(module.imports):
+        # Deduplicated after resolving, not before: `from x import A, B`
+        # records x.A and x.B, two different strings for one module, and
+        # counting them separately reported mare.models as "imported by 130"
+        # in a project of 36 modules.
+        reached = set()
+        for target in module.imports:
             # only edges inside the project: the interesting graph is the one
             # the author drew, not their dependency on the standard library
             hit = _resolve(target, own)
             if hit and hit != name:
-                edges.append({"from": name, "to": hit})
+                reached.add(hit)
+        edges.extend({"from": name, "to": hit} for hit in sorted(reached))
 
     fan_in: Dict[str, int] = {name: 0 for name in own}
     for edge in edges:
@@ -332,25 +338,80 @@ def diagram(root: Path, relative: str, own: Optional[Set[str]] = None
     edges: List[Dict[str, Any]] = []
     seen: Set[tuple] = set()
 
+    # What each name in this file was bound to by an import. A call to an
+    # imported name, or to an attribute of an imported project module, is as
+    # certain as a call within the file — only calls through runtime
+    # variables cannot be known. Leaving these out drew none of the 24
+    # imported classes and functions engine.py calls directly.
+    here = _module_name(target, root)
+    package = here if target.name == "__init__.py" else here.rpartition(".")[0]
+    lookup = {k: None for k in (own or set())}
+    bound: Dict[str, str] = {}          # local name -> module.attribute
+    aliases: Dict[str, str] = {}        # local name -> project module
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.level:
+                parts = package.split(".") if package else []
+                base = ".".join(parts[:len(parts) - (node.level - 1)])
+                source = f"{base}.{node.module}" if node.module else base
+            else:
+                source = node.module or ""
+            for alias in node.names:
+                local = alias.asname or alias.name
+                whole = f"{source}.{alias.name}" if source else alias.name
+                if whole in lookup:
+                    aliases[local] = whole
+                elif _resolve(source, lookup):
+                    bound[local] = f"{_resolve(source, lookup)}.{alias.name}"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in lookup:
+                    aliases[alias.asname or alias.name] = alias.name
+
+    # every name an import bound, inside the project or not: a call on one of
+    # these (json.dumps) goes somewhere known, so it is not "unresolved" —
+    # that word is kept for calls through runtime variables
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            imported.update((a.asname or a.name).split(".")[0] for a in node.names)
+
+    external: Dict[str, str] = {}
+
+    def outside(full: str) -> str:
+        if full not in external:
+            nid = f"x{len(external)}"
+            external[full] = nid
+            nodes.append({"id": nid, "kind": "external", "name": full,
+                          "line": 0, "parent": "", "detail": ""})
+        return external[full]
+
     def calls_in(body, holder: str) -> None:
         for inner in ast.walk(ast.Module(body=body, type_ignores=[])):
             if not isinstance(inner, ast.Call):
                 continue
             func = inner.func
-            name = ""
+            name, to = "", None
             if isinstance(func, ast.Name):
                 name = func.id
-            elif isinstance(func, ast.Attribute):
-                # self.foo() is certain; anything.foo() is not
-                if isinstance(func.value, ast.Name) and func.value.id == "self":
+                if name not in defined and name in bound:
+                    to = outside(bound[name])
+            elif isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                if func.value.id == "self":
                     name = func.attr
+                elif func.value.id in aliases:
+                    to = outside(f"{aliases[func.value.id]}.{func.attr}")
                 else:
                     continue
-            if name in defined and defined[name] != holder:
-                key = (holder, defined[name])
+            else:
+                continue
+            if to is None and name in defined and defined[name] != holder:
+                to = defined[name]
+            if to is not None:
+                key = (holder, to)
                 if key not in seen:
                     seen.add(key)
-                    edges.append({"from": holder, "to": defined[name]})
+                    edges.append({"from": holder, "to": to})
 
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
@@ -378,16 +439,18 @@ def diagram(root: Path, relative: str, own: Optional[Set[str]] = None
                       if own and _resolve(t, lookup)} - {here})
     return {"path": relative, "nodes": nodes, "edges": edges,
             "reaches": reaches[:12],
-            "unresolved": _unresolved_calls(tree, defined)}
+            "unresolved": _unresolved_calls(tree, defined, imported),
+            "external": len(external)}
 
 
-def _unresolved_calls(tree: ast.AST, defined: Dict[str, str]) -> int:
+def _unresolved_calls(tree: ast.AST, defined: Dict[str, str],
+                      aliases=frozenset()) -> int:
     """How many calls could not be drawn, so the diagram admits its gaps."""
     total = 0
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             if not (isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "self"):
+                    and node.func.value.id in ({"self"} | set(aliases))):
                 total += 1
     return total
 

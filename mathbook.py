@@ -913,5 +913,187 @@ def explain(node_type: str, params: Dict[str, Any],
                 "missing": f"Could not work that through: {type(exc).__name__}: {exc}"}
 
 
+
+# --------------------------------------------------------------------------
+# layers whose mathematics is the point of them
+# --------------------------------------------------------------------------
+# Each equation was written from the layer's implementation, not from the
+# textbook: GraphConv adds no self-loops of its own, ODEBlock is fixed-step
+# RK4, Sampling returns the mean at evaluation. Parameter counts come from the
+# block's own counting function, so this tab cannot disagree with the canvas.
+
+def _count(name, p, ins, out):
+    try:
+        from layers import REGISTRY
+
+        return int(REGISTRY[name].learnables(p, ins, out))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _hamiltonian(p, ins, out):
+    d = ins[0][-1] if ins and ins[0] else 0
+    friction = bool(p.get("dissipative"))
+    flow = p.get("mode") == "flow"
+    return {
+        "family": "dynamics", "title": "Hamiltonian field" + (
+            " with friction" if friction else ""),
+        "equation": ("dq/dt = ∂H/∂p,   dp/dt = −∂H/∂q"
+                     + (" − γ ∂H/∂p" if friction else "")),
+        "shape": f"z = (q, p) ∈ ℝ^{_fmt(d)}: {_fmt(d // 2)} positions, "
+                 f"{_fmt(d // 2)} momenta",
+        "symbols": [("H", f"a learned energy: a network from ℝ^{_fmt(d)} to one number"),
+                    ("q, p", "positions and momenta, the two halves of the input")]
+                   + ([("γ", "a learned friction, softplus so never negative")]
+                      if friction else []),
+        "arithmetic": [
+            ("energy along the motion",
+             "dH/dt = −γ‖∂H/∂p‖² ≤ 0" if friction else
+             "dH/dt = ∂H/∂q·∂H/∂p − ∂H/∂p·∂H/∂q = 0, for any weights"),
+            ("returns", f"the state {p.get('t_end', 1.0)} later, by "
+                        f"{p.get('steps', 4)} RK4 steps" if flow else "dz/dt"),
+            ("parameters", _fmt(_count("HamiltonianField", p, ins, out))),
+        ],
+        "freedom": [
+            "What is conserved is the network's own energy H. The true energy "
+            "is kept only as well as H matches it — measured on a damped "
+            "pendulum, true energy still rose on 4% of steps against 11% for "
+            "a plain network.",
+            "With friction on, the learned γ is readable: on a damped "
+            "pendulum it came back as 0.1000 against a true 0.1.",
+        ],
+    }
+
+
+def _coupled(p, ins, out):
+    parts = str(p.get("parts", "2,2"))
+    return {
+        "family": "dynamics", "title": "Coupled port-Hamiltonian system",
+        "equation": "dz/dt = (J − R) ∇H,   J = J₀ + A − Aᵀ,   R = diag(γ) ⪰ 0",
+        "shape": f"subsystems of widths {parts}, side by side",
+        "symbols": [("H", "each subsystem's own energy, plus an optional "
+                          "interaction term"),
+                    ("J₀", "the canonical structure of each subsystem"),
+                    ("A − Aᵀ", "a learned coupling, skew-symmetric by construction"),
+                    ("γ", "one non-negative friction per subsystem")],
+        "arithmetic": [
+            ("energy", "∇HᵀJ∇H = 0 for any skew J, so dH/dt = −∇HᵀR∇H ≤ 0"),
+            ("parameters", _fmt(_count("CoupledHamiltonian", p, ins, out))),
+        ],
+        "freedom": [
+            "The guarantee holds for any weights. On coupled pendulums it did "
+            "not beat a plain network on accuracy once both were trained "
+            "properly, and its learned friction leaked between subsystems.",
+        ],
+    }
+
+
+def _equivariant(p, ins, out):
+    d = int(p.get("coords", 3))
+    rows = ins[0] if ins and ins[0] else [0, 0]
+    return {
+        "family": "graph", "title": "E(n)-equivariant message passing",
+        "equation": "m_ij = φ_e(h_i, h_j, ‖x_i − x_j‖²);   "
+                    "x_i′ = x_i + Σ_j (x_i − x_j) φ_x(m_ij) / (N−1);   "
+                    "h_i′ = φ_h(h_i, Σ_j m_ij)",
+        "shape": f"{_fmt(rows[0])} points, each {d} coordinates and "
+                 f"{_fmt(rows[1] - d)} features",
+        "symbols": [("x_i", "a point's coordinates"), ("h_i", "its features"),
+                    ("m_ij", "the message from j to i, seeing only features "
+                             "and a squared distance")],
+        "arithmetic": [
+            ("symmetry", "for any rotation or reflection Q, translation t and "
+                         "relabelling P: f(P(xQᵀ + t), Ph) = P(x′Qᵀ + t), Ph′"),
+            ("measured", "untrained, in double precision: errors below 2e−15"),
+            ("parameters", _fmt(_count("EquivariantLayer", p, ins, out))),
+        ],
+        "freedom": [
+            "On a five-particle spring system it reached 0.0001 error from 64 "
+            "examples where a plain network reached 0.635 — a near best case, "
+            "since that target is built from pairwise distances.",
+        ],
+    }
+
+
+def _tensor_train(p, ins, out):
+    n = _count("TensorTrainLinear", p, ins, out)
+    d_in = ins[0][-1] if ins and ins[0] else 0
+    d_out = out[-1] if out else 0
+    return {
+        "family": "factorised", "title": "Tensor-train linear map",
+        "equation": "W[(i₁…i_d),(j₁…j_d)] = G₁[i₁,j₁] G₂[i₂,j₂] ⋯ G_d[i_d,j_d],   y = Wx + b",
+        "shape": f"in {p.get('in_modes')} = {_fmt(d_in)},  out {p.get('out_modes')} "
+                 f"= {_fmt(d_out)},  rank {p.get('rank')}",
+        "symbols": [("G_k", "a small core, rank × n_k × m_k × rank")],
+        "arithmetic": [
+            ("parameters", f"{_fmt(n)}, against {_fmt(d_in * d_out)} for the "
+                           f"full matrix"),
+        ],
+        "freedom": [
+            "Measured against a truncated SVD at matched size, it was better "
+            "only below about 1/16 of the dense parameters; above that, the "
+            "SVD won. It saves storage, not arithmetic.",
+        ],
+    }
+
+
+def _ode(p, ins, out):
+    steps = int(p.get("steps", 4))
+    t_end = float(p.get("t_end", 1.0))
+    return {
+        "family": "dynamics", "title": "Neural ODE, fixed-step RK4",
+        "equation": "dh/dt = f_θ(h),   y = h(T)",
+        "shape": "the same shape in and out",
+        "symbols": [("f_θ", "one learned field, shared by every step")],
+        "arithmetic": [
+            ("integration", f"{steps} RK4 steps of {t_end / max(steps, 1):g} "
+                            f"to T = {t_end:g}: {4 * steps} evaluations of f"),
+            ("parameters", _fmt(_count("ODEBlock", p, ins, out))),
+        ],
+        "freedom": [
+            "More steps cost time, not parameters. Fixed-step and without an "
+            "adjoint, so memory grows with the number of steps.",
+        ],
+    }
+
+
+def _graph_conv(p, ins, out):
+    return {
+        "family": "graph", "title": "Graph convolution",
+        "equation": "H′ = D^−½ A D^−½ H W",
+        "shape": "node features, with the adjacency A as a second input",
+        "symbols": [("A", "the adjacency as given — no self-loops are added, "
+                          "so include them in A if a node should see itself"),
+                    ("D", "the degree of each node, from A")],
+        "arithmetic": [("parameters", _fmt(_count("GraphConv", p, ins, out)))],
+        "freedom": [],
+    }
+
+
+def _sampling(p, ins, out):
+    return {
+        "family": "sampling", "title": "Reparameterised sample",
+        "equation": "z = μ + exp(½ log σ²) ⊙ ε,   ε ~ N(0, I)",
+        "shape": "a mean and a log-variance in, one sample out",
+        "symbols": [("ε", "the randomness, which carries no gradient, so the "
+                          "gradient reaches μ and σ")],
+        "arithmetic": [("in evaluation", "returns μ, with no noise"),
+                       ("its KL term", "−½ Σ (1 + log σ² − μ² − σ²)")],
+        "freedom": [],
+    }
+
+
+ENTRIES.update({"HamiltonianField": _hamiltonian,
+                "CoupledHamiltonian": _coupled,
+                "EquivariantLayer": _equivariant,
+                "TensorTrainLinear": _tensor_train,
+                "ODEBlock": _ode, "GraphConv": _graph_conv,
+                "Sampling": _sampling})
+
+#: Families whose content is the equation itself. They are declared here
+#: rather than left to fall through, so a family cannot go undrawn by
+#: accident — which is how "equation" went unnoticed.
+NO_DIAGRAM = {"dynamics", "graph", "factorised", "sampling", "equation"}
+
 def covered() -> List[str]:
     return sorted(ENTRIES)

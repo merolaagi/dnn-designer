@@ -185,6 +185,16 @@ CATALOG = [
 
 def start(kind: str, goal: str, config: Dict[str, Any],
           graph: Optional[Dict[str, Any]] = None) -> Scout:
+    # Refused here, before a thread exists. An unknown kind used to fail
+    # inside the thread before it signalled completion, so anything waiting
+    # on it waited out its whole timeout; an empty goal "succeeded" with
+    # nothing found, which reads as a search that came up empty.
+    known = {entry["id"] for entry in CATALOG}
+    if kind not in known:
+        raise ValueError(f"No scout called '{kind}'. There are: "
+                         f"{', '.join(sorted(known))}.")
+    if kind != "maths" and not (goal or "").strip():
+        raise ValueError("Give the scout something to look for.")
     scout = Scout(id=uuid.uuid4().hex[:12], kind=kind, goal=goal,
                   home=history_dir())
     SCOUTS[scout.id] = scout
