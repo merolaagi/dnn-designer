@@ -2951,6 +2951,42 @@ def _():
         "the module diagram touches the design graph"
 
 
+@check("every layer on the palette has its mathematics, or says why not")
+def _():
+    """Over half the palette once had no Maths-tab entry. Now every layer
+    has one, and the two with no single equation — a whole pretrained
+    architecture, and somebody's own code — say so rather than invent one.
+    A few details are pinned because a textbook entry would get them wrong."""
+    import blockloader
+    import layers as L
+    import mathbook as M
+
+    blockloader.load_all()
+    missing = [n for n in L.REGISTRY
+               if n not in M.covered() and n not in ("Equation", "Input", "Output")]
+    assert not missing, f"no Maths-tab entry for {missing}"
+
+    def show(name, params=None, shape=(16,)):
+        return M.explain(name, params or {}, [list(shape)], list(shape))
+
+    # self-loops: GraphAttention adds them, GraphConv does not
+    assert "self-loops are added" in str(show("GraphAttention")["symbols"])
+    assert "no self-loops are added" in str(show("GraphConv")["symbols"])
+    # the membrane is reset by subtraction, as the code does
+    assert "m_t − s_t θ" in show("SpikingDense")["equation"]
+    # the sinusoid's base is the one in the code
+    assert "10000" in show("PositionalEncoding")["equation"]
+    assert "10000.0" in Path(L.__file__).read_text()
+    # the selection rule is the one the search computes
+    assert "√N / (1 + n(a))" in show("MCTSSearch")["equation"]
+
+    for name in ("Backbone", "Custom"):
+        entry = show(name)
+        assert entry.get("missing") and not entry.get("equation"), \
+            f"{name} was given an equation it does not have"
+    assert "Equation layer" in show("Custom")["missing"]
+
+
 @check("a scout that cannot run is refused at once, not after its timeout")
 def _():
     import time

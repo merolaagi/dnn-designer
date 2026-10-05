@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.97.0
+
+**Every layer on the palette has its mathematics now.** The remaining 29
+entries, each written from the layer's implementation — the constructor it
+generates, or the `forward` of its own class — rather than from a textbook.
+That matters in places a textbook entry would get wrong, and those are pinned
+by a test:
+
+- **GraphAttention adds self-loops**; GraphConv does not. The two are described
+  differently because they behave differently.
+- **SpikingDense resets by subtracting the threshold**, not by zeroing the
+  membrane.
+- **FixedPoint is damped**: z ← (1 − α)z + α tanh(f([z, x])).
+- **The positional encoding's base is 10000**, read from the code; the first
+  "10000" a search turned up was an unrelated vocabulary default.
+- **MCTS selects by Q + c·P·√N/(1 + n)**, the rule the search computes.
+- **RMSNorm** has a learned scale and no shift; **TransformerEncoder** is
+  pre-norm with GELU; **RBM** as a layer returns p(h = 1 | v).
+
+**Two layers say why they have no equation**, rather than being given one.
+Backbone is a whole pretrained architecture. Custom is your own code — and its
+entry points to the Equation layer, whose maths and code come from one
+expression.
+
+All 65 entries render with default settings, and every family is either drawn
+or declared as having no diagram.
+
 ## 1.96.0
 
 **The scouts, reviewed — and what the maths scout exposed.**

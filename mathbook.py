@@ -1095,5 +1095,198 @@ ENTRIES.update({"HamiltonianField": _hamiltonian,
 #: accident — which is how "equation" went unnoticed.
 NO_DIAGRAM = {"dynamics", "graph", "factorised", "sampling", "equation"}
 
+
+# --------------------------------------------------------------------------
+# the rest of the palette, each from its implementation
+# --------------------------------------------------------------------------
+
+def _entry(name, family, title, equation, symbols=(), notes=(), extra=()):
+    def build(p, ins, out):
+        count = _count(name, p, ins, out)
+        sym = [s(p, ins, out) if callable(s) else s for s in symbols]
+        rows = [r(p, ins, out) if callable(r) else r for r in extra]
+        return {"family": family, "title": title(p) if callable(title) else title,
+                "equation": equation(p) if callable(equation) else equation,
+                "shape": "", "symbols": sym,
+                "arithmetic": rows + [("parameters", _fmt(count))],
+                "freedom": list(notes)}
+    return build
+
+
+def _absent(name, why):
+    def build(p, ins, out):
+        return {"family": "external", "label": name, "title": name,
+                "missing": why(p) if callable(why) else why}
+    return build
+
+
+ENTRIES.update({
+    "GroupNorm": _entry(
+        "GroupNorm", "norm", "Group normalization",
+        "y = γ ⊙ (x − μ_g) / √(σ²_g + ε) + β",
+        [("g", lambda p, i, o: f"one of {p.get('groups', 8)} groups of channels; "
+                               f"μ and σ² are taken over each group and the "
+                               f"whole image")],
+        ["Unlike batch normalization it does not depend on the batch, so it "
+         "behaves the same in training and in evaluation."]),
+    "RMSNorm": _entry(
+        "RMSNorm", "norm", "Root-mean-square normalization",
+        "y = x / √(mean(x²) + ε) ⊙ w",
+        [("w", "a learned scale, one per feature — no shift and no mean "
+               "subtraction, unlike layer normalization")]),
+    "ConvTranspose2d": _entry(
+        "ConvTranspose2d", "block", "Transposed convolution",
+        lambda p: f"each input pixel scatters a {p.get('kernel', 4)}×"
+                  f"{p.get('kernel', 4)} learned patch into the output, "
+                  f"{p.get('stride', 2)} pixels apart",
+        [], ["It is the gradient of a convolution, used forwards: it "
+             "upsamples. With a kernel not divisible by the stride it leaves "
+             "the checkerboard pattern it is known for."]),
+    "SeparableConv2d": _entry(
+        "SeparableConv2d", "block", "Depthwise-separable convolution",
+        "y = W_point ∗ (W_depth ⊛ x)",
+        [("W_depth", "one k×k filter per input channel, applied to that "
+                     "channel alone"),
+         ("W_point", "a 1×1 convolution mixing channels")],
+        ["Spatial filtering and channel mixing done separately — far fewer "
+         "parameters than one full convolution."]),
+    "Upsample2d": _entry(
+        "Upsample2d", "block", "Upsampling",
+        lambda p: f"y[i, j] = x[⌊i/{p.get('scale', 2)}⌋, ⌊j/{p.get('scale', 2)}⌋]"
+                  if p.get("mode", "nearest") == "nearest"
+                  else f"bilinear interpolation, scale {p.get('scale', 2)}",
+        [], ["Nothing is learned."]),
+    "LearnedPositions": _entry(
+        "LearnedPositions", "embedding", "Learned positions",
+        "y_t = P[t]",
+        [("P", lambda p, i, o: f"a learned table, {p.get('max_len', 1024)} "
+                               f"positions × {p.get('dim', 768)}")],
+        ["A sequence longer than the table has positions it never learned."]),
+    "PositionalEncoding": _entry(
+        "PositionalEncoding", "embedding", "Sinusoidal positions",
+        "y = x + PE,   PE[t, 2i] = sin(t / 10000^(2i/d)),   "
+        "PE[t, 2i+1] = cos(t / 10000^(2i/d))",
+        [], ["Nothing is learned. Each position is a different mixture of "
+             "frequencies, so relative offsets are linear functions of it."]),
+    "TransformerEncoder": _entry(
+        "TransformerEncoder", "attention", "Transformer encoder",
+        "x ← x + MHA(LN(x));   x ← x + FFN(LN(x)),   repeated",
+        [("FFN", lambda p, i, o: f"two layers, width {p.get('ff_dim', 512)}, "
+                                 f"GELU between them")],
+        ["Normalization comes before each sub-layer (pre-norm), which trains "
+         "more stably at depth."],
+        [lambda p, i, o: ("blocks", f"{p.get('depth', 2)}, "
+                                    f"{p.get('heads', 8)} heads each")]),
+    "GPTStack": _entry(
+        "GPTStack", "attention", "GPT stack",
+        "depth × (causal self-attention and MLP), then a final LayerNorm",
+        [("causal", "each position attends only to itself and earlier ones")],
+        [], [lambda p, i, o: ("blocks", f"{p.get('depth', 4)}, "
+                                        f"{p.get('heads', 4)} heads each")]),
+    "GraphAttention": _entry(
+        "GraphAttention", "graph", "Graph attention",
+        "α_ij = softmax_j(LeakyReLU(aᵀ[W h_i ‖ W h_j])),   h_i′ = Σ_j α_ij W h_j",
+        [("j", "the neighbours of i — and i itself: self-loops are added, "
+               "unlike GraphConv")],
+        ["Non-edges are masked before the softmax, so attention never leaks "
+         "across a missing edge."],
+        [lambda p, i, o: ("heads", f"{p.get('heads', 4)}, "
+                                   f"{'concatenated' if p.get('concat', True) else 'averaged'}")]),
+    "MessagePassing": _entry(
+        "MessagePassing", "graph", "Message passing",
+        lambda p: f"m_ij = φ(h_j, h_i);   h_i′ = U(h_i, "
+                  f"{ {'sum': 'Σ', 'mean': 'mean', 'max': 'max'}.get(p.get('aggr', 'sum'), 'Σ') }_j A_ij m_ij)",
+        [("φ", "a learned message from sender j to receiver i"),
+         ("U", "a learned update from the node and what it received")]),
+    "FixedPoint": _entry(
+        "FixedPoint", "dynamics", "Damped fixed-point iteration",
+        "z ← (1 − α) z + α tanh(f([z, x])),   until ‖Δz‖ < tol",
+        [], ["Converges when the damped map is a contraction; it stops early "
+             "once the change is below the tolerance."],
+        [lambda p, i, o: ("iterations", f"at most {p.get('iterations', 16)}, "
+                                        f"α = {p.get('alpha', 0.5)}")]),
+    "SpikingDense": _entry(
+        "SpikingDense", "dynamics", "Leaky integrate-and-fire",
+        "m_t = β m_{t−1} + Wx + b;   s_t = H(m_t − θ);   m_t ← m_t − s_t θ",
+        [("H", "a step function, trained through a surrogate gradient")],
+        ["The membrane is reset by subtracting the threshold, not zeroed."],
+        [lambda p, i, o: ("readout", f"{p.get('readout', 'rate')} over "
+                                     f"{p.get('steps', 20)} steps")]),
+    "RBM": _entry(
+        "RBM", "energy", "Restricted Boltzmann machine",
+        "E(v, h) = −aᵀv − bᵀh − vᵀWh;   the layer returns p(h = 1 | v) = σ(Wᵀv + b)",
+        [], ["As a layer it gives the hidden probabilities; training it as a "
+             "generative model needs contrastive divergence, not "
+             "backpropagation alone."]),
+    "RidgeSolve": _entry(
+        "RidgeSolve", "solve", "Ridge solve",
+        "x = (A + λI)⁻¹ b,   λ = exp(log λ)",
+        [("λ", "learned in log space so it stays positive")],
+        ["A solve, not an inverse: torch.linalg.solve, which is stabler."]),
+    "SqueezeExcite": _entry(
+        "SqueezeExcite", "block", "Squeeze-and-excitation",
+        "s = σ(W₂ ReLU(W₁ mean_hw(x))),   y = x ⊙ s",
+        [], ["Each channel is rescaled by a weight computed from every "
+             "channel's average."]),
+    "ResidualBlock": _entry(
+        "ResidualBlock", "block", "Residual block",
+        "y = ReLU(BN(conv(ReLU(BN(conv(x))))) + skip(x))",
+        [("skip", "the identity, or a 1×1 convolution when the shape changes")]),
+    "InceptionBlock": _entry(
+        "InceptionBlock", "block", "Inception block",
+        "y = ReLU([b₁(x) ‖ b₃(x) ‖ b₅(x) ‖ b_pool(x)])",
+        [("‖", "concatenation along channels, of 1×1, 3×3, 5×5 and pooling "
+               "branches")]),
+    "CapsuleLayer": _entry(
+        "CapsuleLayer", "block", "Capsules with dynamic routing",
+        "û_j|i = W_ij u_i;   c = softmax(b);   v_j = squash(Σ_i c_ij û_j|i);   "
+        "b_ij += û_j|i · v_j",
+        [], [], [lambda p, i, o: ("routing", f"{p.get('routes', 3)} rounds")]),
+    "PolicyHead": _entry(
+        "PolicyHead", "block", "Policy head",
+        "logits = W · flatten(ReLU(BN(conv₁ₓ₁(x)))) + b",
+        [], ["Logits over actions; the softmax is applied by the loss or the "
+             "search, not here."]),
+    "ValueHead": _entry(
+        "ValueHead", "block", "Value head",
+        "v = tanh(w₂ · ReLU(W₁ · flatten(ReLU(BN(conv₁ₓ₁(x))))))",
+        [], ["tanh keeps the value between −1 and 1: lose to win."]),
+    "MCTSSearch": _entry(
+        "MCTSSearch", "search", "Monte Carlo tree search",
+        "a = argmax_a Q(a) + c · P(a) · √N / (1 + n(a))",
+        [("P", "the policy's prior, softmax over legal moves"),
+         ("N, n(a)", "visits to the node and to the move")],
+        ["Dirichlet noise is mixed into the root priors for exploration."],
+        [lambda p, i, o: ("search", f"{p.get('simulations', 400)} simulations, "
+                                    f"c = {p.get('c_puct', 1.25)}")]),
+    "TextGenerator": _entry(
+        "TextGenerator", "search", "Sampling text",
+        "p = softmax(logits / T) over the top k, then sample",
+        [], [], [lambda p, i, o: ("settings", f"T = {p.get('temperature', 0.8)}, "
+                                              f"k = {p.get('top_k', 40)}")]),
+    "Elementwise": _entry(
+        "Elementwise", "elementwise", "Elementwise operation",
+        lambda p: f"y = {p.get('op', 'op')}(x), applied to each number separately"),
+    "Reduce": _entry(
+        "Reduce", "elementwise", "Reduction",
+        lambda p: f"y = {p.get('op', 'mean')} of x along axis {p.get('axis', -1)}"),
+    "Reshape": _entry(
+        "Reshape", "reshape", "Reshape", "the same numbers, arranged differently",
+        [], ["Nothing is computed and nothing is learned."]),
+    "Permute": _entry(
+        "Permute", "reshape", "Permute", lambda p: f"axes reordered as {p.get('order')}",
+        [], ["Nothing is computed and nothing is learned."]),
+    "Backbone": _absent(
+        "Backbone", lambda p: f"A pretrained {p.get('arch', 'network')}: its "
+        f"mathematics is that whole architecture's, not one equation that "
+        f"could be written here."),
+    "Custom": _absent(
+        "Custom", "Your own code — no equation can be read from it reliably. "
+        "To have the maths shown, write the layer as an Equation layer, whose "
+        "equation and code come from the same expression."),
+})
+
+NO_DIAGRAM |= {"block", "energy", "solve", "search", "elementwise", "external"}
+
 def covered() -> List[str]:
     return sorted(ENTRIES)
