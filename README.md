@@ -304,6 +304,10 @@ run from there, with the original design or the one now on the canvas.
 A **Saved agent** block runs another agent you designed, whole, as one tool;
 select it to open that design on the canvas, and Back to return.
 
+Cases can carry `judge:` criteria graded by a model, studies can A/B system
+prompts and judge versions pairwise, and any run can be saved into a named
+dataset as a good reference or a bad example.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

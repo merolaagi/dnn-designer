@@ -8099,6 +8099,121 @@ def _():
     assert 'd.kind === "design"' in PAGE and "function alDrillInto" in PAGE and "function alDrillOut" in PAGE
 
 
+# --------------------------------------------------------------------------
+# agent lab 2.6: judges, datasets from runs, prompt A/B
+# --------------------------------------------------------------------------
+
+@check("judge checks parse, and judge material without a judge is flagged")
+def _():
+    good = agentlab.parse_cases("Plan a trip\njudge: names a city\nreference: Go to Porto for two days.")
+    assert not good["problems"] and good["cases"][0]["reference"] == "Go to Porto for two days."
+    assert agentlab.parse_cases("Plan a trip\nreference: Porto")["problems"]
+    assert agentlab.parse_cases("Plan a trip\njudge:")["problems"]
+
+
+@check("the rehearsal judge compares words, and says that is what it did")
+def _():
+    near = agentlab.judge("t", "Porto for two days, then Lisbon", "names a city", reference="Go to Porto for two days.")
+    far = agentlab.judge("t", "I cannot help with travel.", "names a city", reference="Go to Porto for two days.")
+    assert near["passed"] and not far["passed"] and "rehearsal judge" in near["reason"]
+    assert not agentlab.judge("t", "Go to Porto for two days.", "x", bad="Go to Porto for two days.")["passed"]
+
+
+@check("a live judge's verdict is read from its first line")
+def _():
+    real = agentlab._ask_judge
+    try:
+        agentlab._ask_judge = lambda system, prompt: {"text": "FAIL\nIt gives no number.", "tokens": 42}
+        out = agentlab.judge("t", "a", "gives a number", mode="live")
+        assert out == {"passed": False, "reason": "It gives no number.", "tokens": 42}
+        agentlab._ask_judge = lambda system, prompt: {"text": "TIE\nBoth fine.", "tokens": 7}
+        assert agentlab.judge_pair("t", "a", "b", mode="live")["winner"] == "TIE"
+    finally:
+        agentlab._ask_judge = real
+
+
+@check("pairwise judging swaps the order, so a judge that always picks A cannot tilt the result")
+def _():
+    real = agentlab._ask_judge
+    try:
+        agentlab._ask_judge = lambda system, prompt: {"text": "A\nThe first one.", "tokens": 1}
+
+        class Study:                             # just enough of a study record for compare_pairs
+            stop = type("S", (), {"is_set": staticmethod(lambda: False)})()
+            def persist(self): pass
+        study = Study()
+        runs = [{"case": c, "repeat": r, "answer": f"answer {c}{r}"} for c in range(2) for r in range(2)]
+        study.trials = [{"label": "as drawn", "block": None, "runs": runs},
+                        {"label": "prompt B", "block": "p", "runs": [dict(x) for x in runs]}]
+        agentlab.compare_pairs(study, [{"task": "t"}, {"task": "u"}], mode="live")
+        tally = study.trials[1]["pairwise"]
+        assert tally["wins"] == tally["losses"] == 2 and tally["ties"] == 0, tally
+    finally:
+        agentlab._ask_judge = real
+
+
+@check("a run becomes a case: good runs as references, bad runs as examples to avoid")
+def _():
+    result = agentlab.run(agentlab.template("react"), "Estimate cafes\nin Lisbon", keep=True)
+    name = "__test_dataset_" + uuid.uuid4().hex[:6]
+    agentlab.dataset_add_run(name, result["run_id"], "good", "gives a number")
+    out = agentlab.dataset_add_run(name, result["run_id"], "bad")
+    assert out["cases"] == 2
+    text = agentlab.dataset_read(name)
+    parsed = agentlab.parse_cases(text)
+    assert not parsed["problems"], parsed["problems"]
+    first, second = parsed["cases"]
+    assert first["task"] == "Estimate cafes in Lisbon", "a task with a line break should stay one case"
+    assert first["checks"] == [{"kind": "judge", "value": "gives a number"}] and first["reference"]
+    assert second["bad"] and second["checks"][0]["kind"] == "judge"
+    (agentlab._datasets_dir() / f"{out['name']}.txt").unlink()      # leave the workspace as it was
+
+
+@check("a study can A/B prompts, with or without removals, and judges its cases")
+def _():
+    g = agentlab.template("planexec")
+    sid = next(n["id"] for n in g["nodes"] if n["type"] == "system_prompt")
+    prompts = {"node": sid, "texts": ["You are terse.", "You show your working."]}
+    only = agentlab.variants(g, prompts, removals=False)
+    assert [v["label"] for v in only] == ["as drawn", "prompt B", "prompt C"]
+    cases = "Estimate the cafes Lisbon can support.\njudge: gives a number\nreference: about 1,200 cafes"
+    planned = agentlab.plan(g, cases, 2, prompts, removals=False, pairwise=True)
+    assert planned["runs"] == 3 * 1 * 2 and planned["judge_calls"] == 3 * 2 + 2 * 2
+    study = agentlab.start_study(g, cases, background=False, prompts=prompts, removals=False, pairwise=True)
+    rows = agentlab.study_snapshot(study.id)["summary"]["rows"]
+    assert all(r.get("judged") for r in rows), rows
+    assert rows[1]["verdict"].startswith("Prompt B") and rows[1].get("preference")
+    try:
+        agentlab.start_study(g, cases, background=False, removals=False)
+    except ValueError as exc:
+        assert "nothing to compare" in str(exc)
+    else:
+        raise AssertionError("a study with one version should be refused")
+
+
+@check("dataset routes save, list and grow from runs; the page offers them")
+def _():
+    import main
+    name = "__test_ds_" + uuid.uuid4().hex[:6]
+    name = main.agentlab_dataset_save(main.AgentLabDataset(name=name, text="Say hi\ncontains: hi"))["name"]
+    assert any(d["name"] == name for d in main.agentlab_datasets()["datasets"])
+    run_ = agentlab.run(agentlab.template("rag"), "cafes", keep=True)
+    grown = main.agentlab_dataset_add(name, main.AgentLabCaseFromRun(run_id=run_["run_id"], verdict="good"))
+    assert grown["cases"] == 2
+    (agentlab._datasets_dir() / f"{name}.txt").unlink()
+    for needle in ("function alSaveCaseHtml", 'id="alPairwise"', 'id="alDsLoad"', "function alStudyOptions"):
+        assert needle in PAGE, needle
+
+
+@check("running an agent never writes into the project folder")
+def _():
+    before = set(p.name for p in ROOT.iterdir())
+    agentlab.run(agentlab.template("rag"), "cafes")
+    agentlab.run(_team(), "cafes")
+    added = set(p.name for p in ROOT.iterdir()) - before
+    assert not added, f"a run left {sorted(added)} beside the source"
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

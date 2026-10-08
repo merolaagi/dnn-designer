@@ -2424,6 +2424,17 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-btrace{list-style:none;margin:4px 0;padding:0;font-size:11px}
 .al-btrace li{border-left:3px solid var(--c);padding:2px 0 3px 6px;margin-bottom:3px;word-break:break-word}
 .al-branches .al-answer{font-size:10.5px;max-height:140px;overflow:auto}
+.al-ds{flex-wrap:wrap;margin:4px 0 8px}
+.al-ds input{border:1px solid var(--paper-3);border-radius:6px;padding:5px 8px;font-size:12px;width:130px}
+.al-ds select{border:1px solid var(--paper-3);border-radius:6px;padding:5px 8px;font-size:12px}
+.al-check{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;margin:6px 0}
+.al-check input{margin-top:3px;accent-color:var(--amber)}
+.al-pref{margin-top:4px;color:var(--muted)}
+.al-why{margin-top:5px;font-size:11.5px}
+.al-why ul{margin:4px 0 0 16px;padding:0}
+.al-savecase{margin-top:12px;border:1px solid var(--paper-3);border-radius:7px;padding:7px 10px;background:#fff;font-size:12.5px}
+.al-savecase summary{cursor:pointer;font-weight:600}
+.al-savecase input,.al-savecase select{width:100%;border:1px solid var(--paper-3);border-radius:5px;padding:5px 7px}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13588,7 +13599,9 @@ function alRenderPhysio(){
     <button class="btn go" id="alRunBtn"${S.running ? " disabled" : ""}>${S.running ? "Running…" : "Run the agent"}</button>
     <ol class="al-trace" id="alTrace">${S.trace.map(alTraceRow).join("")}</ol>
     ${S.answer != null ? `<h4>Final answer</h4><pre class="al-answer">${alEsc(S.answer)}</pre>` : ""}
-    ${S.costs && !S.running ? alCostsHtml(S.costs) : ""}`;
+    ${S.costs && !S.running ? alCostsHtml(S.costs) : ""}
+    ${S.lastRunId && !S.running ? alSaveCaseHtml(S.lastRunId, "p") : ""}`;
+  alWireSaveCase("p");
   $("alTask").addEventListener("input", e => S.task = e.target.value);
   $("alMode").addEventListener("change", e => S.mode = e.target.value);
   if ($("alAppr")) $("alAppr").addEventListener("change", e => S.approvals = e.target.value);
@@ -13741,6 +13754,7 @@ async function alRun(){
     await alReplay(d);
     S.answer = d.answer;
     S.costs = d.costs || null;
+    S.lastRunId = d.run_id || null;
     alRememberRun(d, `Run ${((S.runs || []).length) + 1}: ${S.task.slice(0, 40)}`);
   }
   S.running = false;
@@ -13994,7 +14008,8 @@ function alCostsHtml(c){
    verdict that only calls a difference real when it is bigger than its noise. */
 async function alRenderStudy(){
   const S = agentLabState;
-  S.study = S.study || {cases: null, mode: "rehearsal", repeats: 1, approvals: "approve", plan: null, current: null};
+  S.study = S.study || {cases: null, mode: "rehearsal", repeats: 1, approvals: "approve", plan: null, current: null,
+                        removals: true, pairwise: false, promptNode: "", promptTexts: ""};
   const st = S.study;
   if (st.cases === null){
     try{
@@ -14003,6 +14018,10 @@ async function alRenderStudy(){
       st.past = d.studies || [];
     } catch { st.cases = ""; st.past = []; }
   }
+  try{ st.datasets = (await (await fetch(API + "/api/agentlab/datasets")).json()).datasets || []; }
+  catch { st.datasets = st.datasets || []; }
+  const prompts = S.graph.nodes.filter(n => n.type === "system_prompt");
+  if (st.promptNode && !prompts.some(n => n.id === st.promptNode)) st.promptNode = "";
   if (S.tab !== "study") return;
   const live = S.cat.live_available, hasHuman = S.graph.nodes.some(n => n.type === "human");
   const running = st.current && ["planning", "running"].includes(st.current.status);
@@ -14013,7 +14032,25 @@ async function alRenderStudy(){
     <div class="field"><label for="alCases">Cases</label>
       <textarea id="alCases" class="al-cases" spellcheck="false">${alEsc(st.cases)}</textarea>
       <div class="help">A task on the first line, then one check per line: <code>contains:</code>, <code>excludes:</code>,
-      <code>regex:</code>, <code>tool:</code>, <code>max calls:</code>, or <code>finished</code>. A blank line starts the next case.</div></div>
+      <code>regex:</code>, <code>tool:</code>, <code>max calls:</code>, <code>finished</code>, or <code>judge:</code> with a
+      criterion in plain words. <code>reference:</code> and <code>bad example:</code> give the judge an answer to compare
+      against. A blank line starts the next case.</div></div>
+    <div class="row al-ds">
+      <select id="alDsLoad"><option value="">Load a dataset…</option>${(st.datasets || []).map(x =>
+        `<option value="${alEsc(x.name)}">${alEsc(x.name)} (${x.cases} case${x.cases === 1 ? "" : "s"})</option>`).join("")}</select>
+      <input id="alDsName" placeholder="dataset name" spellcheck="false">
+      <button class="btn" id="alDsSave">Save cases as dataset</button><span class="al-muted" id="alDsMsg"></span>
+    </div>
+    <h4>What to compare</h4>
+    <label class="al-check"><input type="checkbox" id="alRemovals"${st.removals ? " checked" : ""}>
+      Remove blocks one at a time, and try a halved budget and a greedy core</label>
+    ${prompts.length ? `<div class="field"><label for="alPromptNode">Prompt alternatives for</label>
+      <select id="alPromptNode"><option value="">no prompt variants</option>${prompts.map(n =>
+        `<option value="${n.id}"${st.promptNode === n.id ? " selected" : ""}>${alEsc(alLabel(n))} · ${alEsc((n.params.text || "").slice(0, 40))}…</option>`).join("")}</select>
+      ${st.promptNode ? `<textarea id="alPromptTexts" class="al-cases" placeholder="One alternative prompt per block; separate them with a line holding only ---"
+        spellcheck="false">${alEsc(st.promptTexts)}</textarea>` : ""}</div>` : ""}
+    <label class="al-check"><input type="checkbox" id="alPairwise"${st.pairwise ? " checked" : ""}>
+      Pairwise: a judge compares each version's answers with the design as drawn</label>
     <div class="al-row2">
       <div class="field"><label for="alStudyMode">Model</label><select id="alStudyMode">
         <option value="rehearsal"${st.mode === "rehearsal" ? " selected" : ""}>Rehearsal, free</option>
@@ -14053,8 +14090,34 @@ async function alRenderStudy(){
     st.current = await (await fetch(API + "/api/agentlab/studies/" + e.target.value)).json();
     $("alStudyOut").innerHTML = alStudyHtml(st.current); alStudyWire();
   });
+  $("alRemovals").addEventListener("change", e => { st.removals = e.target.checked; replan(); });
+  $("alPairwise").addEventListener("change", e => { st.pairwise = e.target.checked; replan(); });
+  if ($("alPromptNode")) $("alPromptNode").addEventListener("change", e => { st.promptNode = e.target.value; alRenderStudy(); });
+  if ($("alPromptTexts")) $("alPromptTexts").addEventListener("input", e => { st.promptTexts = e.target.value; replan(); });
+  $("alDsLoad").addEventListener("change", async e => {
+    if (!e.target.value) return;
+    const d = await (await fetch(API + "/api/agentlab/datasets/" + encodeURIComponent(e.target.value))).json();
+    st.cases = d.text; $("alCases").value = d.text; $("alDsName").value = e.target.value;
+    try{ localStorage.setItem("agentlab-cases", st.cases); } catch {}
+    replan();
+  });
+  $("alDsSave").addEventListener("click", async () => {
+    const name = $("alDsName").value.trim();
+    if (!name){ $("alDsMsg").textContent = "Give the dataset a name."; return; }
+    const r = await fetch(API + "/api/agentlab/datasets", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({name, text: st.cases})});
+    const d = await r.json();
+    $("alDsMsg").textContent = r.ok ? `Saved ${d.cases} case${d.cases === 1 ? "" : "s"}.` : ((d.detail && d.detail.message) || "Not saved.");
+  });
   alStudyWire();
   alStudyPlan();
+}
+
+function alStudyOptions(){
+  const st = agentLabState.study;
+  const texts = (st.promptTexts || "").split(/\n\s*---\s*\n/).map(t => t.trim()).filter(Boolean);
+  return {removals: st.removals, pairwise: st.pairwise,
+          prompts: st.promptNode && texts.length ? {node: st.promptNode, texts} : null};
 }
 
 async function alStudyPlan(){
@@ -14064,14 +14127,15 @@ async function alStudyPlan(){
   try{
     d = await (await fetch(API + "/api/agentlab/studies/plan", {method: "POST",
       headers: {"content-type": "application/json"},
-      body: JSON.stringify({graph: S.graph, cases: st.cases, repeats: st.repeats})})).json();
+      body: JSON.stringify({graph: S.graph, cases: st.cases, repeats: st.repeats, ...alStudyOptions()})})).json();
   } catch { host.textContent = "The server did not answer."; return; }
   st.plan = d;
   if (!$("alPlan")) return;
   const ok = d.variants.filter(v => v.runnable).length;
   host.innerHTML = `${d.problems.length ? `<ul class="al-probs">${d.problems.map(p => `<li class="error">${alEsc(p)}</li>`).join("")}</ul>` : ""}
     <p>${ok} version${ok === 1 ? "" : "s"} × ${d.cases.length} case${d.cases.length === 1 ? "" : "s"} × ${st.repeats}
-    = <b>${d.runs}</b> runs${st.mode === "live" ? ", each one real model calls" : ""}.</p>
+    = <b>${d.runs}</b> runs${st.mode === "live" ? ", each one real model calls" : ""}${
+      d.judge_calls ? `, plus ${d.judge_calls} judge call${d.judge_calls === 1 ? "" : "s"}` : ""}.</p>
     <ul class="al-vlist">${d.variants.map(v => `<li class="${v.runnable ? "" : "off"}">${alEsc(v.label)}
       ${v.runnable ? "" : `<small>won't run: ${alEsc(v.reason)}</small>`}
       ${(v.safety_lost || []).length ? `<small class="lost">loses: ${alEsc(v.safety_lost.join("; "))}</small>` : ""}</li>`).join("")}</ul>`;
@@ -14084,7 +14148,8 @@ async function alStudyStart(){
   let d, r;
   try{
     r = await fetch(API + "/api/agentlab/studies", {method: "POST", headers: {"content-type": "application/json"},
-      body: JSON.stringify({graph: S.graph, cases: st.cases, mode: st.mode, repeats: st.repeats, approvals: st.approvals})});
+      body: JSON.stringify({graph: S.graph, cases: st.cases, mode: st.mode, repeats: st.repeats,
+                            approvals: st.approvals, ...alStudyOptions()})});
     d = await r.json();
   } catch { $("alStudyOut").innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
   if (!r.ok){ $("alStudyOut").innerHTML = `<div class="runfail">${alEsc((d.detail && d.detail.message) || "The study did not start.")}</div>`; return; }
@@ -14124,7 +14189,12 @@ function alStudyHtml(d){
         <td>${alEsc(r.label)}${r.status === "running" ? " <small>running…</small>" : ""}</td>
         <td>${pct(r.score)}<small>${r.delta != null && r.delta !== 0 ? signed(r.delta) : ""}</small></td>
         <td>${r.tokens == null ? "—" : r.tokens.toLocaleString()}<small>${r.saved ? (r.saved > 0 ? "−" : "+") + Math.abs(r.saved).toLocaleString() : ""}</small></td></tr>
-        ${r.verdict ? `<tr class="k-${r.kind} verdict"><td colspan="3">${alEsc(r.verdict)}
+        ${r.verdict || r.preference || r.judged ? `<tr class="k-${r.kind || "base"} verdict"><td colspan="3">${alEsc(r.verdict || "")}
+          ${r.preference ? `<div class="al-pref">${alEsc(r.preference)}</div>` : ""}
+          ${r.judged ? `<div class="al-pref">Judge: ${r.judged.passed} of ${r.judged.total} criteria met${
+            r.judged.tokens ? ` (${r.judged.tokens.toLocaleString()} judge tokens)` : ""}.</div>` : ""}
+          ${(r.failures || []).length ? `<details class="al-why"><summary>What failed</summary><ul>${r.failures.map(f =>
+            `<li>case ${f.case}: ${alEsc(f.check)}${f.reason ? ` — <i>${alEsc(f.reason)}</i>` : ""}</li>`).join("")}</ul></details>` : ""}
           ${r.block ? `<button class="btn al-open" data-open="${i}">Open this version</button>` : ""}</td></tr>` : ""}`).join("")}
     </table>`;
 }
@@ -14261,10 +14331,44 @@ function alForkHtml(run, cp, f){
       <div><b>Fork</b><ol class="al-btrace">${after.map(row).join("")}</ol>
         <pre class="al-answer">${alEsc(f.answer || f.error || "")}</pre></div>
     </div>
-    <button class="btn" id="alReplayFork">Replay the fork on the canvas</button>`;
+    <button class="btn" id="alReplayFork">Replay the fork on the canvas</button>
+    ${f.run_id ? alSaveCaseHtml(f.run_id, "f") : ""}`;
+}
+
+/* A run worth remembering becomes a case, after LangSmith's datasets from traces:
+   its task, and its answer as the judge's reference (good) or bad example (bad). */
+function alSaveCaseHtml(runId, key){
+  const names = ((agentLabState.study && agentLabState.study.datasets) || []).map(x => x.name);
+  return `<details class="al-savecase" id="alSc_${key}" data-run="${alEsc(runId)}"><summary>Save this run as a case</summary>
+    <div class="al-row2">
+      <div class="field"><label>Dataset</label><input data-sc="name" list="alScList_${key}" value="${alEsc(names[0] || "my-cases")}" spellcheck="false">
+        <datalist id="alScList_${key}">${names.map(n => `<option value="${alEsc(n)}">`).join("")}</datalist></div>
+      <div class="field"><label>This answer was</label><select data-sc="verdict">
+        <option value="good">good: a reference to match</option><option value="bad">bad: a failure to avoid</option></select></div>
+    </div>
+    <div class="field"><label>What makes it so (the judge's criterion)</label>
+      <input data-sc="note" placeholder="e.g. gives a number and says where it came from" spellcheck="false"></div>
+    <button class="btn" data-sc="go">Add to dataset</button> <span class="al-muted" data-sc="msg"></span></details>`;
+}
+
+function alWireSaveCase(key){
+  const box = $("alSc_" + key);
+  if (!box) return;
+  const q = k => box.querySelector(`[data-sc="${k}"]`);
+  q("go").onclick = async () => {
+    const name = q("name").value.trim();
+    if (!name){ q("msg").textContent = "Name the dataset."; return; }
+    const r = await fetch(API + `/api/agentlab/datasets/${encodeURIComponent(name)}/cases`, {method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({run_id: box.dataset.run, verdict: q("verdict").value, note: q("note").value})});
+    const d = await r.json();
+    q("msg").textContent = r.ok ? `Added. ${d.name} now has ${d.cases} case${d.cases === 1 ? "" : "s"}.`
+                                : ((d.detail && d.detail.message) || "Not added.");
+  };
 }
 
 function alWireForkOut(){
+  alWireSaveCase("f");
   const b = $("alReplayFork"), f = agentLabState.timeline && agentLabState.timeline.fork;
   if (b && f) b.onclick = async () => { agentLabState.trace = []; await alReplay(f); };
 }

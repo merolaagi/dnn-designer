@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.6.0
+
+**Evaluation, after LangSmith: judges, datasets from runs, prompt A/B.**
+Together they let a live Study measure answer quality, not only structure.
+
+- **`judge:` checks.** A case can now say what a good answer does in plain
+  words — `judge: gives a number and says where it came from` — and a model
+  grades each answer PASS or FAIL with a one-sentence reason. `reference:`
+  gives the judge an answer known to be good; `bad example:` one known to be
+  bad. Reasons appear under each version's results, with the judge's tokens
+  counted separately from the agent's.
+- **Pairwise judging.** Tick it and a judge compares each version's answer with
+  the design as drawn, case by case, and the results say how often each was
+  preferred. The two answers swap places from one comparison to the next, so a
+  judge that favours whichever comes first cannot tilt the count — a test runs
+  a judge that always says "A" and requires an even split.
+- **Datasets from runs.** Under any run on Physiology, and under any fork on
+  the Timeline, "Save this run as a case" adds it to a named dataset: its task,
+  and its answer as the judge's reference if you mark it good, or as a bad
+  example if you mark it bad, with your note as the criterion. The Study tab
+  loads and saves datasets by name.
+- **Prompt A/B.** Pick a system prompt and write alternatives, one per block
+  separated by `---`; each becomes a version of the study, judged the same way.
+  Block removals can be switched off for a pure prompt comparison.
+
+Before a study starts, the plan now counts judge calls alongside runs.
+
+Fixed: a run started without a memory folder — as some of the tests did —
+saved long-term memory to `agent_memory.json` in whatever folder the server was
+started from, which is the project. Memory now always lands in the workspace's
+`agentlab/` folder, and a test runs agents and requires the project folder to
+be unchanged afterwards. If an `agent_memory.json` appeared beside your source
+after running the tests on 2.2 to 2.5, it is safe to delete.
+
+In rehearsal the judge is a stand-in that compares words — overlap with the
+reference, the bad example or the criterion — and every reason it gives says
+so; the study's note says these results test structure, not quality. Live, the
+judge is a model, `AGENTLAB_JUDGE_MODEL` or the lab's default, at temperature 0.
+
 ## 2.5.0
 
 **Saved agents become blocks**, after LangGraph's subgraphs. A new **Saved

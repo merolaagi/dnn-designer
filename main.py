@@ -380,6 +380,9 @@ class AgentLabStudyPlan(BaseModel):
     graph: Dict[str, Any]
     cases: str = ""
     repeats: int = 1
+    prompts: Optional[Dict[str, Any]] = None     # {"node": system prompt id, "texts": [alternatives]}
+    removals: bool = True
+    pairwise: bool = False
 
 
 class AgentLabStudy(BaseModel):
@@ -388,6 +391,51 @@ class AgentLabStudy(BaseModel):
     mode: str = "rehearsal"
     repeats: int = 1
     approvals: str = "approve"
+    prompts: Optional[Dict[str, Any]] = None
+    removals: bool = True
+    pairwise: bool = False
+
+
+class AgentLabDataset(BaseModel):
+    name: str
+    text: str
+
+
+class AgentLabCaseFromRun(BaseModel):
+    run_id: str
+    verdict: str                 # "good" or "bad"
+    note: str = ""
+
+
+@app.get("/api/agentlab/datasets")
+def agentlab_datasets():
+    return {"datasets": agentlab.datasets_list()}
+
+
+@app.get("/api/agentlab/datasets/{name}")
+def agentlab_dataset_read(name: str):
+    try:
+        return {"name": name, "text": agentlab.dataset_read(name)}
+    except KeyError:
+        raise HTTPException(404, detail={"message": f"No dataset called {name}."})
+
+
+@app.post("/api/agentlab/datasets")
+def agentlab_dataset_save(body: AgentLabDataset):
+    try:
+        return agentlab.dataset_save(body.name, body.text)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/agentlab/datasets/{name}/cases")
+def agentlab_dataset_add(name: str, body: AgentLabCaseFromRun):
+    try:
+        return agentlab.dataset_add_run(name, body.run_id, body.verdict, body.note)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run; only the newest 200 are kept."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 @app.get("/api/agentlab/studies")
@@ -397,13 +445,14 @@ def agentlab_studies():
 
 @app.post("/api/agentlab/studies/plan")
 def agentlab_study_plan(body: AgentLabStudyPlan):
-    return agentlab.plan(body.graph, body.cases, body.repeats)
+    return agentlab.plan(body.graph, body.cases, body.repeats, body.prompts, body.removals, body.pairwise)
 
 
 @app.post("/api/agentlab/studies")
 def agentlab_study_start(body: AgentLabStudy):
     try:
-        study = agentlab.start_study(body.graph, body.cases, body.mode, body.repeats, body.approvals)
+        study = agentlab.start_study(body.graph, body.cases, body.mode, body.repeats, body.approvals,
+                                     prompts=body.prompts, removals=body.removals, pairwise=body.pairwise)
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
     return agentlab.study_snapshot(study.id)
