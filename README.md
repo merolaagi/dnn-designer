@@ -282,6 +282,12 @@ As with layers, each block has a **Code** tab with the exact lines of the
 generated file it contributes, and a **Maths** tab with its equation and this
 design's numbers worked through.
 
+Wires are control flow: each block becomes a function that returns the next
+block to run, and dotted setting wires say which prompt, history and budget an
+LLM core uses. The Python tab generates for plain Python or LangGraph; the
+LangGraph file turns human approval into a resumable interrupt
+(`pip install langgraph` to run it).
+
 Run executes the Python the Python tab shows and replays what each block
 reported across the canvas. Rehearsal runs need no key; live runs need
 `ANTHROPIC_API_KEY` in the server's environment, and `AGENTLAB_MODEL` picks

@@ -80,7 +80,8 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         name="System prompt", system="brain", short="Identity and standing orders",
         anatomy="The agent's DNA: role, goals, rules, tone, and when to use each tool. It shapes every step.",
         inside="Plain text. Usually the most valuable thing to tune.",
-        physiology="Sent unchanged with every model call, ahead of the conversation.",
+        physiology=("Wire it into an LLM core and that core sends it, unchanged, with every call. Different "
+                    "cores can have different prompts."),
         failure="Contradictory rules. Prompts so long the important lines get diluted.",
         params={"text": _p("Instructions",
                            "You are a careful research agent. Break problems down, use tools to check facts, "
@@ -103,13 +104,15 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         anatomy=("The message list: everything said, every tool call and result, in order. It is the agent's "
                  "entire awareness at any moment."),
         inside="Alternating user and assistant messages, including tool_use and tool_result blocks.",
-        physiology="Appended after every step and re-sent in full on every model call.",
+        physiology=("Appended after every step and re-sent in full on every model call. Every core shares it; "
+                    "the wire into a core marks that it reads it."),
         failure="Running past the window. Old details crowding out new ones."),
     "long_mem": dict(
         name="Long-term memory", system="memory", short="Persists between runs",
         anatomy="A store outside the model that survives after the run ends.",
         inside="Saved notes, found again by matching. Here, keyword overlap; in production, embeddings.",
-        physiology="Read before the first model call (recall), written after the answer (consolidate).",
+        physiology=("Placed on the path before a model call it recalls; placed after one it saves the answer. "
+                    "Wired into a retriever, it adds its notes to what the retriever searches."),
         failure="Recalling near-misses. Saving junk that misleads the agent later."),
     "retriever": dict(
         name="Retriever (RAG)", system="memory", short="Fetches relevant documents",
@@ -143,25 +146,28 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
                  "in front of it unless you trust every prompt the agent will see.")),
     "sub_agent": dict(
         name="Sub-agent", system="hands", short="A whole agent used as a tool",
-        anatomy="A complete agent wrapped as a tool: its own instructions, its own loop.",
-        inside="Its own system prompt and step budget.",
-        physiology="The parent calls it like a tool; it runs its own loop and returns its final text.",
+        anatomy="A second model with its own instructions, wrapped as a tool the parent can delegate to.",
+        inside="Its own system prompt. In this lab it has no tools of its own, so it answers in one call.",
+        physiology="The parent calls it like a tool; it answers, and only that answer returns to the parent.",
         failure="Context lost between parent and child. Costs that multiply quietly.",
         params={"name": _p("Agent name", "researcher"),
                 "role": _p("Its role (system prompt)",
                            "You research one question thoroughly and return a short, sourced summary.", "area")}),
     "router": dict(
         name="Router", system="nerve", short="Dispatches tool calls or exits",
-        anatomy=("Reads the model's output and decides where the signal goes: tool requests to the hands, "
-                 "finished text out. Only tools wired out of the router are given to the model."),
-        inside="A check of stop_reason and a table from tool names to functions.",
-        physiology="stop_reason tool_use: run each requested tool. Anything else: leave the loop.",
+        anatomy=("Reads the model's output and decides where control goes: tool requests to the hands, "
+                 "finished text along its other wire. Only tools wired out of a router are offered to the "
+                 "model that feeds it."),
+        inside="A check of stop_reason and a table from tool names to functions and their next block.",
+        physiology=("stop_reason tool_use: run each requested tool, then follow that tool's own wire, usually "
+                    "back to the model. Anything else: follow the router's exit wire."),
         failure="Unknown tool names or malformed arguments nobody catches."),
     "loop": dict(
         name="Loop controller", system="nerve", short="Heartbeat and step budget",
         anatomy="The heartbeat. Keeps the perceive, think, act, observe cycle going, and stops it.",
         inside="A counter and a limit.",
-        physiology="Counts model calls and stops the run at the limit, answer or not.",
+        physiology=("Counts model calls across the whole run. At the limit the next core sends control "
+                    "straight to the final answer."),
         failure="No limit at all, which means runaway cost. Without this block the limit defaults to 8.",
         params={"max_steps": _p("Max steps", 8, "number")}),
     "guard_in": dict(
@@ -180,11 +186,11 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         name="Human approval", system="immune", short="A person signs off",
         anatomy="A checkpoint where a person approves risky actions before they run.",
         inside="A yes or no. Tools wired out of this block need it; tools wired from the router do not.",
-        physiology="Pauses at dispatch. A denial goes back to the model as the tool's result.",
+        physiology=("Pauses at dispatch. A denial goes back to the model as the tool's result. In the "
+                    "LangGraph export it is an interrupt: the run is saved and resumed later."),
         failure="Approval fatigue: clicking yes without reading."),
 }
 
-FEEDERS = {"system_prompt", "short_mem", "loop"}
 ACTIONS = {"tool", "web_search", "code_exec", "sub_agent"}
 
 
@@ -215,10 +221,10 @@ TEMPLATES = {
                         ("output", 1280, 450)],
               "edges": [(0, 1), (1, 4), (2, 4), (3, 4), (5, 4), (4, 6), (6, 7), (6, 8), (7, 4), (8, 4),
                         (6, 9), (9, 10)]},
-    "rag": {"name": "Retrieval (RAG) agent",
-            "nodes": [("user_input", 40, 220), ("retriever", 290, 220), ("long_mem", 290, 410),
-                      ("system_prompt", 540, 50), ("llm", 540, 220), ("output", 800, 220)],
-            "edges": [(0, 1), (2, 1), (1, 4), (3, 4), (4, 5)]},
+    "rag": {"name": "Retrieval (RAG) agent with memory",
+            "nodes": [("user_input", 40, 220), ("retriever", 290, 220), ("long_mem", 790, 420),
+                      ("system_prompt", 540, 50), ("llm", 540, 220), ("output", 1040, 220)],
+            "edges": [(0, 1), (2, 1), (1, 4), (3, 4), (4, 2), (2, 5)]},
     "planexec": {"name": "Planner, executor, critic",
                  "nodes": [("user_input", 40, 240), ("planner", 270, 240), ("system_prompt", 510, 60),
                            ("short_mem", 510, 420), ("llm", 510, 240), ("router", 750, 240),
@@ -280,27 +286,140 @@ def py_id(text: str) -> str:
     return out
 
 
-def wiring(graph) -> Dict[str, Any]:
-    """Which tools the model is given, and which of them need a person's yes.
+def is_config(src_type: str, dst_type: str) -> bool:
+    """A wire that configures its target rather than handing it control.
 
-    Only what is wired counts. A tool sitting on the canvas with no wire from the
-    router is an organ that is not connected, so the model is not told about it.
+    A system prompt, working memory or loop controller wired into an LLM core
+    says which instructions, history and budget that core uses; nothing runs
+    along it. Long-term memory wired into a retriever adds the store to what
+    the retriever searches. Every other wire is control flow.
     """
-    nodes = {n["id"]: n for n in graph.get("nodes", [])}
-    edges = graph.get("edges", [])
-    routers = {n["id"] for n in _of(graph, "router")}
-    humans = {n["id"] for n in _of(graph, "human")}
-    given, gated = [], set()
-    for e in edges:
-        src, dst = nodes.get(e.get("source")), nodes.get(e.get("target"))
-        if not src or not dst or dst["type"] not in ACTIONS:
+    return src_type in CONFIG_SOURCES or (src_type == "long_mem" and dst_type == "retriever")
+
+
+CONFIG_SOURCES = {"system_prompt", "short_mem", "loop"}
+STEPS = {"user_input", "output", "llm", "planner", "reflector", "retriever", "long_mem",
+         "router", "guard_in", "guard_out"}
+DEFAULT_PROMPT = "You are a helpful agent."
+
+
+def analyze(graph) -> Dict[str, Any]:
+    """Turn the canvas into a state machine: which block runs after which.
+
+    Every block on the control path becomes one function that takes the state
+    and returns the id of the block to run next. Tools, sub-agents and human
+    approval are not steps of their own: a router reaches them by dispatching
+    the model's tool requests, so they are routes of that router.
+    """
+    nodes = {n["id"]: n for n in graph.get("nodes", []) if n.get("type") in BLOCKS}
+    kind = {nid: n["type"] for nid, n in nodes.items()}
+    control: Dict[str, List[str]] = {nid: [] for nid in nodes}
+    feeds: Dict[str, List[str]] = {nid: [] for nid in nodes}
+    for e in graph.get("edges", []):
+        a, b = e.get("source"), e.get("target")
+        if a not in nodes or b not in nodes:
             continue
-        if src["id"] in routers or src["id"] in humans:
-            if dst["id"] not in given:
-                given.append(dst["id"])
-            if src["id"] in humans:
-                gated.add(dst["id"])
-    return {"given": given, "gated": gated}
+        if is_config(kind[a], kind[b]):
+            feeds[b].append(a)        # b is configured by a
+        else:
+            control[a].append(b)      # control passes from a to b
+
+    first = lambda t: next((nid for nid in nodes if kind[nid] == t), None)  # noqa: E731
+    start, end = first("user_input"), first("output")
+    loop = first("loop")
+    max_steps = int(_params(nodes[loop])["max_steps"]) if loop else 8
+
+    used: set = set()
+
+    def unique(name):
+        out, i = name, 2
+        while out in used:
+            out, i = f"{name}_{i}", i + 1
+        used.add(out)
+        return out
+
+    tool_names = {nid: unique(py_id(_params(n)["name"]) if kind[nid] in ("tool", "sub_agent")
+                              else ("web_search" if kind[nid] == "web_search" else "run_python"))
+                  for nid, n in nodes.items() if kind[nid] in ACTIONS}
+
+    def llm_before(router):
+        return next((nid for nid in nodes if kind[nid] == "llm" and router in control[nid]), None)
+
+    routers: Dict[str, Dict[str, Any]] = {}
+    for rid in (nid for nid in nodes if kind[nid] == "router"):
+        back = llm_before(rid)
+        routes, exits = {}, []
+        for target in control[rid]:
+            if kind[target] in ACTIONS:
+                routes[target] = None
+            elif kind[target] == "human":
+                for gated in control[target]:
+                    if kind[gated] in ACTIONS:
+                        routes[gated] = target
+            else:
+                exits.append(target)
+        table = {}
+        for tid, gate in routes.items():
+            after = next((t for t in control[tid] if kind[t] not in ACTIONS), None) or back
+            table[tool_names[tid]] = {"node": tid, "gate": gate, "next": after}
+        routers[rid] = {"routes": table, "exit": exits[0] if exits else None, "back": back}
+
+    llms = {}
+    for lid in (nid for nid in nodes if kind[nid] == "llm"):
+        prompt = next((f for f in feeds[lid] if kind[f] == "system_prompt"), None)
+        offered = []
+        for rid in control[lid]:
+            if rid in routers:
+                offered += [name for name in routers[rid]["routes"] if name not in offered]
+        llms[lid] = {"prompt": prompt, "tools": offered,
+                     "next": control[lid][0] if control[lid] else None,
+                     "memory": any(kind[f] == "short_mem" for f in feeds[lid]),
+                     "loop": any(kind[f] == "loop" for f in feeds[lid])}
+
+    critics = {}
+    for cid in (nid for nid in nodes if kind[nid] == "reflector"):
+        back = next((t for t in control[cid] if kind[t] == "llm"), None)
+        fwd = next((t for t in control[cid] if kind[t] != "llm"), None)
+        critics[cid] = {"back": back, "next": fwd}
+
+    # which blocks a run can actually reach, following control and dispatch
+    reach, queue = set(), deque([start] if start else [])
+    while queue:
+        cur = queue.popleft()
+        if cur in reach:
+            continue
+        reach.add(cur)
+        succ = list(control[cur])
+        if cur in routers:
+            succ += [r["node"] for r in routers[cur]["routes"].values()]
+            succ += [r["next"] for r in routers[cur]["routes"].values() if r["next"]]
+            succ += [r["gate"] for r in routers[cur]["routes"].values() if r["gate"]]
+        queue.extend(s for s in succ if s and s not in reach)
+
+    given = [r["node"] for rt in routers.values() for r in rt["routes"].values()]
+    gated = {r["node"] for rt in routers.values() for r in rt["routes"].values() if r["gate"]}
+    steps = [nid for nid in nodes if kind[nid] in STEPS and nid in reach]
+
+    successors: Dict[str, List[str]] = {}
+    for nid in steps:
+        out = [t for t in control[nid] if kind.get(t) in STEPS]
+        if nid in routers:
+            out += [r["next"] for r in routers[nid]["routes"].values() if r["next"]]
+        if kind[nid] == "llm" and end:
+            out.append(end)                      # the step budget exits here
+        if kind[nid] == "guard_in" and end:
+            out.append(end)                      # a blocked task exits here
+        successors[nid] = list(dict.fromkeys(out))
+
+    return {"nodes": nodes, "kind": kind, "control": control, "feeds": feeds, "start": start, "end": end,
+            "loop": loop, "max_steps": max_steps, "tool_names": tool_names, "routers": routers,
+            "llms": llms, "critics": critics, "reach": reach, "steps": steps,
+            "given": given, "gated": gated, "successors": successors}
+
+
+def wiring(graph) -> Dict[str, Any]:
+    a = analyze(graph)
+    return {"given": a["given"], "gated": a["gated"]}
 
 
 def validate(graph) -> List[Dict[str, Any]]:
@@ -318,32 +437,54 @@ def validate(graph) -> List[Dict[str, Any]]:
         say("error", "Add an LLM core. Without it nothing thinks.")
     if not _of(graph, "output"):
         say("error", "Add a Final answer block so the result has somewhere to go.")
-    for kind in ("user_input", "llm", "output", "router", "loop", "system_prompt"):
-        extra = _of(graph, kind)[1:]
-        for n in extra:
-            say("warning", f"Only the first {BLOCKS[kind]['name']} is used; this one is ignored.", n["id"])
+    for k in ("user_input", "output", "loop"):
+        for n in _of(graph, k)[1:]:
+            say("warning", f"Only the first {BLOCKS[k]['name']} is used; this one is ignored.", n["id"])
+    if problems and any(p["level"] == "error" for p in problems):
+        return problems
 
-    w = wiring(graph)
+    a = analyze(graph)
+    kind, control = a["kind"], a["control"]
+    for nid in a["steps"]:
+        n = a["nodes"][nid]
+        if kind[nid] != "output" and not control[nid]:
+            say("error", f"{label(n)} is a dead end: wire it to whatever should run next.", nid)
+        if kind[nid] in ACTIONS:
+            continue
+        bad = [t for t in control[nid] if kind[t] in ACTIONS and kind[nid] not in ("router", "human")]
+        for t in bad:
+            say("error", f"{label(a['nodes'][t])} is wired from {label(n)}. Tools are reached through a "
+                         "router, which runs them when the model asks.", t)
+    if a["end"] not in a["reach"]:
+        say("error", "No wired path leads from the input to the final answer.")
+    for rid, r in a["routers"].items():
+        if r["exit"] is None:
+            say("error", "The router has nowhere to send a finished answer: wire it to the next step.", rid)
+        if r["back"] is None:
+            say("error", "Wire an LLM core into the router; it routes that model's requests.", rid)
+        if not r["routes"]:
+            say("warning", "The router has no tools wired to it, so the model is offered none.", rid)
+    for lid, l in a["llms"].items():
+        if lid in a["reach"] and not l["prompt"]:
+            say("info", f"No system prompt is wired into {label(a['nodes'][lid])}; it uses a one-line default.",
+                lid)
+        if len(a["control"][lid]) > 1:
+            say("warning", f"{label(a['nodes'][lid])} has several outgoing wires; only the first is followed. "
+                           "Put a router after it to branch.", lid)
+    for cid, c in a["critics"].items():
+        if c["back"] is None:
+            say("info", "The critic has no wire back to an LLM core, so it can report but not send work back.",
+                cid)
     for n in graph.get("nodes", []):
-        if n.get("type") in ACTIONS and n["id"] not in w["given"]:
-            say("warning", f"{label(n)} is not wired from the router, so the model is not given it.", n["id"])
-    if any(n.get("type") in ACTIONS for n in graph.get("nodes", [])) and not _of(graph, "router"):
-        say("warning", "There are tools but no router to dispatch them.")
-    if not _of(graph, "loop"):
+        t = n.get("type")
+        if t in ACTIONS and n["id"] not in a["given"]:
+            say("warning", f"{label(n)} is not wired from the router, so no model is offered it.", n["id"])
+        if t in STEPS and n["id"] not in a["reach"] and t != "output":
+            say("warning", f"{label(n)} is never reached from the input.", n["id"])
+        if t == "system_prompt" and not any(e.get("source") == n["id"] for e in graph.get("edges", [])):
+            say("warning", "This system prompt is not wired into an LLM core, so nothing reads it.", n["id"])
+    if not a["loop"]:
         say("info", "No loop controller, so the step limit defaults to 8.")
-
-    starts = _of(graph, "user_input")
-    ends = {n["id"] for n in _of(graph, "output")}
-    if starts and ends:
-        seen, queue = {starts[0]["id"]}, deque([starts[0]["id"]])
-        while queue:
-            cur = queue.popleft()
-            for e in graph.get("edges", []):
-                if e.get("source") == cur and e.get("target") not in seen:
-                    seen.add(e["target"])
-                    queue.append(e["target"])
-        if not seen & ends:
-            say("warning", "No wired path leads from the input to the final answer.")
     return problems
 
 
@@ -360,68 +501,42 @@ def label(node) -> str:
 # code generation
 # --------------------------------------------------------------------------
 
+TARGETS = {"python": "Plain Python (standard library)", "langgraph": "LangGraph"}
+
+
 def _doc(text: str) -> str:
     """A triple-quoted literal that is safe for any text a person types."""
     return '"""' + str(text).replace("\\", "\\\\").replace('"', '\\"') + '"""'
 
 
-def codegen(graph) -> Dict[str, Any]:
+def fn_name(nid: str, node) -> str:
+    return f"{py_id(nid)}_{py_id(label(node))}"
+
+
+def codegen(graph, target: str = "python") -> Dict[str, Any]:
     """Python source for the design, plus which lines each block contributed.
 
-    Lines are attributed as they are emitted, the way codegen.py records each
-    layer's constructor and forward line, so the Code tab shows a block's lines
-    by position in this very file rather than reconstructing them for display.
+    The file is a state machine: one function per block on the control path,
+    each returning the next block's id. The plain target drives it with a
+    while loop; the LangGraph target hands the same functions to a StateGraph,
+    so the two files differ only in what runs the machine.
     """
-    nodes = {n["id"]: n for n in graph.get("nodes", [])}
-    has = lambda kind: bool(_of(graph, kind))  # noqa: E731
-    first = lambda kind: _params(_of(graph, kind)[0])  # noqa: E731
-    if not has("llm"):
-        return {"source": "# Add an LLM core block to generate an agent.\n",
-                "nodemap": {"tools": {}, "agents": {}}, "node_code": {}}
-
-    def nid(kind):
-        found = _of(graph, kind)
-        return found[0]["id"] if found else None
-
-    llm = first("llm")
-    prompt = first("system_prompt")["text"] if has("system_prompt") else "You are a helpful agent."
-    max_steps = int(first("loop")["max_steps"]) if has("loop") else 8
-    w = wiring(graph)
-
-    used, tools, nodemap = set(), [], {"tools": {}, "agents": {}}
-
-    def unique(name):
-        out, i = name, 2
-        while out in used:
-            out, i = f"{name}_{i}", i + 1
-        used.add(out)
-        return out
-
-    for tid in w["given"]:
-        n = nodes[tid]
-        p = _params(n)
-        if n["type"] == "tool":
-            t = {"kind": "custom", "name": unique(py_id(p["name"])), "arg": "input", "desc": p["description"]}
-        elif n["type"] == "web_search":
-            t = {"kind": "search", "name": unique("web_search"), "arg": "query",
-                 "desc": "Search the web and return short result snippets for a query."}
-        elif n["type"] == "code_exec":
-            t = {"kind": "code", "name": unique("run_python"), "arg": "code",
-                 "desc": "Run a Python snippet and return what it prints. Use print() to show results."}
-        else:
-            t = {"kind": "agent", "name": unique(py_id(p["name"])), "arg": "task", "role": p["role"],
-                 "desc": f"Delegate a sub-task to the {p['name']} agent. Its role: {p['role']}"}
-            nodemap["agents"][t["name"]] = tid
-        t["gated"] = tid in w["gated"]
-        t["node"] = tid
-        nodemap["tools"][t["name"]] = tid
-        tools.append(t)
+    if target not in TARGETS:
+        raise ValueError(f"Unknown target {target!r}.")
+    errors = [p for p in validate(graph) if p["level"] == "error"]
+    if not _of(graph, "llm") or not _of(graph, "user_input") or not _of(graph, "output"):
+        return {"source": "# Add a User input, an LLM core and a Final answer to generate an agent.\n",
+                "nodemap": {"tools": {}}, "node_code": {}, "target": target, "errors": errors}
+    a = analyze(graph)
+    nodes, kind = a["nodes"], a["kind"]
+    of_kind = lambda t: [nid for nid in nodes if kind[nid] == t]  # noqa: E731
+    present = lambda t: any(kind[nid] == t and nid in a["reach"] for nid in nodes)  # noqa: E731
+    langgraph = target == "langgraph"
 
     L: List[str] = []
     spans: Dict[str, List[List[int]]] = {}
 
     def add(lines, *owners):
-        """Append lines and credit them to the blocks that own them (1-based, inclusive)."""
         start = len(L) + 1
         L.extend(lines)
         end = len(L)
@@ -435,46 +550,71 @@ def codegen(graph) -> Dict[str, Any]:
             if not owner:
                 continue
             mine = spans.setdefault(owner, [])
-            # pieces separated only by blank lines read as one
             gap = L[mine[-1][1]:start - 1] if mine else None
             if mine and gap is not None and all(not line.strip() for line in gap):
                 mine[-1][1] = end
             else:
                 mine.append([start, end])
 
-    LLM, PROMPT, LOOP, ROUTER, WORK = nid("llm"), nid("system_prompt"), nid("loop"), nid("router"), nid("short_mem")
-    INPUT, OUTPUT, HUMAN = nid("user_input"), nid("output"), nid("human")
-    PLANNER, CRITIC, LONG, RAG = nid("planner"), nid("reflector"), nid("long_mem"), nid("retriever")
-    GIN, GOUT = nid("guard_in"), nid("guard_out")
+    def const(nid):
+        return py_id(nid).upper()
+
+    llm_ids = [nid for nid in of_kind("llm")]
+    first_llm = _params(nodes[llm_ids[0]])
+    routers, llms, critics = a["routers"], a["llms"], a["critics"]
+    tools = [(tid, a["tool_names"][tid]) for tid in a["given"]]
+    gates = sorted({r["gate"] for rt in routers.values() for r in rt["routes"].values() if r["gate"]})
+    end, start = a["end"], a["start"]
 
     parts = ", ".join(label(n) for n in graph.get("nodes", []))
-    add(['"""Agent generated by Deep Network Designer\'s agent lab.', "",
+    run_line = ("Run it:  pip install langgraph; ANTHROPIC_API_KEY=... python agent_langgraph.py"
+                if langgraph else "Run it:  ANTHROPIC_API_KEY=... python agent.py")
+    add(['"""Agent generated by Deep Network Designer\'s agent lab'
+         + (", for LangGraph." if langgraph else "."), "",
          f"Anatomy: {parts}.".replace('"""', "'''"),
-         "Physiology: perceive -> think (model call) -> act (tool) -> observe (append result) -> repeat.", "",
-         "Run it:  ANTHROPIC_API_KEY=... python agent.py", "Standard library only.", '"""', ""])
+         "Each block on the control path is one function: it takes the state, does its work,",
+         "and returns the id of the block to run next. " + (
+             "A LangGraph StateGraph runs them; human approval is a real interrupt you can resume."
+             if langgraph else "A while loop at the bottom runs them."), "",
+         run_line, "" if langgraph else "Standard library only.", '"""', ""])
     imports = ["import json", "import os", "import urllib.request"]
-    if any(t["kind"] == "code" for t in tools):
+    if any(kind[t] == "code_exec" for t, _ in tools):
         imports += ["import subprocess", "import sys"]
-    if has("guard_in") or has("guard_out"):
+    if present("guard_in") or present("guard_out"):
         imports.append("import re")
-    if has("long_mem"):
+    if any(kind[n] == "long_mem" for n in nodes):
         imports.append("from pathlib import Path")
-    add(sorted(imports) + [""])
-    add(['API_URL = "https://api.anthropic.com/v1/messages"',
-         f'MODEL = os.environ.get("AGENT_MODEL", {json.dumps(str(llm["model"]))})',
-         f"TEMPERATURE = {float(llm['temperature'])}",
-         f"MAX_TOKENS = {int(llm['max_tokens'])}"], LLM)
-    add([f"MAX_STEPS = {max_steps}  # loop controller: the heartbeat's hard limit"], LOOP)
+    if langgraph:
+        imports += ["import copy", "from typing import Optional, TypedDict"]
+    add(sorted(imports))
+    if langgraph:
+        add(["", "from langgraph.checkpoint.memory import MemorySaver",
+             "from langgraph.graph import END, START as GRAPH_START, StateGraph",
+             "from langgraph.types import Command, interrupt"])
+    add(["", 'API_URL = "https://api.anthropic.com/v1/messages"'])
+    add([f'MODEL = os.environ.get("AGENT_MODEL", {json.dumps(str(first_llm["model"]))})'], llm_ids[0])
+    add([f"MAX_STEPS = {a['max_steps']}  # loop controller: model calls allowed across the whole run",
+         "MAX_HOPS = 200  # a safety net on block-to-block moves, so a miswired graph cannot spin forever"],
+        a["loop"])
     add(["", "",
          "def emit(event, **data):",
-         '    """Each organ reports here as it works. The lab swaps this in to animate the canvas;',
-         '    on its own it does nothing."""',
-         "", "", "# ---- brain: identity ----"])
-    add([f"SYSTEM_PROMPT = {_doc(prompt)}"], PROMPT)
+         '    """Each block reports here as it works. The lab swaps this in to animate the canvas;',
+         '    on its own it does nothing."""'])
+
+    # ---- brain: settings and instructions per LLM core ----
+    add(["", "", "# ---- brain ----"])
+    for lid in llm_ids:
+        p = _params(nodes[lid])
+        add([f'{const(lid)}_SETTINGS = {{"model": os.environ.get("AGENT_MODEL", {json.dumps(str(p["model"]))}), '
+             f'"temperature": {float(p["temperature"])}, "max_tokens": {int(p["max_tokens"])}}}'], lid)
+    for sid in of_kind("system_prompt"):
+        readers = [lid for lid, l in llms.items() if l["prompt"] == sid]
+        add([f"{const(sid)}_SYSTEM = {_doc(_params(nodes[sid])['text'])}"], sid, *readers)
+    add([f"DEFAULT_SYSTEM = {_doc(DEFAULT_PROMPT)}"])
     add(["", ""])
-    add(["def call_model(system, messages, tools=None):",
+    add(["def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048):",
          '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests."""',
-         '    body = {"model": MODEL, "max_tokens": MAX_TOKENS, "temperature": TEMPERATURE,',
+         '    body = {"model": model, "max_tokens": max_tokens, "temperature": temperature,',
          '            "system": system, "messages": messages}',
          "    if tools:",
          '        body["tools"] = tools',
@@ -486,27 +626,27 @@ def codegen(graph) -> Dict[str, Any]:
          "        return json.load(reply)", "", "",
          "def text_of(response):",
          '    return "".join(b.get("text", "") for b in response.get("content", []) if b.get("type") == "text")'],
-        LLM)
-    add([""])
-    if has("planner") or has("reflector"):
-        add([""])
+        *llm_ids)
+    if present("planner") or present("reflector") or any(kind[t] == "sub_agent" for t, _ in tools):
+        add(["", ""])
         add(["def complete(system, prompt):",
-             '    """A single model call with no tools, for the planner and the critic."""',
-             '    return text_of(call_model(system, [{"role": "user", "content": prompt}]))'], PLANNER, CRITIC)
-        add([""])
+             '    """A single model call with no tools, for the planner, the critic and sub-agents."""',
+             '    return text_of(call_model(system, [{"role": "user", "content": prompt}]))'],
+            *of_kind("planner"), *of_kind("reflector"), *[t for t, _ in tools if kind[t] == "sub_agent"])
 
+    # ---- hands ----
     if tools:
-        add(["", "# ---- hands: tools ----"])
-        for t in tools:
-            n = t["name"]
-            if t["kind"] == "custom":
-                body = [f"def {n}(input: str) -> str:", f"    {_doc(t['desc'])}",
-                        f'    return f"TODO: implement {n}. It was asked: {{input}}"']
-            elif t["kind"] == "search":
-                body = [f"def {n}(query: str) -> str:", '    """Plug a real search API in here."""',
+        add(["", "", "# ---- hands: tools ----"])
+        for tid, name in tools:
+            p, k = _params(nodes[tid]), kind[tid]
+            if k == "tool":
+                body = [f"def {name}(input: str) -> str:", f"    {_doc(p['description'])}",
+                        f'    return f"TODO: implement {name}. It was asked: {{input}}"']
+            elif k == "web_search":
+                body = [f"def {name}(query: str) -> str:", '    """Plug a real search API in here."""',
                         '    return f"[placeholder results for: {query}]"']
-            elif t["kind"] == "code":
-                body = [f"def {n}(code: str) -> str:",
+            elif k == "code_exec":
+                body = [f"def {name}(code: str) -> str:",
                         '    """Runs model-written code in a subprocess. That is not a sandbox."""',
                         "    try:",
                         "        done = subprocess.run([sys.executable, \"-c\", code], capture_output=True,",
@@ -515,168 +655,293 @@ def codegen(graph) -> Dict[str, Any]:
                         '        return "Error: timed out after 20 seconds."',
                         '    return (done.stdout + done.stderr)[-4000:] or "(no output)"']
             else:
-                body = [f"{n.upper()}_ROLE = {_doc(t['role'])}", "", "",
-                        f"def {n}(task: str) -> str:",
-                        '    """A sub-agent: its own instructions and its own loop, called like a tool."""',
-                        f'    emit("delegate", agent="{n}")',
-                        f'    return agent_loop([{{"role": "user", "content": task}}], {n.upper()}_ROLE,',
-                        f'                      tools=[], tool_funcs={{}}, max_steps=4, agent="{n}")']
-            add([""])
-            add(body, t["node"])
-            add([""])
-        add(["", "TOOLS = ["], ROUTER)
-        for t in tools:
-            add(["    {", f'        "name": {json.dumps(t["name"])},',
-                 f'        "description": {json.dumps(t["desc"])},',
-                 f'        "input_schema": {{"type": "object", "properties": {{"{t["arg"]}": {{"type": "string"}}}},'
-                 f' "required": ["{t["arg"]}"]}},', "    },"], t["node"], ROUTER)
-        add(["]", "", "TOOL_FUNCS = {" + ", ".join(f'"{t["name"]}": {t["name"]}' for t in tools) + "}"], ROUTER)
-        gated = [t["name"] for t in tools if t["gated"]]
-        add(["NEEDS_APPROVAL = {" + ", ".join(json.dumps(g) for g in gated) + "}" if gated
-             else "NEEDS_APPROVAL = set()"], HUMAN)
-        add([""])
-    else:
-        add(["", "TOOLS = []", "TOOL_FUNCS = {}"], ROUTER)
-        add(["NEEDS_APPROVAL = set()"], HUMAN)
-        add([""])
+                body = [f"{name.upper()}_ROLE = {_doc(p['role'])}", "", "",
+                        f"def {name}(task: str) -> str:",
+                        '    """A sub-agent: a second model with its own instructions, called like a tool."""',
+                        f'    emit("delegate", node="{tid}")',
+                        f"    answer = complete({name.upper()}_ROLE, task)",
+                        f'    emit("model", node="{tid}", step=1, wants_tools=False)',
+                        "    return answer"]
+            add(["", ""])
+            add(body, tid)
 
-    if has("long_mem") or has("retriever"):
-        add(["", "# ---- memory ----",
+        def schema(tid, name):
+            arg = {"tool": "input", "web_search": "query", "code_exec": "code", "sub_agent": "task"}[kind[tid]]
+            p = _params(nodes[tid])
+            desc = {"tool": p.get("description", ""),
+                    "web_search": "Search the web and return short result snippets for a query.",
+                    "code_exec": "Run a Python snippet and return what it prints. Use print() to show results.",
+                    "sub_agent": f"Delegate a sub-task to the {p.get('name')} agent. Its role: {p.get('role')}"
+                    }[kind[tid]]
+            return ["    {", f'        "name": {json.dumps(name)},', f'        "description": {json.dumps(desc)},',
+                    f'        "input_schema": {{"type": "object", "properties": {{"{arg}": {{"type": "string"}}}},'
+                    f' "required": ["{arg}"]}},', "    },"]
+
+        add(["", ""])
+        add(["SCHEMAS = {"], *routers)
+        for tid, name in tools:
+            block = schema(tid, name)
+            block[0] = f"    {json.dumps(name)}: {{"
+            add(block, tid)
+        add(["}"], *routers)
+
+    # ---- memory ----
+    long_ids, rag_ids = of_kind("long_mem"), of_kind("retriever")
+    if long_ids or rag_ids:
+        add(["", "", "# ---- memory ----",
              "# Keyword overlap keeps this to the standard library. Swap in embeddings for real use."])
-        if has("long_mem"):
+        if long_ids:
             add(['MEMORY_FILE = Path("agent_memory.json")', "", "",
                  "def load_memories():",
                  "    return json.loads(MEMORY_FILE.read_text()) if MEMORY_FILE.exists() else []", "", "",
                  "def save_memory(text):",
                  "    notes = load_memories() + [text]",
-                 "    MEMORY_FILE.write_text(json.dumps(notes[-500:], indent=2))",
-                 '    emit("remember")'], LONG)
-            add([""])
-        if has("retriever"):
-            add([""])
+                 "    MEMORY_FILE.write_text(json.dumps(notes[-500:], indent=2))"], *long_ids)
+        if rag_ids:
+            add(["", ""])
             add(["DOCUMENTS = [",
                  '    "Replace these strings with chunks of your own documents.",',
-                 '    "Each chunk should hold a few hundred words on one idea.",', "]"], RAG)
-            add([""])
-        pool = "list(DOCUMENTS)" if has("retriever") else "[]"
-        if has("long_mem"):
-            pool += " + load_memories()"
-        add([""])
-        add(["def retrieve(query, k):", f"    pool = {pool}",
+                 '    "Each chunk should hold a few hundred words on one idea.",', "]"], *rag_ids)
+        add(["", ""])
+        add(["def retrieve(query, k, pool):",
              "    words = set(query.lower().split())",
              "    ranked = sorted(pool, key=lambda doc: -len(words & set(doc.lower().split())))",
-             "    found = [doc for doc in ranked[:k] if words & set(doc.lower().split())]",
-             '    emit("recall", count=len(found))',
-             "    return found"], RAG or LONG)
-        add([""])
+             "    return [doc for doc in ranked[:k] if words & set(doc.lower().split())]"], *rag_ids, *long_ids)
 
-    if has("guard_in"):
-        add(["", "# ---- immune system ----"])
+    # ---- immune ----
+    if of_kind("guard_in"):
+        add(["", "", "# ---- immune system ----"])
         add(['INJECTION = [r"ignore (all|previous) instructions", r"reveal your system prompt", r"you are now"]',
              "", "",
-             "def input_guardrail(text):",
-             "    for pattern in INJECTION:",
-             "        if re.search(pattern, text, re.IGNORECASE):",
-             '            emit("guard_in", passed=False)',
-             '            raise ValueError("Blocked by the input guardrail: this looks like prompt injection.")',
-             '    emit("guard_in", passed=True)',
-             "    return text.strip()"], GIN)
-        add([""])
-    if has("guard_out"):
-        add([""])
-        add(["def output_guardrail(text):",
-             '    cleaned = re.sub(r"[\\w.+-]+@[\\w-]+\\.[\\w.]+", "[email removed]", text)',
-             '    cleaned = re.sub(r"\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b", "[phone removed]", cleaned)',
-             '    emit("guard_out", changed=cleaned != text)',
-             "    return cleaned"], GOUT)
-        add([""])
-    add([""])
-    add(["def human_approves(name, args):",
-         '    """A person signs off before a gated tool runs."""',
-         '    answer = input(f"\\nApprove {name}({json.dumps(args)})? [y/N] ")',
-         '    approved = answer.strip().lower() == "y"',
-         '    emit("approval", tool=name, approved=approved)',
-         "    return approved"], HUMAN)
-    add([""])
-    if has("planner"):
-        add([""])
+             "def looks_injected(text):",
+             "    return any(re.search(pattern, text, re.IGNORECASE) for pattern in INJECTION)"],
+            *of_kind("guard_in"))
+    if of_kind("guard_out"):
+        add(["", ""])
+        add(["def redact(text):",
+             '    text = re.sub(r"[\\w.+-]+@[\\w-]+\\.[\\w.]+", "[email removed]", text)',
+             '    return re.sub(r"\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b", "[phone removed]", text)'],
+            *of_kind("guard_out"))
+    add(["", ""])
+    if langgraph:
+        add(["def human_approves(name, args, gate):",
+             '    """A real pause: the graph stops here, saves its state, and waits to be resumed.',
+             "",
+             "    Resuming re-runs the router's dispatch from its start, so tools it already ran in",
+             "    the same step run again. Keep gated tools first, or make them safe to repeat.",
+             '    """',
+             '    approved = bool(interrupt({"tool": name, "args": args, "gate": gate}))',
+             '    emit("approval", node=gate, tool=name, approved=approved)',
+             "    return approved"], *gates)
+    else:
+        add(["def human_approves(name, args, gate):",
+             '    """A person signs off before a gated tool runs."""',
+             '    answer = input(f"\\nApprove {name}({json.dumps(args)})? [y/N] ")',
+             '    approved = answer.strip().lower() == "y"',
+             '    emit("approval", node=gate, tool=name, approved=approved)',
+             "    return approved"], *gates)
+    if of_kind("planner"):
+        add(["", ""])
         add(['PLANNER_PROMPT = "You are a planner. Write a short numbered plan of concrete steps. No preamble."'],
-            PLANNER)
-        add([""])
-    if has("reflector"):
-        add([""])
+            *of_kind("planner"))
+    if of_kind("reflector"):
+        add(["", ""])
         add(["CRITIC_PROMPT = (",
              "    \"You review an agent's draft answer against the task. \"",
              '    "If it is correct, complete and supported, reply with exactly PASS. "',
-             '    "Otherwise list the specific problems to fix."', ")",
-             f"MAX_REVISIONS = {int(first('reflector')['max_revisions'])}", "", "",
+             '    "Otherwise list the specific problems to fix."', ")", "", "",
              "def critique(task, answer):",
              '    verdict = complete(CRITIC_PROMPT, f"Task:\\n{task}\\n\\nDraft answer:\\n{answer}")',
-             '    passed = verdict.strip().upper().startswith("PASS")',
-             '    emit("critique", passed=passed, notes=verdict[:200])',
-             "    return None if passed else verdict"], CRITIC)
-        add([""])
+             '    return None if verdict.strip().upper().startswith("PASS") else verdict'], *of_kind("reflector"))
 
-    add(["", "# ---- nervous system: the loop and the router ----"])
-    add(['def agent_loop(messages, system, tools, tool_funcs, max_steps, agent="main"):',
-         '    """Working memory is `messages`: appended every step, re-sent in full on every call."""'], WORK)
-    add(["    for step in range(max_steps):"], LOOP)
-    add(["        response = call_model(system, messages, tools)"], LLM)
-    add(['        wants_tools = response.get("stop_reason") == "tool_use"',
-         '        emit("model", agent=agent, step=step + 1, wants_tools=wants_tools)'], ROUTER)
-    add(['        messages.append({"role": "assistant", "content": response["content"]})'], WORK)
-    add(["        if not wants_tools:", "            return text_of(response)"], ROUTER, OUTPUT)
-    add(["", "        results = []",
-         '        for block in response["content"]:',
-         '            if block.get("type") != "tool_use":',
-         "                continue",
-         '            name, args = block["name"], block.get("input") or {}',
-         '            emit("dispatch", agent=agent, tool=name)',
-         "            func = tool_funcs.get(name)",
-         "            if func is None:",
-         '                output = f"Error: there is no tool called {name}."'], ROUTER)
-    add(["            elif name in NEEDS_APPROVAL and not human_approves(name, args):",
-         '                output = "A person declined this action. Find another way, or explain why it is needed."'],
-        HUMAN)
-    add(["            else:",
-         "                try:",
-         "                    output = func(**args)",
-         "                except Exception as error:",
-         '                    output = f"Error: {error}"'], ROUTER)
-    add(['            emit("tool_result", agent=agent, tool=name, preview=str(output)[:200])',
-         '            results.append({"type": "tool_result", "tool_use_id": block["id"], "content": str(output)})',
-         '        messages.append({"role": "user", "content": results})'], WORK)
-    add([""])
-    add(['    emit("budget", agent=agent, limit=max_steps)',
-         '    return "Stopped: the step budget ran out before a final answer."'], LOOP)
+    # ---- state and the two physiological helpers ----
+    add(["", "", "# ---- the state every block reads and writes ----"])
+    add(["def new_state(task):",
+         '    return {"task": task, "context": [], "messages": [], "draft": "", "answer": None,',
+         '            "pending": [], "steps": 0, "revisions": 0, "next": None}'], start, *of_kind("short_mem"))
     add(["", ""])
-    add(["def run_agent(task):", '    emit("input", task=task[:200])'], INPUT)
-    if has("guard_in"):
-        add(["    task = input_guardrail(task)"], GIN)
-    add(["    context = []"], INPUT)
-    if has("long_mem") or has("retriever"):
-        k = int(first("retriever")["top_k"]) if has("retriever") else 4
-        add([f"    notes = retrieve(task, k={k})", "    if notes:",
-             '        context.append("Relevant notes:\\n" + "\\n".join(f"- {n}" for n in notes))'], RAG, LONG)
-    if has("planner"):
-        add(["    plan = complete(PLANNER_PROMPT, task)", '    emit("plan", preview=plan[:200])',
-             '    context.append("Plan to follow:\\n" + plan)'], PLANNER)
-    add(['    messages = [{"role": "user", "content": "\\n\\n".join(context + [f"Task:\\n{task}"])}]'], INPUT, WORK)
-    add(["    answer = agent_loop(messages, SYSTEM_PROMPT, TOOLS, TOOL_FUNCS, MAX_STEPS)"], LOOP, PROMPT)
-    if has("reflector"):
-        add(["    for _ in range(MAX_REVISIONS):", "        notes = critique(task, answer)",
-             "        if notes is None:", "            break",
-             '        messages.append({"role": "user", "content": f"A reviewer found problems:\\n{notes}\\n\\nRevise."})',
-             "        answer = agent_loop(messages, SYSTEM_PROMPT, TOOLS, TOOL_FUNCS, MAX_STEPS)"], CRITIC)
-    if has("long_mem"):
-        add(['    save_memory(f"Task: {task[:200]} | Answer: {answer[:300]}")'], LONG)
-    if has("guard_out"):
-        add(["    answer = output_guardrail(answer)"], GOUT)
-    add(['    emit("final", preview=answer[:300])', "    return answer"], OUTPUT)
+    add(["def think(state, node, system, tools, settings):",
+         '    """The LLM core\'s physiology: re-read everything, return text or tool requests."""',
+         '    messages = state["messages"]',
+         "    if not messages:",
+         '        messages.append({"role": "user", "content": "\\n\\n".join(state["context"] + ["Task:\\n" + state["task"]])})',
+         '    elif messages[-1]["role"] == "assistant":',
+         "        # two cores in a row: the second reads the first one's draft as its input",
+         '        messages.append({"role": "user", "content": "The previous stage wrote:\\n" + state["draft"]',
+         '                         + "\\n\\nContinue the task."})',
+         '    response = call_model(system, messages, [SCHEMAS[name] for name in tools] or None, **settings)',
+         '    state["steps"] += 1',
+         '    wants_tools = response.get("stop_reason") == "tool_use"',
+         '    emit("model", node=node, step=state["steps"], wants_tools=wants_tools)',
+         '    messages.append({"role": "assistant", "content": response["content"]})',
+         '    state["pending"] = [b for b in response["content"] if b.get("type") == "tool_use"] if wants_tools else []',
+         '    state["draft"] = text_of(response)'], *llm_ids, *of_kind("short_mem"))
+    if routers:
+        add(["", ""])
+        add(["def dispatch(state, node, routes, back):",
+             '    """The router\'s physiology: run each requested tool, or explain why not, and say where to go."""',
+             "    results, chosen = [], None",
+             '    for call in state["pending"]:',
+             '        name, args = call["name"], call.get("input") or {}',
+             '        emit("dispatch", node=node, tool=name)',
+             "        route = routes.get(name)",
+             "        if route is None:",
+             '            output = f"Error: there is no tool called {name}."',
+             '        elif route["gate"] and not human_approves(name, args, route["gate"]):',
+             '            output = "A person declined this action. Find another way, or explain why it is needed."',
+             "        else:",
+             "            try:",
+             '                output = route["func"](**args)',
+             "            except Exception as error:",
+             '                output = f"Error: {error}"',
+             '        emit("tool_result", node=route["node"] if route else node, tool=name, preview=str(output)[:200])',
+             "        chosen = chosen or route",
+             '        results.append({"type": "tool_result", "tool_use_id": call["id"], "content": str(output)})',
+             '    state["messages"].append({"role": "user", "content": results})',
+             '    state["pending"] = []',
+             '    return chosen["next"] if chosen else back'], *routers, *of_kind("short_mem"))
+
+    # ---- the graph ----
+    add(["", "", "# ---- the graph: one function per block, each returning the next block's id ----"])
+    for nid in a["steps"]:
+        n, k = nodes[nid], kind[nid]
+        p = _params(n)
+        nxt = (a["control"][nid] or [None])[0]
+        name = fn_name(nid, n)
+        to = lambda target: f'"{target}"' if target else "None"  # noqa: E731
+        comment = lambda target: f"  # {label(nodes[target])}" if target else ""  # noqa: E731
+        body = [f"def {name}(state):"]
+        if k == "user_input":
+            body += ['    emit("input", node="' + nid + '", task=state["task"][:200])',
+                     f"    return {to(nxt)}{comment(nxt)}"]
+        elif k == "guard_in":
+            body += ['    if looks_injected(state["task"]):',
+                     f'        emit("guard_in", node="{nid}", passed=False)',
+                     '        state["answer"] = "Blocked by the input guardrail: this looks like prompt injection."',
+                     f"        return {to(end)}{comment(end)}",
+                     f'    emit("guard_in", node="{nid}", passed=True)',
+                     f"    return {to(nxt)}{comment(nxt)}"]
+        elif k == "retriever":
+            reads_memory = any(kind[f] == "long_mem" for f in a["feeds"][nid])
+            pool = "list(DOCUMENTS)" + (" + load_memories()" if reads_memory else "")
+            body += [f'    notes = retrieve(state["task"], {int(p["top_k"])}, {pool})',
+                     f'    emit("recall", node="{nid}", count=len(notes))',
+                     "    if notes:",
+                     '        state["context"].append("Relevant notes:\\n" + "\\n".join(f"- {n}" for n in notes))',
+                     f"    return {to(nxt)}{comment(nxt)}"]
+        elif k == "long_mem":
+            body += ['    if state["answer"] or state["draft"]:',
+                     '        save_memory(f"Task: {state[\'task\'][:200]} | Answer: {(state[\'answer\'] or state[\'draft\'])[:300]}")',
+                     f'        emit("remember", node="{nid}")',
+                     "    else:",
+                     '        notes = retrieve(state["task"], 4, load_memories())',
+                     f'        emit("recall", node="{nid}", count=len(notes))',
+                     "        if notes:",
+                     '            state["context"].append("From earlier runs:\\n" + "\\n".join(f"- {n}" for n in notes))',
+                     f"    return {to(nxt)}{comment(nxt)}"]
+        elif k == "planner":
+            body += ['    plan = complete(PLANNER_PROMPT, state["task"])',
+                     f'    emit("plan", node="{nid}", preview=plan[:200])',
+                     '    state["context"].append("Plan to follow:\\n" + plan)',
+                     f"    return {to(nxt)}{comment(nxt)}"]
+        elif k == "llm":
+            l = llms[nid]
+            system = f"{const(l['prompt'])}_SYSTEM" if l["prompt"] else "DEFAULT_SYSTEM"
+            body += ['    if state["steps"] >= MAX_STEPS:',
+                     f'        emit("budget", node="{a["loop"] or nid}", limit=MAX_STEPS)',
+                     '        state["answer"] = state["draft"] or "Stopped: the step budget ran out before a final answer."',
+                     f"        return {to(end)}{comment(end)}",
+                     f'    think(state, "{nid}", {system}, {json.dumps(l["tools"])}, {const(nid)}_SETTINGS)',
+                     f"    return {to(l['next'])}{comment(l['next'])}"]
+        elif k == "router":
+            r = routers[nid]
+            table = ", ".join(
+                f'"{tname}": {{"node": "{rt["node"]}", "func": {tname}, '
+                f'"gate": {to(rt["gate"])}, "next": {to(rt["next"])}}}'
+                for tname, rt in r["routes"].items())
+            body = [f"{const(nid)}_ROUTES = {{{table}}}", "", "", f"def {name}(state):",
+                    '    if state["pending"]:',
+                    f'        return dispatch(state, "{nid}", {const(nid)}_ROUTES, back={to(r["back"])})',
+                    '    state["answer"] = state["draft"]',
+                    f"    return {to(r['exit'])}{comment(r['exit'])}"]
+        elif k == "reflector":
+            c = critics[nid]
+            body += [f"    MAX_REVISIONS = {int(p['max_revisions'])}",
+                     '    draft = state["answer"] or state["draft"]',
+                     '    notes = critique(state["task"], draft)',
+                     f'    emit("critique", node="{nid}", passed=notes is None, notes=(notes or "PASS")[:200])']
+            if c["back"]:
+                body += ['    if notes and state["revisions"] < MAX_REVISIONS:',
+                         '        state["revisions"] += 1',
+                         '        state["answer"] = None',
+                         '        state["messages"].append({"role": "user", "content": f"A reviewer found problems:\\n{notes}\\n\\nRevise."})',
+                         f"        return {to(c['back'])}{comment(c['back'])}"]
+            body += ['    state["answer"] = draft', f"    return {to(c['next'])}{comment(c['next'])}"]
+        elif k == "guard_out":
+            body += ['    cleaned = redact(state["answer"] or state["draft"])',
+                     f'    emit("guard_out", node="{nid}", changed=cleaned != (state["answer"] or state["draft"]))',
+                     '    state["answer"] = cleaned', f"    return {to(nxt)}{comment(nxt)}"]
+        elif k == "output":
+            body += ['    state["answer"] = state["answer"] or state["draft"]',
+                     f'    emit("final", node="{nid}", preview=state["answer"][:300])', "    return None"]
+        add(["", ""])
+        add(body, nid)
+
     add(["", ""])
-    add(['if __name__ == "__main__":', '    print(run_agent(input("Task: ")))'], INPUT, OUTPUT)
+    add(["NODES = {" + ", ".join(f'"{nid}": {fn_name(nid, nodes[nid])}' for nid in a["steps"]) + "}",
+         f'START = "{start}"',
+         "SUCCESSORS = {" + ", ".join(f'"{k}": {json.dumps(v)}' for k, v in a["successors"].items()) + "}"])
+
+    if langgraph:
+        add(["", "", "# ---- LangGraph runs the machine ----"])
+        add(["class AgentState(TypedDict, total=False):",
+             "    task: str", "    context: list", "    messages: list", "    draft: str",
+             "    answer: Optional[str]", "    pending: list", "    steps: int", "    revisions: int",
+             "    next: Optional[str]", "", "",
+             "def as_node(block):",
+             '    """Wrap a block so LangGraph sees a state update; its return value picks the next node."""',
+             "    def node(state):",
+             "        state = copy.deepcopy(dict(state))",
+             '        state["next"] = block(state)',
+             "        return state",
+             "    return node", "", "",
+             "def build():",
+             "    graph = StateGraph(AgentState)",
+             "    for name, block in NODES.items():",
+             "        graph.add_node(name, as_node(block))",
+             "    graph.add_edge(GRAPH_START, START)",
+             "    for name, targets in SUCCESSORS.items():",
+             "        paths = {t: t for t in targets}",
+             "        paths[END] = END",
+             '        graph.add_conditional_edges(name, lambda s: s.get("next") or END, paths)',
+             "    return graph", "", "",
+             'def run_agent(task, thread="cli", approve=None):',
+             '    """Run to the end, answering each approval interrupt with approve(request) or by asking."""',
+             "    app = build().compile(checkpointer=MemorySaver())",
+             '    config = {"configurable": {"thread_id": thread}, "recursion_limit": MAX_HOPS}',
+             "    result = app.invoke(new_state(task), config)",
+             '    while result.get("__interrupt__"):',
+             '        request = result["__interrupt__"][0].value',
+             "        yes = approve(request) if approve else input(",
+             '            f"\\nApprove {request[\'tool\']}({json.dumps(request[\'args\'])})? [y/N] ").strip().lower() == "y"',
+             "        result = app.invoke(Command(resume=yes), config)",
+             '    return result["answer"]'], start, end)
+    else:
+        add(["", "", "# ---- a while loop runs the machine ----"])
+        add(["def run_agent(task):",
+             "    state = new_state(task)",
+             "    current, hops = START, 0",
+             "    while current is not None:",
+             "        hops += 1",
+             "        if hops > MAX_HOPS:",
+             '            raise RuntimeError(f"More than {MAX_HOPS} moves between blocks: the graph is circling.")',
+             "        current = NODES[current](state)",
+             '    return state["answer"]'], start, end)
+    add(["", ""])
+    add(['if __name__ == "__main__":', '    print(run_agent(input("Task: ")))'], start, end)
     add([""])
-    return {"source": "\n".join(L), "nodemap": nodemap, "node_code": spans}
+    return {"source": "\n".join(L), "nodemap": {"tools": {name: tid for tid, name in tools}},
+            "node_code": spans, "target": target, "errors": errors}
 
 
 # --------------------------------------------------------------------------
@@ -902,23 +1167,30 @@ def _m_tool(p, node, graph, c):
 
 
 def _m_sub(p, node, graph, c):
-    return {"title": "A loop inside a tool",
-            "equation": "o = Agent_role(a.task):  H′₁ = a.task,  N′ = 4,  no tools",
-            "symbols": [("role", "its own system prompt"), ("N′", "its step limit")],
-            "arithmetic": [("model calls per delegation", "≤ 4"),
-                           ("parent context", "only o comes back; the sub-agent's history is discarded")],
+    return {"title": "A second model, called like a tool",
+            "equation": "o = π_θ(role, a.task)",
+            "symbols": [("role", "its own system prompt"), ("a.task", "what the parent model asked it to do")],
+            "arithmetic": [("model calls per delegation", "1: it has no tools of its own here"),
+                           ("parent context", "only o comes back; the sub-agent's reasoning is not kept")],
             "freedom": ["Delegation compresses: the parent sees a summary, not the work. That saves the parent's "
                         "context and loses whatever the summary leaves out."]}
 
 
 def _m_router(p, node, graph, c):
+    r = analyze(graph)["routers"].get(node["id"], {"routes": {}, "exit": None})
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    exit_to = label(nodes[r["exit"]]) if r.get("exit") in nodes else "nothing yet"
     return {"title": "A branch on one field",
-            "equation": "route(r) = run f for each tool_use in r  if stop(r) = tool_use;  else exit with text(r)",
-            "symbols": [("stop(r)", "the response's stop_reason")],
-            "arithmetic": [("tools offered", ", ".join(c["tools"]) or "none"),
+            "equation": "next(r) = dispatch(tool_use blocks of r)  if stop(r) = tool_use;  else " + exit_to,
+            "symbols": [("stop(r)", "the response's stop_reason"),
+                        ("dispatch", "run each requested tool, then follow that tool's own wire")],
+            "arithmetic": [("tools routed", ", ".join(r["routes"]) or "none"),
+                           ("gated", ", ".join(n for n, v in r["routes"].items() if v["gate"]) or "none"),
+                           ("finished answers go to", exit_to),
                            ("unknown tool", "returns an error string to the model rather than raising")],
-            "freedom": ["The router has no judgement: it is a pure function of the model's output. Anything "
-                        "you want enforced, such as allow-lists or argument checks, has to be written here."]}
+            "freedom": ["The router has no judgement: it is a pure function of the model's output and of "
+                        "the wires on the canvas. Anything you want enforced, such as an allow-list or an "
+                        "argument check, is written here, not hoped for in the prompt."]}
 
 
 def _m_loop(p, node, graph, c):
@@ -953,12 +1225,14 @@ def _m_gout(p, node, graph, c):
 
 
 def _m_human(p, node, graph, c):
-    gated = [t for t, nid in c["tools"].items() if nid in c["w"]["gated"]]
+    gated = [n for rt in analyze(graph)["routers"].values() for n, v in rt["routes"].items()
+             if v["gate"] == node["id"]]
     return {"title": "A gate on the dispatch",
             "equation": "run f(a)  ⇔  name ∉ G  ∨  approve(name, a)",
             "symbols": [("G", "the tools wired out of this block")],
             "arithmetic": [("G here", ", ".join(gated) or "empty: nothing is wired out of this block"),
-                           ("on denial", "o = a refusal message, so the model sees it and adapts")],
+                           ("on denial", "o = a refusal message, so the model sees it and adapts"),
+                           ("in the LangGraph export", "an interrupt: the run is saved and waits to be resumed")],
             "freedom": ["The gate sits between prediction and action, which is the only place a human check "
                         "can stop a side effect rather than report it."]}
 
@@ -972,15 +1246,15 @@ MATH: Dict[str, Callable] = {
 }
 
 
-def node_view(graph, node_id: Optional[str]) -> Dict[str, Any]:
+def node_view(graph, node_id: Optional[str], target: str = "python") -> Dict[str, Any]:
     """Everything the inspector shows for one block: its lines of the file and its maths."""
-    built = codegen(graph)
+    built = codegen(graph, target)
     lines = built["source"].split("\n")
     spans = built["node_code"].get(node_id, []) if node_id else []
     return {"math": explain(graph, node_id),
             "spans": spans,
             "snippets": [{"start": s, "end": e, "text": "\n".join(lines[s - 1:e])} for s, e in spans],
-            "source": built["source"]}
+            "source": built["source"], "target": target}
 
 
 # --------------------------------------------------------------------------
@@ -990,16 +1264,16 @@ def node_view(graph, node_id: Optional[str]) -> Dict[str, Any]:
 class Rehearsal:
     """Plays the model so a design can be run with no key and no cost.
 
-    It asks for each tool it was given, in order, up to two rounds, then answers
-    with what came back. The critic objects once and then passes. Everything
-    around it — the loop, the router, the tools, the guardrails — is the real
-    generated code.
+    It asks for each tool it was offered, in order, up to two rounds, then
+    answers with what came back. The critic objects once and then passes.
+    Everything around it — the graph, the router, the tools, the guardrails —
+    is the real generated code.
     """
 
     def __init__(self):
         self.critic_calls = 0
 
-    def __call__(self, system, messages, tools=None):
+    def __call__(self, system, messages, tools=None, **_settings):
         if not tools:
             low = (system or "").lower()
             if "planner" in low:
@@ -1009,7 +1283,7 @@ class Rehearsal:
                 text = ("The answer gives a figure without saying where it came from."
                         if self.critic_calls == 1 else "PASS")
             else:
-                ask = messages[0]["content"] if messages else ""
+                ask = messages[-1]["content"] if messages else ""
                 text = f"(rehearsal) A short, sourced finding on: {str(ask)[:80]}"
             return {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn"}
 
@@ -1043,16 +1317,16 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
     if mode not in ("live", "rehearsal"):
         raise ValueError(f"Unknown mode {mode!r}.")
 
-    built = codegen(graph)
+    built = codegen(graph, "python")
     events: List[Dict[str, Any]] = []
     started = time.time()
 
     def emit(event, **data):
         events.append({"event": event, "t": round(time.time() - started, 3), **data})
 
-    def approve(name, args):
+    def approve(name, args, gate):
         ok = approvals == "approve"
-        emit("approval", tool=name, approved=ok)
+        emit("approval", node=gate, tool=name, approved=ok)
         return ok
 
     space: Dict[str, Any] = {"__name__": "agentlab_run"}

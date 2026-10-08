@@ -293,21 +293,33 @@ def agentlab_check(body: AgentLabGraph):
     return {"problems": agentlab.validate(body.graph)}
 
 
+class AgentLabCode(BaseModel):
+    graph: Dict[str, Any]
+    target: str = "python"
+
+
 @app.post("/api/agentlab/codegen")
-def agentlab_codegen(body: AgentLabGraph):
-    built = agentlab.codegen(body.graph)
+def agentlab_codegen(body: AgentLabCode):
+    try:
+        built = agentlab.codegen(body.graph, body.target)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
     return {**built, "problems": agentlab.validate(body.graph)}
 
 
 class AgentLabNode(BaseModel):
     graph: Dict[str, Any]
     node: Optional[str] = None
+    target: str = "python"
 
 
 @app.post("/api/agentlab/node")
 def agentlab_node(body: AgentLabNode):
     """A block's own lines of the generated file, and its mathematics."""
-    return agentlab.node_view(body.graph, body.node)
+    try:
+        return agentlab.node_view(body.graph, body.node, body.target)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 @app.post("/api/agentlab/run")

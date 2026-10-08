@@ -2307,6 +2307,7 @@ body.sizing{user-select:none}
 .al-wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .al-wire{fill:none;stroke:var(--board-line);stroke-width:2}
 .al-wire.back{stroke-dasharray:6 5}
+.al-wire.cfg{stroke-dasharray:1 5;stroke-linecap:round;stroke-width:2.5;opacity:.7}
 .al-wire.sel{stroke:var(--amber);stroke-width:3}
 .al-wire.temp{stroke:var(--al-brain);stroke-dasharray:4 4}
 .al-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
@@ -13227,6 +13228,14 @@ function alRenderNodes(){
   });
 }
 
+/* Mirrors agentlab.is_config: these wires say which prompt, history or
+   budget a core uses, or add memory to a retriever. Control never runs
+   along them. */
+function alIsConfig(srcType, dstType){
+  return ["system_prompt", "short_mem", "loop"].includes(srcType) ||
+         (srcType === "long_mem" && dstType === "retriever");
+}
+
 function alEdgePath(a, b){
   const sx = a.x + AL_W, sy = a.y + AL_PORT_Y, tx = b.x, ty = b.y + AL_PORT_Y;
   if (tx > sx + 30){
@@ -13245,7 +13254,8 @@ function alRenderEdges(){
     const a = alNode(e.source), b = alNode(e.target);
     if (!a || !b) return;
     const p = alEdgePath(a, b), on = sel && sel.kind === "edge" && sel.id === e.id;
-    svg += `<path class="al-wire${p.back ? " back" : ""}${on ? " sel" : ""}" id="alw_${e.id}" d="${p.d}"/>` +
+    const cfg = alIsConfig(a.type, b.type);
+    svg += `<path class="al-wire${cfg ? " cfg" : p.back ? " back" : ""}${on ? " sel" : ""}" id="alw_${e.id}" d="${p.d}"/>` +
            `<path class="al-hit" data-edge="${e.id}" d="${p.d}"/>`;
   });
   svg += `<path class="al-wire temp" id="alTemp" d=""/>`;
@@ -13395,11 +13405,14 @@ function alRenderAnatomy(){
     const e = agentLabState.graph.edges.find(x => x.id === sel.id);
     const a = e && alNode(e.source), b = e && alNode(e.target);
     if (a && b){
-      const back = alEdgePath(a, b).back;
-      pane.innerHTML = `<h3>Wire</h3><p class="al-muted">${alEsc(alLabel(a))} to ${alEsc(alLabel(b))}</p>
-        <p>${back
-          ? "A dashed wire runs backward. That is feedback: a later stage's output returns to an earlier one, which is what turns a pipeline into a loop."
-          : "The signal flows forward along this wire. The output of one stage becomes part of the input to the next."}</p>
+      const back = alEdgePath(a, b).back, cfg = alIsConfig(a.type, b.type);
+      pane.innerHTML = `<h3>${cfg ? "Setting wire" : "Control wire"}</h3>
+        <p class="al-muted">${alEsc(alLabel(a))} to ${alEsc(alLabel(b))}</p>
+        <p>${cfg
+          ? "This wire configures its target rather than handing it control: it says which instructions, history or budget that block uses. Nothing runs along it."
+          : back
+          ? "A dashed wire runs backward. That is feedback: control returns to an earlier block, which is what turns a pipeline into a loop."
+          : "Control passes along this wire. When the block on the left finishes, the block on the right runs next."}</p>
         <button class="btn danger" id="alDel">Delete wire</button>`;
       $("alDel").onclick = alDeleteSel;
       return;
@@ -13495,10 +13508,11 @@ function alTraceRow(t){
 async function alNodeView(){
   const S = agentLabState;
   const node = S.sel && S.sel.kind === "node" ? S.sel.id : null;
-  const key = JSON.stringify(S.graph) + "|" + node;
+  const target = S.target || "python";
+  const key = JSON.stringify(S.graph) + "|" + node + "|" + target;
   if (S.view && S.view.key === key) return S.view.data;
   const r = await fetch(API + "/api/agentlab/node", {method: "POST",
-    headers: {"content-type": "application/json"}, body: JSON.stringify({graph: S.graph, node})});
+    headers: {"content-type": "application/json"}, body: JSON.stringify({graph: S.graph, node, target})});
   const data = await r.json();
   S.view = {key, data};
   return data;
@@ -13574,12 +13588,19 @@ async function alRenderCode(){
   const hits = new Set();
   d.spans.forEach(([a, b]) => { for (let i = a; i <= b; i++) hits.add(i); });
   const n = S.sel && S.sel.kind === "node" && alNode(S.sel.id);
+  const lg = (S.target || "python") === "langgraph";
   $("alPane").innerHTML = `<h3>Your agent in Python</h3>
-    <p class="al-muted">Standard library only. This is the exact file a run executes.
-    ${n ? `Lines from <b>${alEsc(alLabel(n))}</b> are marked.` : "Select a block to mark its lines."}</p>
+    <div class="field"><label for="alTarget">Generate for</label>
+      <select id="alTarget"><option value="python"${lg ? "" : " selected"}>Plain Python, standard library</option>
+        <option value="langgraph"${lg ? " selected" : ""}>LangGraph</option></select>
+      <div class="help">${lg
+        ? "The same block functions, run by a StateGraph. Human approval becomes a real interrupt you can resume. Needs pip install langgraph."
+        : "This is the exact file a run on this page executes."}</div></div>
+    <p class="al-muted">${n ? `Lines from <b>${alEsc(alLabel(n))}</b> are marked.` : "Select a block to mark its lines."}</p>
     <div class="row"><button class="btn" id="alCopy">Copy</button>
-      <button class="btn" id="alDownload">Download agent.py</button><span class="al-muted" id="alCopied"></span></div>
+      <button class="btn" id="alDownload">Download ${lg ? "agent_langgraph.py" : "agent.py"}</button><span class="al-muted" id="alCopied"></span></div>
     <div class="al-src al-file" tabindex="0">${alSource(d.source, 1, hits)}</div>`;
+  $("alTarget").addEventListener("change", ev => { S.target = ev.target.value; alRenderCode(); });
   const firstHit = $("alPane").querySelector(".al-src .l.hit");
   if (firstHit) firstHit.scrollIntoView({block: "center"});
   $("alCopy").onclick = async () => {
@@ -13589,7 +13610,7 @@ async function alRenderCode(){
   $("alDownload").onclick = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([d.source], {type: "text/x-python"}));
-    a.download = (S.graph.name || "agent").replace(/[^\w-]+/g, "_") + ".py";
+    a.download = (S.graph.name || "agent").replace(/[^\w-]+/g, "_") + (lg ? "_langgraph" : "") + ".py";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
@@ -13626,47 +13647,33 @@ async function alRun(){
   if (S.tab === "physio") alRenderPhysio();
 }
 
-function alEventNode(ev, map){
-  const g = agentLabState.graph, first = t => g.nodes.find(n => n.type === t);
-  const agentNode = name => map.agents && map.agents[name] ? alNode(map.agents[name]) : null;
-  switch (ev.event){
-    case "input": return first("user_input");
-    case "guard_in": return first("guard_in");
-    case "recall": return first("retriever") || first("long_mem");
-    case "plan": return first("planner");
-    case "model": return ev.agent === "main" ? first("llm") : agentNode(ev.agent);
-    case "dispatch": return ev.agent === "main" ? first("router") : agentNode(ev.agent);
-    case "approval": return first("human");
-    case "delegate": return agentNode(ev.agent);
-    case "tool_result": return map.tools && map.tools[ev.tool] ? alNode(map.tools[ev.tool]) : null;
-    case "critique": return first("reflector");
-    case "remember": return first("long_mem");
-    case "guard_out": return first("guard_out");
-    case "final": return first("output");
-    case "budget": return first("loop");
-    default: return null;
-  }
+/* Every event names the block that reported it, so the replay needs no
+   guessing about which LLM core or which router spoke. */
+function alEventNode(ev){
+  return ev.node ? alNode(ev.node) || null : null;
 }
 
 function alEventText(ev){
-  const inside = ev.agent && ev.agent !== "main" ? ` (inside ${ev.agent})` : "";
+  const who = ev.node && alNode(ev.node);
+  const sub = who && who.type === "sub_agent";
   switch (ev.event){
     case "input": return `Task arrives: “${ev.task}”`;
-    case "guard_in": return ev.passed ? "Screened the task; nothing blocked." : "Blocked the task as likely prompt injection.";
+    case "guard_in": return ev.passed ? "Screened the task; nothing blocked." : "Blocked the task as likely prompt injection, so control jumps to the final answer.";
     case "recall": return `Pulled ${ev.count} matching note${ev.count === 1 ? "" : "s"} into context.`;
     case "plan": return `Wrote a plan: ${ev.preview}`;
-    case "model": return ev.wants_tools
-      ? `Model call ${ev.step}${inside}: it asks for a tool (stop_reason tool_use).`
-      : `Model call ${ev.step}${inside}: it answers in text (stop_reason end_turn).`;
-    case "dispatch": return `Router dispatches ${ev.tool}${inside}.`;
+    case "model": return sub
+      ? "The sub-agent's model answers its sub-task in one call."
+      : ev.wants_tools ? `Model call ${ev.step}: it asks for a tool (stop_reason tool_use).`
+                       : `Model call ${ev.step}: it answers in text (stop_reason end_turn).`;
+    case "dispatch": return `Router dispatches ${ev.tool}.`;
     case "approval": return ev.approved ? `${ev.tool} approved.` : `${ev.tool} denied; the model is told so.`;
-    case "delegate": return `Handed the sub-task to ${ev.agent}, which runs its own loop.`;
+    case "delegate": return "Handed a sub-task to this sub-agent.";
     case "tool_result": return `${ev.tool} returned: ${ev.preview}`;
-    case "critique": return ev.passed ? "Critic passed the answer." : `Critic sent it back: ${ev.notes}`;
+    case "critique": return ev.passed ? "Critic passed the answer." : `Critic found problems: ${ev.notes}`;
     case "remember": return "Saved this exchange to long-term memory.";
     case "guard_out": return ev.changed ? "Redacted personal data from the answer." : "Checked the answer; nothing to redact.";
     case "final": return `Final answer leaves: ${ev.preview}`;
-    case "budget": return `Step budget of ${ev.limit} spent without a final answer.`;
+    case "budget": return `Step budget of ${ev.limit} spent, so control goes straight to the final answer.`;
     case "error": return ev.message;
     default: return ev.event;
   }
@@ -13706,7 +13713,7 @@ async function alReplay(d){
   const S = agentLabState, g = S.graph;
   let prev = null;
   for (const ev of d.events){
-    const node = alEventNode(ev, d.nodemap || {});
+    const node = alEventNode(ev);
     if (node && prev && node.id !== prev.id){
       const fwd = g.edges.find(e => e.source === prev.id && e.target === node.id);
       const rev = !fwd && g.edges.find(e => e.source === node.id && e.target === prev.id);

@@ -1,5 +1,47 @@
 # Changelog
 
+## 2.0.0
+
+**The agent canvas is now a real graph.** Until this release the Agent lab
+compiled every design to one fixed loop, and wiring only decided which tools
+existed. Now the canvas compiles to a state machine: each block on the control
+path becomes one function that takes the state and returns the id of the block
+to run next. What you wire is what runs.
+
+- **Two kinds of wire.** Control wires carry the run from block to block.
+  Setting wires, drawn dotted, configure their target and carry nothing: a
+  system prompt, working memory or loop controller wired into an LLM core says
+  which instructions, history and budget that core uses, and long-term memory
+  wired into a retriever adds itself to what the retriever searches.
+- **Designs that could not be built before.** Several LLM cores, each with
+  its own prompt and settings, in sequence or around routers. A critic that
+  sends work back only if it is wired back. Long-term memory that recalls when
+  placed before a model call and saves when placed after one. A guardrail you
+  can route around, and the run really does go around it.
+- **The router branches on the wires.** Requested tools run, then control
+  follows each tool's own wire. Tools wired out of a Human approval block wait
+  for a yes. Finished answers follow the router's exit wire.
+- **Exits are control flow too.** A blocked task and a spent step budget both
+  jump to the final answer instead of raising.
+- **Miswiring is caught before a run.** A dead end, a tool wired from
+  something other than a router, a router with no exit, or an answer that
+  cannot be reached is an error that names the block.
+
+**LangGraph export.** The Python tab now generates for plain Python or for
+LangGraph. Both files contain the same block functions; the LangGraph one hands
+them to a `StateGraph` with exact successor lists, so LangGraph Studio draws the
+same graph as the canvas. Human approval becomes a real `interrupt` with a
+checkpointer, so a run can stop, be saved and be resumed. A test runs every
+starting design through both and requires the same blocks in the same order
+(it skips the LangGraph half when langgraph is not installed).
+
+Every event a run emits now names the block that reported it, so the replay
+on the canvas follows the actual path, through whichever core or router spoke.
+
+Breaking: designs saved by 1.98 and 1.99 open, but they now run as wired. A
+system prompt or loop controller that was not wired into an LLM core is no
+longer used, and the checks say so.
+
 ## 1.99.0
 
 **Agent blocks have Code and Maths tabs, the way layers do.** Select any block
