@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.5.0
+
+**Model replies streamed, word by word.** During a run, each LLM core's words
+now appear on Physiology as it writes them, in a box named for the core, with
+the block outlined on the canvas; when the call ends, the finished call joins
+the trace as before. Parallel branches stream side by side.
+
+- **The generated file streams.** When something wants the words, a model call
+  asks for a stream and reads it — Anthropic's server-sent events, or the
+  chunks of an OpenAI-compatible server such as Ollama — and puts it back
+  together into exactly the response a plain call returns: text, tool calls
+  whose arguments arrive in pieces, the stop reason, and token usage. Nothing
+  downstream can tell the difference. A server that ignores the request and
+  answers in one piece still works.
+- **A STREAM hook in the download.** Set `STREAM` to a function of
+  `(node, text)` and your own scripts receive every core's words as they arrive;
+  left as `None`, calls are not streamed at all.
+- **Rehearsals stream too**, in small pieces, so the whole path is exercised
+  without a model.
+
+The words are kept only while they are being written and are never saved; the
+saved run holds the finished calls, as before. The planner, critic and
+summarizer, and saved agents inside another agent, do not stream.
+
 ## 3.4.0
 
 **An evaluator library, online evaluators, and prompt versions** — LangSmith's

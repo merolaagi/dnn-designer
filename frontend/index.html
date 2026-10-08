@@ -2477,6 +2477,13 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-ev small{color:var(--muted)}
 .al-ev div{color:var(--muted);font-size:11.5px}
 .al-ev .btn{font-size:10.5px;padding:1px 6px;margin-right:4px;font-family:var(--mono)}
+.al-stream{margin:8px 0;padding:8px 10px;border-left:3px solid var(--c);background:#fff;border-radius:0 7px 7px 0;font-size:12.5px}
+.al-stream b{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-bottom:2px}
+.al-stream div{white-space:pre-wrap;word-break:break-word}
+.al-caret{display:inline-block;width:7px;height:13px;margin-left:1px;vertical-align:-2px;background:var(--c);animation:alblink 1s steps(2) infinite}
+@keyframes alblink{50%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.al-caret{animation:none}}
+.al-node.writing{box-shadow:0 0 0 3px var(--c)}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13669,6 +13676,7 @@ function alRenderPhysio(){
       <a href="#" id="alNewThread">Start a new conversation</a></p>` : ""}
     <div class="row"><button class="btn go" id="alRunBtn"${S.running ? " disabled" : ""}>${S.running ? "Running…" : "Run the agent"}</button>
       ${S.running ? `<button class="btn" id="alStopRun">Stop</button>` : ""}</div>
+    <div id="alStream"></div>
     <div id="alWaiting"></div>
     <ol class="al-trace" id="alTrace">${S.trace.map(alTraceRow).join("")}</ol>
     ${S.answer != null ? `<h4>Final answer</h4><pre class="al-answer">${alEsc(S.answer)}</pre>` : ""}
@@ -13847,12 +13855,14 @@ async function alFollow(id, resumed){
     if (view.events.length) await alAnimateEvents(view.events);
     S.pending = view.pending || null;
     alShowWaiting();
+    alShowStreaming(view.streaming || []);
     if (!["running", "waiting"].includes(view.status)) break;
-    await alSleep(view.status === "waiting" ? 700 : 300);
+    await alSleep(view.status === "waiting" ? 700 : (view.streaming || []).length ? 120 : 300);
   }
   let rec = null;
   try{ rec = await (await fetch(API + "/api/agentlab/runs/" + id)).json(); } catch {}
   S.running = false; S.liveId = null; S.pending = null;
+  alShowStreaming([]);
   S.answer = view.answer != null ? view.answer : (view.error ? null : S.answer);
   S.costs = view.costs || null;
   S.lastRunId = id;
@@ -14813,6 +14823,21 @@ async function alEvLibrary(){
     $("alCases").value = st.cases;
     $("alCases").dispatchEvent(new Event("input"));
   });
+}
+
+/* What each LLM core is writing right now, word by word, until its call ends and the
+   finished call joins the trace. */
+function alShowStreaming(list){
+  const host = $("alStream");
+  if (!host) return;
+  host.innerHTML = list.filter(x => x.text).map(x => {
+    const node = alNode(x.node);
+    return `<div class="al-stream" style="--c:${node ? alColor(node.type) : "var(--al-brain)"}">
+      <b>${alEsc(node ? alLabel(node) : x.node)} is writing</b><div>${alEsc(x.text)}<i class="al-caret"></i></div></div>`;
+  }).join("");
+  const firing = list.map(x => x.node);
+  document.querySelectorAll("#alCanvas .al-node").forEach(el => el.classList.toggle("writing", firing.includes(el.dataset.id)));
+  if (list.length) $("alPane").scrollTop = $("alPane").scrollHeight;
 }
 
 /* ---------- prompt versions ---------- */

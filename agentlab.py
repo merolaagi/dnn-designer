@@ -64,6 +64,91 @@ SANDBOXED, UNRESTRICTED = "sandboxed", "unrestricted (runs as you, no limits)"
 
 # The code sandbox every generated file carries when its code executor is sandboxed, and the
 # lab uses to report which layer this machine gets: one copy of the code, as with MCP_CLIENT.
+# Readers for streamed model replies, carried by every generated file that calls a model itself.
+STREAM_CODE = r'''
+STREAM = None  # set to a function(node, text) to receive each LLM core's words as they arrive
+
+
+def streamed(reply, on_text):
+    """Whether to read the reply as a stream: asked for, and the server really sent one.
+    A server that ignores stream=true and answers in one piece still works."""
+    return bool(on_text) and "event-stream" in (reply.headers.get("content-type") or "")
+
+
+def sse_events(reply):
+    """Server-sent events from an HTTP reply, as (event name, data) pairs."""
+    event, data = None, []
+    for raw in reply:
+        line = raw.decode("utf-8").rstrip("\r\n")
+        if not line:
+            if data:
+                yield event, "\n".join(data)
+            event, data = None, []
+        elif line.startswith("event:"):
+            event = line[6:].strip()
+        elif line.startswith("data:"):
+            data.append(line[5:].lstrip())
+    if data:
+        yield event, "\n".join(data)
+
+
+def read_anthropic_stream(reply, on_text):
+    """A streamed Messages API reply, put back together into the response a plain call returns."""
+    blocks, stop, usage = {}, None, {}
+    for event, data in sse_events(reply):
+        msg = json.loads(data) if data and data != "[DONE]" else {}
+        kind = msg.get("type") or event
+        if kind == "message_start":
+            usage.update((msg.get("message") or {}).get("usage") or {})
+        elif kind == "content_block_start":
+            block = dict(msg["content_block"])
+            if block.get("type") == "tool_use":
+                block["partial"] = ""
+            blocks[msg["index"]] = block
+        elif kind == "content_block_delta":
+            delta, block = msg["delta"], blocks[msg["index"]]
+            if delta.get("type") == "text_delta":
+                block["text"] = block.get("text", "") + delta["text"]
+                on_text(delta["text"])
+            elif delta.get("type") == "input_json_delta":
+                block["partial"] += delta.get("partial_json", "")
+        elif kind == "content_block_stop":
+            block = blocks.get(msg["index"]) or {}
+            if "partial" in block:
+                block["input"] = json.loads(block.pop("partial") or "{}")
+        elif kind == "message_delta":
+            stop = (msg.get("delta") or {}).get("stop_reason") or stop
+            usage.update(msg.get("usage") or {})
+        elif kind == "error":
+            raise RuntimeError((msg.get("error") or {}).get("message") or "the stream reported an error")
+    return {"content": [blocks[i] for i in sorted(blocks)], "stop_reason": stop, "usage": usage}
+
+
+def read_openai_stream(reply, on_text):
+    """A streamed chat-completions reply, put back together into the reply a plain call returns."""
+    text, calls, finish, usage = "", {}, None, {}
+    for _, data in sse_events(reply):
+        if not data or data.strip() == "[DONE]":
+            continue
+        chunk = json.loads(data)
+        usage = chunk.get("usage") or usage
+        for choice in chunk.get("choices") or []:
+            delta = choice.get("delta") or {}
+            if delta.get("content"):
+                text += delta["content"]
+                on_text(delta["content"])
+            for call in delta.get("tool_calls") or []:
+                slot = calls.setdefault(call.get("index", 0), {"id": None, "name": "", "arguments": ""})
+                slot["id"] = call.get("id") or slot["id"]
+                slot["name"] += (call.get("function") or {}).get("name") or ""
+                slot["arguments"] += (call.get("function") or {}).get("arguments") or ""
+            finish = choice.get("finish_reason") or finish
+    message = {"content": text or None,
+               "tool_calls": [{"id": c["id"], "function": {"name": c["name"], "arguments": c["arguments"]}}
+                              for _, c in sorted(calls.items())]}
+    return {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}
+'''
+
 SANDBOX_CODE = r'''# ---- the code sandbox: model-written code never runs as you ----
 SANDBOX_GUARD = r"""
 import json, os, sys
@@ -1225,27 +1310,33 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     add(["", ""])
     add(([] if embedded else [
          "def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048,",
-         '               provider="anthropic", base_url=None):',
-         '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests."""']
+         '               provider="anthropic", base_url=None, on_text=None):',
+         '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests.',
+         "",
+         "    With on_text, the reply is streamed: on_text gets each piece of text as it arrives, and the",
+         '    response returned is the same one a plain call gives."""']
         + (['    if provider == "openai":',
-            "        return call_openai(base_url, system, messages, tools, model, temperature, max_tokens)"]
+            "        return call_openai(base_url, system, messages, tools, model, temperature, max_tokens, on_text)"]
            if openai_used else []) + [
          '    body = {"model": model, "max_tokens": max_tokens, "temperature": temperature,',
          '            "system": system, "messages": messages}',
          "    if tools:",
          '        body["tools"] = tools',
+         "    if on_text:",
+         '        body["stream"] = True',
          "    request = urllib.request.Request(",
          "        API_URL, data=json.dumps(body).encode(),",
          '        headers={"content-type": "application/json", "x-api-key": os.environ["ANTHROPIC_API_KEY"],',
          '                 "anthropic-version": "2023-06-01"})',
          "    with urllib.request.urlopen(request, timeout=120) as reply:",
-         "        return json.load(reply)", "", ""]) + [
+         "        return read_anthropic_stream(reply, on_text) if streamed(reply, on_text) else json.load(reply)", "", ""]
+        + STREAM_CODE.strip().split("\n") + ["", ""]) + [
          "def text_of(response):",
          '    return "".join(b.get("text", "") for b in response.get("content", []) if b.get("type") == "text")'],
         *llm_ids)
     if openai_used and not embedded:
         add(["", ""])
-        add(["def call_openai(base_url, system, messages, tools, model, temperature, max_tokens):",
+        add(["def call_openai(base_url, system, messages, tools, model, temperature, max_tokens, on_text=None):",
              '    """The same call to an OpenAI-compatible server — Ollama, LM Studio, vLLM — translated both ways,',
              '    so the rest of the file only ever sees the Messages API\'s shape."""',
              '    chat = [{"role": "system", "content": system}]',
@@ -1265,6 +1356,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '                elif b.get("type") == "text":',
              '                    chat.append({"role": "user", "content": b["text"]})',
              '    body = {"model": model, "messages": chat, "temperature": temperature, "max_tokens": max_tokens}',
+             "    if on_text:",
+             '        body.update(stream=True, stream_options={"include_usage": True})',
              "    if tools:",
              '        body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],',
              '                                                         "parameters": t["input_schema"]}} for t in tools]',
@@ -1274,7 +1367,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '    request = urllib.request.Request(base_url.rstrip("/") + "/chat/completions",',
              "                                     data=json.dumps(body).encode(), headers=headers)",
              "    with urllib.request.urlopen(request, timeout=300) as reply:",
-             "        data = json.load(reply)",
+             "        data = read_openai_stream(reply, on_text) if streamed(reply, on_text) else json.load(reply)",
              '    choice = data["choices"][0]',
              '    message = choice.get("message") or {}',
              '    content = [{"type": "text", "text": message["content"]}] if message.get("content") else []',
@@ -1587,8 +1680,10 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
          "    if compaction:",
          "        compact(state, **compaction)",
          '    state["last_core"] = node',
+         *([] if embedded else
+           ["    streaming = {\"on_text\": lambda piece: STREAM(node, piece)} if STREAM else {}"]),
          f'    response = call_model(system{" + SCHEMA_NOTE" if answer_shape is not None else ""}, messages,'
-         ' [SCHEMAS[name] for name in tools] or None, **settings)',
+         ' [SCHEMAS[name] for name in tools] or None, **settings' + ("" if embedded else ", **streaming") + ')',
          '    state["steps"] += 1',
          '    wants_tools = response.get("stop_reason") == "tool_use"',
          '    emit("model", node=node, step=state["steps"], wants_tools=wants_tools)',
@@ -2612,7 +2707,16 @@ class Rehearsal:
         """What it remembers, so a fork from a checkpoint behaves as the original would have."""
         return {"critic_calls": self.critic_calls, "tool_rounds": dict(self.tool_rounds)}
 
-    def __call__(self, system, messages, tools=None, **_settings):
+    def __call__(self, system, messages, tools=None, on_text=None, **_settings):
+        response = self._reply(system, messages, tools)
+        if on_text:                      # streams like a real model: its words in small pieces
+            for block in response["content"]:
+                if block.get("type") == "text":
+                    for piece in re.findall(r"\S+\s*", block["text"]):
+                        on_text(piece)
+        return response
+
+    def _reply(self, system, messages, tools=None):
         if not tools:
             low = (system or "").lower()
             if "compress" in low:
@@ -2720,6 +2824,8 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
     def emit_measured(event, **data):
         with lock:
             emit(event, **data)
+            if event == "model":
+                streaming.pop(data.get("node"), None)
             if event in ("model", "plan", "critique", "compact"):
                 me = threading.get_ident()
                 open_call = next((c for c in calls if c["event"] is None and c["thread"] == me), None)
@@ -2728,8 +2834,17 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
                     events[-1]["tokens"] = {"input": open_call["input"], "output": open_call["output"],
                                             "estimate": open_call["estimate"]}
 
+    # what each LLM core has written so far in the call it is making; cleared when the call ends
+    streaming: Dict[str, str] = {}
+
+    def on_stream(node, piece):
+        with lock:
+            streaming[node] = streaming.get(node, "") + piece
+
     space["call_model"] = measured
     space["emit"] = emit_measured
+    if "STREAM" in space:
+        space["STREAM"] = on_stream
     if "PARALLEL" in space:
         # a rehearsal runs branches in order, so its stand-in model answers the same way every
         # time and a fork from a checkpoint repeats the original; live runs keep them concurrent
@@ -2752,7 +2867,7 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
             after_step()
 
     return {"space": space, "events": events, "calls": calls, "emit": emit, "started": started,
-            "built": built, "checkpoints": checkpoints, "on_step": on_step}
+            "built": built, "checkpoints": checkpoints, "on_step": on_step, "streaming": streaming}
 
 
 def _close_servers(ctx) -> None:
@@ -4385,6 +4500,7 @@ class Job:
         self.stop = threading.Event()
         self.abandoned = False      # set by tests to stand for a crash: nothing more gets written
         self.lock = threading.RLock()   # a status change and its write are one step to anyone looking
+        self.streaming: Dict[str, str] = {}  # words arriving from each core right now; never written to disk
 
     def write(self) -> None:
         if not self.abandoned:
@@ -4460,6 +4576,7 @@ def _execute(job: Job, memory_dir: Optional[Path], resume_at: Optional[Dict[str,
         ctx = _prepare(graph, mode, approvals, memory_dir, model_state=(resume_at or {}).get("model"),
                        ask=ask, after_step=after_step,
                        carry={"events": rec["events"], "calls": rec["calls"], "checkpoints": rec["checkpoints"]})
+        job.streaming = ctx["streaming"]
         if resume_at is None:
             if thread:
                 ctx["space"]["THREADS"][thread] = thread_turns(thread)
@@ -4552,7 +4669,9 @@ def run_view(run_id: str, since: int = 0) -> Dict[str, Any]:
         job = _JOBS.get(run_id)
     if job is not None:
         with job.lock:
-            return _view(run_id, job.record, since)
+            view = _view(run_id, job.record, since)
+        view["streaming"] = [{"node": n, "text": t[-3000:]} for n, t in list(job.streaming.items())]
+        return view
     return _view(run_id, _record(run_id), since)
 
 

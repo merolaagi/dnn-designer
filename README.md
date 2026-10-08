@@ -339,6 +339,9 @@ Cases can use a library of **evaluators** — PII, injection, hallucination,
 conciseness, correctness, toxicity, bias — which can also score every run online.
 System prompts keep **numbered versions** with diffs.
 
+Live runs **stream**: each core's words appear as it writes them, and the
+downloaded file has a `STREAM` hook for your own scripts.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

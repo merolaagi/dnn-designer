@@ -9164,6 +9164,183 @@ def _():
         assert needle in PAGE, needle
 
 
+# --------------------------------------------------------------------------
+# agent lab 3.5: model replies streamed word by word
+# --------------------------------------------------------------------------
+
+def _readers():
+    space = {"json": json}
+    exec(agentlab.STREAM_CODE, space)  # noqa: S102
+    return space
+
+
+class _Lines(list):
+    """Stands for an HTTP reply: iterating gives its lines as bytes."""
+
+
+def _sse(events):
+    out = _Lines()
+    for name, obj in events:
+        out += [f"event: {name}\n".encode() if name else b"", f"data: {obj if isinstance(obj, str) else json.dumps(obj)}\n".encode(), b"\n"]
+    return [line for line in out if line]
+
+
+@check("a streamed Anthropic reply reassembles into the response a plain call gives")
+def _():
+    pieces = []
+    reply = _sse([
+        ("message_start", {"type": "message_start", "message": {"usage": {"input_tokens": 50}}}),
+        ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Checking "}}),
+        ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "now."}}),
+        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        ("content_block_start", {"type": "content_block_start", "index": 1,
+                                 "content_block": {"type": "tool_use", "id": "t1", "name": "web_search", "input": {}}}),
+        ("content_block_delta", {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": '{"qu'}}),
+        ("content_block_delta", {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": 'ery": "Lisbon"}'}}),
+        ("content_block_stop", {"type": "content_block_stop", "index": 1}),
+        ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 12}}),
+        ("message_stop", {"type": "message_stop"})])
+    out = _readers()["read_anthropic_stream"](reply, pieces.append)
+    assert pieces == ["Checking ", "now."]
+    assert out == {"content": [{"type": "text", "text": "Checking now."},
+                               {"type": "tool_use", "id": "t1", "name": "web_search", "input": {"query": "Lisbon"}}],
+                   "stop_reason": "tool_use", "usage": {"input_tokens": 50, "output_tokens": 12}}
+    try:
+        _readers()["read_anthropic_stream"](_sse([("error", {"type": "error", "error": {"message": "overloaded"}})]), print)
+    except RuntimeError as exc:
+        assert "overloaded" in str(exc)
+    else:
+        raise AssertionError("an error event in the stream should raise")
+
+
+@check("a streamed chat-completions reply reassembles, tool arguments and usage included")
+def _():
+    pieces = []
+    chunks = [{"choices": [{"delta": {"content": "Let me "}}]}, {"choices": [{"delta": {"content": "check."}}]},
+              {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "web_search", "arguments": '{"query'}}]}}]},
+              {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": '": "Porto"}'}}]}, "finish_reason": "tool_calls"}]},
+              {"choices": [], "usage": {"prompt_tokens": 30, "completion_tokens": 9}}]
+    out = _readers()["read_openai_stream"](_sse([(None, c) for c in chunks] + [(None, "[DONE]")]), pieces.append)
+    assert pieces == ["Let me ", "check."]
+    message = out["choices"][0]["message"]
+    assert message["content"] == "Let me check." and out["choices"][0]["finish_reason"] == "tool_calls"
+    assert message["tool_calls"] == [{"id": "c1", "function": {"name": "web_search", "arguments": '{"query": "Porto"}'}}]
+    assert out["usage"] == {"prompt_tokens": 30, "completion_tokens": 9}
+
+
+@check("a live run shows each core's words while it is still writing")
+def _():
+    import threading
+    import time as _t
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            assert body.get("stream") is True
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.end_headers()
+            events = [("message_start", {"type": "message_start", "message": {"usage": {"input_tokens": 10}}}),
+                      ("content_block_start", {"type": "content_block_start", "index": 0,
+                                               "content_block": {"type": "text", "text": ""}})]
+            events += [("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                                "delta": {"type": "text_delta", "text": w}}) for w in ("One ", "two ", "three.")]
+            events += [("content_block_stop", {"type": "content_block_stop", "index": 0}),
+                       ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"},
+                                          "usage": {"output_tokens": 3}})]
+            for name, obj in events:
+                self.wfile.write(f"event: {name}\ndata: {json.dumps(obj)}\n\n".encode())
+                self.wfile.flush()
+                _t.sleep(0.3 if name == "content_block_delta" else 0)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    real, key = agentlab._prepare, os.environ.get("ANTHROPIC_API_KEY")
+
+    def pointed(*a, **k):
+        ctx = real(*a, **k)
+        ctx["space"]["API_URL"] = f"http://127.0.0.1:{server.server_port}/v1/messages"
+        return ctx
+
+    agentlab._prepare, os.environ["ANTHROPIC_API_KEY"] = pointed, "test"
+    try:
+        view = agentlab.start_run(agentlab.template("rag"), "count", mode="live", approvals="approve")
+        seen = []
+        for _ in range(60):
+            now = agentlab.run_view(view["id"])
+            seen += [x["text"] for x in now.get("streaming") or [] if x["text"] and (not seen or seen[-1] != x["text"])]
+            if now["status"] not in ("running", "waiting"):
+                break
+            _t.sleep(0.08)
+    finally:
+        agentlab._prepare = real
+        server.shutdown()
+        if key is None:
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+        else:
+            os.environ["ANTHROPIC_API_KEY"] = key
+    assert now["status"] == "done" and now["answer"] == "One two three."
+    assert seen[:3] == ["One ", "One two ", "One two three."][:len(seen[:3])] and len(seen) >= 2, seen
+    assert not now.get("streaming"), "nothing is left writing once the run is over"
+
+
+@check("an OpenAI-compatible server streams too")
+def _():
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    asked = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            asked.append(body)
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.end_headers()
+            for chunk in ({"choices": [{"delta": {"content": "Porto "}}]}, {"choices": [{"delta": {"content": "wins."},
+                          "finish_reason": "stop"}]}, {"choices": [], "usage": {"prompt_tokens": 20, "completion_tokens": 2}}):
+                self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        view = agentlab.start_run(_local(agentlab.template("rag"), f"http://127.0.0.1:{server.server_port}/v1"),
+                                  "which city", mode="live", approvals="approve")
+        done = _until(view["id"], ("done", "error"))
+    finally:
+        server.shutdown()
+    assert done["answer"] == "Porto wins." and asked[0]["stream"] is True
+    assert asked[0]["stream_options"] == {"include_usage": True}
+    tokens = [e["tokens"] for e in agentlab.load_run(view["id"])["events"] if e["event"] == "model"]
+    assert tokens[0]["input"] == 20 and tokens[0]["output"] == 2
+
+
+@check("the downloaded file streams to a STREAM hook, named by core")
+def _():
+    g = agentlab.template("debate")
+    space = {"__name__": "agent"}
+    exec(compile(agentlab.codegen(g)["source"], "agent", "exec"), space)  # noqa: S102
+    space["call_model"] = agentlab.Rehearsal()
+    space["PARALLEL"] = False
+    heard = {}
+    space["STREAM"] = lambda node, piece: heard.setdefault(node, []).append(piece)
+    answer = space["run_agent"]("Ban cars?")
+    cores = [n["id"] for n in g["nodes"] if n["type"] == "llm"]
+    assert set(heard) == set(cores), "every core streamed"
+    assert "".join(heard[cores[-1]]) == answer
+    assert "def read_anthropic_stream" in agentlab.codegen(g)["source"]
+    assert "function alShowStreaming" in PAGE and 'id="alStream"' in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
