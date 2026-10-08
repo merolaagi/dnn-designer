@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.99.0
+
+**Agent blocks have Code and Maths tabs, the way layers do.** Select any block
+in the Agent lab and two new tabs follow the selection.
+
+- **Code** shows the lines of `agent.py` that block contributes, with their line
+  numbers in the file. Codegen credits each line to its blocks as it writes
+  them, the same way it records a layer's constructor and forward line, so the
+  tab shows positions in the real file rather than a second rendering of it. A
+  test checks every block in every starting design against the file. The
+  Python tab now marks the selected block's lines and scrolls to them.
+- **Maths** gives the block's equation, its notation, the arithmetic with this
+  design's numbers substituted, and why it matters. Working memory shows the
+  N(N − 1)/2 re-reading cost with your step limit in it; the critic shows its
+  worst-case model calls; the LLM core turns your temperature into odds between
+  two tokens. With nothing selected, the tab shows the agent as one recurrence.
+
+Entries describe the code the lab generates, not agents in general: the
+retriever is a word-overlap count because that is what the file does.
+
 ## 1.98.0
 
 **Agent lab: language-model agents, built from organs.** A new page on the

@@ -278,6 +278,10 @@ system prompt, memory, tools, the router and loop that keep it running, and
 the guardrails around it. Select a block to read what it is made of, how it
 behaves and how it fails.
 
+As with layers, each block has a **Code** tab with the exact lines of the
+generated file it contributes, and a **Maths** tab with its equation and this
+design's numbers worked through.
+
 Run executes the Python the Python tab shows and replays what each block
 reported across the canvas. Rehearsal runs need no key; live runs need
 `ANTHROPIC_API_KEY` in the server's environment, and `AGENTLAB_MODEL` picks

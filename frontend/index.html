@@ -2330,8 +2330,8 @@ body.sizing{user-select:none}
 .al-insp{width:370px;flex:none;display:flex;flex-direction:column;border-left:1px solid var(--paper-3);
   background:var(--paper);min-height:0}
 .al-tabs{display:flex;border-bottom:1px solid var(--paper-3);background:#fff;flex:none}
-.al-tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:9px 4px;
-  font-size:12.5px;color:var(--muted)}
+.al-tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:9px 2px;
+  font-size:12px;color:var(--muted)}
 .al-tabs button.on{color:var(--text);border-bottom-color:var(--amber);font-weight:600}
 .al-pane{flex:1;overflow-y:auto;padding:14px 16px 32px;font-size:13px;line-height:1.5}
 .al-pane h3{margin:0 0 2px;font-size:16px}
@@ -2355,10 +2355,20 @@ body.sizing{user-select:none}
   word-break:break-word}
 .al-trace li.warn{border-left-color:var(--bad)}
 .al-t{color:var(--muted);font-size:11px;font-family:var(--mono);margin-left:6px}
-.al-answer,.al-code{background:var(--ink);color:#DCE6EC;font-family:var(--mono);font-size:11.5px;
+.al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
+.al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
+  font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
+.al-src .l{white-space:pre;padding-right:12px;min-height:1.65em}
+.al-src .l.hit{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
+.al-ln{display:inline-block;width:32px;text-align:right;color:#A0A6B0;margin-right:10px;user-select:none}
+.al-file{max-height:none}
+.al-eq{font-size:15px;word-break:break-word}
+.al-pane .mathsec{padding-left:0}
+.al-pane .mathtab td:first-child{padding-left:0}
+.al-pane .mathnote{margin-left:0;margin-right:0}
+.al-answer{background:var(--ink);color:#DCE6EC;font-family:var(--mono);font-size:11.5px;
   line-height:1.55;padding:12px;border-radius:7px;overflow-x:auto;margin:8px 0 0}
 .al-answer{white-space:pre-wrap}
-.al-code{white-space:pre}
 
 #railToggle{display:none}
 
@@ -13104,6 +13114,8 @@ function alBuildShell(){
       <div class="al-insp">
         <div class="al-tabs" role="tablist">
           <button data-altab="anatomy" class="on">Anatomy</button>
+          <button data-altab="lines">Code</button>
+          <button data-altab="maths">Maths</button>
           <button data-altab="physio">Physiology</button>
           <button data-altab="code">Python</button>
         </div>
@@ -13331,8 +13343,10 @@ function alSelect(kind, id, toAnatomy = true){
   document.querySelectorAll("#alCanvas .al-node").forEach(el =>
     el.classList.toggle("sel", kind === "node" && el.dataset.id === id));
   alRenderEdges();
-  if (toAnatomy && agentLabState.tab !== "anatomy") alTab("anatomy");
-  else if (agentLabState.tab === "anatomy") alRenderPane();
+  // a running replay keeps its tab; otherwise the open tab follows the selection,
+  // so Code and Maths can be read block by block
+  if (agentLabState.tab === "physio"){ if (toAnatomy) alTab("anatomy"); return; }
+  alRenderPane();
 }
 
 function alDeleteSel(){
@@ -13370,6 +13384,8 @@ function alTab(tab){
 function alRenderPane(){
   if (agentLabState.tab === "physio") return alRenderPhysio();
   if (agentLabState.tab === "code") return alRenderCode();
+  if (agentLabState.tab === "lines") return alRenderLines();
+  if (agentLabState.tab === "maths") return alRenderMaths();
   alRenderAnatomy();
 }
 
@@ -13473,25 +13489,99 @@ function alTraceRow(t){
     ${t.t != null ? `<span class="al-t">${t.t.toFixed(2)}s</span>` : ""}<br>${alEsc(t.msg)}</li>`;
 }
 
-async function alRenderCode(){
-  const pane = $("alPane");
-  pane.innerHTML = `<div class="al-wait">writing…</div>`;
-  let d;
-  try{
-    const r = await fetch(API + "/api/agentlab/codegen", {method: "POST",
-      headers: {"content-type": "application/json"}, body: JSON.stringify({graph: agentLabState.graph})});
-    d = await r.json();
-  } catch {
-    pane.innerHTML = `<div class="runfail">The server did not answer.</div>`;
+/* The file, the block's lines of it, and its mathematics all come from one
+   call. The lines are the ones codegen credited to the block while writing the
+   file, so they are positions in agent.py, not a separate rendering of it. */
+async function alNodeView(){
+  const S = agentLabState;
+  const node = S.sel && S.sel.kind === "node" ? S.sel.id : null;
+  const key = JSON.stringify(S.graph) + "|" + node;
+  if (S.view && S.view.key === key) return S.view.data;
+  const r = await fetch(API + "/api/agentlab/node", {method: "POST",
+    headers: {"content-type": "application/json"}, body: JSON.stringify({graph: S.graph, node})});
+  const data = await r.json();
+  S.view = {key, data};
+  return data;
+}
+
+function alSource(text, firstLine, hits){
+  return highlightPython(text).map((parts, i) => {
+    const n = firstLine + i;
+    const inner = parts.map(pair => pair[1]
+      ? `<span class="${pair[1]}">${escapeHtml(pair[0])}</span>` : escapeHtml(pair[0])).join("");
+    return `<div class="l${hits && hits.has(n) ? " hit" : ""}" data-ln="${n}"><span class="al-ln">${n}</span>${inner || " "}</div>`;
+  }).join("");
+}
+
+function alPaneWait(word){
+  $("alPane").innerHTML = `<div class="al-wait">${word}</div>`;
+}
+
+async function alRenderLines(){
+  const S = agentLabState, n = S.sel && S.sel.kind === "node" && alNode(S.sel.id);
+  if (!n){
+    $("alPane").innerHTML = `<h3>Code, block by block</h3>
+      <p class="al-muted">Select a block to see the lines of agent.py it contributes, with their line
+      numbers in the file. The Python tab shows the whole file with the selected block's lines marked.</p>`;
     return;
   }
-  if (agentLabState.tab !== "code") return;
-  pane.innerHTML = `<h3>Your agent in Python</h3>
-    <p class="al-muted">Standard library only. This is the exact file a run executes, so every organ
-    on the canvas is a named function or constant here.</p>
+  alPaneWait("finding its lines…");
+  let d;
+  try{ d = await alNodeView(); } catch { $("alPane").innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
+  if (S.tab !== "lines") return;
+  const total = d.source.split("\n").length;
+  const count = d.snippets.reduce((a, sn) => a + sn.end - sn.start + 1, 0);
+  const why = (S.problems.find(p => p.node === n.id && p.level !== "info") || {}).message;
+  $("alPane").innerHTML = `<h3>${alEsc(alLabel(n))}</h3>
+    <div class="al-sysline" style="color:var(--al-${alBlock(n.type).system})">${count} of ${total} lines in agent.py</div>
+    ${d.snippets.length ? d.snippets.map(sn => `
+      <div class="al-where">lines ${sn.start}${sn.end > sn.start ? "–" + sn.end : ""}</div>
+      <div class="al-src">${alSource(sn.text, sn.start)}</div>`).join("")
+      : `<p>This block adds nothing to the file${why ? `: ${alEsc(why)}` : "."}</p>`}
+    ${d.snippets.length ? `<button class="btn" id="alInFile">Show in the whole file</button>` : ""}`;
+  if ($("alInFile")) $("alInFile").onclick = () => alTab("code");
+}
+
+async function alRenderMaths(){
+  const S = agentLabState;
+  alPaneWait("working it through…");
+  let d;
+  try{ d = (await alNodeView()).math; } catch { $("alPane").innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
+  if (S.tab !== "maths") return;
+  if (d.missing){ $("alPane").innerHTML = `<div class="mathmissing">${alEsc(d.missing)}</div>`; return; }
+  $("alPane").innerHTML = `<h3>${alEsc(d.label)}</h3>
+    <div class="al-sysline al-muted">${alEsc(d.title)}</div>
+    <div class="eqcard"><div class="eqbig al-eq">${alEsc(d.equation)}</div>
+      ${d.shape ? `<div class="eqwhere">${alEsc(d.shape)}</div>` : ""}</div>
+    ${d.symbols.length ? `<div class="mathsec">read the notation</div>
+      <table class="mathtab">${d.symbols.map(sy =>
+        `<tr><td class="sym">${alEsc(sy[0])}</td><td>${alEsc(sy[1])}</td></tr>`).join("")}</table>` : ""}
+    ${d.arithmetic.length ? `<div class="mathsec">worked through, here</div>
+      <table class="mathtab">${d.arithmetic.map(a =>
+        `<tr><td class="key">${alEsc(a[0])}</td><td class="val">${alEsc(a[1])}</td></tr>`).join("")}</table>` : ""}
+    ${d.freedom.length ? `<div class="mathsec">why this matters</div>
+      ${d.freedom.map(f => `<p class="mathnote">${alEsc(f)}</p>`).join("")}` : ""}
+    ${S.sel ? "" : `<p class="al-muted" style="margin-top:12px">Select a block for its own equation,
+      with this design's numbers in it.</p>`}`;
+}
+
+async function alRenderCode(){
+  const S = agentLabState;
+  alPaneWait("writing…");
+  let d;
+  try{ d = await alNodeView(); } catch { $("alPane").innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
+  if (S.tab !== "code") return;
+  const hits = new Set();
+  d.spans.forEach(([a, b]) => { for (let i = a; i <= b; i++) hits.add(i); });
+  const n = S.sel && S.sel.kind === "node" && alNode(S.sel.id);
+  $("alPane").innerHTML = `<h3>Your agent in Python</h3>
+    <p class="al-muted">Standard library only. This is the exact file a run executes.
+    ${n ? `Lines from <b>${alEsc(alLabel(n))}</b> are marked.` : "Select a block to mark its lines."}</p>
     <div class="row"><button class="btn" id="alCopy">Copy</button>
       <button class="btn" id="alDownload">Download agent.py</button><span class="al-muted" id="alCopied"></span></div>
-    <pre class="al-code" tabindex="0">${alEsc(d.source)}</pre>`;
+    <div class="al-src al-file" tabindex="0">${alSource(d.source, 1, hits)}</div>`;
+  const firstHit = $("alPane").querySelector(".al-src .l.hit");
+  if (firstHit) firstHit.scrollIntoView({block: "center"});
   $("alCopy").onclick = async () => {
     try{ await navigator.clipboard.writeText(d.source); $("alCopied").textContent = "Copied."; }
     catch { $("alCopied").textContent = "The browser blocked the clipboard; select the code instead."; }
@@ -13499,7 +13589,7 @@ async function alRenderCode(){
   $("alDownload").onclick = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([d.source], {type: "text/x-python"}));
-    a.download = (agentLabState.graph.name || "agent").replace(/[^\w-]+/g, "_") + ".py";
+    a.download = (S.graph.name || "agent").replace(/[^\w-]+/g, "_") + ".py";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };

@@ -299,6 +299,17 @@ def agentlab_codegen(body: AgentLabGraph):
     return {**built, "problems": agentlab.validate(body.graph)}
 
 
+class AgentLabNode(BaseModel):
+    graph: Dict[str, Any]
+    node: Optional[str] = None
+
+
+@app.post("/api/agentlab/node")
+def agentlab_node(body: AgentLabNode):
+    """A block's own lines of the generated file, and its mathematics."""
+    return agentlab.node_view(body.graph, body.node)
+
+
 @app.post("/api/agentlab/run")
 def agentlab_run(body: AgentLabRun):
     if not body.task.strip():

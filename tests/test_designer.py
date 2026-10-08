@@ -7524,6 +7524,58 @@ def _():
     assert "pageAgentLab: () => renderAgentLab()" in PAGE
 
 
+@check("every agent block shows its own lines of the generated file")
+def _():
+    for key in agentlab.TEMPLATES:
+        g = agentlab.template(key)
+        built = agentlab.codegen(g)
+        lines = built["source"].split("\n")
+        for n in g["nodes"]:
+            spans = built["node_code"].get(n["id"])
+            assert spans, f"{key}: {n['type']} contributes no lines"
+            for start, end in spans:
+                assert 1 <= start <= end <= len(lines), f"{key}: {n['type']} span {start}-{end} is off the file"
+                assert lines[start - 1].strip() and lines[end - 1].strip(), \
+                    f"{key}: {n['type']} span {start}-{end} starts or ends on a blank line"
+        view = agentlab.node_view(g, g["nodes"][0]["id"])
+        for snip in view["snippets"]:
+            assert snip["text"] == "\n".join(lines[snip["start"] - 1:snip["end"]]), \
+                "the Code tab's lines are not the file's lines"
+
+
+@check("a tool that is not wired contributes no code")
+def _():
+    g = agentlab.template("react")
+    tool = next(n for n in g["nodes"] if n["type"] == "tool")
+    g["edges"] = [e for e in g["edges"] if e["target"] != tool["id"]]
+    assert not agentlab.codegen(g)["node_code"].get(tool["id"])
+
+
+@check("every agent block has its mathematics, with the design's numbers in it")
+def _():
+    for key in agentlab.TEMPLATES:
+        g = agentlab.template(key)
+        assert agentlab.explain(g)["equation"], "the whole-agent entry is empty"
+        for n in g["nodes"]:
+            entry = agentlab.explain(g, n["id"])
+            assert "missing" not in entry and entry["equation"], f"{n['type']} has no maths"
+    g = agentlab.template("planexec")
+    loop = next(n for n in g["nodes"] if n["type"] == "loop")
+    critic = next(n for n in g["nodes"] if n["type"] == "reflector")
+    loop["params"]["max_steps"] = 5
+    critic["params"]["max_revisions"] = 3
+    assert "N = 5" in agentlab.explain(g, loop["id"])["shape"]
+    worst = dict(agentlab.explain(g, critic["id"])["arithmetic"])["worst-case model calls"]
+    assert worst.endswith("= 23"), f"(3 + 1)·5 + 3 should be 23, got {worst}"
+
+
+@check("the agent lab inspector has Code and Maths tabs that are wired")
+def _():
+    for tab in ("lines", "maths"):
+        assert f'data-altab="{tab}"' in PAGE, f"no {tab} tab"
+    assert "return alRenderLines()" in PAGE and "return alRenderMaths()" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
