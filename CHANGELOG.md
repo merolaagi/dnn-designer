@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.2.0
+
+**Studies for agents: does each block earn its cost?** A new Study tab in the
+Agent lab asks of an agent what the ablation study asks of a network. It makes
+one version of the design per block removed — the wires around the block
+joined up — plus a halved step budget and a greedy core, runs the same cases on
+every version, and compares each with the design as drawn on pass rate, tokens
+per run and the Safety tab's guarantees.
+
+- **Cases are plain text.** A task, then one check per line: `contains:`,
+  `excludes:`, `regex:`, `tool:`, `max calls:` or `finished`. A bad check is
+  named, not skipped.
+- **A difference counts only when it beats its noise**, twice the standard
+  error of the two pass rates. Below that the verdict says which cases changed
+  and that more cases or repeats would settle it, rather than declaring a winner.
+- **Guarantees are part of the answer.** Removing a guardrail rarely changes a
+  pass rate; it does remove a property the Safety tab proved. Those versions
+  say "but without it, this no longer holds", so a guardrail is never reported
+  as dead weight just because the cases did not attack it.
+- **Every version can be opened on the canvas** to see exactly what was run.
+- In rehearsal the answers are scripted, so pass rates test structure — does
+  it finish, use the tool, refuse the injection — and the page says so. Live
+  studies default to three repeats.
+
+Studies use the same record as the network Studies — status, trials, stop,
+persistence — and are filed under the agent lab's own folder, because their
+trials are agents and the Studies page would try to train them.
+
 ## 2.1.0
 
 **A Safety tab: what the wiring guarantees, checked before anything runs.**

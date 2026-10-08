@@ -294,6 +294,10 @@ result or retrieved text can reach a model that can act unapproved, and that
 guardrails cannot be routed around. After a run, Physiology sets the predicted
 token growth against what the run measured.
 
+The **Study** tab removes one block at a time, runs your cases on every version,
+and reports which blocks earn their tokens, which ones only cost them, and which
+guarantees a removal would lose.
+
 Run executes the Python the Python tab shows and replays what each block
 reported across the canvas. Rehearsal runs need no key; live runs need
 `ANTHROPIC_API_KEY` in the server's environment, and `AGENTLAB_MODEL` picks

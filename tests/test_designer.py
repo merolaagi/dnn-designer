@@ -7769,6 +7769,60 @@ def _():
     assert 'data-altab="safety"' in PAGE and "function alRenderSafety" in PAGE and "function alCostsHtml" in PAGE
 
 
+# --------------------------------------------------------------------------
+# agent lab 2.2: studies — does each block earn its cost?
+# --------------------------------------------------------------------------
+
+@check("study cases parse, and a bad check is named rather than ignored")
+def _():
+    good = agentlab.parse_cases("Find x\ncontains: 42\ntool: web_search\n\nSecond task")
+    assert not good["problems"] and len(good["cases"]) == 2
+    assert good["cases"][1]["checks"] == [{"kind": "finished", "value": ""}], "a case with no checks should test finishing"
+    bad = agentlab.parse_cases("Find x\nshould mention: 42")
+    assert bad["problems"] and "should mention" in bad["problems"][0]
+
+
+@check("every version a study makes of a starting design still runs")
+def _():
+    for key in agentlab.TEMPLATES:
+        for v in agentlab.variants(agentlab.template(key)):
+            assert v["runnable"], f"{key}: {v['label']} does not run: {v['reason']}"
+
+
+@check("removing a guardrail is reported as losing its guarantee")
+def _():
+    lost = {v["label"]: v["safety_lost"] for v in agentlab.variants(agentlab.template("react"))}
+    assert "Every answer passes the output guardrail" in lost["without Output guardrail"]
+    assert "Every task is screened before a model reads it" in lost["without Input guardrail"]
+    assert not lost["as drawn"]
+
+
+@check("a study finds the block a case needs and the block that only costs tokens")
+def _():
+    cases = agentlab.DEFAULT_CASES + "\n\nWhat is 545000 divided by 450?\ncontains: 1211\ntool: run_python"
+    study = agentlab.start_study(agentlab.template("planexec"), cases, background=False)
+    rows = {r["label"]: r for r in agentlab.study_snapshot(study.id)["summary"]["rows"]}
+    assert rows["as drawn"]["score"] is not None
+    assert 2 in rows["without Code executor"]["lost"], "the arithmetic case needs the code executor"
+    critic = rows["without Critic"]
+    assert critic["kind"] == "unproven" and critic["saved"] > 0, critic
+    # and the record outlives the process that ran it
+    import agents
+    agents.AGENTS.pop(study.id, None)
+    again = agentlab.study_snapshot(study.id)
+    assert again["mode"] == "rehearsal" and again["summary"]["rows"]
+
+
+@check("the study routes plan and start, and the page has a Study tab")
+def _():
+    import main
+    planned = main.agentlab_study_plan(main.AgentLabStudyPlan(graph=agentlab.template("rag"),
+                                                              cases=agentlab.DEFAULT_CASES, repeats=2))
+    runnable = sum(1 for v in planned["variants"] if v["runnable"])
+    assert planned["runs"] == runnable * 2 * 2
+    assert 'data-altab="study"' in PAGE and "function alRenderStudy" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

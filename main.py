@@ -351,6 +351,56 @@ def agentlab_load(name: str):
         raise HTTPException(404, detail={"message": f"No saved agent called {name}."})
 
 
+class AgentLabStudyPlan(BaseModel):
+    graph: Dict[str, Any]
+    cases: str = ""
+    repeats: int = 1
+
+
+class AgentLabStudy(BaseModel):
+    graph: Dict[str, Any]
+    cases: str
+    mode: str = "rehearsal"
+    repeats: int = 1
+    approvals: str = "approve"
+
+
+@app.get("/api/agentlab/studies")
+def agentlab_studies():
+    return {"studies": agentlab.study_listing(), "default_cases": agentlab.DEFAULT_CASES}
+
+
+@app.post("/api/agentlab/studies/plan")
+def agentlab_study_plan(body: AgentLabStudyPlan):
+    return agentlab.plan(body.graph, body.cases, body.repeats)
+
+
+@app.post("/api/agentlab/studies")
+def agentlab_study_start(body: AgentLabStudy):
+    try:
+        study = agentlab.start_study(body.graph, body.cases, body.mode, body.repeats, body.approvals)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    return agentlab.study_snapshot(study.id)
+
+
+@app.get("/api/agentlab/studies/{study_id}")
+def agentlab_study_read(study_id: str):
+    try:
+        return agentlab.study_snapshot(study_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such study."})
+
+
+@app.post("/api/agentlab/studies/{study_id}/stop")
+def agentlab_study_stop(study_id: str):
+    study = agents.AGENTS.get(study_id)
+    if not study or study.kind != "organs":
+        raise HTTPException(404, detail={"message": "No such study is running."})
+    study.stop.set()
+    return {"ok": True}
+
+
 class AssistantPayload(BaseModel):
     graph: Dict[str, Any]
     message: str = ""
