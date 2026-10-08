@@ -55,6 +55,10 @@ def _p(label, value, kind="text", options=None):
 
 
 READS, CHANGES = "only reads", "changes things"
+# Where a core's calls go. "openai-compatible" covers Ollama, LM Studio, vLLM and any server speaking
+# the chat-completions protocol, including one running on this machine.
+PROVIDERS = {"anthropic": "Anthropic Messages API", "openai-compatible": "OpenAI-compatible server"}
+LIMIT = ("max_calls", "Calls allowed per run (0 for no limit)")
 
 
 BLOCKS: Dict[str, Dict[str, Any]] = {
@@ -68,8 +72,12 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         name="Final answer", system="senses", no_out=True, short="The result leaves",
         anatomy="What the agent hands back: a reply, a file, a database write, a sent message.",
         inside="The last text the model produced once it stopped asking for tools.",
-        physiology="Emitted when a model call ends with text instead of a tool request (stop_reason end_turn).",
-        failure="Answers that drift from the task. Claims no tool ever checked."),
+        physiology=("Emitted when a model call ends with text instead of a tool request (stop_reason end_turn). "
+                    "Give it a JSON schema and the answer must match it: every core is told the format, and an "
+                    "answer that does not match goes back to the core that wrote it, with what was wrong."),
+        failure="Answers that drift from the task. Claims no tool ever checked.",
+        params={"schema": _p("Answer must match this JSON schema (optional)", "", "area"),
+                "retries": _p("Tries to fix a mismatched answer", 1, "number")}),
     "llm": dict(
         name="LLM core", system="brain", short="Reads context, picks next tokens",
         anatomy=("The only organ that thinks. A stateless function, tokens in and tokens out. Every decision "
@@ -79,7 +87,9 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         physiology=("Each step it re-reads everything: system prompt, history, tool results. It returns either "
                     "text or a tool_use block. It remembers nothing between calls; the loop re-feeds it."),
         failure="Invented tool arguments. Losing the thread in a long context. Confidence ahead of evidence.",
-        params={"model": _p("Model", DEFAULT_MODEL),
+        params={"provider": _p("Provider", "anthropic", "choice", list(PROVIDERS)),
+                "model": _p("Model", DEFAULT_MODEL),
+                "base_url": _p("Server (OpenAI-compatible only)", "http://localhost:11434/v1"),
                 "temperature": _p("Temperature", 0.3, "number"),
                 "max_tokens": _p("Max tokens per step", 2048, "number")}),
     "system_prompt": dict(
@@ -154,20 +164,23 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         params={"name": _p("Tool name", "calculator"),
                 "effects": _p("What it does to the world", CHANGES, "choice", [READS, CHANGES]),
                 "description": _p("What it does (the model reads this)",
-                                  "Evaluate an arithmetic expression and return the number.", "area")}),
+                                  "Evaluate an arithmetic expression and return the number.", "area"),
+                LIMIT[0]: _p(LIMIT[1], 0, "number")}),
     "web_search": dict(
         name="Web search", system="hands", short="Fresh facts from the web",
         anatomy="A ready-made tool that brings in current information. The agent's eyes on the world.",
         inside="A search API call and a snippet formatter. The generated stub returns a placeholder.",
         physiology="Called like any tool; snippets come back as a tool_result.",
-        failure="Poor sources treated as truth. Results carrying hostile instructions."),
+        failure="Poor sources treated as truth. Results carrying hostile instructions.",
+        params={LIMIT[0]: _p(LIMIT[1], 0, "number")}),
     "code_exec": dict(
         name="Code executor", system="hands", short="Runs code the model writes",
         anatomy="Runs code the model writes and returns the output, for exact maths and data handling.",
         inside="A Python subprocess with a timeout. Not a sandbox.",
         physiology="The model writes code as the tool argument; stdout and errors come back as the result.",
         failure=("In a live run this executes model-written code on this machine. Put a Human approval block "
-                 "in front of it unless you trust every prompt the agent will see.")),
+                 "in front of it unless you trust every prompt the agent will see."),
+        params={LIMIT[0]: _p(LIMIT[1], 0, "number")}),
     "sub_agent": dict(
         name="Sub-agent", system="hands", short="A whole agent used as a tool",
         anatomy="A second model with its own instructions, wrapped as a tool the parent can delegate to.",
@@ -176,7 +189,8 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         failure="Context lost between parent and child. Costs that multiply quietly.",
         params={"name": _p("Agent name", "researcher"),
                 "role": _p("Its role (system prompt)",
-                           "You research one question thoroughly and return a short, sourced summary.", "area")}),
+                           "You research one question thoroughly and return a short, sourced summary.", "area"),
+                LIMIT[0]: _p(LIMIT[1], 0, "number")}),
     "subgraph": dict(
         name="Saved agent", system="hands", short="A whole saved agent, used as a tool",
         anatomy=("Another agent you designed and saved, used here as one tool. It brings all its own blocks: "
@@ -189,7 +203,8 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
                  "Its inner steps are not checkpointed, so a fork replays it whole."),
         params={"design": _p("Saved agent", "", "design"),
                 "description": _p("What it does (the model reads this)",
-                                  "Hand a sub-task to a specialist agent and get back its answer.", "area")}),
+                                  "Hand a sub-task to a specialist agent and get back its answer.", "area"),
+                LIMIT[0]: _p(LIMIT[1], 0, "number")}),
     "router": dict(
         name="Router", system="nerve", short="Dispatches tool calls or exits",
         anatomy=("Reads the model's output and decides where control goes: tool requests to the hands, "
@@ -243,7 +258,7 @@ def catalog() -> Dict[str, Any]:
     return {"systems": SYSTEMS, "order": SYSTEM_ORDER, "blocks": blocks,
             "templates": {k: template(k) for k in TEMPLATES},
             "template_names": {k: v["name"] for k, v in TEMPLATES.items()},
-            "live_available": bool(os.environ.get("ANTHROPIC_API_KEY"))}
+            "live_available": bool(os.environ.get("ANTHROPIC_API_KEY")), "providers": PROVIDERS}
 
 
 # --------------------------------------------------------------------------
@@ -312,6 +327,33 @@ def template(key: str) -> Dict[str, Any]:
 # --------------------------------------------------------------------------
 # reading a design
 # --------------------------------------------------------------------------
+
+def answer_schema(node) -> Optional[Dict[str, Any]]:
+    """The Final answer block's JSON schema, if it has a usable one."""
+    text = str(_params(node).get("schema") or "").strip()
+    if not text:
+        return None
+    try:
+        schema = json.loads(text)
+    except ValueError:
+        return None
+    return schema if isinstance(schema, dict) else None
+
+
+def uses_provider(graph, provider: str, depth: int = 0) -> bool:
+    """Whether any LLM core here, or in a saved agent inside, sends its calls to this provider."""
+    for n in graph.get("nodes", []):
+        if n.get("type") == "llm" and _params(n).get("provider", "anthropic") == provider:
+            return True
+        if n.get("type") == "subgraph" and depth < 4:
+            try:
+                inner = load(_params(n).get("design") or "")
+            except KeyError:
+                continue
+            if uses_provider(inner, provider, depth + 1):
+                return True
+    return False
+
 
 def _of(graph, kind):
     return [n for n in graph.get("nodes", []) if n.get("type") == kind]
@@ -474,6 +516,8 @@ def analyze(graph) -> Dict[str, Any]:
             out.append(exit_to)                  # the step budget exits here
         if kind[nid] == "guard_in" and exit_to:
             out.append(exit_to)                  # a blocked task exits here
+        if kind[nid] == "output" and answer_schema(nodes[nid]):
+            out += [l for l in llms if l in reach]   # a mismatched answer goes back to its core
         successors[nid] = list(dict.fromkeys(out))
 
     return {"nodes": nodes, "kind": kind, "control": control, "feeds": feeds, "start": start, "end": end,
@@ -557,6 +601,10 @@ def validate(graph, _stack: tuple = ()) -> List[Dict[str, Any]]:
                 if inner:
                     say("error", f"The saved agent {_params(n)['design']} does not run: {inner[0]['message']}",
                         n["id"])
+        if t == "output" and str(_params(n).get("schema") or "").strip() and answer_schema(n) is None:
+            say("error", "The answer schema is not a JSON object; check its brackets and quotes.", n["id"])
+        if t == "llm" and _params(n).get("provider") == "openai-compatible" and not str(_params(n).get("base_url") or "").strip():
+            say("error", "Give the server's address, such as http://localhost:11434/v1 for Ollama.", n["id"])
         if t == "summarizer" and not any(l["summarizer"] == n["id"] for l in a["llms"].values()):
             say("warning", "This summarizer is not wired into an LLM core, so nothing is limited.", n["id"])
         if t == "system_prompt" and not any(e.get("source") == n["id"] for e in graph.get("edges", [])):
@@ -657,6 +705,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     of_kind = lambda t: [nid for nid in nodes if kind[nid] == t]  # noqa: E731
     present = lambda t: any(kind[nid] == t and nid in a["reach"] for nid in nodes)  # noqa: E731
     langgraph = target == "langgraph"
+    openai_used = uses_provider(graph, "openai-compatible")
 
     L: List[str] = []
     spans: Dict[str, List[List[int]]] = {}
@@ -741,16 +790,25 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     add(["", "", "# ---- brain ----"])
     for lid in llm_ids:
         p = _params(nodes[lid])
+        provider = p.get("provider") or "anthropic"
+        where = (f', "provider": "openai", "base_url": os.environ.get("AGENT_BASE_URL", {json.dumps(str(p["base_url"]))})'
+                 if provider == "openai-compatible" else "")
         add([f'{const(lid)}_SETTINGS = {{"model": os.environ.get("AGENT_MODEL", {json.dumps(str(p["model"]))}), '
-             f'"temperature": {float(p["temperature"])}, "max_tokens": {int(p["max_tokens"])}}}'], lid)
+             f'"temperature": {float(p["temperature"])}, "max_tokens": {int(p["max_tokens"])}{where}}}'], lid)
+    add([f"COMPLETE_SETTINGS = {const(llm_ids[0])}_SETTINGS  # the planner, critic and summarizer use the first core"],
+        llm_ids[0])
     for sid in of_kind("system_prompt"):
         readers = [lid for lid, l in llms.items() if l["prompt"] == sid]
         add([f"{const(sid)}_SYSTEM = {_doc(_params(nodes[sid])['text'])}"], sid, *readers)
     add([f"DEFAULT_SYSTEM = {_doc(DEFAULT_PROMPT)}"])
     add(["", ""])
     add(([] if embedded else [
-         "def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048):",
-         '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests."""',
+         "def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048,",
+         '               provider="anthropic", base_url=None):',
+         '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests."""']
+        + (['    if provider == "openai":',
+            "        return call_openai(base_url, system, messages, tools, model, temperature, max_tokens)"]
+           if openai_used else []) + [
          '    body = {"model": model, "max_tokens": max_tokens, "temperature": temperature,',
          '            "system": system, "messages": messages}',
          "    if tools:",
@@ -764,6 +822,89 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
          "def text_of(response):",
          '    return "".join(b.get("text", "") for b in response.get("content", []) if b.get("type") == "text")'],
         *llm_ids)
+    if openai_used and not embedded:
+        add(["", ""])
+        add(["def call_openai(base_url, system, messages, tools, model, temperature, max_tokens):",
+             '    """The same call to an OpenAI-compatible server — Ollama, LM Studio, vLLM — translated both ways,',
+             '    so the rest of the file only ever sees the Messages API\'s shape."""',
+             '    chat = [{"role": "system", "content": system}]',
+             "    for m in messages:",
+             '        if isinstance(m["content"], str):',
+             '            chat.append({"role": m["role"], "content": m["content"]})',
+             '        elif m["role"] == "assistant":',
+             '            text = "".join(b.get("text", "") for b in m["content"] if b.get("type") == "text")',
+             '            calls = [{"id": b["id"], "type": "function",',
+             '                      "function": {"name": b["name"], "arguments": json.dumps(b.get("input") or {})}}',
+             '                     for b in m["content"] if b.get("type") == "tool_use"]',
+             '            chat.append({"role": "assistant", "content": text or None, **({"tool_calls": calls} if calls else {})})',
+             "        else:",
+             '            for b in m["content"]:',
+             '                if b.get("type") == "tool_result":',
+             '                    chat.append({"role": "tool", "tool_call_id": b["tool_use_id"], "content": str(b.get("content"))})',
+             '                elif b.get("type") == "text":',
+             '                    chat.append({"role": "user", "content": b["text"]})',
+             '    body = {"model": model, "messages": chat, "temperature": temperature, "max_tokens": max_tokens}',
+             "    if tools:",
+             '        body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],',
+             '                                                         "parameters": t["input_schema"]}} for t in tools]',
+             '    headers = {"content-type": "application/json"}',
+             '    if os.environ.get("OPENAI_API_KEY"):',
+             '        headers["authorization"] = "Bearer " + os.environ["OPENAI_API_KEY"]',
+             '    request = urllib.request.Request(base_url.rstrip("/") + "/chat/completions",',
+             "                                     data=json.dumps(body).encode(), headers=headers)",
+             "    with urllib.request.urlopen(request, timeout=300) as reply:",
+             "        data = json.load(reply)",
+             '    choice = data["choices"][0]',
+             '    message = choice.get("message") or {}',
+             '    content = [{"type": "text", "text": message["content"]}] if message.get("content") else []',
+             '    for call in message.get("tool_calls") or []:',
+             "        try:",
+             '            args = json.loads(call["function"].get("arguments") or "{}")',
+             "        except ValueError:",
+             '            args = {"input": call["function"].get("arguments")}',
+             '        content.append({"type": "tool_use", "id": call.get("id") or call["function"]["name"],',
+             '                        "name": call["function"]["name"], "input": args})',
+             '    usage = data.get("usage") or {}',
+             '    return {"content": content,',
+             '            "stop_reason": "tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn",',
+             '            "usage": {"input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens")}}'],
+            *[lid for lid in llm_ids if _params(nodes[lid]).get("provider") == "openai-compatible"])
+    answer_shape = answer_schema(nodes[end]) if end else None
+    if answer_shape is not None:
+        add(["", "", "# ---- the answer's required shape ----"])
+        add([f"ANSWER_SCHEMA = {json.dumps(answer_shape)}",
+             f"ANSWER_RETRIES = {max(0, int(_params(nodes[end])['retries']))}",
+             'SCHEMA_NOTE = "\\n\\nWhen you give your final answer, reply with only JSON matching this schema:\\n" + json.dumps(ANSWER_SCHEMA)',
+             "", "",
+             "def check_schema(value, schema, path=\"answer\"):",
+             '    """A small JSON Schema check — type, properties, required, items, enum. Returns what is wrong."""',
+             '    kinds = {"object": dict, "array": list, "string": str, "boolean": bool}',
+             '    t = schema.get("type")',
+             '    if t in ("number", "integer"):',
+             "        if isinstance(value, bool) or not isinstance(value, (int, float)) or (",
+             '                t == "integer" and not float(value).is_integer()):',
+             '            return [f"{path} should be {\'an integer\' if t == \'integer\' else \'a number\'}"]',
+             "    elif t in kinds and not isinstance(value, kinds[t]):",
+             '        return [f"{path} should be of type {t}"]',
+             '    if "enum" in schema and value not in schema["enum"]:',
+             '        return [f"{path} should be one of {schema[\'enum\']}"]',
+             "    problems = []",
+             "    if isinstance(value, dict):",
+             '        problems += [f"{path}.{key} is missing" for key in schema.get("required", []) if key not in value]',
+             '        for key, sub in schema.get("properties", {}).items():',
+             "            if key in value:",
+             '                problems += check_schema(value[key], sub, f"{path}.{key}")',
+             '    if isinstance(value, list) and "items" in schema:',
+             "        for i, item in enumerate(value):",
+             '            problems += check_schema(item, schema["items"], f"{path}[{i}]")',
+             "    return problems", "", "",
+             "def parse_answer(text):",
+             '    """The answer as JSON, allowing a ```json fence around it."""',
+             "    body = text.strip()",
+             '    if body.startswith("```"):',
+             '        body = body.split("\\n", 1)[1] if "\\n" in body else ""',
+             '        body = body.rsplit("```", 1)[0]',
+             "    return json.loads(body)"], end)
     summarizers = [nid for nid in of_kind("summarizer") if any(l["summarizer"] == nid for l in llms.values())]
     summarising = [sid for sid in summarizers if _params(nodes[sid])["strategy"] == "summarise"]
     if (present("planner") or present("reflector") or summarising
@@ -771,7 +912,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         add(["", ""])
         add(["def complete(system, prompt):",
              '    """A single model call with no tools, for the planner, the critic and sub-agents."""',
-             '    return text_of(call_model(system, [{"role": "user", "content": prompt}]))'],
+             '    return text_of(call_model(system, [{"role": "user", "content": prompt}], **COMPLETE_SETTINGS))'],
             *of_kind("planner"), *of_kind("reflector"), *summarising,
             *[t for t, _ in tools if kind[t] == "sub_agent"])
 
@@ -906,7 +1047,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     add(["", "", "# ---- the state every block reads and writes ----"])
     add(["def new_state(task):",
          '    return {"task": task, "context": [], "messages": [], "draft": "", "answer": None,',
-         '            "pending": [], "steps": 0, "revisions": 0, "next": None}'], start, *of_kind("short_mem"))
+         '            "pending": [], "steps": 0, "revisions": 0, "next": None,',
+         '            "tool_calls": {}, "last_core": None, "format_retries": 0}'], start, *of_kind("short_mem"))
     if summarizers:
         add(["", "", "# ---- memory: keeping the context under a limit ----"])
         for sid in summarizers:
@@ -984,7 +1126,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
          '                         + "\\n\\nContinue the task."})',
          "    if compaction:",
          "        compact(state, **compaction)",
-         '    response = call_model(system, messages, [SCHEMAS[name] for name in tools] or None, **settings)',
+         '    state["last_core"] = node',
+         f'    response = call_model(system{" + SCHEMA_NOTE" if answer_shape is not None else ""}, messages,'
+         ' [SCHEMAS[name] for name in tools] or None, **settings)',
          '    state["steps"] += 1',
          '    wants_tools = response.get("stop_reason") == "tool_use"',
          '    emit("model", node=node, step=state["steps"], wants_tools=wants_tools)',
@@ -1002,9 +1146,12 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "        route = routes.get(name)",
              "        if route is None:",
              '            output = f"Error: there is no tool called {name}."',
+             '        elif route["limit"] and state["tool_calls"].get(name, 0) >= route["limit"]:',
+             '            output = f"Error: {name} may be called {route[\'limit\']} times in a run, and that is used up."',
              '        elif route["gate"] and not human_approves(name, args, route["gate"]):',
              '            output = "A person declined this action. Find another way, or explain why it is needed."',
              "        else:",
+             '            state["tool_calls"][name] = state["tool_calls"].get(name, 0) + 1',
              "            try:",
              '                output = route["func"](**args)',
              "            except Exception as error:",
@@ -1073,7 +1220,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             r = routers[nid]
             table = ", ".join(
                 f'"{tname}": {{"node": "{rt["node"]}", "func": {tname}, '
-                f'"gate": {to(rt["gate"])}, "next": {to(rt["next"])}}}'
+                f'"gate": {to(rt["gate"])}, "next": {to(rt["next"])}, '
+                f'"limit": {int(_params(nodes[rt["node"]]).get("max_calls") or 0) or None}}}'
                 for tname, rt in r["routes"].items())
             body = [f"{const(nid)}_ROUTES = {{{table}}}", "", "", f"def {name}(state):",
                     '    if state["pending"]:',
@@ -1098,8 +1246,20 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                      f'    emit("guard_out", node="{nid}", changed=cleaned != (state["answer"] or state["draft"]))',
                      '    state["answer"] = cleaned', f"    return {to(nxt)}{comment(nxt)}"]
         elif k == "output":
-            body += ['    state["answer"] = state["answer"] or state["draft"]',
-                     f'    emit("final", node="{nid}", preview=state["answer"][:300])', "    return None"]
+            body += ['    state["answer"] = state["answer"] or state["draft"]']
+            if answer_shape is not None:
+                body += ["    try:",
+                         '        problems = check_schema(parse_answer(state["answer"]), ANSWER_SCHEMA)',
+                         "    except ValueError as error:",
+                         '        problems = [f"the answer is not JSON ({error})"]',
+                         f'    emit("schema", node="{nid}", passed=not problems, problems=problems[:3])',
+                         '    if problems and state["format_retries"] < ANSWER_RETRIES and state["last_core"]:',
+                         '        state["format_retries"] += 1',
+                         '        state["answer"] = None',
+                         '        state["messages"].append({"role": "user", "content": "Your final answer must be only JSON '
+                         'matching the schema. Fix: " + "; ".join(problems[:5])})',
+                         '        return state["last_core"]']
+            body += [f'    emit("final", node="{nid}", preview=state["answer"][:300])', "    return None"]
         add(["", ""])
         add(body, nid)
 
@@ -1113,7 +1273,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         add(["class AgentState(TypedDict, total=False):",
              "    task: str", "    context: list", "    messages: list", "    draft: str",
              "    answer: Optional[str]", "    pending: list", "    steps: int", "    revisions: int",
-             "    next: Optional[str]", "", "",
+             "    next: Optional[str]", "    tool_calls: dict", "    last_core: Optional[str]",
+             "    format_retries: int", "", "",
              "def as_node(block):",
              '    """Wrap a block so LangGraph sees a state update; its return value picks the next node."""',
              "    def node(state):",
@@ -1276,9 +1437,14 @@ def _m_output(p, node, graph, c):
             "symbols": [("K", "the first step on which the model answers instead of asking for a tool"),
                         ("text(r)", "the text blocks of the response, joined")]
                        + ([("g_out", "the output guardrail")] if guarded else []),
-            "arithmetic": [("exists only if", f"K ≤ N = {c['N']}; otherwise y is the budget message")],
+            "arithmetic": [("exists only if", f"K ≤ N = {c['N']}; otherwise y is the budget message")]
+                          + ([("shape", f"y must parse as JSON matching the schema; a mismatch goes back to its core "
+                                        f"up to {int(p.get('retries') or 0)} time(s), each one more model call")]
+                             if answer_schema(node) else []),
             "freedom": ["The answer is whatever the model wrote last. Nothing in the loop checks it against "
-                        "the tool results unless a Critic is wired in."]}
+                        "the tool results unless a Critic is wired in."]
+                       + (["A schema checks the answer's shape, not its truth: a well-formed JSON answer can "
+                           "still be wrong."] if answer_schema(node) else [])}
 
 
 def _m_llm(p, node, graph, c):
@@ -1395,9 +1561,11 @@ def _m_tool(p, node, graph, c):
     else:
         eq, shape = "o = f(a.input)", "a = { input: string }"
     desc = p.get("description") or ""
+    limit = int(p.get("max_calls") or 0)
     rows = [("given to the model", f"yes, as {name}" if given else "no: not wired from the router"),
             ("effects", effects(node)),
-            ("needs approval", "yes" if gated else "no")]
+            ("needs approval", "yes" if gated else "no"),
+            ("calls per run", f"at most {limit}; after that the model is told it is used up" if limit else "no limit")]
     if desc:
         rows.append(("description", f"≈ {_n(_tokens(desc))} tokens, sent with every call as part of the tool list"))
     return {"title": "A function the model can only request",
@@ -1804,6 +1972,18 @@ def safety(graph) -> Dict[str, Any]:
 # running a design
 # --------------------------------------------------------------------------
 
+def example_of(schema: Dict[str, Any]):
+    """A value that fits a JSON schema, for the stand-in model to answer with."""
+    if "enum" in schema:
+        return schema["enum"][0]
+    t = schema.get("type")
+    if t == "object":
+        return {k: example_of(v) for k, v in (schema.get("properties") or {}).items()}
+    if t == "array":
+        return [example_of(schema.get("items") or {"type": "string"})]
+    return {"string": "(rehearsal)", "number": 0, "integer": 0, "boolean": True}.get(t, "(rehearsal)")
+
+
 class Rehearsal:
     """Plays the model so a design can be run with no key and no cost.
 
@@ -1858,16 +2038,22 @@ class Rehearsal:
             if m["role"] == "user" and isinstance(m["content"], list):
                 seen += [str(b.get("content", ""))[:60] for b in m["content"]]
         body = "; ".join(seen) if seen else "nothing beyond the task itself"
-        return {"content": [{"type": "text", "text": f"(rehearsal) Final answer, drawing on: {body}"}],
-                "stop_reason": "end_turn"}
+        text = f"(rehearsal) Final answer, drawing on: {body}"
+        marker = "JSON matching this schema:\n"
+        if marker in (system or ""):
+            try:
+                text = json.dumps(example_of(json.loads(system.split(marker, 1)[1])))
+            except ValueError:
+                pass
+        return {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn"}
 
 
 def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None,
              model_state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Load the generated file and wire the lab into it: events, measurement, approvals, the model."""
-    if mode == "live" and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ValueError("A live run needs ANTHROPIC_API_KEY in the server's environment. "
-                         "Rehearsal runs work without it.")
+    if mode == "live" and uses_provider(graph, "anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError("A live run needs ANTHROPIC_API_KEY in the server's environment, or LLM cores set to "
+                         "an OpenAI-compatible server such as a local Ollama. Rehearsal runs need neither.")
     if mode not in ("live", "rehearsal"):
         raise ValueError(f"Unknown mode {mode!r}.")
     built = codegen(graph, "python")
@@ -2247,10 +2433,24 @@ def _overlap(a: str, b: str) -> float:
 
 
 def _ask_judge(system: str, prompt: str) -> Dict[str, Any]:
+    import urllib.request
+    local = os.environ.get("AGENTLAB_JUDGE_BASE_URL")
+    if local:
+        # a judge on an OpenAI-compatible server, such as the same local model the agents use
+        body = json.dumps({"model": JUDGE_MODEL, "temperature": 0, "max_tokens": 200,
+                           "messages": [{"role": "system", "content": system},
+                                        {"role": "user", "content": prompt}]}).encode()
+        request = urllib.request.Request(local.rstrip("/") + "/chat/completions", data=body,
+                                         headers={"content-type": "application/json"})
+        with urllib.request.urlopen(request, timeout=300) as reply:
+            data = json.load(reply)
+        usage = data.get("usage") or {}
+        return {"text": (data["choices"][0].get("message") or {}).get("content") or "",
+                "tokens": (usage.get("prompt_tokens") or 0) + (usage.get("completion_tokens") or 0)}
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
-        raise ValueError("A live judge needs ANTHROPIC_API_KEY in the server's environment.")
-    import urllib.request
+        raise ValueError("A live judge needs ANTHROPIC_API_KEY, or AGENTLAB_JUDGE_BASE_URL for an "
+                         "OpenAI-compatible server.")
     body = json.dumps({"model": JUDGE_MODEL, "max_tokens": 200, "temperature": 0, "system": system,
                        "messages": [{"role": "user", "content": prompt}]}).encode()
     request = urllib.request.Request("https://api.anthropic.com/v1/messages", data=body,
@@ -2618,8 +2818,9 @@ def start_study(graph, cases_text: str, mode: str = "rehearsal", repeats: int = 
     parsed = parse_cases(cases_text)
     if parsed["problems"]:
         raise ValueError(parsed["problems"][0])
-    if mode == "live" and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ValueError("A live study needs ANTHROPIC_API_KEY in the server's environment.")
+    if mode == "live" and uses_provider(graph, "anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError("A live study needs ANTHROPIC_API_KEY in the server's environment, or LLM cores set to "
+                         "an OpenAI-compatible server.")
     if [p for p in validate(graph) if p["level"] == "error"]:
         raise ValueError("Fix the design's errors first; the baseline has to run.")
     repeats = max(1, min(int(repeats), 20))

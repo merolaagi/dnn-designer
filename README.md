@@ -308,6 +308,10 @@ Cases can carry `judge:` criteria graded by a model, studies can A/B system
 prompts and judge versions pairwise, and any run can be saved into a named
 dataset as a good reference or a bad example.
 
+LLM cores can use a local model through any OpenAI-compatible server, such as
+Ollama, so live runs need no key. Tools can be limited to a number of calls per
+run, and the Final answer block can require a JSON schema.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

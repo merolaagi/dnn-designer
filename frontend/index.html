@@ -13580,7 +13580,7 @@ function alRenderAnatomy(){
 }
 
 function alRenderPhysio(){
-  const S = agentLabState, live = S.cat.live_available;
+  const S = agentLabState, live = alLiveAvailable();
   const hasHuman = S.graph.nodes.some(n => n.type === "human");
   $("alPane").innerHTML = `<h3>Run it</h3>
     <p class="al-muted">The server generates the Python on the Python tab, executes it, and records what
@@ -13591,8 +13591,9 @@ function alRenderPhysio(){
         <option value="rehearsal"${S.mode === "rehearsal" ? " selected" : ""}>Rehearsal: a scripted stand-in, free</option>
         <option value="live"${S.mode === "live" ? " selected" : ""}${live ? "" : " disabled"}>Live: the real model</option>
       </select>
-      <div class="help">${live ? "Live runs call the Messages API and cost tokens."
-        : "Live runs need ANTHROPIC_API_KEY in the server's environment."} Tools run for real either way.</div></div>
+      <div class="help">${live ? (alLocalOnly() ? "Live runs call the OpenAI-compatible server set on the LLM cores."
+          : "Live runs call the model and cost tokens.")
+        : "Live runs need ANTHROPIC_API_KEY in the server's environment, or LLM cores set to an OpenAI-compatible server such as a local Ollama."} Tools run for real either way.</div></div>
     ${hasHuman ? `<div class="field"><label for="alAppr">When a tool needs approval</label>
       <select id="alAppr"><option value="approve"${S.approvals === "approve" ? " selected" : ""}>Approve it</option>
         <option value="deny"${S.approvals === "deny" ? " selected" : ""}>Deny it</option></select></div>` : ""}
@@ -13830,6 +13831,8 @@ function alEventText(ev){
     case "fork": return `Forked from checkpoint ${ev.checkpoint} of an earlier run`
       + (ev.changed && ev.changed.length ? `, with ${ev.changed.join(", ")} changed` : ", with nothing changed")
       + (ev.design === "current" ? ", on the design now on the canvas." : ".");
+    case "schema": return ev.passed ? "The answer matches the required JSON schema."
+      : `The answer does not match the schema: ${(ev.problems || []).join("; ")}.`;
     case "compact": return `History over its limit: ${ev.before.toLocaleString()} tokens folded to ${ev.after.toLocaleString()}`
       + ` (${ev.removed} message${ev.removed === 1 ? "" : "s"} ${ev.strategy === "trim" ? "dropped" : "summarised"})`
       + (ev.over ? ". Still over: the newest messages alone are bigger than the limit." : ".");
@@ -13892,6 +13895,18 @@ async function alReplay(d){
                $("alPane").scrollTop = $("alPane").scrollHeight; }
     if (node){ await alFire(node); prev = node; }
   }
+}
+
+/* Live runs are possible with a key for Anthropic, or with every core pointed at an
+   OpenAI-compatible server — a local Ollama needs no key at all. */
+function alLiveAvailable(){
+  const cores = agentLabState.graph.nodes.filter(n => n.type === "llm");
+  const local = cores.length && cores.every(n => (n.params.provider || "anthropic") === "openai-compatible");
+  return !!(agentLabState.cat.live_available || local);
+}
+function alLocalOnly(){
+  const cores = agentLabState.graph.nodes.filter(n => n.type === "llm");
+  return cores.length > 0 && cores.every(n => (n.params.provider || "anthropic") === "openai-compatible");
 }
 
 /* ---------- safety: what the wiring guarantees ---------- */
@@ -14023,7 +14038,7 @@ async function alRenderStudy(){
   const prompts = S.graph.nodes.filter(n => n.type === "system_prompt");
   if (st.promptNode && !prompts.some(n => n.id === st.promptNode)) st.promptNode = "";
   if (S.tab !== "study") return;
-  const live = S.cat.live_available, hasHuman = S.graph.nodes.some(n => n.type === "human");
+  const live = alLiveAvailable(), hasHuman = S.graph.nodes.some(n => n.type === "human");
   const running = st.current && ["planning", "running"].includes(st.current.status);
   $("alPane").innerHTML = `<h3>Does each block earn its cost?</h3>
     <p class="al-muted">Each version of the design has one block removed, with the wires around it joined, or one

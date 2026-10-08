@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.7.0
+
+**Any model server, call limits, and a required answer shape** — the
+provider-agnostic models, tool-call limits and structured output of LangChain 1.0.
+
+- **LLM cores can talk to any OpenAI-compatible server**: Ollama, LM Studio,
+  vLLM, or a hosted one. Set the core's provider and the server's address
+  (`http://localhost:11434/v1` for Ollama). The generated file translates both
+  ways, so everything else in it still sees the Messages API's shape; it stays
+  standard library only. With every core on a local server, live runs and live
+  studies need no key at all and cost nothing. `OPENAI_API_KEY` is sent if set;
+  `AGENT_BASE_URL` overrides the address in the downloaded file. A study's judge
+  can use one too: set `AGENTLAB_JUDGE_BASE_URL`.
+- **Call limits.** Every tool, sub-agent and saved agent has "calls allowed per
+  run". Past the limit the router does not run it; the model is told the
+  allowance is used up and has to manage without.
+- **A required answer shape.** Give the Final answer block a JSON schema. Every
+  core is told the format; an answer that does not parse, or does not match,
+  goes back to the core that wrote it with what was wrong, up to a number of
+  tries you set. The check is a small JSON Schema subset — type, properties,
+  required, items, enum — written into the file. The stand-in model answers in
+  the required shape, so rehearsals exercise it too.
+
+Tested against a local server speaking the chat-completions protocol: a run
+with a tool call and its result, a limit reached on the third call, and an
+answer sent back once for not being JSON and accepted the second time.
+
 ## 2.6.0
 
 **Evaluation, after LangSmith: judges, datasets from runs, prompt A/B.**

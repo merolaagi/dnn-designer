@@ -8,6 +8,7 @@ worse than no designer.
 """
 
 import json
+import os
 import inspect
 import time
 import sys
@@ -8212,6 +8213,129 @@ def _():
     agentlab.run(_team(), "cafes")
     added = set(p.name for p in ROOT.iterdir()) - before
     assert not added, f"a run left {sorted(added)} beside the source"
+
+
+# --------------------------------------------------------------------------
+# agent lab 2.7: any model server, call limits, a required answer shape
+# --------------------------------------------------------------------------
+
+def _fake_openai(script):
+    """A local server speaking the chat-completions protocol. `script(body, n)` returns (message, finish)."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            seen.append(body)
+            message, finish = script(body, len(seen))
+            out = json.dumps({"choices": [{"message": message, "finish_reason": finish}],
+                              "usage": {"prompt_tokens": 50, "completion_tokens": 10}}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_port}/v1", seen, server
+
+
+def _local(graph, url):
+    for n in graph["nodes"]:
+        if n["type"] == "llm":
+            n["params"].update(provider="openai-compatible", base_url=url, model="local-model")
+    return graph
+
+
+def _tool_call(name, args, i=1):
+    return {"role": "assistant", "content": None,
+            "tool_calls": [{"id": f"call_{i}", "type": "function",
+                            "function": {"name": name, "arguments": json.dumps(args)}}]}
+
+
+@check("an agent runs live on an OpenAI-compatible server, with no Anthropic key")
+def _():
+    def script(body, n):
+        if body.get("tools") and not any(m["role"] == "tool" for m in body["messages"]):
+            return _tool_call("web_search", {"query": "Lisbon"}), "tool_calls"
+        return {"role": "assistant", "content": "Lisbon has about 1,200 cafes."}, "stop"
+    url, seen, server = _fake_openai(script)
+    saved = os.environ.pop("ANTHROPIC_API_KEY", None)
+    try:
+        result = agentlab.run(_local(agentlab.template("react"), url), "Cafes in Lisbon?", mode="live")
+    finally:
+        server.shutdown()
+        if saved:
+            os.environ["ANTHROPIC_API_KEY"] = saved
+    assert result["ok"] and "1,200 cafes" in result["answer"], result
+    assert [m["role"] for m in seen[1]["messages"]] == ["system", "user", "assistant", "tool"], \
+        "the tool request and its result should travel in the server's own format"
+    assert seen[1]["messages"][2]["tool_calls"][0]["function"]["name"] == "web_search"
+    assert result["costs"]["counted"], "the server's usage should be read as real token counts"
+
+
+@check("a tool's call limit is enforced, and the model is told")
+def _():
+    def script(body, n):
+        if n <= 3:
+            return _tool_call("web_search", {"query": f"q{n}"}, n), "tool_calls"
+        return {"role": "assistant", "content": "done"}, "stop"
+    url, seen, server = _fake_openai(script)
+    g = _local(agentlab.template("react"), url)
+    next(n for n in g["nodes"] if n["type"] == "web_search")["params"]["max_calls"] = 2
+    try:
+        result = agentlab.run(g, "search a lot", mode="live")
+    finally:
+        server.shutdown()
+    results = [e["preview"] for e in result["events"] if e["event"] == "tool_result"]
+    assert len(results) == 3 and "used up" in results[2] and "used up" not in results[0], results
+
+
+@check("an answer that misses its schema goes back to its core, with what was wrong")
+def _():
+    def script(body, n):
+        if body.get("tools") and not any(m["role"] == "tool" for m in body["messages"]) and n == 1:
+            return {"role": "assistant", "content": "About 1,200."}, "stop"
+        return {"role": "assistant", "content": '{"cafes": 1211}'}, "stop"
+    url, seen, server = _fake_openai(script)
+    g = _local(agentlab.template("react"), url)
+    end = next(n for n in g["nodes"] if n["type"] == "output")
+    end["params"].update(schema=json.dumps({"type": "object", "required": ["cafes"],
+                                            "properties": {"cafes": {"type": "integer"}}}), retries=1)
+    try:
+        result = agentlab.run(g, "Cafes in Lisbon?", mode="live")
+    finally:
+        server.shutdown()
+    checks = [e["passed"] for e in result["events"] if e["event"] == "schema"]
+    assert checks == [False, True], checks
+    assert json.loads(result["answer"]) == {"cafes": 1211}
+    assert "not JSON" in seen[1]["messages"][-1]["content"], "the core should be told what was wrong"
+    assert "JSON matching this schema" in seen[0]["messages"][0]["content"]
+
+
+@check("a rehearsal answers in the required shape, and a broken schema is refused")
+def _():
+    g = agentlab.template("react")
+    end = next(n for n in g["nodes"] if n["type"] == "output")
+    end["params"]["schema"] = json.dumps({"type": "object", "properties": {"n": {"type": "integer"},
+                                                                           "tags": {"type": "array"}}})
+    result = agentlab.run(g, "x")
+    assert json.loads(result["answer"]) == {"n": 0, "tags": ["(rehearsal)"]}
+    for target in ("python", "langgraph"):
+        compile(agentlab.codegen(g, target)["source"], target, "exec")
+    end["params"]["schema"] = "{not json"
+    assert any(p["node"] == end["id"] for p in agentlab.validate(g) if p["level"] == "error")
+
+
+@check("the page allows live runs when every core points at a local server")
+def _():
+    assert "function alLiveAvailable" in PAGE and 'case "schema"' in PAGE
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
