@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.3.0
+
+**The Summarizer: a ceiling on the history.** A new memory block, after
+LangChain's summarization middleware. Wire it into an LLM core with a setting
+wire and, before each of that core's calls, it measures the history; past its
+limit it folds the older steps into a summary — or, set to trim, drops them
+with a note — and keeps the newest messages word for word. The cut always lands
+on an assistant message, so a tool request is never separated from its result,
+and if the newest messages alone are still too big it keeps fewer of them.
+
+**Derived, then checked.** The Maths tab gives the Summarizer's consequence
+with this design's numbers: every call reads at most B + L, the fixed part of a
+call (system prompt and tool schemas) plus the limit, so a full-budget run
+costs N(B + L) instead of N·x₁ + ρ·N(N − 1)/2. After a run, Physiology checks
+it: the ceiling is drawn on the chart, ρ is fitted only on the calls before the
+first compaction, the largest call is set against B + L, and the projection
+for a full-budget run is shown with and without the Summarizer. A limit the
+newest messages alone exceed is reported as broken rather than hidden.
+
+A new starting design, **Long-running agent with a context limit**, shows it
+firing. On short runs a Study will tell you the Summarizer costs more than it
+saves — its summary calls are not free — which is the honest answer; it pays
+for itself on long runs, where the quadratic term dominates.
+
+Fixed while writing the tests: with a very small "keep" the Summarizer found
+no place to cut and silently did nothing. It now always keeps at least the
+last exchange whole and folds the rest.
+
 ## 2.2.0
 
 **Studies for agents: does each block earn its cost?** A new Study tab in the

@@ -2384,6 +2384,9 @@ body.sizing{user-select:none}
 .al-chart .fit{stroke:var(--al-brain);stroke-width:2;fill:none}
 .al-chart .proj{stroke:var(--al-brain);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
 .al-chart .m{fill:var(--amber)}
+.al-chart .cap{stroke:var(--al-memory);stroke-dasharray:2 3}
+.al-costs b.ok{color:var(--good)}
+.al-costs b.bad{color:var(--bad)}
 .al-costs .key{width:120px}
 .al-cases{min-height:120px;font-family:var(--mono);font-size:11.5px}
 .al-row2{display:flex;gap:8px}
@@ -13285,7 +13288,7 @@ function alRenderNodes(){
    budget a core uses, or add memory to a retriever. Control never runs
    along them. */
 function alIsConfig(srcType, dstType){
-  return ["system_prompt", "short_mem", "loop"].includes(srcType) ||
+  return ["system_prompt", "short_mem", "loop", "summarizer"].includes(srcType) ||
          (srcType === "long_mem" && dstType === "retriever");
 }
 
@@ -13741,6 +13744,9 @@ function alEventText(ev){
     case "guard_out": return ev.changed ? "Redacted personal data from the answer." : "Checked the answer; nothing to redact.";
     case "final": return `Final answer leaves: ${ev.preview}`;
     case "budget": return `Step budget of ${ev.limit} spent, so control goes straight to the final answer.`;
+    case "compact": return `History over its limit: ${ev.before.toLocaleString()} tokens folded to ${ev.after.toLocaleString()}`
+      + ` (${ev.removed} message${ev.removed === 1 ? "" : "s"} ${ev.strategy === "trim" ? "dropped" : "summarised"})`
+      + (ev.over ? ". Still over: the newest messages alone are bigger than the limit." : ".");
     case "error": return ev.message;
     default: return ev.event;
   }
@@ -13788,7 +13794,7 @@ async function alReplay(d){
     }
     if (node && node.type === "llm"){
       const feeds = g.edges.filter(e => e.target === node.id &&
-        ["system_prompt", "short_mem", "loop"].includes((alNode(e.source) || {}).type));
+        ["system_prompt", "short_mem", "loop", "summarizer"].includes((alNode(e.source) || {}).type));
       await Promise.all(feeds.map(e => alPulse(e, alColor(alNode(e.source).type))));
     }
     S.trace.push({who: node ? alLabel(node) : (ev.event === "error" ? "Run failed" : ev.event),
@@ -13866,13 +13872,19 @@ function alCostsHtml(c){
     <p class="al-muted">No LLM core was called, so there is nothing to measure.</p>`;
   const N = c.budget, rows = c.rows;
   const W = 300, H = 140, pad = 30;
-  const maxY = Math.max(1, ...rows.map(r => r.measured), c.x1 + c.rho * (N - 1)) * 1.08;
+  const cap = c.ceiling_scaled || null;
+  const lawAt = k => { const v = c.x1 + c.rho * (k - 1); return cap ? Math.min(v, cap) : v; };
+  const maxY = Math.max(1, ...rows.map(r => r.measured), lawAt(N), cap || 0) * 1.08;
   const X = k => pad + (k - 1) * (W - pad - 8) / Math.max(1, N - 1);
   const Y = v => H - 18 - v * (H - 30) / maxY;
-  const line = `M${X(1)},${Y(c.x1)} L${X(rows.length)},${Y(c.x1 + c.rho * (rows.length - 1))}`;
-  const proj = `M${X(rows.length)},${Y(c.x1 + c.rho * (rows.length - 1))} L${X(N)},${Y(c.x1 + c.rho * (N - 1))}`;
+  const pathTo = (from, to) => { let d = ""; for (let k = from; k <= to; k++) d += (k === from ? "M" : "L") + X(k) + "," + Y(lawAt(k)); return d; };
+  const line = pathTo(1, rows.length);
+  const proj = pathTo(rows.length, N);
+
   const pts = rows.map(r => `<circle cx="${X(r.k)}" cy="${Y(r.measured)}" r="3.5" class="m"/>`).join("");
   const n = v => Math.round(v).toLocaleString();
+  const ceilingLine = cap ? `<line x1="${pad}" y1="${Y(cap)}" x2="${W - 4}" y2="${Y(cap)}" class="cap"/>
+    <text x="${W - 6}" y="${Y(cap) - 3}" text-anchor="end">ceiling ${n(cap)}</text>` : "";
   return `<h4>Predicted against measured</h4>
     <p class="al-muted">The Maths tab says each core call reads x<sub>k</sub> = x<sub>1</sub> + (k − 1)ρ tokens,
     because history only grows. Here that law meets the run${est}.</p>
@@ -13883,7 +13895,7 @@ function alCostsHtml(c){
       <text x="${pad - 4}" y="${H - 18}" text-anchor="end">0</text>
       <text x="${X(1)}" y="${H - 4}" text-anchor="middle">k=1</text>
       <text x="${X(N)}" y="${H - 4}" text-anchor="middle">N=${N}</text>
-      <path d="${line}" class="fit"/><path d="${proj}" class="proj"/>${pts}
+      ${ceilingLine}<path d="${line}" class="fit"/><path d="${proj}" class="proj"/>${pts}
     </svg>
     <table class="mathtab al-costs">
       <tr><td class="key">x₁ before the run</td><td class="val">${n(c.x1_predicted)} tokens from prompt, tool schemas and task</td></tr>
@@ -13892,7 +13904,12 @@ function alCostsHtml(c){
       <tr><td class="key">ρ fitted</td><td class="val">${n(c.rho)} tokens per step</td></tr>
       <tr><td class="key">this run</td><td class="val">predicted ${n(c.total_predicted)}, measured ${n(c.total_measured)},
         worst step off by ${n(c.worst_residual)}</td></tr>
-      <tr><td class="key">at the budget</td><td class="val">a run using all ${N} calls would read ≈ ${n(c.at_budget)}</td></tr>
+      <tr><td class="key">at the budget</td><td class="val">a run using all ${N} calls would read ≈ ${n(c.at_budget)}${
+        c.at_budget_unbounded ? `, against ≈ ${n(c.at_budget_unbounded)} without the summarizer` : ""}</td></tr>
+      ${c.ceiling ? `<tr><td class="key">ceiling B + L</td><td class="val">${n(c.ceiling)} (estimated);
+        largest call ${n(c.largest_call)} — <b class="${c.ceiling_holds ? "ok" : "bad"}">${c.ceiling_holds ? "held" : "broken"}</b></td></tr>
+      <tr><td class="key">compactions</td><td class="val">${c.compactions}${c.summary_tokens ? `, costing ${n(c.summary_tokens)} tokens of summary calls` : ""};
+        ρ fitted on the ${c.fit_calls} call${c.fit_calls === 1 ? "" : "s"} before the first</td></tr>` : ""}
       <tr><td class="key">bounds</td><td class="val">${c.core_calls} of ${N} calls${c.within_budget ? "" : " — over the budget"};
         output ${c.output_within_cap ? "within" : "over"} each core's cap</td></tr>
       ${c.estimator_ratio ? `<tr><td class="key">estimator</td><td class="val">real tokens ÷ (characters ÷ 4) = ${c.estimator_ratio}</td></tr>` : ""}

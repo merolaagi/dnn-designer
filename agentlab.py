@@ -113,6 +113,21 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         physiology=("Appended after every step and re-sent in full on every model call. Every core shares it; "
                     "the wire into a core marks that it reads it."),
         failure="Running past the window. Old details crowding out new ones."),
+    "summarizer": dict(
+        name="Summarizer", system="memory", short="Keeps the context under a limit",
+        anatomy=("Watches working memory before each model call. Past a token limit it folds the older steps "
+                 "into a summary and keeps the latest ones word for word, so the history stops growing without "
+                 "bound."),
+        inside=("A limit, how many recent messages to keep, and a strategy: summarise with a model call, or trim "
+                "without one."),
+        physiology=("Wire it into an LLM core. Before each of that core's calls it measures the history; over the "
+                    "limit, it replaces the middle with a summary. It never separates a tool request from its "
+                    "result."),
+        failure=("A summary can drop the one detail the next step needs. Trimming is free but forgets outright. "
+                 "A single tool result bigger than the limit cannot be kept under it."),
+        params={"limit": _p("Limit (tokens of history)", 1500, "number"),
+                "keep": _p("Recent messages kept word for word", 4, "number"),
+                "strategy": _p("When over the limit", "summarise", "choice", ["summarise", "trim"])}),
     "long_mem": dict(
         name="Long-term memory", system="memory", short="Persists between runs",
         anatomy="A store outside the model that survives after the run ends.",
@@ -242,6 +257,15 @@ TEMPLATES = {
                            ("output", 1250, 470), ("loop", 750, 60)],
                  "edges": [(0, 1), (1, 4), (2, 4), (3, 4), (10, 4), (4, 5), (5, 6), (5, 7), (6, 4), (7, 4),
                            (5, 8), (8, 4), (8, 9)]},
+    "longrun": {"name": "Long-running agent with a context limit",
+                "nodes": [("user_input", 40, 240), ("system_prompt", 290, 50), ("summarizer", 290, 430),
+                          ("llm", 540, 240), ("loop", 540, 50), ("router", 790, 240),
+                          ("web_search", 1040, 110), ("tool", 1040, 290), ("output", 1040, 450)],
+                "edges": [(0, 3), (1, 3), (2, 3), (4, 3), (3, 5), (5, 6), (5, 7), (6, 3), (7, 3), (5, 8)],
+                "params": {2: {"limit": 200, "keep": 2},
+                           4: {"max_steps": 10},
+                           7: {"name": "notes", "effects": READS,
+                               "description": "Look up what the team already wrote about a topic."}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -307,7 +331,7 @@ def is_config(src_type: str, dst_type: str) -> bool:
     return src_type in CONFIG_SOURCES or (src_type == "long_mem" and dst_type == "retriever")
 
 
-CONFIG_SOURCES = {"system_prompt", "short_mem", "loop"}
+CONFIG_SOURCES = {"system_prompt", "short_mem", "loop", "summarizer"}
 STEPS = {"user_input", "output", "llm", "planner", "reflector", "retriever", "long_mem",
          "router", "guard_in", "guard_out"}
 DEFAULT_PROMPT = "You are a helpful agent."
@@ -384,7 +408,8 @@ def analyze(graph) -> Dict[str, Any]:
         llms[lid] = {"prompt": prompt, "tools": offered,
                      "next": control[lid][0] if control[lid] else None,
                      "memory": any(kind[f] == "short_mem" for f in feeds[lid]),
-                     "loop": any(kind[f] == "loop" for f in feeds[lid])}
+                     "loop": any(kind[f] == "loop" for f in feeds[lid]),
+                     "summarizer": next((f for f in feeds[lid] if kind[f] == "summarizer"), None)}
 
     critics = {}
     for cid in (nid for nid in nodes if kind[nid] == "reflector"):
@@ -508,6 +533,8 @@ def validate(graph) -> List[Dict[str, Any]]:
             say("warning", f"{label(n)} is not wired from the router, so no model is offered it.", n["id"])
         if t in STEPS and n["id"] not in a["reach"] and t != "output":
             say("warning", f"{label(n)} is never reached from the input.", n["id"])
+        if t == "summarizer" and not any(l["summarizer"] == n["id"] for l in a["llms"].values()):
+            say("warning", "This summarizer is not wired into an LLM core, so nothing is limited.", n["id"])
         if t == "system_prompt" and not any(e.get("source") == n["id"] for e in graph.get("edges", [])):
             say("warning", "This system prompt is not wired into an LLM core, so nothing reads it.", n["id"])
     if not a["loop"]:
@@ -654,12 +681,16 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
          "def text_of(response):",
          '    return "".join(b.get("text", "") for b in response.get("content", []) if b.get("type") == "text")'],
         *llm_ids)
-    if present("planner") or present("reflector") or any(kind[t] == "sub_agent" for t, _ in tools):
+    summarizers = [nid for nid in of_kind("summarizer") if any(l["summarizer"] == nid for l in llms.values())]
+    summarising = [sid for sid in summarizers if _params(nodes[sid])["strategy"] == "summarise"]
+    if (present("planner") or present("reflector") or summarising
+            or any(kind[t] == "sub_agent" for t, _ in tools)):
         add(["", ""])
         add(["def complete(system, prompt):",
              '    """A single model call with no tools, for the planner, the critic and sub-agents."""',
              '    return text_of(call_model(system, [{"role": "user", "content": prompt}]))'],
-            *of_kind("planner"), *of_kind("reflector"), *[t for t, _ in tools if kind[t] == "sub_agent"])
+            *of_kind("planner"), *of_kind("reflector"), *summarising,
+            *[t for t, _ in tools if kind[t] == "sub_agent"])
 
     # ---- hands ----
     if tools:
@@ -786,8 +817,73 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
     add(["def new_state(task):",
          '    return {"task": task, "context": [], "messages": [], "draft": "", "answer": None,',
          '            "pending": [], "steps": 0, "revisions": 0, "next": None}'], start, *of_kind("short_mem"))
+    if summarizers:
+        add(["", "", "# ---- memory: keeping the context under a limit ----"])
+        for sid in summarizers:
+            p = _params(nodes[sid])
+            readers = [lid for lid, l in llms.items() if l["summarizer"] == sid]
+            add([f'{const(sid)}_COMPACTION = {{"node": "{sid}", "limit": {int(p["limit"])}, '
+                 f'"keep": {max(1, int(p["keep"]))}, "strategy": {json.dumps(p["strategy"])}}}'], sid, *readers)
+        if summarising:
+            add([""])
+            add(['SUMMARY_PROMPT = ("You compress an agent\'s working notes. Summarise the steps below: what was "',
+                 '                  "asked, which tools were used, and every fact or number they returned. "',
+                 '                  "Keep figures exact. No preamble.")'], *summarising)
+        add(["", ""])
+        add(["def count_tokens(messages):",
+             '    """About four characters a token: the same estimate the lab measures rehearsals with."""',
+             "    return -(-len(json.dumps(messages)) // 4)", "", "",
+             "def render(messages):",
+             '    """Messages as plain lines, for a summariser to read."""',
+             "    lines = []",
+             "    for m in messages:",
+             '        if isinstance(m["content"], str):',
+             '            lines.append(f\'{m["role"]}: {m["content"]}\')',
+             "            continue",
+             '        for b in m["content"]:',
+             '            if b.get("type") == "text":',
+             '                lines.append(f\'{m["role"]}: {b["text"]}\')',
+             '            elif b.get("type") == "tool_use":',
+             '                lines.append(f\'asked for {b["name"]}({json.dumps(b.get("input"))})\')',
+             '            elif b.get("type") == "tool_result":',
+             '                lines.append(f\'tool result: {str(b.get("content"))[:1000]}\')',
+             '    return "\\n".join(lines)', "", "",
+             "def compact(state, node, limit, keep, strategy):",
+             '    """The summarizer\'s physiology: past the limit, fold the middle of the history into a summary.',
+             "",
+             "    The cut always lands on an assistant message, so a tool request is never separated",
+             "    from its result. If keeping `keep` messages is still over the limit, fewer are kept.",
+             '    """',
+             '    messages = state["messages"]',
+             "    before = count_tokens(messages)",
+             "    if before <= limit:",
+             "        return",
+             '    turns = [i for i in range(1, len(messages)) if messages[i]["role"] == "assistant"]',
+             "    # at least the last exchange is kept whole, however small keep is",
+             "    cuts = [i for i in turns if i >= len(messages) - keep] or turns[-1:]",
+             "    if not cuts:",
+             "        return",
+             "    first = messages[0]",
+             '    task = first["content"] if isinstance(first["content"], str) else render([first])',
+             "    middle = messages[1:cuts[0]]"]
+            + (['    if strategy == "summarise":',
+                "        summary = complete(SUMMARY_PROMPT, render(middle))",
+                "    else:",
+                '        summary = f"[{len(middle)} earlier messages removed to stay under the context limit]"']
+               if summarising else
+               ['    summary = f"[{len(middle)} earlier messages removed to stay under the context limit]"'])
+            + ["    for cut in cuts:",
+             '        dropped = f" ({cut - cuts[0]} more messages dropped after it)" if cut > cuts[0] else ""',
+             '        head = {"role": "user", "content": task + "\\n\\nSummary of earlier steps" + dropped + ":\\n" + summary}',
+             "        kept = [head] + messages[cut:]",
+             "        if count_tokens(kept) <= limit:",
+             "            break",
+             "    messages[:] = kept",
+             "    after = count_tokens(messages)",
+             '    emit("compact", node=node, before=before, after=after, removed=cut - 1,',
+             "         strategy=strategy, over=after > limit)"], *summarizers)
     add(["", ""])
-    add(["def think(state, node, system, tools, settings):",
+    add(["def think(state, node, system, tools, settings, compaction=None):",
          '    """The LLM core\'s physiology: re-read everything, return text or tool requests."""',
          '    messages = state["messages"]',
          "    if not messages:",
@@ -796,6 +892,8 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
          "        # two cores in a row: the second reads the first one's draft as its input",
          '        messages.append({"role": "user", "content": "The previous stage wrote:\\n" + state["draft"]',
          '                         + "\\n\\nContinue the task."})',
+         "    if compaction:",
+         "        compact(state, **compaction)",
          '    response = call_model(system, messages, [SCHEMAS[name] for name in tools] or None, **settings)',
          '    state["steps"] += 1',
          '    wants_tools = response.get("stop_reason") == "tool_use"',
@@ -878,7 +976,8 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
                      f'        emit("budget", node="{a["loop"] or nid}", limit=MAX_STEPS)',
                      '        state["answer"] = state["draft"] or "Stopped: the step budget ran out before a final answer."',
                      f"        return {to(early)}{comment(early)}",
-                     f'    think(state, "{nid}", {system}, {json.dumps(l["tools"])}, {const(nid)}_SETTINGS)',
+                     f'    think(state, "{nid}", {system}, {json.dumps(l["tools"])}, {const(nid)}_SETTINGS'
+                     + (f", {const(l['summarizer'])}_COMPACTION)" if l["summarizer"] else ")"),
                      f"    return {to(l['next'])}{comment(l['next'])}"]
         elif k == "router":
             r = routers[nid]
@@ -1265,7 +1364,42 @@ def _m_human(p, node, graph, c):
                         "can stop a side effect rather than report it."]}
 
 
+def _m_summarizer(p, node, graph, c):
+    a = analyze(graph)
+    readers = [lid for lid, l in a["llms"].items() if l["summarizer"] == node["id"]]
+    L, K, N = int(p["limit"]), int(p["keep"]), c["N"]
+    entry = {"title": "A ceiling on the history",
+             "equation": "if |H| > L:  H ← (m₁ ⊕ σ(H₂ … H_{c−1})) ⊕ H_c …,   so each call reads ≤ B + L",
+             "shape": f"L = {_n(L)} tokens of history,  keep the last {K} messages,  strategy: {p['strategy']}",
+             "symbols": [("L", "the limit on the history, in tokens (≈ characters ÷ 4)"),
+                         ("σ", "a model-written summary" if p["strategy"] == "summarise" else
+                               "a one-line note that messages were removed"),
+                         ("c", "the cut: always an assistant message, so no request loses its result"),
+                         ("B", "the fixed part of a call: system prompt and tool schemas")]}
+    if not readers:
+        entry["arithmetic"] = [("wired into", "no LLM core yet, so nothing is limited")]
+        return entry
+    try:
+        base = call_base(graph, readers[0])
+    except Exception:  # noqa: BLE001 — a panel must never break the canvas
+        base = c["S"]
+    entry["arithmetic"] = [
+        ("each call reads", f"≤ B + L = {_n(base)} + {_n(L)} = {_n(base + L)} tokens"),
+        ("without it", f"call k reads x₁ + (k − 1)ρ, and N = {N} calls read N·x₁ + ρ·N(N − 1)/2 "
+                       f"= {N}x₁ + {N * (N - 1) // 2}ρ"),
+        ("with it", f"≤ N(B + L) = {N}·{_n(base + L)} = {_n(N * (base + L))} tokens"
+                    + (", plus one summary call each time it fires" if p["strategy"] == "summarise" else "")),
+        ("first fires", "on the first call where the history passes L, about (L − |H₁|)/ρ steps in")]
+    entry["freedom"] = [
+        "The ceiling turns the quadratic N(N − 1)/2 term into a linear one: past the first compaction, a call "
+        "costs about the same however long the run has gone on.",
+        "The bound can fail. If the newest messages alone are over L — one huge tool result — nothing can be "
+        "folded away. After a run, Physiology checks whether every call stayed under B + L."]
+    return entry
+
+
 MATH: Dict[str, Callable] = {
+    "summarizer": _m_summarizer,
     "user_input": _m_input, "output": _m_output, "llm": _m_llm, "system_prompt": _m_prompt,
     "planner": _m_planner, "reflector": _m_critic, "short_mem": _m_work, "long_mem": _m_long,
     "retriever": _m_rag, "tool": _m_tool, "web_search": _m_tool, "code_exec": _m_tool,
@@ -1496,11 +1630,15 @@ class Rehearsal:
 
     def __init__(self):
         self.critic_calls = 0
+        self.tool_rounds = 0      # counted here, not read off the history, which a summarizer rewrites
 
     def __call__(self, system, messages, tools=None, **_settings):
         if not tools:
             low = (system or "").lower()
-            if "planner" in low:
+            if "compress" in low:
+                lines = str(messages[-1]["content"]).count("\n") + 1 if messages else 0
+                text = f"(rehearsal) Summary of {lines} earlier lines: the agent looked things up and kept the results."
+            elif "planner" in low:
                 text = "1. Find the facts the task needs.\n2. Work out what follows.\n3. Answer, naming sources."
             elif "review" in low:
                 self.critic_calls += 1
@@ -1511,8 +1649,9 @@ class Rehearsal:
                 text = f"(rehearsal) A short, sourced finding on: {str(ask)[:80]}"
             return {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn"}
 
-        rounds = sum(1 for m in messages if m["role"] == "user" and isinstance(m["content"], list))
+        rounds = self.tool_rounds
         if rounds < min(2, len(tools)):
+            self.tool_rounds += 1
             tool = tools[rounds]
             arg = tool["input_schema"]["required"][0]
             task = str(messages[0]["content"]).split("Task:\n")[-1][:120]
@@ -1574,11 +1713,12 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
 
     def emit_measured(event, **data):
         emit(event, **data)
-        if event in ("model", "plan", "critique"):
+        if event in ("model", "plan", "critique", "compact"):
             open_call = next((c for c in calls if c["event"] is None), None)
             if open_call is not None:
                 open_call["event"] = len(events) - 1
-                events[-1]["tokens"] = {"input": open_call["input"], "output": open_call["output"]}
+                events[-1]["tokens"] = {"input": open_call["input"], "output": open_call["output"],
+                                        "estimate": open_call["estimate"]}
 
     space["call_model"] = measured
     space["emit"] = emit_measured
@@ -1594,6 +1734,18 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
     return {"ok": error is None, "answer": answer, "error": error, "events": events,
             "mode": mode, "nodemap": built["nodemap"], "seconds": round(time.time() - started, 2),
             "costs": costs(graph, task, events, calls, space, mode)}
+
+
+def call_base(graph, lid, space=None) -> int:
+    """Tokens of everything a core sends besides the history: its system prompt and tool schemas."""
+    a = analyze(graph)
+    if space is None:
+        space = {"__name__": "agentlab_static"}
+        exec(compile(codegen(graph)["source"], "<agent>", "exec"), space)  # noqa: S102 — our own file
+    l = a["llms"][lid]
+    system = _params(a["nodes"][l["prompt"]])["text"] if l["prompt"] else DEFAULT_PROMPT
+    schemas = [space.get("SCHEMAS", {}).get(t) for t in l["tools"]]
+    return _tokens(json.dumps({"system": system, "messages": [], "tools": [x for x in schemas if x]}))
 
 
 def costs(graph, task, events, calls, space, mode) -> Dict[str, Any]:
@@ -1624,21 +1776,51 @@ def costs(graph, task, events, calls, space, mode) -> Dict[str, Any]:
                                            "messages": [{"role": "user", "content": "Task:\n" + task}],
                                            "tools": [s for s in schemas if s]}))
         report["x1_predicted"] = predicted_x1
+    # with a summarizer the straight line only holds until the first compaction,
+    # so ρ is fitted on the calls before it and the line is capped at the ceiling
+    ceiling, first_compact = None, None
+    sid = a["llms"][first]["summarizer"] if first else None
+    if sid:
+        ceiling = call_base(graph, first, space) + int(_params(nodes[sid])["limit"]) + 1
+        positions = [i for i, e in enumerate(events) if e["event"] == "compact"]
+        if positions:
+            first_compact = sum(1 for e in core_events if events.index(e) < positions[0])
     if xs:
         x1 = xs[0]
-        k = list(range(1, len(xs) + 1))
+        fit = xs[:first_compact] if first_compact else xs
+        k = list(range(1, len(fit) + 1))
         denom = sum((i - 1) ** 2 for i in k)
-        rho = (sum((i - 1) * (x - x1) for i, x in zip(k, xs)) / denom) if denom else 0.0
-        rows = [{"k": i, "predicted": round(x1 + (i - 1) * rho), "measured": x} for i, x in zip(k, xs)]
+        rho = (sum((i - 1) * (x - x1) for i, x in zip(k, fit)) / denom) if denom else 0.0
+        scale = (xs[0] / core_events[0]["tokens"]["estimate"]) if core_events[0]["tokens"].get("estimate") else 1.0
+        cap = ceiling * scale if ceiling else None
+
+        def law(i):
+            line = x1 + (i - 1) * rho
+            return min(line, cap) if cap else line
+
+        rows = [{"k": i, "predicted": round(law(i)), "measured": x} for i, x in enumerate(xs, 1)]
         N = a["max_steps"]
         report.update({
             "x1": x1, "rho": round(rho, 1), "rows": rows,
-            "total_predicted": round(len(xs) * x1 + rho * len(xs) * (len(xs) - 1) / 2),
+            "total_predicted": round(sum(law(i) for i in range(1, len(xs) + 1))),
             "total_measured": sum(xs),
-            "at_budget": round(N * x1 + rho * N * (N - 1) / 2),
+            "at_budget": round(sum(law(i) for i in range(1, N + 1))),
             "worst_residual": max(abs(r["predicted"] - r["measured"]) for r in rows),
             "within_budget": len(xs) <= N,
         })
+        if sid:
+            estimates = [e["tokens"].get("estimate") or 0 for e in core_events if e["node"] == first]
+            compacts = [e for e in events if e["event"] == "compact"]
+            report.update({
+                "ceiling": ceiling, "ceiling_scaled": round(cap) if cap else None,
+                "largest_call": max(estimates) if estimates else 0,
+                "ceiling_holds": all(x <= ceiling for x in estimates),
+                "compactions": len(compacts),
+                "summary_tokens": sum((e.get("tokens") or {}).get("input", 0) + (e.get("tokens") or {}).get("output", 0)
+                                      for e in compacts),
+                "at_budget_unbounded": round(N * x1 + rho * N * (N - 1) / 2),
+                "fit_calls": len(fit),
+            })
         caps = [int(_params(nodes[e["node"]])["max_tokens"]) for e in core_events]
         report["output_within_cap"] = all(e["tokens"]["output"] <= cap for e, cap in zip(core_events, caps))
     if counted:
@@ -1747,7 +1929,7 @@ def _without(graph, nid) -> Dict[str, Any]:
     return g
 
 
-REMOVABLE = {"guard_in", "guard_out", "planner", "reflector", "retriever", "long_mem", "human",
+REMOVABLE = {"guard_in", "guard_out", "planner", "reflector", "retriever", "long_mem", "human", "summarizer",
              "system_prompt", "tool", "web_search", "code_exec", "sub_agent"}
 
 
@@ -1760,6 +1942,7 @@ def variants(graph) -> List[Dict[str, Any]]:
         t = n.get("type")
         used = n["id"] in a["reach"] or n["id"] in a["given"] or (
             t == "system_prompt" and any(l["prompt"] == n["id"] for l in a["llms"].values())) or (
+            t == "summarizer" and any(l["summarizer"] == n["id"] for l in a["llms"].values())) or (
             t == "human" and any(r["gate"] == n["id"] for rt in a["routers"].values() for r in rt["routes"].values()))
         if t in REMOVABLE and used:
             out.append({"label": f"without {label(n)}", "graph": _without(graph, n["id"]),

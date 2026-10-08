@@ -294,6 +294,9 @@ result or retrieved text can reach a model that can act unapproved, and that
 guardrails cannot be routed around. After a run, Physiology sets the predicted
 token growth against what the run measured.
 
+A **Summarizer** wired into a core keeps its history under a token limit, and
+the cost chart checks that every call stayed under the ceiling it predicts.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

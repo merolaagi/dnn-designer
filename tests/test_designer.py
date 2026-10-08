@@ -7823,6 +7823,69 @@ def _():
     assert 'data-altab="study"' in PAGE and "function alRenderStudy" in PAGE
 
 
+# --------------------------------------------------------------------------
+# agent lab 2.3: the summarizer — a ceiling on the history
+# --------------------------------------------------------------------------
+
+@check("the summarizer keeps every call under the ceiling its maths predicts")
+def _():
+    g = agentlab.template("longrun")
+    result = agentlab.run(g, "Find what the team knows about Lisbon cafe density and estimate the market")
+    c = result["costs"]
+    assert result["ok"] and c["compactions"] >= 1, [e["event"] for e in result["events"]]
+    assert c["ceiling_holds"] and c["largest_call"] <= c["ceiling"], c
+    assert c["at_budget"] < c["at_budget_unbounded"], "a ceiling should make a full-budget run cheaper"
+    sid = next(n["id"] for n in g["nodes"] if n["type"] == "summarizer")
+    lid = next(n["id"] for n in g["nodes"] if n["type"] == "llm")
+    said = dict(agentlab.explain(g, sid)["arithmetic"])["each call reads"]
+    assert said.endswith(f"= {agentlab.call_base(g, lid) + 200:,} tokens"), said
+
+
+@check("compaction never separates a tool request from its result")
+def _():
+    space = {"__name__": "t"}
+    exec(compile(agentlab.codegen(agentlab.template("longrun"))["source"], "<agent>", "exec"), space)  # noqa: S102
+    space["emit"] = lambda *a, **k: None
+    space["complete"] = lambda system, text: "short summary"
+    messages = [{"role": "user", "content": "Task:\nresearch"}]
+    for i in range(6):
+        messages.append({"role": "assistant", "content": [{"type": "text", "text": "x" * 80},
+                         {"type": "tool_use", "id": f"t{i}", "name": "web_search", "input": {"query": "q"}}]})
+        messages.append({"role": "user", "content": [{"type": "tool_result", "tool_use_id": f"t{i}",
+                                                      "content": "y" * 300}]})
+    for keep in (1, 2, 3, 4, 5):
+        state = {"messages": json.loads(json.dumps(messages))}
+        space["compact"](state, node="s", limit=300, keep=keep, strategy="summarise")
+        kept = state["messages"]
+        assert kept[0]["role"] == "user" and "short summary" in kept[0]["content"]
+        roles = [m["role"] for m in kept]
+        assert all(a != b for a, b in zip(roles, roles[1:])), f"roles no longer alternate: {roles}"
+        asked = {b["id"] for m in kept if m["role"] == "assistant" for b in m["content"] if b.get("type") == "tool_use"}
+        answered = {b["tool_use_id"] for m in kept if isinstance(m["content"], list)
+                    for b in m["content"] if b.get("type") == "tool_result"}
+        assert answered <= asked, f"keep={keep}: a result lost its request"
+
+
+@check("a ceiling the newest messages alone exceed is reported as broken, not hidden")
+def _():
+    g = agentlab.template("longrun")
+    next(n for n in g["nodes"] if n["type"] == "summarizer")["params"]["limit"] = 20
+    result = agentlab.run(g, "Find what the team knows about Lisbon cafe density")
+    compacts = [e for e in result["events"] if e["event"] == "compact"]
+    assert compacts and any(e["over"] for e in compacts)
+    assert result["costs"]["ceiling_holds"] is False
+
+
+@check("a study can take the summarizer out, and an unwired one is flagged")
+def _():
+    labels = [v["label"] for v in agentlab.variants(agentlab.template("longrun"))]
+    assert "without Summarizer" in labels, labels
+    g = agentlab.template("longrun")
+    sid = next(n["id"] for n in g["nodes"] if n["type"] == "summarizer")
+    g["edges"] = [e for e in g["edges"] if e["source"] != sid]
+    assert any(p["node"] == sid and "not wired" in p["message"] for p in agentlab.validate(g))
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
