@@ -335,6 +335,10 @@ latency, tokens and cost — with alerts when a threshold is crossed.
 Runs can be **sent to LangSmith** as traces, from the Monitor tab, so its
 tracing and evaluators work on lab runs.
 
+Cases can use a library of **evaluators** — PII, injection, hallucination,
+conciseness, correctness, toxicity, bias — which can also score every run online.
+System prompts keep **numbered versions** with diffs.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

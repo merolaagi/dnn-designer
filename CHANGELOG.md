@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.4.0
+
+**An evaluator library, online evaluators, and prompt versions** — LangSmith's
+Evaluators and Prompts, in the lab.
+
+- **Evaluator library.** Cases can now use `eval:` and a named evaluator. Where
+  a property can be checked by rule it is, exactly and for free, the same live
+  as in a rehearsal:
+  - Security: `pii` (email addresses, phone numbers, Luhn-valid card numbers,
+    US SSNs and IP addresses in the answer), `injection` and `code_injection`
+    (in the task, tool results and retrieved notes).
+  - Quality: `conciseness N` (words), and `hallucination`, which by rule flags
+    any number in the answer that no task, tool or note supplied, and live asks
+    a model to check every claim against what the run saw.
+  - Judged by a model: `toxicity`, `bias`, and `correctness` against the case's
+    `reference:`.
+
+  In a rehearsal a model-judged evaluator says "not judged" and is left out of
+  the pass rate rather than guessing. The Study tab lists the library with what
+  each checks and how, and a button adds one to the last case.
+- **Online evaluators.** Tick evaluators on the Monitor tab and they score every
+  run finished from the page; their daily pass rates are charted beside the rest.
+  Rule-based ones are free; model-judged ones run on live runs only.
+- **Prompt versions.** Name a system prompt and save its text as numbered
+  versions with a note. The block shows which version it holds and whether it
+  has been edited since; the history shows what changed between versions, line
+  by line, and "Use" puts any version back. A study's prompt A/B can be filled
+  from a prompt's saved versions in one click.
+
 ## 3.3.0
 
 **Runs as traces in LangSmith.** The Monitor tab has a new section, "Send runs

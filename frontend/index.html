@@ -2461,6 +2461,22 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-price input[type=number]{width:70px;border:1px solid var(--paper-3);border-radius:5px;padding:3px 5px}
 .al-price select{border:1px solid var(--paper-3);border-radius:5px;padding:3px 5px;font-size:11.5px}
 .al-price code{font-family:var(--mono);font-size:11px}
+.al-pv{list-style:none;margin:6px 0;padding:0;font-size:12px}
+.al-pv li{padding:5px 0;border-bottom:1px solid var(--paper-2)}
+.al-pv small{display:block;color:var(--muted)}
+.al-pv .btn{font-size:11px;padding:2px 8px;margin-top:3px}
+.al-pv-note{flex:1;border:1px solid var(--paper-3);border-radius:5px;padding:4px 7px;font-size:12px}
+.al-pv-diff{font-family:var(--mono);font-size:10.5px;margin-top:4px;white-space:pre-wrap}
+.al-pv-diff .added{background:#EAF6EE;color:#256B3C}
+.al-pv-diff .removed{background:#FDECEA;color:#8C2F27;text-decoration:line-through}
+.al-pv-diff .same{color:var(--muted)}
+.al-evlib{margin:4px 0 8px;font-size:12px}
+.al-evlib summary{cursor:pointer;font-weight:600}
+.al-evlib h5{margin:8px 0 2px;font-size:11.5px}
+.al-ev{padding:4px 0;border-bottom:1px solid var(--paper-2)}
+.al-ev small{color:var(--muted)}
+.al-ev div{color:var(--muted);font-size:11.5px}
+.al-ev .btn{font-size:10.5px;padding:1px 6px;margin-right:4px;font-family:var(--mono)}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13599,10 +13615,12 @@ function alRenderAnatomy(){
     <h4>Wiring</h4><p class="al-muted">Receives from: ${ins.join(", ") || "nothing yet"}<br>
       Sends to: ${outs.join(", ") || "nothing yet"}</p>
     ${fields ? `<h4>Settings</h4>${fields}` : ""}
+    ${n.type === "system_prompt" ? `<h4>Versions</h4><div id="alPromptVer" class="al-muted">loading…</div>` : ""}
     ${n.type === "subgraph" && n.params.design && (agentLabState.designs || []).includes(n.params.design)
       ? `<button class="btn" id="alDrill">Open “${alEsc(n.params.design)}” on the canvas</button> ` : ""}
     <button class="btn danger" id="alDel">Delete block</button>`;
   if ($("alDrill")) $("alDrill").onclick = () => alDrillInto(n.params.design);
+  if (n.type === "system_prompt") alPromptVersions(n);
   if ($("alMcpFind")) $("alMcpFind").onclick = async () => {
     $("alMcpMsg").textContent = "connecting…";
     let r, d;
@@ -14189,9 +14207,10 @@ async function alRenderStudy(){
     <div class="field"><label for="alCases">Cases</label>
       <textarea id="alCases" class="al-cases" spellcheck="false">${alEsc(st.cases)}</textarea>
       <div class="help">A task on the first line, then one check per line: <code>contains:</code>, <code>excludes:</code>,
-      <code>regex:</code>, <code>tool:</code>, <code>max calls:</code>, <code>finished</code>, or <code>judge:</code> with a
-      criterion in plain words. <code>reference:</code> and <code>bad example:</code> give the judge an answer to compare
-      against. A blank line starts the next case.</div></div>
+      <code>regex:</code>, <code>tool:</code>, <code>max calls:</code>, <code>finished</code>, <code>judge:</code> with a
+      criterion in plain words, or <code>eval:</code> and an evaluator from the library. <code>reference:</code> and
+      <code>bad example:</code> give the judge an answer to compare against. A blank line starts the next case.</div></div>
+    <details class="al-evlib"><summary>Evaluator library</summary><div id="alEvLib" class="al-muted">loading…</div></details>
     <div class="row al-ds">
       <select id="alDsLoad"><option value="">Load a dataset…</option>${(st.datasets || []).map(x =>
         `<option value="${alEsc(x.name)}">${alEsc(x.name)} (${x.cases} case${x.cases === 1 ? "" : "s"})</option>`).join("")}</select>
@@ -14204,6 +14223,8 @@ async function alRenderStudy(){
     ${prompts.length ? `<div class="field"><label for="alPromptNode">Prompt alternatives for</label>
       <select id="alPromptNode"><option value="">no prompt variants</option>${prompts.map(n =>
         `<option value="${n.id}"${st.promptNode === n.id ? " selected" : ""}>${alEsc(alLabel(n))} · ${alEsc((n.params.text || "").slice(0, 40))}…</option>`).join("")}</select>
+      ${st.promptNode && alNode(st.promptNode) && alNode(st.promptNode).params.prompt_name
+        ? `<button class="btn" id="alFillVersions">Fill from saved versions of ${alEsc(alNode(st.promptNode).params.prompt_name)}</button>` : ""}
       ${st.promptNode ? `<textarea id="alPromptTexts" class="al-cases" placeholder="One alternative prompt per block; separate them with a line holding only ---"
         spellcheck="false">${alEsc(st.promptTexts)}</textarea>` : ""}</div>` : ""}
     <label class="al-check"><input type="checkbox" id="alPairwise"${st.pairwise ? " checked" : ""}>
@@ -14251,6 +14272,16 @@ async function alRenderStudy(){
   $("alPairwise").addEventListener("change", e => { st.pairwise = e.target.checked; replan(); });
   if ($("alPromptNode")) $("alPromptNode").addEventListener("change", e => { st.promptNode = e.target.value; alRenderStudy(); });
   if ($("alPromptTexts")) $("alPromptTexts").addEventListener("input", e => { st.promptTexts = e.target.value; replan(); });
+  alEvLibrary();
+  if ($("alFillVersions")) $("alFillVersions").onclick = async () => {
+    const node = alNode(st.promptNode), name = node.params.prompt_name;
+    const r = await fetch(API + "/api/agentlab/prompts/" + encodeURIComponent(name));
+    if (!r.ok) return;
+    const others = (await r.json()).versions.filter(v => v.text !== node.params.text);
+    st.promptTexts = others.map(v => v.text).join("\n---\n");
+    $("alPromptTexts").value = st.promptTexts;
+    replan();
+  };
   $("alDsLoad").addEventListener("change", async e => {
     if (!e.target.value) return;
     const d = await (await fetch(API + "/api/agentlab/datasets/" + encodeURIComponent(e.target.value))).json();
@@ -14596,6 +14627,18 @@ async function alRenderMonitor(){
     <p class="al-muted">Tool errors ${t.tool_errors} · approvals denied ${t.denied} · step budgets spent ${t.budget}</p>`
     : `<p class="al-muted">No finished runs in this period. Every run from now on is counted, from the page,
       the API and forks${m.studies ? ", studies and gates" : ""}.</p>`}
+    <h4>Online evaluators</h4>
+    <p class="al-muted">Scored on every run finished from the page. Rule-based ones are free; model-judged ones
+      run on live runs only, one judge call each.</p>
+    <div class="al-online">${d.evaluators.map(e => `<label class="al-check"><input type="checkbox" data-online="${e.key}"
+      ${d.online.includes(e.key) ? " checked" : ""}> ${alEsc(e.name)} <small class="al-muted">${alEsc(e.how)}</small></label>`).join("")}</div>
+    ${Object.keys(t.scores || {}).length ? `<table class="al-study"><tr><th>Evaluator</th><th>Judged</th><th>Passed</th></tr>
+      ${Object.entries(t.scores).map(([k, v]) => `<tr><td>${alEsc(k)}</td><td>${v.judged}</td><td>${v.rate}%</td></tr>`).join("")}</table>
+      ${alMonChart("Online evaluator pass rate (%)", d.series.map(x => {
+        const row = {...x};
+        Object.keys(t.scores).forEach(k => row[k] = x.scores && x.scores[k] ? x.scores[k].rate : null);
+        return row; }), Object.keys(t.scores).slice(0, 4).map((k, i) => [k, ["var(--al-memory)", "var(--al-brain)", "var(--amber)", "var(--al-nerve)"][i]]), "line")}`
+      : d.online.length ? `<p class="al-muted">No runs scored yet in this period.</p>` : ""}
     <h4>Prices</h4>
     <p class="al-muted">Dollars per million tokens. Cost shows once every model in the period has a price.</p>
     <div id="alPrices">${alPriceRows(d.unpriced)}</div>
@@ -14612,6 +14655,11 @@ async function alRenderMonitor(){
   $("alMonMode").onchange = e => { m.mode = e.target.value; redo(); };
   $("alMonScope").onchange = e => { m.scope = e.target.value; redo(); };
   $("alMonStudies").onchange = e => { m.studies = e.target.checked; redo(); };
+  pane.querySelectorAll("[data-online]").forEach(b => b.onchange = async () => {
+    const keys = [...pane.querySelectorAll("[data-online]")].filter(x => x.checked).map(x => x.dataset.online);
+    await fetch(API + "/api/agentlab/evaluators/online", {method: "PUT", headers: {"content-type": "application/json"},
+      body: JSON.stringify({evaluators: keys})});
+  });
   $("alAddAlert").onclick = () => $("alAlerts").insertAdjacentHTML("beforeend",
     alAlertRow({metric: "error_rate", above: 10}, $("alAlerts").children.length, d.metrics));
   $("alSaveAlerts").onclick = async () => {
@@ -14743,6 +14791,81 @@ async function alRenderLangSmith(){
       : out.ok ? `Sent ${out.spans} spans to “${out.project}”.` : out.error;
     setTimeout(alRenderLangSmith, 300);
   };
+}
+
+/* The evaluator library on the Study tab: what each one checks, how, and a button
+   that adds it to the last case. */
+async function alEvLibrary(){
+  const host = $("alEvLib");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/agentlab/evaluators")).json(); } catch { return; }
+  if (!$("alEvLib")) return;
+  const groups = {};
+  d.evaluators.forEach(e => (groups[e.group] = groups[e.group] || []).push(e));
+  host.className = "";
+  host.innerHTML = Object.entries(groups).map(([g, list]) => `<h5>${alEsc(g)}</h5>${list.map(e =>
+    `<div class="al-ev"><button class="btn" data-ev="${e.key}">+ ${alEsc(e.key)}</button>
+      <b>${alEsc(e.name)}</b> <small>${alEsc(e.how)}</small><div>${alEsc(e.what)}</div></div>`).join("")}`).join("");
+  host.querySelectorAll("[data-ev]").forEach(b => b.onclick = () => {
+    const st = agentLabState.study;
+    st.cases = (st.cases || "").replace(/\s*$/, "") + `\neval: ${b.dataset.ev}`;
+    $("alCases").value = st.cases;
+    $("alCases").dispatchEvent(new Event("input"));
+  });
+}
+
+/* ---------- prompt versions ---------- */
+
+/* A system prompt can be kept as numbered versions of a named prompt: save the text
+   with a note, read the history, see what changed, put an old version back. */
+async function alPromptVersions(n){
+  const host = $("alPromptVer");
+  if (!host) return;
+  const name = (n.params.prompt_name || "").trim();
+  let versions = [];
+  if (name){
+    try{
+      const r = await fetch(API + "/api/agentlab/prompts/" + encodeURIComponent(name));
+      if (r.ok) versions = (await r.json()).versions;
+    } catch {}
+  }
+  if (!$("alPromptVer")) return;
+  const cur = versions.find(v => v.v === Number(n.params.version));
+  const edited = cur && cur.text !== n.params.text;
+  host.className = "";
+  host.innerHTML = `${!name ? `<p class="al-muted">Give this prompt a name in “Named prompt” above to keep versions of it.</p>` : `
+    <p class="al-muted">${versions.length ? `${versions.length} version${versions.length === 1 ? "" : "s"} of <b>${alEsc(name)}</b>.
+      ${cur ? `This block holds v${cur.v}${edited ? ", edited since" : ""}.` : "This text is not a saved version."}` : `No versions of <b>${alEsc(name)}</b> yet.`}</p>
+    <div class="row"><input id="alPvNote" class="al-pv-note" placeholder="what changed (optional)" spellcheck="false">
+      <button class="btn" id="alPvSave">Save as a new version</button></div>
+    <span class="al-muted" id="alPvMsg"></span>
+    <ol class="al-pv">${versions.slice().reverse().map(v => `<li><b>v${v.v}</b> ${alEsc(v.note || "")}
+      <small>${new Date(v.t * 1000).toLocaleString()}</small>
+      <button class="btn" data-pv-use="${v.v}">Use</button>
+      ${v.v > 1 ? `<button class="btn" data-pv-diff="${v.v}">Changes from v${v.v - 1}</button>` : ""}
+      <div class="al-pv-diff" id="alPvDiff${v.v}"></div></li>`).join("")}</ol>`}`;
+  if (!name) return;
+  $("alPvSave").onclick = async () => {
+    const r = await fetch(API + "/api/agentlab/prompts/" + encodeURIComponent(name), {method: "POST",
+      headers: {"content-type": "application/json"}, body: JSON.stringify({text: n.params.text, note: $("alPvNote").value})});
+    const d = await r.json();
+    if (!r.ok){ $("alPvMsg").textContent = (d.detail && d.detail.message) || "Not saved."; return; }
+    n.params.version = d.v; alDraft();
+    $("alPvMsg").textContent = d.unchanged ? `Same text as v${d.v}; nothing new to save.` : `Saved as v${d.v}.`;
+    setTimeout(() => alPromptVersions(n), 400);
+  };
+  host.querySelectorAll("[data-pv-use]").forEach(b => b.onclick = () => {
+    const v = versions.find(x => x.v === +b.dataset.pvUse);
+    n.params.text = v.text; n.params.version = v.v;
+    alDraft(); alScheduleCheck(); alRenderPane();
+  });
+  host.querySelectorAll("[data-pv-diff]").forEach(b => b.onclick = async () => {
+    const v = +b.dataset.pvDiff;
+    const d = await (await fetch(API + `/api/agentlab/prompts/${encodeURIComponent(name)}/diff?a=${v - 1}&b=${v}`)).json();
+    $("alPvDiff" + v).innerHTML = (d.lines || []).map(l =>
+      `<div class="${l.kind}">${l.kind === "added" ? "+" : l.kind === "removed" ? "−" : " "} ${alEsc(l.text) || "&nbsp;"}</div>`).join("");
+  });
 }
 
 /* ---------- saving ---------- */

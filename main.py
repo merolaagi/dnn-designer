@@ -457,6 +457,57 @@ def agentlab_langsmith_send(run_id: str):
         raise HTTPException(400, detail={"message": str(exc)})
 
 
+class AgentLabPromptSave(BaseModel):
+    text: str
+    note: str = ""
+
+
+class AgentLabOnline(BaseModel):
+    evaluators: List[str]
+
+
+@app.get("/api/agentlab/evaluators")
+def agentlab_evaluators():
+    return {"evaluators": agentlab.evaluator_catalog(), "online": agentlab.online_evaluators()}
+
+
+@app.put("/api/agentlab/evaluators/online")
+def agentlab_online(body: AgentLabOnline):
+    try:
+        return {"online": agentlab.set_online_evaluators(body.evaluators)}
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/agentlab/prompts")
+def agentlab_prompts():
+    return {"prompts": agentlab.prompt_names()}
+
+
+@app.get("/api/agentlab/prompts/{name}")
+def agentlab_prompt_versions(name: str):
+    try:
+        return {"name": name, "versions": agentlab.prompt_versions(name)}
+    except KeyError:
+        raise HTTPException(404, detail={"message": f"No prompt called {name}."})
+
+
+@app.post("/api/agentlab/prompts/{name}")
+def agentlab_prompt_save(name: str, body: AgentLabPromptSave):
+    try:
+        return agentlab.prompt_save(name, body.text, body.note)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/agentlab/prompts/{name}/diff")
+def agentlab_prompt_diff(name: str, a: int, b: int):
+    try:
+        return {"lines": agentlab.prompt_diff(name, a, b)}
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such prompt or version."})
+
+
 class AgentLabStart(BaseModel):
     graph: Dict[str, Any]
     task: str
