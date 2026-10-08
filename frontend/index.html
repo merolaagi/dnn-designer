@@ -14603,7 +14603,10 @@ async function alRenderMonitor(){
     <p class="al-muted">Checked against today whenever this tab opens; a firing alert shows a badge on the tab.</p>
     <div id="alAlerts">${(d.alerts || []).map((a, i) => alAlertRow(a, i, d.metrics)).join("")}</div>
     <div class="row"><button class="btn" id="alAddAlert">Add an alert</button>
-      <button class="btn" id="alSaveAlerts">Save alerts</button><span class="al-muted" id="alAlertMsg"></span></div>`;
+      <button class="btn" id="alSaveAlerts">Save alerts</button><span class="al-muted" id="alAlertMsg"></span></div>
+    <h4>Send runs to LangSmith</h4>
+    <div id="alLangSmith" class="al-muted">loading…</div>`;
+  alRenderLangSmith();
   const redo = () => alRenderMonitor();
   $("alMonDays").onchange = e => { m.days = +e.target.value; redo(); };
   $("alMonMode").onchange = e => { m.mode = e.target.value; redo(); };
@@ -14681,6 +14684,65 @@ function alMonChart(title, series, keys, kind){
       <text x="${X(0)}" y="${H - 3}" text-anchor="middle">${series[0].day.slice(5)}</text>
       ${n > 1 ? `<text x="${X(n - 1)}" y="${H - 3}" text-anchor="middle">${series[n - 1].day.slice(5)}</text>` : ""}
       ${marks}</svg></div>`;
+}
+
+/* Runs as traces in your LangSmith project. The key never comes back to the page:
+   the server says only whether one is saved, or comes from LANGSMITH_API_KEY. */
+async function alRenderLangSmith(){
+  const host = $("alLangSmith");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/agentlab/langsmith")).json(); } catch { host.textContent = "The server did not answer."; return; }
+  if (!$("alLangSmith")) return;
+  const c = d.settings, region = Object.entries(d.endpoints).find(([, url]) => url === c.endpoint);
+  const last = agentLabState.lastRunId;
+  host.className = "";
+  host.innerHTML = `<p class="al-muted">Each finished run becomes a trace: the run, every block it passed, tools under
+    their router, model calls with their tokens. Sent in the background after the run, so it never slows one.</p>
+    <label class="al-check"><input type="checkbox" id="alLsOn"${c.enabled ? " checked" : ""}> Send runs as they finish</label>
+    <div class="al-row2">
+      <div class="field"><label for="alLsRegion">Region</label><select id="alLsRegion">
+        ${Object.keys(d.endpoints).map(k => `<option${region && region[0] === k ? " selected" : ""}>${k}</option>`).join("")}
+        <option value="custom"${region ? "" : " selected"}>Other</option></select></div>
+      <div class="field"><label for="alLsWhich">Which runs</label><select id="alLsWhich">
+        <option value="live"${c.which === "live" ? " selected" : ""}>Live only</option>
+        <option value="all"${c.which === "all" ? " selected" : ""}>Live and rehearsals</option></select></div>
+    </div>
+    <div class="field" id="alLsCustom"${region ? " hidden" : ""}><label for="alLsEndpoint">Endpoint</label>
+      <input id="alLsEndpoint" value="${alEsc(c.endpoint)}" spellcheck="false"></div>
+    <div class="field"><label for="alLsProject">Project</label><input id="alLsProject" value="${alEsc(c.project)}" spellcheck="false"></div>
+    <div class="field"><label for="alLsKey">API key</label>
+      <input id="alLsKey" type="password" autocomplete="off" placeholder="${alEsc(c.key)}">
+      <div class="help">Create one under LangSmith → Settings → API Keys. Leave blank to keep the current one.
+      Kept in the workspace's agentlab folder, readable only by you.</div></div>
+    <div class="field"><label for="alLsWs">Workspace ID (only if your key covers several)</label>
+      <input id="alLsWs" value="${alEsc(c.workspace)}" spellcheck="false"></div>
+    <div class="row"><button class="btn" id="alLsSave">Save</button>
+      ${last ? `<button class="btn" id="alLsTest">Send the last run now</button>` : ""}
+      <span class="al-muted" id="alLsMsg"></span></div>
+    ${d.log.length ? `<ul class="al-unf">${d.log.map(e => `<li><b>${e.ok ? "sent" : "failed"}</b> · ${alEsc(e.design || "")}
+      · ${e.spans} spans to ${alEsc(e.project)}${e.error ? `<small class="al-err">${alEsc(e.error)}</small>` : ""}</li>`).join("")}</ul>` : ""}`;
+  $("alLsRegion").onchange = e => {
+    $("alLsCustom").hidden = e.target.value !== "custom";
+    if (e.target.value !== "custom") $("alLsEndpoint").value = d.endpoints[e.target.value];
+  };
+  $("alLsSave").onclick = async () => {
+    const key = $("alLsKey").value;
+    const r = await fetch(API + "/api/agentlab/langsmith", {method: "PUT", headers: {"content-type": "application/json"},
+      body: JSON.stringify({enabled: $("alLsOn").checked, endpoint: $("alLsEndpoint").value, project: $("alLsProject").value,
+                            workspace: $("alLsWs").value, which: $("alLsWhich").value, api_key: key ? key : null})});
+    const out = await r.json();
+    $("alLsMsg").textContent = r.ok ? "Saved." : ((out.detail && out.detail.message) || "Not saved.");
+    if (r.ok) setTimeout(alRenderLangSmith, 500);
+  };
+  if ($("alLsTest")) $("alLsTest").onclick = async () => {
+    $("alLsMsg").textContent = "sending…";
+    const r = await fetch(API + `/api/agentlab/langsmith/send/${last}`, {method: "POST"});
+    const out = await r.json();
+    $("alLsMsg").textContent = !r.ok ? ((out.detail && out.detail.message) || "Not sent.")
+      : out.ok ? `Sent ${out.spans} spans to “${out.project}”.` : out.error;
+    setTimeout(alRenderLangSmith, 300);
+  };
 }
 
 /* ---------- saving ---------- */

@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.3.0
+
+**Runs as traces in LangSmith.** The Monitor tab has a new section, "Send runs
+to LangSmith": a region (US or EU, or any endpoint), a project, your API key,
+and whether to send live runs only or rehearsals too. With it on, every run
+finished from the page — and forks, and runs over the API — becomes a trace in
+that project, so LangSmith's tracing, monitoring and evaluators work on lab
+runs without the lab rebuilding them.
+
+- **The trace mirrors the run.** The run is the root, with the task as input and
+  the answer as output; each block it passed is a child, in order, with the
+  state before and after; tools sit under the router that dispatched them, with
+  their arguments and results; model calls are LLM runs with their messages,
+  token usage and model name, which LangSmith uses for cost. Ids are
+  time-ordered UUIDv7s, as LangSmith recommends.
+- **Never in the way.** Sending happens on a background thread after the run has
+  finished. A refused send — a wrong key, say — is listed under the settings
+  with LangSmith's own reason; the run itself is untouched.
+- **Your key stays yours.** It is kept in the workspace's `agentlab/` folder,
+  readable only by you, or read from `LANGSMITH_API_KEY`, and never sent back to
+  the page, which only learns whether one is set.
+- **"Send the last run now"** sends the newest run straight away and says
+  how it went: the quickest way to check a key and project.
+
+Written against LangSmith's documented REST API (`POST /runs`) with the
+standard library, and tested against a stand-in server; it has not yet been
+run against your LangSmith account. The test suite uses its own settings file,
+so turning sending on never sends test runs.
+
 ## 3.2.0
 
 **Monitoring over days**, after LangSmith's Monitoring. A new **Monitor** tab

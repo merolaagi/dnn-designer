@@ -2823,12 +2823,14 @@ def _runs_dir() -> Path:
     return path
 
 
-def save_run(result, graph, task, mode, approvals, parent=None) -> str:
+def save_run(result, graph, task, mode, approvals, parent=None, source: str = "page") -> str:
     run_id = uuid.uuid4().hex[:10]
     record = {"id": run_id, "parent": parent, "graph": graph, "task": task, "mode": mode,
-              "approvals": approvals, "started": time.time(),
+              "approvals": approvals, "started": time.time() - (result.get("seconds") or 0.0),
+              "status": "done" if result.get("ok") else "error",
               **{k: result.get(k) for k in ("ok", "answer", "error", "events", "checkpoints", "costs")}}
     (_runs_dir() / f"{run_id}.json").write_text(json.dumps(record))
+    _maybe_export(record, "fork" if parent else source)
     kept = sorted(_runs_dir().glob("*.json"), key=lambda p: p.stat().st_mtime)
     for old in kept[:-200]:                       # the newest 200 runs are kept
         old.unlink(missing_ok=True)
@@ -3862,6 +3864,219 @@ def monitor(days: int = 7, design: Optional[str] = None, mode: Optional[str] = N
             "sources": sorted(keep), "metrics": ALERT_METRICS}
 
 
+
+# --------------------------------------------------------------------------
+# export to LangSmith: lab runs as traces in your LangSmith project
+# --------------------------------------------------------------------------
+# Each finished run becomes a trace through LangSmith's documented REST API
+# (POST /runs, authenticated by x-api-key), with the standard library: the run
+# is the root, each block it passed is a child, tools sit under the router that
+# dispatched them, and model calls carry their token usage and model name, which
+# LangSmith uses for cost. Sending happens on a background thread after the run
+# has finished, so it never slows a run, and a failed send is logged, not raised.
+
+LANGSMITH_ENDPOINTS = {"US": "https://api.smith.langchain.com", "EU": "https://eu.api.smith.langchain.com"}
+_EXPORT_LOG: List[Dict[str, Any]] = []
+_FIELD_LIMIT = 100_000
+
+
+def _ls_path() -> Path:
+    return _dir() / "langsmith.json"
+
+
+def langsmith_settings(public: bool = True) -> Dict[str, Any]:
+    raw = _ls_raw()
+    out = {"enabled": bool(raw.get("enabled")), "endpoint": raw.get("endpoint") or LANGSMITH_ENDPOINTS["US"],
+           "project": raw.get("project") or "agent-lab", "which": raw.get("which") or "live",
+           "workspace": raw.get("workspace") or ""}
+    key = raw.get("api_key") or os.environ.get("LANGSMITH_API_KEY") or ""
+    if public:
+        out["key"] = ("saved here" if raw.get("api_key") else "from LANGSMITH_API_KEY" if key else "not set")
+    else:
+        out["api_key"] = key
+    return out
+
+
+def _ls_raw() -> Dict[str, Any]:
+    try:
+        return json.loads(_ls_path().read_text()) if _ls_path().exists() else {}
+    except ValueError:
+        return {}
+
+
+def set_langsmith(settings: Dict[str, Any]) -> Dict[str, Any]:
+    raw = _ls_raw()
+    endpoint = str(settings.get("endpoint") or raw.get("endpoint") or LANGSMITH_ENDPOINTS["US"]).rstrip("/")
+    if not endpoint.startswith("https://") and not endpoint.startswith("http://127.0.0.1") \
+            and not endpoint.startswith("http://localhost"):
+        raise ValueError("The endpoint must be an https:// address.")
+    which = settings.get("which") or raw.get("which") or "live"
+    if which not in ("live", "all"):
+        raise ValueError("Send live runs only, or all runs.")
+    raw.update(enabled=bool(settings.get("enabled")), endpoint=endpoint, which=which,
+               project=str(settings.get("project") or raw.get("project") or "agent-lab")[:100],
+               workspace=str(settings.get("workspace") or "").strip()[:64])
+    if settings.get("api_key") is not None:                  # "" forgets a saved key
+        raw["api_key"] = str(settings["api_key"]).strip()
+        if not raw["api_key"]:
+            raw.pop("api_key")
+    path = _ls_path()
+    path.write_text(json.dumps(raw, indent=1))
+    try:
+        os.chmod(path, 0o600)                                # the key is readable by you alone
+    except OSError:
+        pass
+    return langsmith_settings()
+
+
+def uuid7(at: Optional[float] = None) -> str:
+    """A time-ordered UUID (version 7), as LangSmith recommends for run ids."""
+    ms = int((at if at is not None else time.time()) * 1000) & ((1 << 48) - 1)
+    rand = int.from_bytes(os.urandom(10), "big")
+    value = (ms << 80) | (0x7 << 76) | ((rand >> 64 & 0xFFF) << 64) | (0b10 << 62) | (rand & ((1 << 62) - 1))
+    return str(uuid.UUID(int=value))
+
+
+def _iso(t: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(t)) + f".{int((t % 1) * 1e6):06d}Z"
+
+
+def _dotted(t: float, run_id: str) -> str:
+    return time.strftime("%Y%m%dT%H%M%S", time.gmtime(t)) + f"{int((t % 1) * 1e6):06d}Z{run_id}"
+
+
+def _clip(value):
+    text = json.dumps(value, default=str)
+    return value if len(text) <= _FIELD_LIMIT else {"truncated": text[:_FIELD_LIMIT]}
+
+
+def to_langsmith(rec: Dict[str, Any], project: str) -> List[Dict[str, Any]]:
+    """A run record as LangSmith runs, parents before children."""
+    graph, events, cps = rec.get("graph") or {}, rec.get("events") or [], rec.get("checkpoints") or []
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    t0 = float(rec.get("started") or time.time())
+    t_end = t0 + (events[-1]["t"] if events else 0.0)
+    models = _model_of(graph)
+    providers = {n["id"]: ("openai" if _params(n).get("provider") == "openai-compatible" else "anthropic")
+                 for n in nodes.values() if n.get("type") == "llm"}
+    root_id = uuid7(t0)
+    root_dot = _dotted(t0, root_id)
+    meta = {"design": graph.get("name"), "mode": rec.get("mode"), "agent_lab_run": rec.get("id"),
+            "thread": rec.get("thread")}
+    status_error = rec.get("error") if rec.get("status") in ("error", "stopped") or rec.get("ok") is False else None
+    out = [{"id": root_id, "trace_id": root_id, "dotted_order": root_dot, "name": f"agent: {graph.get('name') or 'unsaved'}",
+            "run_type": "chain", "start_time": _iso(t0), "end_time": _iso(t_end),
+            "inputs": {"task": rec.get("task")}, "outputs": {"answer": rec.get("answer")},
+            "error": status_error, "session_name": project, "tags": ["agent-lab", rec.get("mode") or ""],
+            "extra": {"metadata": {k: v for k, v in meta.items() if v is not None}}}]
+
+    def child(parent_id, parent_dot, name, kind, start, end, inputs, outputs, error=None, metadata=None):
+        rid = uuid7(start)
+        dot = parent_dot + "." + _dotted(start, rid)
+        out.append({"id": rid, "trace_id": root_id, "parent_run_id": parent_id, "dotted_order": dot, "name": name,
+                    "run_type": kind, "start_time": _iso(start), "end_time": _iso(max(start, end)),
+                    "inputs": _clip(inputs), "outputs": _clip(outputs), "error": error, "session_name": project,
+                    "extra": {"metadata": metadata or {}}})
+        return rid, dot
+
+    kinds = {"llm": "llm", "retriever": "retriever", "long_mem": "retriever", "planner": "llm", "reflector": "llm"}
+    for k in range(1, len(cps)):
+        before, after = cps[k - 1], cps[k]
+        block = after.get("block")
+        if block is None or block not in nodes:
+            continue
+        span = events[before["events"]:after["events"]]
+        start = t0 + (events[before["events"] - 1]["t"] if before["events"] > 0 else 0.0)
+        end = t0 + (span[-1]["t"] if span else start - t0)
+        kind = nodes[block]["type"]
+        prior, state = before["state"], after["state"]
+        if kind == "llm":
+            call = next((e for e in span if e.get("event") == "model" and not e.get("inside")), {})
+            tok = call.get("tokens") or {}
+            reply = state["messages"][-1] if state.get("messages") else {}
+            inputs = {"messages": prior.get("messages") or [], "context": prior.get("context") or [],
+                      "task": prior.get("task")}
+            outputs = {"messages": [reply], "usage_metadata": {
+                "input_tokens": tok.get("input", 0), "output_tokens": tok.get("output", 0),
+                "total_tokens": tok.get("input", 0) + tok.get("output", 0)}}
+            child(root_id, root_dot, label(nodes[block]), "llm", start, end, inputs, outputs,
+                  metadata={"ls_model_name": models.get(block) if rec.get("mode") == "live" else "rehearsal",
+                            "ls_provider": providers.get(block), "estimated_tokens": not tok or rec.get("mode") != "live"})
+            continue
+        rid, dot = child(root_id, root_dot, label(nodes[block]), kinds.get(kind, "chain"), start, end,
+                         {"state": {k2: prior.get(k2) for k2 in ("task", "context", "draft")}},
+                         {"events": [{k2: v for k2, v in e.items() if k2 != "tokens"} for e in span],
+                          "context": state.get("context"), "answer": state.get("answer")})
+        if kind == "router":
+            asked = {}
+            for m in prior.get("messages") or []:
+                if m.get("role") == "assistant" and isinstance(m.get("content"), list):
+                    for b in m["content"]:
+                        if b.get("type") == "tool_use":
+                            asked[b["id"]] = b
+            results = []
+            last = (state.get("messages") or [{}])[-1]
+            if last.get("role") == "user" and isinstance(last.get("content"), list):
+                results = [b for b in last["content"] if b.get("type") == "tool_result"]
+            for b in results:
+                call = asked.get(b.get("tool_use_id"), {})
+                text = str(b.get("content"))
+                child(rid, dot, call.get("name") or "tool", "tool", start, end, {"input": call.get("input")},
+                      {"output": text}, error=text if text.startswith("Error") else None)
+    return out
+
+
+def _post(url: str, body: Dict[str, Any], key: str, workspace: str) -> int:
+    import urllib.error
+    import urllib.request
+    headers = {"content-type": "application/json", "x-api-key": key}
+    if workspace:
+        headers["x-tenant-id"] = workspace
+    request = urllib.request.Request(url, data=json.dumps(body, default=str).encode(), headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as reply:
+            return reply.status
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:200]
+        raise RuntimeError(f"LangSmith answered {exc.code}: {detail}") from None
+
+
+def send_to_langsmith(rec: Dict[str, Any], settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    cfg = settings or langsmith_settings(public=False)
+    if not cfg.get("api_key"):
+        raise ValueError("Set a LangSmith API key first: in the Monitor tab, or LANGSMITH_API_KEY.")
+    runs = to_langsmith(rec, cfg["project"])
+    entry = {"run": rec.get("id"), "design": (rec.get("graph") or {}).get("name"), "t": time.time(),
+             "spans": len(runs), "project": cfg["project"], "trace": runs[0]["id"]}
+    try:
+        for r in runs:
+            _post(cfg["endpoint"].rstrip("/") + "/runs", r, cfg["api_key"], cfg.get("workspace") or "")
+        entry["ok"] = True
+    except Exception as exc:  # noqa: BLE001 — a failed send is a line in the log, never a failed run
+        entry.update(ok=False, error=str(exc)[:300])
+    _EXPORT_LOG.append(entry)
+    del _EXPORT_LOG[:-20]
+    return entry
+
+
+def export_log() -> List[Dict[str, Any]]:
+    return list(reversed(_EXPORT_LOG))
+
+
+def _maybe_export(rec: Dict[str, Any], source: str) -> None:
+    """After a run finishes: send it, in the background, if tracing is on and this run qualifies."""
+    try:
+        cfg = langsmith_settings(public=False)
+    except Exception:  # noqa: BLE001
+        return
+    if not cfg["enabled"] or not cfg.get("api_key") or source not in ("page", "api", "fork"):
+        return
+    if cfg["which"] == "live" and rec.get("mode") != "live":
+        return
+    snapshot = json.loads(json.dumps(rec, default=str))
+    threading.Thread(target=send_to_langsmith, args=(snapshot, cfg), daemon=True).start()
+
+
 # --------------------------------------------------------------------------
 # durable runs: written as they go, paused for a person, resumed after a crash
 # --------------------------------------------------------------------------
@@ -4001,6 +4216,8 @@ def _execute(job: Job, memory_dir: Optional[Path], resume_at: Optional[Dict[str,
     if ctx:
         record_metric(graph, mode, status, rec["events"], rec.get("costs"), time.time() - segment_start,
                       "page", rec["id"], waited[0])
+    if status in ("done", "error") and not job.abandoned:
+        _maybe_export({**rec, "status": status, "pending": None}, "page")   # sent from a copy, in the background
     with _JOBS_LOCK, job.lock:
         rec.update(status=status, pending=None, finished=time.time())
         job.write()

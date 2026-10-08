@@ -7463,6 +7463,9 @@ import tempfile as _tempfile  # noqa: E402
 # the suite runs hundreds of agents; they must not show up in your Monitoring
 _TEST_METRICS = Path(_tempfile.mkdtemp()) / "metrics.jsonl"
 agentlab._metrics_path = lambda: _TEST_METRICS
+# ...nor be sent to your LangSmith project if you have turned sending on
+_TEST_LANGSMITH = _TEST_METRICS.parent / "langsmith.json"
+agentlab._ls_path = lambda: _TEST_LANGSMITH
 
 
 @check("every agent-lab design generates Python that compiles")
@@ -8916,6 +8919,126 @@ def _():
     assert len(out["series"]) == 7 and "fired" in out
     for needle in ('data-altab="monitor"', "async function alRenderMonitor", "function alMonChart"):
         assert needle in PAGE, needle
+
+
+# --------------------------------------------------------------------------
+# agent lab 3.3: runs as traces in LangSmith
+# --------------------------------------------------------------------------
+
+def _fake_langsmith(status=202):
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    got = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            got.append({"path": self.path, "key": self.headers.get("x-api-key"),
+                        "tenant": self.headers.get("x-tenant-id"), "body": body})
+            reply = b'{"detail":"bad key"}' if status >= 400 else b"{}"
+            self.send_response(status)
+            self.send_header("content-length", str(len(reply)))
+            self.end_headers()
+            self.wfile.write(reply)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_port}", got, server
+
+
+@check("a run becomes one LangSmith trace: blocks as children, tools under their router")
+def _():
+    url, got, server = _fake_langsmith()
+    try:
+        kept = agentlab.run(agentlab.template("react"), "Find Lisbon's population", keep=True)
+        entry = agentlab.send_to_langsmith(agentlab.load_run(kept["run_id"]),
+                                           {"api_key": "k-123", "endpoint": url, "project": "lab", "workspace": "ws"})
+    finally:
+        server.shutdown()
+    assert entry["ok"] and entry["spans"] == len(got)
+    assert {g["path"] for g in got} == {"/runs"} and {g["key"] for g in got} == {"k-123"}
+    assert {g["tenant"] for g in got} == {"ws"}
+    runs = [g["body"] for g in got]
+    root = runs[0]
+    assert root["run_type"] == "chain" and "parent_run_id" not in root and root["session_name"] == "lab"
+    assert root["inputs"] == {"task": "Find Lisbon's population"} and root["outputs"]["answer"] == kept["answer"]
+    ids = {r["id"]: r for r in runs}
+    assert all(r["trace_id"] == root["id"] for r in runs)
+    for r in runs[1:]:
+        parent = ids[r["parent_run_id"]]
+        assert r["dotted_order"].startswith(parent["dotted_order"] + "."), "a child's dotted order extends its parent's"
+    tools = [r for r in runs if r["run_type"] == "tool"]
+    assert sorted(t["name"] for t in tools) == ["calculator", "web_search"]
+    assert all(ids[t["parent_run_id"]]["name"] == "Router" for t in tools)
+    llm = next(r for r in runs if r["run_type"] == "llm")
+    assert llm["outputs"]["usage_metadata"]["total_tokens"] > 0
+    assert all(uuid.UUID(r["id"]).version == 7 for r in runs)
+
+
+@check("a refused send is logged with LangSmith's reason, and the run is untouched")
+def _():
+    url, got, server = _fake_langsmith(status=401)
+    try:
+        kept = agentlab.run(agentlab.template("rag"), "cafes", keep=True)
+        entry = agentlab.send_to_langsmith(agentlab.load_run(kept["run_id"]),
+                                           {"api_key": "wrong", "endpoint": url, "project": "lab", "workspace": ""})
+    finally:
+        server.shutdown()
+    assert not entry["ok"] and "401" in entry["error"] and "bad key" in entry["error"]
+    assert agentlab.export_log()[0]["error"] == entry["error"]
+    assert agentlab.load_run(kept["run_id"])["status"] == "done"
+
+
+@check("runs are sent as they finish only when sending is on, and only the kind asked for")
+def _():
+    import time as _t
+    url, got, server = _fake_langsmith()
+    try:
+        agentlab.set_langsmith({"enabled": True, "endpoint": url, "project": "lab", "which": "live",
+                                "api_key": "k"})
+        agentlab.run(agentlab.template("rag"), "cafes", keep=True)            # a rehearsal: not sent
+        _t.sleep(0.4)
+        assert got == [], "live only: a rehearsal should not have been sent"
+        agentlab.set_langsmith({"enabled": True, "endpoint": url, "project": "lab", "which": "all"})
+        view = agentlab.start_run(agentlab.template("rag"), "cafes", approvals="approve")
+        _until(view["id"], ("done",))
+        for _ in range(40):
+            if got:
+                break
+            _t.sleep(0.05)
+        assert got and got[0]["body"]["extra"]["metadata"]["agent_lab_run"] == view["id"]
+        before = len(got)
+        agentlab.set_langsmith({"enabled": False})
+        agentlab.run(agentlab.template("rag"), "cafes", keep=True)
+        _t.sleep(0.4)
+        assert len(got) == before, "switched off, nothing more should be sent"
+    finally:
+        server.shutdown()
+        _TEST_LANGSMITH.unlink(missing_ok=True)
+
+
+@check("the LangSmith key is kept from the page and from other users")
+def _():
+    try:
+        out = agentlab.set_langsmith({"enabled": False, "api_key": "lsv2_secret"})
+        assert "secret" not in json.dumps(out) and out["key"] == "saved here"
+        assert agentlab.langsmith_settings(public=False)["api_key"] == "lsv2_secret"
+        assert oct(_TEST_LANGSMITH.stat().st_mode & 0o777) == "0o600"
+        import main
+        assert "secret" not in json.dumps(main.agentlab_langsmith())
+        assert agentlab.set_langsmith({"api_key": ""})["key"] in ("not set", "from LANGSMITH_API_KEY")
+        try:
+            agentlab.set_langsmith({"endpoint": "http://evil.example"})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("a plain-http endpoint elsewhere should be refused")
+        assert "async function alRenderLangSmith" in PAGE
+    finally:
+        _TEST_LANGSMITH.unlink(missing_ok=True)
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

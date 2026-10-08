@@ -423,6 +423,40 @@ def agentlab_alerts(body: AgentLabAlerts):
         raise HTTPException(400, detail={"message": str(exc)})
 
 
+class AgentLabLangSmith(BaseModel):
+    enabled: bool = False
+    endpoint: Optional[str] = None
+    project: Optional[str] = None
+    workspace: Optional[str] = None
+    which: Optional[str] = None
+    api_key: Optional[str] = None              # None keeps the saved key; "" forgets it
+
+
+@app.get("/api/agentlab/langsmith")
+def agentlab_langsmith():
+    return {"settings": agentlab.langsmith_settings(), "log": agentlab.export_log(),
+            "endpoints": agentlab.LANGSMITH_ENDPOINTS}
+
+
+@app.put("/api/agentlab/langsmith")
+def agentlab_langsmith_set(body: AgentLabLangSmith):
+    try:
+        return {"settings": agentlab.set_langsmith(body.dict())}
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/agentlab/langsmith/send/{run_id}")
+def agentlab_langsmith_send(run_id: str):
+    """Send one saved run now and say how it went: the way to check the connection."""
+    try:
+        return agentlab.send_to_langsmith(agentlab._record(run_id))
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
 class AgentLabStart(BaseModel):
     graph: Dict[str, Any]
     task: str
