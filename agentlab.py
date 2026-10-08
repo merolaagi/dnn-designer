@@ -1041,28 +1041,54 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
              "        paths[END] = END",
              '        graph.add_conditional_edges(name, lambda s: s.get("next") or END, paths)',
              "    return graph", "", "",
-             'def run_agent(task, thread="cli", approve=None):',
-             '    """Run to the end, answering each approval interrupt with approve(request) or by asking."""',
-             "    app = build().compile(checkpointer=MemorySaver())",
-             '    config = {"configurable": {"thread_id": thread}, "recursion_limit": MAX_HOPS}',
-             "    result = app.invoke(new_state(task), config)",
+             "def compile_app():",
+             '    """The graph with a checkpointer: LangGraph saves the state after every node."""',
+             "    return build().compile(checkpointer=MemorySaver())", "", "",
+             "def finish(app, result, config, approve=None):",
+             '    """Answer approval interrupts until the run ends."""',
              '    while result.get("__interrupt__"):',
              '        request = result["__interrupt__"][0].value',
              "        yes = approve(request) if approve else input(",
              '            f"\\nApprove {request[\'tool\']}({json.dumps(request[\'args\'])})? [y/N] ").strip().lower() == "y"',
              "        result = app.invoke(Command(resume=yes), config)",
-             '    return result["answer"]'], start, end)
+             '    return result["answer"]', "", "",
+             'def run_agent(task, thread="cli", approve=None, app=None):',
+             '    """Run to the end, answering each approval interrupt with approve(request) or by asking."""',
+             "    app = app or compile_app()",
+             '    config = {"configurable": {"thread_id": thread}, "recursion_limit": MAX_HOPS}',
+             "    return finish(app, app.invoke(new_state(task), config), config, approve)", "", "",
+             "# ---- time travel, LangGraph's way ----",
+             'def history(app, thread="cli"):',
+             '    """Every checkpoint saved for a thread, newest first. Each has .values, .next and .config."""',
+             '    return list(app.get_state_history({"configurable": {"thread_id": thread}}))', "", "",
+             "def fork(app, checkpoint, changes, approve=None):",
+             '    """Continue from an earlier checkpoint with some of its state changed, as a new branch."""',
+             "    config = app.update_state(checkpoint.config, changes)",
+             '    config = {**config, "recursion_limit": MAX_HOPS}',
+             "    return finish(app, app.invoke(None, config), config, approve)"], start, end)
     else:
         add(["", "", "# ---- a while loop runs the machine ----"])
-        add(["def run_agent(task):",
-             "    state = new_state(task)",
-             "    current, hops = START, 0",
+        add(["def resume(state, current, on_step=None):",
+             '    """Run blocks from `current` until one returns None.',
+             "",
+             "    on_step(block, state, next_block) is called after every block: the state then is a",
+             "    checkpoint, and resume(that state, next_block) carries on from it — time travel.",
+             '    """',
+             "    hops = 0",
              "    while current is not None:",
              "        hops += 1",
              "        if hops > MAX_HOPS:",
              '            raise RuntimeError(f"More than {MAX_HOPS} moves between blocks: the graph is circling.")',
-             "        current = NODES[current](state)",
-             '    return state["answer"]'], start, end)
+             "        block = current",
+             "        current = NODES[block](state)",
+             "        if on_step:",
+             "            on_step(block, state, current)",
+             '    return state["answer"]', "", "",
+             "def run_agent(task, on_step=None):",
+             "    state = new_state(task)",
+             "    if on_step:",
+             "        on_step(None, state, START)",
+             "    return resume(state, START, on_step)"], start, end)
     add(["", ""])
     add(['if __name__ == "__main__":', '    print(run_agent(input("Task: ")))'], start, end)
     add([""])
@@ -1628,9 +1654,13 @@ class Rehearsal:
     is the real generated code.
     """
 
-    def __init__(self):
-        self.critic_calls = 0
-        self.tool_rounds = 0      # counted here, not read off the history, which a summarizer rewrites
+    def __init__(self, critic_calls: int = 0, tool_rounds: int = 0):
+        self.critic_calls = critic_calls
+        self.tool_rounds = tool_rounds    # counted here, not read off the history, which a summarizer rewrites
+
+    def snapshot(self) -> Dict[str, int]:
+        """What it remembers, so a fork from a checkpoint behaves as the original would have."""
+        return {"critic_calls": self.critic_calls, "tool_rounds": self.tool_rounds}
 
     def __call__(self, system, messages, tools=None, **_settings):
         if not tools:
@@ -1669,17 +1699,14 @@ class Rehearsal:
                 "stop_reason": "end_turn"}
 
 
-def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
-        memory_dir: Optional[Path] = None) -> Dict[str, Any]:
-    errors = [p for p in validate(graph) if p["level"] == "error"]
-    if errors:
-        return {"ok": False, "problems": errors, "events": [], "answer": None, "mode": mode}
+def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None,
+             model_state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Load the generated file and wire the lab into it: events, measurement, approvals, the model."""
     if mode == "live" and not os.environ.get("ANTHROPIC_API_KEY"):
         raise ValueError("A live run needs ANTHROPIC_API_KEY in the server's environment. "
                          "Rehearsal runs work without it.")
     if mode not in ("live", "rehearsal"):
         raise ValueError(f"Unknown mode {mode!r}.")
-
     built = codegen(graph, "python")
     events: List[Dict[str, Any]] = []
     started = time.time()
@@ -1695,8 +1722,10 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
     space: Dict[str, Any] = {"__name__": "agentlab_run"}
     exec(compile(built["source"], "<agent>", "exec"), space)  # noqa: S102 — our own generated file
     space["human_approves"] = approve
+    rehearsal = None
     if mode == "rehearsal":
-        space["call_model"] = Rehearsal()
+        rehearsal = Rehearsal(**(model_state or {}))
+        space["call_model"] = rehearsal
 
     # Measure every model call, and pin each measurement to the event the call produced.
     calls: List[Dict[str, Any]] = []
@@ -1725,15 +1754,143 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
     if "MEMORY_FILE" in space and memory_dir is not None:
         space["MEMORY_FILE"] = Path(memory_dir) / "agent_memory.json"
 
+    checkpoints: List[Dict[str, Any]] = []
+
+    def on_step(block, state, nxt):
+        """A checkpoint: the whole state after a block, and which block runs next."""
+        checkpoints.append({"i": len(checkpoints), "block": block, "next": nxt, "events": len(events),
+                            "state": json.loads(json.dumps(state)),
+                            "model": rehearsal.snapshot() if rehearsal else None})
+
+    return {"space": space, "events": events, "calls": calls, "emit": emit, "started": started,
+            "built": built, "checkpoints": checkpoints, "on_step": on_step}
+
+
+def _drive(ctx, start) -> Dict[str, Any]:
     answer, error = None, None
     try:
-        answer = space["run_agent"](task)
+        answer = start()
     except Exception as exc:  # noqa: BLE001 — a failed run is a result to show, not a crash
         error = f"{type(exc).__name__}: {exc}"
-        emit("error", message=error)
-    return {"ok": error is None, "answer": answer, "error": error, "events": events,
-            "mode": mode, "nodemap": built["nodemap"], "seconds": round(time.time() - started, 2),
-            "costs": costs(graph, task, events, calls, space, mode)}
+        ctx["emit"]("error", message=error)
+    return {"ok": error is None, "answer": answer, "error": error, "events": ctx["events"],
+            "nodemap": ctx["built"]["nodemap"], "seconds": round(time.time() - ctx["started"], 2),
+            "checkpoints": ctx["checkpoints"]}
+
+
+def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
+        memory_dir: Optional[Path] = None, keep: bool = False) -> Dict[str, Any]:
+    errors = [p for p in validate(graph) if p["level"] == "error"]
+    if errors:
+        return {"ok": False, "problems": errors, "events": [], "answer": None, "mode": mode}
+    ctx = _prepare(graph, mode, approvals, memory_dir)
+    result = _drive(ctx, lambda: ctx["space"]["run_agent"](task, ctx["on_step"]))
+    result.update(mode=mode, costs=costs(graph, task, ctx["events"], ctx["calls"], ctx["space"], mode))
+    if keep:
+        result["run_id"] = save_run(result, graph, task, mode, approvals)
+    return result
+
+
+# --------------------------------------------------------------------------
+# time travel: checkpoints, edits and forks
+# --------------------------------------------------------------------------
+# Every block leaves a checkpoint: the whole state after it ran and the block
+# that runs next. Forking takes one, applies edits a person made — the task, a
+# message, what a tool returned — and resumes the generated file from there,
+# with the original design or the one now on the canvas. What lives outside
+# the state is not rewound: files a tool wrote, long-term memory, the world.
+
+def _runs_dir() -> Path:
+    path = _dir() / "runs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def save_run(result, graph, task, mode, approvals, parent=None) -> str:
+    run_id = uuid.uuid4().hex[:10]
+    record = {"id": run_id, "parent": parent, "graph": graph, "task": task, "mode": mode,
+              "approvals": approvals, "started": time.time(),
+              **{k: result.get(k) for k in ("ok", "answer", "error", "events", "checkpoints", "costs")}}
+    (_runs_dir() / f"{run_id}.json").write_text(json.dumps(record))
+    kept = sorted(_runs_dir().glob("*.json"), key=lambda p: p.stat().st_mtime)
+    for old in kept[:-200]:                       # the newest 200 runs are kept
+        old.unlink(missing_ok=True)
+    return run_id
+
+
+def load_run(run_id: str) -> Dict[str, Any]:
+    path = _runs_dir() / f"{Path(run_id).name}.json"
+    if not path.exists():
+        raise KeyError(run_id)
+    return json.loads(path.read_text())
+
+
+def apply_edits(state: Dict[str, Any], edits: Dict[str, Any]) -> List[str]:
+    """Change a checkpoint's state the way a person asked. Returns what actually changed."""
+    changed = []
+    for key, name in (("task", "the task"), ("draft", "the draft")):
+        if key in edits and edits[key] is not None and edits[key] != state.get(key):
+            state[key] = edits[key]
+            changed.append(name)
+    for e in edits.get("context") or []:
+        i = int(e["i"])
+        if not 0 <= i < len(state["context"]):
+            raise ValueError(f"There is no context note {i + 1} at this checkpoint.")
+        if state["context"][i] != e["text"]:
+            state["context"][i] = e["text"]
+            changed.append(f"context note {i + 1}")
+    for e in edits.get("messages") or []:
+        m = int(e["m"])
+        if not 0 <= m < len(state["messages"]):
+            raise ValueError(f"There is no message {m + 1} at this checkpoint.")
+        msg = state["messages"][m]
+        if e.get("b") is None:
+            if not isinstance(msg["content"], str):
+                raise ValueError(f"Message {m + 1} is made of parts; edit one part.")
+            if msg["content"] != e["text"]:
+                msg["content"] = e["text"]
+                changed.append(f"message {m + 1}")
+            continue
+        block = msg["content"][int(e["b"])]
+        key = {"text": "text", "tool_result": "content"}.get(block.get("type"))
+        if key is None:
+            raise ValueError("Only text and tool results can be edited; a tool request is the model's own words.")
+        if block.get(key) != e["text"]:
+            block[key] = e["text"]
+            changed.append(f"message {m + 1}" + (" (what the tool returned)" if key == "content" else ""))
+    return changed
+
+
+def fork(run_id: str, index: int, edits: Optional[Dict[str, Any]] = None, graph=None,
+         memory_dir: Optional[Path] = None) -> Dict[str, Any]:
+    parent = load_run(run_id)
+    points = parent.get("checkpoints") or []
+    if not 0 <= index < len(points):
+        raise ValueError("That run has no such checkpoint.")
+    cp = points[index]
+    if cp["next"] is None:
+        raise ValueError("That checkpoint is the end of the run; fork from an earlier one.")
+    design = graph or parent["graph"]
+    if graph is not None:
+        errors = [p["message"] for p in validate(graph) if p["level"] == "error"]
+        if errors:
+            raise ValueError(f"The design on the canvas does not run: {errors[0]}")
+        if cp["next"] not in {n["id"] for n in graph.get("nodes", [])}:
+            raise ValueError("The design on the canvas no longer has the block this checkpoint continues into.")
+    state = json.loads(json.dumps(cp["state"]))
+    changed = apply_edits(state, edits or {})
+    ctx = _prepare(design, parent["mode"], parent["approvals"], memory_dir, model_state=cp.get("model"))
+    ctx["emit"]("fork", node=cp["next"], parent=run_id, checkpoint=index, changed=changed,
+                design="current" if graph is not None else "original")
+    ctx["on_step"](None, state, cp["next"])
+    result = _drive(ctx, lambda: ctx["space"]["resume"](state, cp["next"], ctx["on_step"]))
+    result.update(mode=parent["mode"],
+                  costs={**costs(design, state["task"], ctx["events"], ctx["calls"], ctx["space"], parent["mode"]),
+                         "forked": True},
+                  parent={"run": run_id, "checkpoint": index, "changed": changed})
+    result["run_id"] = save_run(result, design, state["task"], parent["mode"], parent["approvals"],
+                                parent=result["parent"])
+    return result
 
 
 def call_base(graph, lid, space=None) -> int:

@@ -7886,6 +7886,127 @@ def _():
     assert any(p["node"] == sid and "not wired" in p["message"] for p in agentlab.validate(g))
 
 
+# --------------------------------------------------------------------------
+# agent lab 2.4: checkpoints and time travel
+# --------------------------------------------------------------------------
+
+def _checkpoint(result, block, nxt):
+    return next(c for c in result["checkpoints"] if c["block"] == block and c["next"] == nxt)
+
+
+def _ids(graph, kind):
+    return next(n["id"] for n in graph["nodes"] if n["type"] == kind)
+
+
+@check("every block a run passes leaves a checkpoint, from the start to the end")
+def _():
+    result = agentlab.run(agentlab.template("react"), "Estimate cafes in Lisbon", keep=True)
+    cps = result["checkpoints"]
+    assert result["run_id"] and cps[0]["block"] is None and cps[0]["next"] == _ids(agentlab.template("react"), "user_input")
+    assert cps[-1]["next"] is None and cps[-1]["state"]["answer"] == result["answer"]
+    assert [c["events"] for c in cps] == sorted(c["events"] for c in cps)
+    assert all(a["next"] == b["block"] for a, b in zip(cps, cps[1:])), "checkpoints do not chain"
+
+
+@check("a fork with nothing changed repeats the original exactly")
+def _():
+    g = agentlab.template("planexec")
+    result = agentlab.run(g, "Estimate cafes in Lisbon", keep=True)
+    for cp in result["checkpoints"][:-1]:
+        forked = agentlab.fork(result["run_id"], cp["i"], {})
+        assert forked["answer"] == result["answer"], f"fork at {cp['i']} answered differently"
+        later = [e["event"] for e in result["events"][cp["events"]:]]
+        again = [e["event"] for e in forked["events"] if e["event"] != "fork"]
+        assert later == again, f"fork at {cp['i']}: {again} after, original {later}"
+
+
+@check("changing what a tool returned changes what happens after it")
+def _():
+    g = agentlab.template("react")
+    result = agentlab.run(g, "Estimate cafes in Lisbon", keep=True)
+    cp = _checkpoint(result, _ids(g, "router"), _ids(g, "llm"))
+    m = len(cp["state"]["messages"]) - 1
+    forked = agentlab.fork(result["run_id"], cp["i"],
+                           {"messages": [{"m": m, "b": 0, "text": "Lisbon: 545,000 people, 1,900 cafes."}]})
+    assert "1,900 cafes" in forked["answer"] and "1,900 cafes" not in result["answer"]
+    assert forked["parent"]["changed"] == [f"message {m + 1} (what the tool returned)"]
+    assert agentlab.load_run(forked["run_id"])["parent"]["run"] == result["run_id"]
+
+
+@check("a fork can continue on the design now on the canvas")
+def _():
+    g = agentlab.template("react")
+    result = agentlab.run(g, "Estimate cafes in Lisbon", keep=True)
+    router, guard, end = _ids(g, "router"), _ids(g, "guard_out"), _ids(g, "output")
+    cp = _checkpoint(result, _ids(g, "llm"), router)
+    rewired = json.loads(json.dumps(g))
+    for e in rewired["edges"]:
+        if e["source"] == router and e["target"] == guard:
+            e["target"] = end
+    forked = agentlab.fork(result["run_id"], cp["i"], {}, graph=rewired)
+    assert "guard_out" in [e["event"] for e in result["events"]]
+    assert "guard_out" not in [e["event"] for e in forked["events"]], "the fork ignored the new wiring"
+
+
+@check("forks refuse what they cannot do, and say why")
+def _():
+    g = agentlab.template("react")
+    result = agentlab.run(g, "Estimate cafes in Lisbon", keep=True)
+    for args, needle in (((len(result["checkpoints"]) - 1, {}), "end of the run"),
+                         ((_checkpoint(result, _ids(g, "llm"), _ids(g, "router"))["i"],
+                           {"messages": [{"m": 1, "b": 1, "text": "x"}]}), "model's own words")):
+        try:
+            agentlab.fork(result["run_id"], *args)
+        except ValueError as exc:
+            assert needle in str(exc), str(exc)
+        else:
+            raise AssertionError(f"fork {args} should have been refused")
+    cp = _checkpoint(result, _ids(g, "llm"), _ids(g, "router"))
+    smaller = json.loads(json.dumps(g))
+    smaller["nodes"] = [n for n in smaller["nodes"] if n["type"] != "router"]
+    try:
+        agentlab.fork(result["run_id"], cp["i"], {}, graph=smaller)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a canvas design without the next block should be refused")
+
+
+@check("the LangGraph export can fork from its own history")
+def _():
+    try:
+        import langgraph  # noqa: F401
+    except ImportError:
+        return
+    g = agentlab.template("react")
+    space = {"__name__": "lg"}
+    exec(compile(agentlab.codegen(g, "langgraph")["source"], "lg", "exec"), space)  # noqa: S102
+    space["call_model"] = agentlab.Rehearsal()
+    app = space["compile_app"]()
+    space["run_agent"]("Estimate cafes", thread="tt", app=app)
+    llm = _ids(g, "llm")
+    cp = next(h for h in reversed(space["history"](app, "tt"))
+              if h.next == (llm,) and h.values["messages"] and isinstance(h.values["messages"][-1]["content"], list))
+    messages = json.loads(json.dumps(cp.values["messages"]))
+    messages[-1]["content"][0]["content"] = "EDITED"
+    space["call_model"] = agentlab.Rehearsal(tool_rounds=1)
+    assert "EDITED" in space["fork"](app, cp, {"messages": messages})
+
+
+@check("the run and fork routes work, and the page has a Timeline tab")
+def _():
+    import main
+    out = main.agentlab_run(main.AgentLabRun(graph=agentlab.template("rag"), task="cafes"))
+    assert out["run_id"] and out["checkpoints"]
+    # fork after the retriever: before it, long-term memory — which every run of this
+    # design writes to, and which a fork does not rewind — could have changed underneath
+    after_recall = next(c["i"] for c in out["checkpoints"] if c["block"] and c["next"]
+                        and agentlab.analyze(agentlab.template("rag"))["kind"][c["block"]] == "retriever")
+    forked = main.agentlab_fork(out["run_id"], main.AgentLabFork(checkpoint=after_recall))
+    assert forked["answer"] == out["answer"]
+    assert 'data-altab="timeline"' in PAGE and "function alRenderTimeline" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -1,5 +1,40 @@
 # Changelog
 
+## 2.4.0
+
+**Time travel: checkpoints, edits and forks**, after LangGraph's. Every block
+a run passes now leaves a checkpoint — the whole state after the block, and the
+block that runs next — and a new **Timeline** tab lists them. Pick one and the
+canvas lights the block it came from and the one it leads to; below it, the
+state at that moment is laid out for editing: the task, the context notes,
+every message in working memory, what each tool returned, the draft. Change
+what you like and fork.
+
+- **A fork resumes the generated file.** The plain Python export now has
+  `resume(state, block, on_step)` — `run_agent` is just `resume` from the
+  start — so a fork runs exactly the code you would download, from the
+  checkpoint, with your edits.
+- **Fork with the original design or the one on the canvas.** The second
+  answers "what if it had been wired differently from here?" A canvas design
+  that no longer has the block the checkpoint continues into is refused, by name.
+- **The branches side by side.** What the original did from the checkpoint,
+  what the fork did instead, and both answers. A fork is a run in its own
+  right, with its own checkpoints, so it can be forked again.
+- **Rehearsals fork faithfully.** The stand-in model's own memory is kept in
+  each checkpoint, and a test forks every checkpoint of a run with nothing
+  changed and requires the same events and the same answer.
+- **The LangGraph export gets LangGraph's version:** `history(app, thread)`
+  and `fork(app, checkpoint, changes)` over its checkpointer, tested against
+  LangGraph itself.
+
+What lives outside the state is not rewound — files a tool wrote, long-term
+memory, the world — and the tab says so. One of the new tests found exactly
+that: a design that writes long-term memory recalls a different note when
+forked from before its retriever, because the original run had saved one.
+
+Runs started from the canvas are kept, the newest 200, under the workspace's
+`agentlab/runs/`.
+
 ## 2.3.0
 
 **The Summarizer: a ceiling on the history.** A new memory block, after

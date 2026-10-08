@@ -2408,6 +2408,22 @@ table.al-study tr.k-needed td:first-child,table.al-study tr.k-needed.verdict td{
 table.al-study tr.k-unclear td:first-child,table.al-study tr.k-unclear.verdict td,
 table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{border-left:3px solid var(--muted);padding-left:6px}
 .al-open{margin-top:5px;font-size:11px;padding:3px 8px}
+.al-cps{list-style:none;margin:8px 0;padding:0;max-height:240px;overflow-y:auto;border:1px solid var(--paper-3);border-radius:7px;background:#fff}
+.al-cps li{padding:5px 9px;border-bottom:1px solid var(--paper-2);cursor:pointer;font-size:12px}
+.al-cps li b{display:inline-block;width:20px;color:var(--muted);font-family:var(--mono)}
+.al-cps li small{display:block;margin-left:20px;color:var(--muted);font-size:10.5px}
+.al-cps li.on{background:#FFF4D6;box-shadow:inset 3px 0 0 var(--amber)}
+.al-cps li.end{color:var(--muted)}
+.al-msg{border-left:2px solid var(--paper-3);padding-left:8px;margin:6px 0}
+.al-msg span{display:block;font-size:10.5px;color:var(--muted);margin-bottom:2px}
+.al-msg textarea,#alCp .field textarea{width:100%;font-family:var(--mono);font-size:11px;margin-bottom:4px}
+.al-part{display:block;font-size:10.5px;color:var(--muted)}
+.al-ask{margin:2px 0 4px;font-family:var(--mono);font-size:10.5px;background:var(--paper-2);padding:5px 7px;border-radius:5px;white-space:pre-wrap;word-break:break-word}
+.al-branches{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.al-branches b{font-size:11.5px}
+.al-btrace{list-style:none;margin:4px 0;padding:0;font-size:11px}
+.al-btrace li{border-left:3px solid var(--c);padding:2px 0 3px 6px;margin-bottom:3px;word-break:break-word}
+.al-branches .al-answer{font-size:10.5px;max-height:140px;overflow:auto}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13172,6 +13188,7 @@ function alBuildShell(){
           <button data-altab="physio">Physiology</button>
           <button data-altab="code">Python</button>
           <button data-altab="safety">Safety<span class="al-badge" id="alSafetyBadge"></span></button>
+          <button data-altab="timeline">Timeline</button>
           <button data-altab="study">Study</button>
         </div>
         <div class="al-pane" id="alPane"></div>
@@ -13446,7 +13463,7 @@ function alScheduleCheck(){
 /* ---------- inspector ---------- */
 
 function alTab(tab){
-  if (tab !== "safety" && (agentLabState.trail || []).length) alShowTrail([]);
+  if (!["safety", "timeline"].includes(tab) && (agentLabState.trail || []).length) alShowTrail([]);
   agentLabState.tab = tab;
   document.querySelectorAll("[data-altab]").forEach(b => b.classList.toggle("on", b.dataset.altab === tab));
   alRenderPane();
@@ -13459,6 +13476,7 @@ function alRenderPane(){
   if (agentLabState.tab === "maths") return alRenderMaths();
   if (agentLabState.tab === "safety") return alRenderSafety();
   if (agentLabState.tab === "study") return alRenderStudy();
+  if (agentLabState.tab === "timeline") return alRenderTimeline();
   alRenderAnatomy();
 }
 
@@ -13712,6 +13730,7 @@ async function alRun(){
     await alReplay(d);
     S.answer = d.answer;
     S.costs = d.costs || null;
+    alRememberRun(d, `Run ${((S.runs || []).length) + 1}: ${S.task.slice(0, 40)}`);
   }
   S.running = false;
   if (S.tab === "physio") alRenderPhysio();
@@ -13744,6 +13763,9 @@ function alEventText(ev){
     case "guard_out": return ev.changed ? "Redacted personal data from the answer." : "Checked the answer; nothing to redact.";
     case "final": return `Final answer leaves: ${ev.preview}`;
     case "budget": return `Step budget of ${ev.limit} spent, so control goes straight to the final answer.`;
+    case "fork": return `Forked from checkpoint ${ev.checkpoint} of an earlier run`
+      + (ev.changed && ev.changed.length ? `, with ${ev.changed.join(", ")} changed` : ", with nothing changed")
+      + (ev.design === "current" ? ", on the design now on the canvas." : ".");
     case "compact": return `History over its limit: ${ev.before.toLocaleString()} tokens folded to ${ev.after.toLocaleString()}`
       + ` (${ev.removed} message${ev.removed === 1 ? "" : "s"} ${ev.strategy === "trim" ? "dropped" : "summarised"})`
       + (ev.over ? ". Still over: the newest messages alone are bigger than the limit." : ".");
@@ -14065,6 +14087,136 @@ function alStudyWire(){
     alSetGraph({...t.graph, name: `${agentLabState.graph.name || "Agent"} (${t.label})`});
     alTab("anatomy");
   }));
+}
+
+/* ---------- time travel: checkpoints, edits, forks ---------- */
+
+/* A run leaves one checkpoint per block: the whole state after it and the block
+   that runs next. Pick one, change what you like, and the server resumes the
+   generated file from there — the same resume() the downloaded file has. */
+
+function alRememberRun(d, label){
+  const S = agentLabState;
+  if (!d || !d.run_id) return;
+  S.runs = S.runs || [];
+  S.runs.push({id: d.run_id, label, data: d});
+  S.timeline = {run: d.run_id, cp: null, fork: null};
+}
+
+function alRunById(id){ return (agentLabState.runs || []).find(r => r.id === id); }
+
+function alRenderTimeline(){
+  const S = agentLabState, pane = $("alPane");
+  if (!(S.runs || []).length){
+    pane.innerHTML = `<h3>Time travel</h3><p class="al-muted">Run the agent on the Physiology tab first. Every block
+      it passes leaves a checkpoint here: the whole state after the block, and which block runs next.</p>`;
+    return;
+  }
+  const tl = S.timeline || (S.timeline = {run: S.runs[S.runs.length - 1].id, cp: null, fork: null});
+  const run = alRunById(tl.run) || S.runs[S.runs.length - 1];
+  const cps = run.data.checkpoints || [];
+  const name = id => id ? alEsc(alLabel(alNode(id) || {type: id})) : "";
+  pane.innerHTML = `<h3>Time travel</h3>
+    <p class="al-muted">Pick a checkpoint, change the task, a message or what a tool returned, and fork the run from
+    there. Things outside the state — files a tool wrote, long-term memory — are not rewound.</p>
+    <div class="field"><label for="alRunPick">Run</label><select id="alRunPick">${S.runs.map(r =>
+      `<option value="${r.id}"${r.id === run.id ? " selected" : ""}>${alEsc(r.label)}</option>`).join("")}</select></div>
+    <ol class="al-cps">${cps.map(c => `<li data-cp="${c.i}" class="${tl.cp === c.i ? "on" : ""}${c.next ? "" : " end"}" tabindex="0">
+      <b>${c.i}</b> ${c.block ? name(c.block) : "start"} → ${c.next ? name(c.next) : "end"}
+      <small>${c.state.steps} model call${c.state.steps === 1 ? "" : "s"} · ${c.state.messages.length} message${c.state.messages.length === 1 ? "" : "s"}</small></li>`).join("")}</ol>
+    <div id="alCp"></div>`;
+  $("alRunPick").addEventListener("change", e => {
+    S.timeline = {run: e.target.value, cp: null, fork: null}; alShowTrail([]); alRenderTimeline();
+  });
+  pane.querySelectorAll("[data-cp]").forEach(li => {
+    const go = () => { tl.cp = +li.dataset.cp; tl.fork = null; alRenderTimeline(); };
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", ev => { if (ev.key === "Enter") go(); });
+  });
+  if (tl.cp != null && cps[tl.cp]) alRenderCheckpoint(run, cps[tl.cp]);
+}
+
+function alRenderCheckpoint(run, cp){
+  const S = agentLabState, tl = S.timeline, st = cp.state, host = $("alCp");
+  alShowTrail([cp.block, cp.next].filter(Boolean));
+  const name = id => alEsc(alLabel(alNode(id) || {type: id}));
+  const area = (attrs, text, rows) => `<textarea ${attrs} rows="${rows || 3}">${alEsc(text)}</textarea>`;
+  const parts = (m, mi) => typeof m.content === "string"
+    ? area(`data-m="${mi}"`, m.content)
+    : m.content.map((b, bi) => b.type === "text" ? area(`data-m="${mi}" data-b="${bi}"`, b.text)
+      : b.type === "tool_result" ? `<label class="al-part">what the tool returned</label>${area(`data-m="${mi}" data-b="${bi}"`, String(b.content))}`
+      : b.type === "tool_use" ? `<pre class="al-ask">asked for ${alEsc(b.name)}(${alEsc(JSON.stringify(b.input))})</pre>`
+      : "").join("");
+  host.innerHTML = `<h4>Checkpoint ${cp.i}${cp.next ? `: next is ${name(cp.next)}` : ": the run ended here"}</h4>
+    ${cp.next ? "" : `<p class="al-muted">Nothing runs after this point. Fork from an earlier checkpoint.</p>`}
+    <div class="field"><label>Task</label>${area('data-edit="task"', st.task, 2)}</div>
+    ${st.context.length ? `<div class="field"><label>Context notes</label>${st.context.map((c, i) =>
+      area(`data-ctx="${i}"`, c)).join("")}</div>` : ""}
+    ${st.messages.length ? `<div class="field"><label>Working memory</label>${st.messages.map((m, mi) =>
+      `<div class="al-msg"><span>${mi + 1} · ${m.role === "user" ? "user / tools" : "model"}</span>${parts(m, mi)}</div>`).join("")}</div>`
+      : `<p class="al-muted">Working memory is empty: no model has been called yet.</p>`}
+    ${st.draft ? `<div class="field"><label>Draft</label>${area('data-edit="draft"', st.draft)}</div>` : ""}
+    ${cp.next ? `<div class="row"><button class="btn go" id="alFork">Fork from here</button>
+      <button class="btn" id="alForkCanvas" title="Continue with the design as it is on the canvas now">Fork with the canvas design</button></div>` : ""}
+    <div id="alForkOut">${tl.fork ? alForkHtml(run, cp, tl.fork) : ""}</div>`;
+  if ($("alFork")){
+    $("alFork").onclick = () => alFork(run, cp, false);
+    $("alForkCanvas").onclick = () => alFork(run, cp, true);
+  }
+  alWireForkOut();
+}
+
+function alCollectEdits(){
+  const host = $("alCp"), edits = {messages: [], context: []};
+  host.querySelectorAll('[data-edit]').forEach(t => edits[t.dataset.edit] = t.value);
+  host.querySelectorAll('[data-ctx]').forEach(t => edits.context.push({i: +t.dataset.ctx, text: t.value}));
+  host.querySelectorAll('[data-m]').forEach(t => edits.messages.push(
+    {m: +t.dataset.m, b: t.dataset.b == null ? null : +t.dataset.b, text: t.value}));
+  return edits;
+}
+
+async function alFork(run, cp, useCanvas){
+  const S = agentLabState, out = $("alForkOut");
+  out.innerHTML = `<div class="al-wait">running the fork…</div>`;
+  let r, d;
+  try{
+    r = await fetch(API + `/api/agentlab/runs/${run.id}/fork`, {method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({checkpoint: cp.i, edits: alCollectEdits(), graph: useCanvas ? S.graph : null})});
+    d = await r.json();
+  } catch { out.innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
+  if (!r.ok){ out.innerHTML = `<div class="runfail">${alEsc((d.detail && d.detail.message) || "The fork did not run.")}</div>`; return; }
+  const label = `${run.label} → fork at ${cp.i}${useCanvas ? " (canvas design)" : ""}`;
+  S.runs.push({id: d.run_id, label, data: d});
+  S.timeline.fork = d;
+  out.innerHTML = alForkHtml(run, cp, d);
+  alWireForkOut();
+  const pick = $("alRunPick");
+  if (pick) pick.insertAdjacentHTML("beforeend", `<option value="${d.run_id}">${alEsc(label)}</option>`);
+}
+
+/* The two branches side by side from the checkpoint on: what the original did
+   next, what the fork did instead, and where they ended up. */
+function alForkHtml(run, cp, f){
+  const before = (run.data.events || []).slice(cp.events);
+  const after = (f.events || []).filter(e => e.event !== "fork");
+  const row = e => `<li style="--c:${e.node && alNode(e.node) ? alColor(alNode(e.node).type) : "var(--muted)"}">${alEsc(alEventText(e))}</li>`;
+  const changed = (f.parent && f.parent.changed) || [];
+  return `<h4>Fork</h4>
+    <p class="al-muted">${changed.length ? "Changed: " + alEsc(changed.join(", ")) + "." : "Nothing was changed, so the fork should repeat the original."}
+    ${f.answer === run.data.answer ? " Both branches gave the same answer." : " The answers differ."}</p>
+    <div class="al-branches">
+      <div><b>Original, from here</b><ol class="al-btrace">${before.map(row).join("")}</ol>
+        <pre class="al-answer">${alEsc(run.data.answer || run.data.error || "")}</pre></div>
+      <div><b>Fork</b><ol class="al-btrace">${after.map(row).join("")}</ol>
+        <pre class="al-answer">${alEsc(f.answer || f.error || "")}</pre></div>
+    </div>
+    <button class="btn" id="alReplayFork">Replay the fork on the canvas</button>`;
+}
+
+function alWireForkOut(){
+  const b = $("alReplayFork"), f = agentLabState.timeline && agentLabState.timeline.fork;
+  if (b && f) b.onclick = async () => { agentLabState.trace = []; await alReplay(f); };
 }
 
 /* ---------- saving ---------- */

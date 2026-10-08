@@ -328,7 +328,7 @@ def agentlab_run(body: AgentLabRun):
         raise HTTPException(400, detail={"message": "Give the agent a task to work on."})
     try:
         return agentlab.run(body.graph, body.task, body.mode, body.approvals,
-                            memory_dir=auth.sub("agentlab"))
+                            memory_dir=auth.sub("agentlab"), keep=True)
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
 
@@ -349,6 +349,31 @@ def agentlab_load(name: str):
         return agentlab.load(name)
     except KeyError:
         raise HTTPException(404, detail={"message": f"No saved agent called {name}."})
+
+
+class AgentLabFork(BaseModel):
+    checkpoint: int
+    edits: Dict[str, Any] = {}
+    graph: Optional[Dict[str, Any]] = None      # the design on the canvas, to continue with instead
+
+
+@app.get("/api/agentlab/runs/{run_id}")
+def agentlab_run_read(run_id: str):
+    try:
+        return agentlab.load_run(run_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run; only the newest 200 are kept."})
+
+
+@app.post("/api/agentlab/runs/{run_id}/fork")
+def agentlab_fork(run_id: str, body: AgentLabFork):
+    try:
+        return agentlab.fork(run_id, body.checkpoint, body.edits, body.graph,
+                             memory_dir=auth.sub("agentlab"))
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run; only the newest 200 are kept."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 class AgentLabStudyPlan(BaseModel):
