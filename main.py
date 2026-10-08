@@ -338,9 +338,44 @@ def agentlab_designs():
     return {"designs": agentlab.listing()}
 
 
+class AgentLabSave(BaseModel):
+    graph: Dict[str, Any]
+    force: bool = False
+
+
 @app.post("/api/agentlab/designs")
-def agentlab_save(body: AgentLabGraph):
-    return agentlab.save(body.graph)
+def agentlab_save(body: AgentLabSave):
+    """Save a design. If it has a release gate, its cases run first, and a regression refuses the save."""
+    gate = agentlab.gate_for(body.graph.get("name") or "")
+    outcome = None
+    if gate and not body.force:
+        outcome = agentlab.check_gate(body.graph, gate, memory_dir=auth.sub("agentlab"))
+        if not outcome["passed"]:
+            raise HTTPException(409, detail={"message": "This version fails its release gate.", "gate": outcome})
+    return {**agentlab.save(body.graph), "gate": outcome}
+
+
+class AgentLabMCP(BaseModel):
+    transport: str
+    target: str
+
+
+@app.post("/api/agentlab/mcp/discover")
+def agentlab_mcp_discover(body: AgentLabMCP):
+    try:
+        return {"tools": agentlab.mcp_discover(body.transport, body.target)}
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/agentlab/studies/{study_id}/gate")
+def agentlab_study_gate(study_id: str):
+    try:
+        return agentlab.set_gate(study_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such study."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 @app.get("/api/agentlab/designs/{name}")

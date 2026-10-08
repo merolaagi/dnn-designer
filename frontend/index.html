@@ -2435,6 +2435,14 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-savecase{margin-top:12px;border:1px solid var(--paper-3);border-radius:7px;padding:7px 10px;background:#fff;font-size:12.5px}
 .al-savecase summary{cursor:pointer;font-weight:600}
 .al-savecase input,.al-savecase select{width:100%;border:1px solid var(--paper-3);border-radius:5px;padding:5px 7px}
+.al-notice{padding:8px 14px;font-size:12.5px;border-bottom:1px solid var(--paper-3);background:#fff}
+.al-notice.bad{background:#FDECEA;color:#8C2F27}
+.al-notice.ok{background:#EAF6EE;color:#256B3C}
+.al-notice small{display:block;margin:3px 0;color:inherit;opacity:.85}
+.al-notice .btn{margin-top:4px}
+.al-mcp{list-style:none;margin:4px 0 6px;padding:0;font-size:11.5px}
+.al-mcp li{padding:2px 0;border-bottom:1px solid var(--paper-2)}
+.al-mcp b{font-family:var(--mono);font-weight:600}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13185,6 +13193,7 @@ function alBuildShell(){
       <button class="btn" id="alSave">Save</button>
       <button class="btn go" id="alRunTop">Run</button>
     </div>
+    <div class="al-notice" id="alNotice" hidden></div>
     <div class="al-body">
       <div class="al-pal" id="alPal"></div>
       <div class="al-stage" id="alStage">
@@ -13237,7 +13246,7 @@ function alBuildShell(){
   });
   $("alClear").addEventListener("click", () =>
     alSetGraph({name: agentLabState.graph.name || "MyAgent", nodes: [], edges: []}));
-  $("alSave").addEventListener("click", alSaveDesign);
+  $("alSave").addEventListener("click", () => alSaveDesign(false));
   $("alBack").addEventListener("click", alDrillOut);
   $("alRunTop").addEventListener("click", () => { alTab("physio"); alRun(); });
   $("alStage").addEventListener("pointerdown", ev => {
@@ -13534,7 +13543,12 @@ function alRenderAnatomy(){
   let fields = "";
   Object.entries(b.params || {}).forEach(([k, d]) => {
     const v = n.params[k] == null ? d.value : n.params[k];
-    fields += d.kind === "design"
+    fields += d.kind === "mcp_tools"
+      ? `<div class="field"><label>${alEsc(d.label)}</label>
+           ${(v || []).length ? `<ul class="al-mcp">${v.map(t => `<li><b>${alEsc(t.name)}</b> ${alEsc((t.description || "").slice(0, 90))}</li>`).join("")}</ul>`
+             : `<div class="help">None yet. Set the command or URL above, then discover.</div>`}
+           <button class="btn" id="alMcpFind">Discover tools</button> <span class="al-muted" id="alMcpMsg"></span></div>`
+      : d.kind === "design"
       ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
            <select id="alf_${k}" data-k="${k}"><option value="">Choose a saved agent…</option>${
              (agentLabState.designs || []).map(o => `<option${o === v ? " selected" : ""}>${alEsc(o)}</option>`).join("")}</select>
@@ -13568,6 +13582,18 @@ function alRenderAnatomy(){
       ? `<button class="btn" id="alDrill">Open “${alEsc(n.params.design)}” on the canvas</button> ` : ""}
     <button class="btn danger" id="alDel">Delete block</button>`;
   if ($("alDrill")) $("alDrill").onclick = () => alDrillInto(n.params.design);
+  if ($("alMcpFind")) $("alMcpFind").onclick = async () => {
+    $("alMcpMsg").textContent = "connecting…";
+    let r, d;
+    try{
+      r = await fetch(API + "/api/agentlab/mcp/discover", {method: "POST", headers: {"content-type": "application/json"},
+        body: JSON.stringify({transport: n.params.transport || "stdio", target: n.params.target || ""})});
+      d = await r.json();
+    } catch { $("alMcpMsg").textContent = "The server did not answer."; return; }
+    if (!r.ok){ $("alMcpMsg").textContent = (d.detail && d.detail.message) || "Discovery failed."; return; }
+    n.params.tools = d.tools;
+    alDraft(); alScheduleCheck(); alRenderNodes(); alRenderPane();
+  };
   pane.querySelectorAll("[data-k]").forEach(inp => ["input", "change"].forEach(type =>
     inp.addEventListener(type, () => {
       const k = inp.dataset.k;
@@ -14211,11 +14237,21 @@ function alStudyHtml(d){
           ${(r.failures || []).length ? `<details class="al-why"><summary>What failed</summary><ul>${r.failures.map(f =>
             `<li>case ${f.case}: ${alEsc(f.check)}${f.reason ? ` — <i>${alEsc(f.reason)}</i>` : ""}</li>`).join("")}</ul></details>` : ""}
           ${r.block ? `<button class="btn al-open" data-open="${i}">Open this version</button>` : ""}</td></tr>` : ""}`).join("")}
-    </table>`;
+    </table>
+    ${d.status === "done" ? `<div class="row" style="margin-top:8px"><button class="btn" id="alGate"
+      title="Saving this agent will then re-run these cases, and refuse a version that does worse">Make “as drawn” the release gate for ${alEsc(d.design)}</button>
+      <span class="al-muted" id="alGateMsg"></span></div>` : ""}`;
 }
 
 function alStudyWire(){
   const st = agentLabState.study;
+  if ($("alGate")) $("alGate").onclick = async () => {
+    const r = await fetch(API + `/api/agentlab/studies/${st.current.id}/gate`, {method: "POST"});
+    const d = await r.json();
+    $("alGateMsg").textContent = r.ok
+      ? `Gate set: ${d.cases.length} case${d.cases.length === 1 ? "" : "s"}, at least ${Math.round(d.pass_rate * 100)}%, keeping ${d.properties.length} guarantee${d.properties.length === 1 ? "" : "s"}.`
+      : ((d.detail && d.detail.message) || "Not set.");
+  };
   document.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => {
     const t = st.current.trials[+b.dataset.open];
     if (!t || !t.graph) return;
@@ -14390,14 +14426,37 @@ function alWireForkOut(){
 
 /* ---------- saving ---------- */
 
-async function alSaveDesign(){
-  const btn = $("alSave");
+/* Saving an agent that has a release gate runs the gate's cases first. A version
+   that does worse, or loses a Safety guarantee, is not saved unless you insist. */
+async function alSaveDesign(force){
+  const btn = $("alSave"), note = $("alNotice");
+  btn.textContent = "Saving…";
+  let r, d;
   try{
-    const r = await fetch(API + "/api/agentlab/designs", {method: "POST",
-      headers: {"content-type": "application/json"}, body: JSON.stringify({graph: agentLabState.graph})});
-    btn.textContent = r.ok ? "Saved" : "Not saved";
-    if (r.ok) alRefreshDesigns();
-  } catch { btn.textContent = "Not saved"; }
+    r = await fetch(API + "/api/agentlab/designs", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({graph: agentLabState.graph, force: force === true})});
+    d = await r.json();
+  } catch { btn.textContent = "Not saved"; setTimeout(() => { btn.textContent = "Save"; }, 1400); return; }
+  const pct = v => Math.round(v * 100) + "%";
+  if (r.status === 409 && d.detail && d.detail.gate){
+    const g = d.detail.gate;
+    note.hidden = false;
+    note.className = "al-notice bad";
+    note.innerHTML = `<b>Not saved: this version fails its release gate.</b> It passes ${pct(g.pass_rate)} of the gate's
+      cases where the saved version passed ${pct(g.threshold)}${g.lost.length ? `, and no longer holds: ${alEsc(g.lost.join("; "))}` : ""}.
+      ${g.failures.length ? `<small>${alEsc(g.failures.slice(0, 4).join(" · "))}</small>` : ""}
+      <button class="btn" id="alForce">Save anyway</button>`;
+    $("alForce").onclick = () => alSaveDesign(true);
+    btn.textContent = "Save";
+    return;
+  }
+  btn.textContent = r.ok ? "Saved" : "Not saved";
+  note.hidden = !(r.ok && d.gate);
+  if (r.ok && d.gate){
+    note.className = "al-notice ok";
+    note.innerHTML = `Saved. Release gate passed: ${pct(d.gate.pass_rate)} of ${d.gate.runs} run${d.gate.runs === 1 ? "" : "s"}, needing ${pct(d.gate.threshold)}.`;
+  }
+  if (r.ok) alRefreshDesigns();
   setTimeout(() => { btn.textContent = "Save"; }, 1400);
 }
 

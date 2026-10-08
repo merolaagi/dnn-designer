@@ -312,6 +312,11 @@ LLM cores can use a local model through any OpenAI-compatible server, such as
 Ollama, so live runs need no key. Tools can be limited to a number of calls per
 run, and the Final answer block can require a JSON schema.
 
+An **MCP server** block connects real tools — files, databases, browsers — over
+the Model Context Protocol. A finished study can become a saved agent's
+**release gate**: saving a version that does worse is refused, and
+`python3 agentlab.py gate` checks every gate from a terminal.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

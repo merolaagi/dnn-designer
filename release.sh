@@ -33,6 +33,11 @@ fi
 
 python3 tests/test_designer.py
 
+# Saved agents with a release gate must still pass it: same cases, no lower pass
+# rate, no lost Safety guarantee. With no gates set this passes straight away.
+echo "==> agent release gates"
+python3 agentlab.py gate
+
 if [ -z "$(git status --porcelain)" ]; then
   echo "==> nothing to commit"
 else

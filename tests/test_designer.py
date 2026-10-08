@@ -8338,6 +8338,143 @@ def _():
     assert "function alLiveAvailable" in PAGE and 'case "schema"' in PAGE
 
 
+# --------------------------------------------------------------------------
+# agent lab 2.8: real tools over MCP, and release gates
+# --------------------------------------------------------------------------
+
+ECHO_SERVER = f"{sys.executable} {ROOT / 'tests' / 'mcp_echo_server.py'}"
+
+
+def _with_mcp(effects="only reads"):
+    g = agentlab.template("react")
+    web = next(n for n in g["nodes"] if n["type"] == "web_search")
+    web.update(type="mcp", params={"transport": "stdio", "target": ECHO_SERVER, "effects": effects,
+                                   "tools": agentlab.mcp_discover("stdio", ECHO_SERVER)})
+    return g, web["id"]
+
+
+@check("an MCP server's tools are discovered, offered and really called")
+def _():
+    tools = agentlab.mcp_discover("stdio", ECHO_SERVER)
+    assert [t["name"] for t in tools] == ["echo", "add"] and tools[1]["inputSchema"]["required"] == ["a", "b"]
+    g, mid = _with_mcp()
+    assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
+    result = agentlab.run(g, "Add 2 and 3")
+    returned = {e["tool"]: e["preview"] for e in result["events"] if e["event"] == "tool_result"}
+    assert returned.get("echo", "").startswith("echo: ") and returned.get("add") == "4.0", returned
+    assert all(e["node"] == mid for e in result["events"] if e["event"] == "tool_result" and e["tool"] in ("echo", "add"))
+    for target in ("python", "langgraph"):
+        compile(agentlab.codegen(g, target)["source"], target, "exec")
+
+
+@check("an MCP server over HTTP works too, session and all")
+def _():
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    sessions = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            msg = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            sessions.append(self.headers.get("mcp-session-id"))
+            if "id" not in msg:
+                self.send_response(202)
+                self.end_headers()
+                return
+            result = ({"protocolVersion": "2025-06-18", "capabilities": {}} if msg["method"] == "initialize" else
+                      {"tools": [{"name": "ping", "description": "Pong.", "inputSchema": {"type": "object"}}]}
+                      if msg["method"] == "tools/list" else {"content": [{"type": "text", "text": "pong"}]})
+            body = ("event: message\ndata: " + json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": result})
+                    + "\n\n").encode()
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.send_header("mcp-session-id", "s-1")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        tools = agentlab.mcp_discover("http", f"http://127.0.0.1:{server.server_port}/mcp")
+    finally:
+        server.shutdown()
+    assert [t["name"] for t in tools] == ["ping"]
+    assert sessions[0] is None and sessions[-1] == "s-1", "later messages should carry the session id"
+
+
+@check("MCP tools count as outside text, and as side effects when marked so")
+def _():
+    g, mid = _with_mcp(effects="changes things")
+    report = agentlab.safety(g)
+    assert any(f["check"] == "approval" and mid in f["nodes"] for f in report["findings"])
+    assert any(f["check"] == "injection" and f["level"] == "risk" and mid in f["path"] for f in report["findings"]), \
+        "outside text reaches a core that can run it unapproved: that is an injection path"
+    empty = agentlab.template("react")
+    web = next(n for n in empty["nodes"] if n["type"] == "web_search")
+    web.update(type="mcp", params={"transport": "stdio", "target": ECHO_SERVER, "tools": []})
+    assert any(p["node"] == web["id"] and "Discover" in p["message"] for p in agentlab.validate(empty))
+
+
+@check("an unreachable MCP server is refused with a reason, not hung on")
+def _():
+    for target in ("definitely-not-a-command-xyz", f"{sys.executable} -c 'import time; time.sleep(30)'"):
+        try:
+            agentlab.mcp_discover("stdio", target, timeout=2)
+        except ValueError as exc:
+            assert "server" in str(exc).lower() or "No such file" in str(exc)
+        else:
+            raise AssertionError(f"{target} should have been refused")
+
+
+@check("a release gate refuses a version that does worse, unless forced")
+def _():
+    import main
+    from fastapi import HTTPException
+    g = agentlab.template("react")
+    g["name"] = "__test_gated"
+    name = agentlab.save(g)["name"]
+    study = agentlab.start_study(g, "Look something up\ntool: web_search", background=False,
+                                 removals=False, prompts={"node": next(n["id"] for n in g["nodes"]
+                                                                       if n["type"] == "system_prompt"),
+                                                          "texts": ["Be brief."]})
+    gate = agentlab.set_gate(study.id)
+    assert gate["pass_rate"] == 1.0 and "Every task is screened before a model reads it" in gate["properties"]
+    assert agentlab.check_gate(g, gate)["passed"]
+    worse = json.loads(json.dumps(g))
+    worse["nodes"] = [n for n in worse["nodes"] if n["type"] != "web_search"]
+    worse["edges"] = [e for e in worse["edges"] if e["source"] in {n["id"] for n in worse["nodes"]}
+                      and e["target"] in {n["id"] for n in worse["nodes"]}]
+    outcome = agentlab.check_gate(worse, gate)
+    assert not outcome["passed"] and outcome["pass_rate"] == 0.0
+    try:
+        main.agentlab_save(main.AgentLabSave(graph=worse))
+    except HTTPException as exc:
+        assert exc.status_code == 409 and exc.detail["gate"]["pass_rate"] == 0.0
+    else:
+        raise AssertionError("a regression should not save")
+    assert agentlab.load(name)["nodes"] == g["nodes"], "the refused version must not have replaced the saved one"
+    forced = main.agentlab_save(main.AgentLabSave(graph=worse, force=True))
+    assert forced["name"] == name
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()) as said:
+        assert agentlab._cli(["gate", name]) == 1, "the command line should fail the forced regression too"
+        agentlab.save(g)
+        assert agentlab._cli(["gate", name]) == 0
+    assert "0% against 100%" in said.getvalue()
+    (agentlab._gates_dir() / f"{name}.json").unlink()
+
+
+@check("the page discovers MCP tools and shows gate results on save")
+def _():
+    for needle in ('d.kind === "mcp_tools"', "/api/agentlab/mcp/discover", 'id="alNotice"', "alSaveDesign(true)"):
+        assert needle in PAGE, needle
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

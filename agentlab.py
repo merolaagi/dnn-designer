@@ -61,6 +61,122 @@ PROVIDERS = {"anthropic": "Anthropic Messages API", "openai-compatible": "OpenAI
 LIMIT = ("max_calls", "Calls allowed per run (0 for no limit)")
 
 
+# The MCP client every generated file carries when it uses an MCP server, and the lab uses to
+# discover a server's tools: one copy of the code, so discovery and the run speak the same way.
+MCP_CLIENT = r'''class MCPServer:
+    """A Model Context Protocol server, spoken to with the standard library.
+
+    transport "stdio": target is a command; the server runs as a child process and
+    JSON-RPC messages go one per line over its stdin and stdout.
+    transport "http": target is the server's URL (streamable HTTP); each message is a
+    POST, and the reply is JSON or a short server-sent event stream.
+    The connection opens on the first call and is reused for the rest of the run.
+    """
+
+    def __init__(self, transport, target):
+        self.transport, self.target = transport, target
+        self.process, self.session, self.counter = None, None, 0
+
+    def _send(self, message):
+        if self.transport == "stdio":
+            self.process.stdin.write(json.dumps(message) + "\n")
+            self.process.stdin.flush()
+            if "id" not in message:
+                return None
+            while True:
+                line = self.process.stdout.readline()
+                if not line:
+                    raise RuntimeError("the MCP server closed its output")
+                reply = json.loads(line)
+                if reply.get("id") == message["id"]:
+                    return reply
+        headers = {"content-type": "application/json", "accept": "application/json, text/event-stream"}
+        if self.session:
+            headers["mcp-session-id"] = self.session
+        request = urllib.request.Request(self.target, data=json.dumps(message).encode(), headers=headers)
+        with urllib.request.urlopen(request, timeout=120) as reply:
+            self.session = reply.headers.get("mcp-session-id") or self.session
+            body = reply.read().decode()
+        if "id" not in message or not body.strip():
+            return None
+        if body.lstrip().startswith("{"):
+            return json.loads(body)
+        for line in body.splitlines():                   # a server-sent event stream
+            if line.startswith("data:"):
+                data = json.loads(line[5:].strip())
+                if data.get("id") == message["id"]:
+                    return data
+        raise RuntimeError("the MCP server sent no reply")
+
+    def request(self, method, params=None):
+        if self.process is None and self.session is None and method != "initialize":
+            self.open()
+        self.counter += 1
+        reply = self._send({"jsonrpc": "2.0", "id": self.counter, "method": method, "params": params or {}})
+        if "error" in reply:
+            raise RuntimeError(reply["error"].get("message", "MCP error"))
+        return reply.get("result") or {}
+
+    def open(self):
+        if self.transport == "stdio":
+            import shlex
+            self.process = subprocess.Popen(shlex.split(self.target), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                            stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        self.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                    "clientInfo": {"name": "agent-lab", "version": "1"}})
+        self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+    def tools(self):
+        return self.request("tools/list").get("tools", [])
+
+    def call(self, tool, args):
+        result = self.request("tools/call", {"name": tool, "arguments": args})
+        text = "\n".join(c.get("text", "") for c in result.get("content", []) if c.get("type") == "text")
+        return ("Error: " + text) if result.get("isError") else text
+
+    def close(self):
+        if self.process:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+            self.process = None
+'''
+
+
+def mcp_discover(transport: str, target: str, timeout: float = 30.0) -> List[Dict[str, Any]]:
+    """Connect to an MCP server and list its tools, with the same client the generated file uses."""
+    import subprocess
+    import threading
+    import urllib.request
+
+    if transport not in ("stdio", "http") or not str(target or "").strip():
+        raise ValueError("Give the server: a command to start it (stdio) or its URL (http).")
+    space: Dict[str, Any] = {"json": json, "subprocess": subprocess, "urllib": urllib}
+    exec(MCP_CLIENT, space)  # noqa: S102 — our own client code
+    server = space["MCPServer"](transport, target)
+    box: Dict[str, Any] = {}
+
+    def go():
+        try:
+            box["tools"] = server.tools()
+        except Exception as exc:  # noqa: BLE001
+            box["error"] = f"{type(exc).__name__}: {exc}"
+
+    worker = threading.Thread(target=go, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    server.close()
+    if worker.is_alive():
+        raise ValueError(f"The server did not answer within {timeout:g} seconds.")
+    if "error" in box:
+        raise ValueError(f"Could not list the server's tools: {box['error']}")
+    return [{"name": t.get("name"), "description": t.get("description") or "",
+             "inputSchema": t.get("inputSchema") or {"type": "object", "properties": {}}}
+            for t in box["tools"] if t.get("name")]
+
+
 BLOCKS: Dict[str, Dict[str, Any]] = {
     "user_input": dict(
         name="User input", system="senses", no_in=True, short="The task arrives",
@@ -205,6 +321,21 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
                 "description": _p("What it does (the model reads this)",
                                   "Hand a sub-task to a specialist agent and get back its answer.", "area"),
                 LIMIT[0]: _p(LIMIT[1], 0, "number")}),
+    "mcp": dict(
+        name="MCP server", system="hands", short="Real tools from an MCP server",
+        anatomy=("A Model Context Protocol server: a program or URL that offers tools — files, a database, "
+                 "GitHub, a browser. Every tool it lists becomes one the model can call."),
+        inside=("The command that starts it (stdio) or its URL (http), and the tools discovered from it. The "
+                "file carries a small MCP client written with the standard library."),
+        physiology=("The router sends the model's request to the server as tools/call and hands back the text it "
+                    "returns. The connection opens on the first call and is reused for the run."),
+        failure=("Its tools act on real systems, and its output is text from outside the agent. Mark what it does "
+                 "honestly; the Safety tab treats it as both."),
+        params={"transport": _p("How to reach it", "stdio", "choice", ["stdio", "http"]),
+                "target": _p("Command (stdio) or URL (http)", "npx -y @modelcontextprotocol/server-filesystem ."),
+                "tools": _p("Tools", [], "mcp_tools"),
+                "effects": _p("What its tools do to the world", CHANGES, "choice", [READS, CHANGES]),
+                LIMIT[0]: _p(LIMIT[1], 0, "number")}),
     "router": dict(
         name="Router", system="nerve", short="Dispatches tool calls or exits",
         anatomy=("Reads the model's output and decides where control goes: tool requests to the hands, "
@@ -243,7 +374,7 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         failure="Approval fatigue: clicking yes without reading."),
 }
 
-ACTIONS = {"tool", "web_search", "code_exec", "sub_agent", "subgraph"}
+ACTIONS = {"tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp"}
 
 
 def catalog() -> Dict[str, Any]:
@@ -430,7 +561,16 @@ def analyze(graph) -> Dict[str, Any]:
     tool_names = {nid: unique(py_id(_params(n)["name"]) if kind[nid] in ("tool", "sub_agent")
                               else py_id((_params(n)["design"] or "saved") + "_agent") if kind[nid] == "subgraph"
                               else ("web_search" if kind[nid] == "web_search" else "run_python"))
-                  for nid, n in nodes.items() if kind[nid] in ACTIONS}
+                  for nid, n in nodes.items() if kind[nid] in ACTIONS and kind[nid] != "mcp"}
+    # an MCP server offers several tools, each a route of its own to the same block
+    mcp_tools: Dict[str, List[Dict[str, Any]]] = {}
+    for nid, n in nodes.items():
+        if kind[nid] == "mcp":
+            mcp_tools[nid] = [{"name": unique(py_id(t.get("name"))), "remote": t.get("name"),
+                               "description": t.get("description") or "",
+                               "schema": t.get("inputSchema") or {"type": "object", "properties": {}}}
+                              for t in (_params(n).get("tools") or []) if t.get("name")]
+            tool_names[nid] = mcp_tools[nid][0]["name"] if mcp_tools[nid] else unique("mcp")
 
     def llm_before(router):
         return next((nid for nid in nodes if kind[nid] == "llm" and router in control[nid]), None)
@@ -451,7 +591,8 @@ def analyze(graph) -> Dict[str, Any]:
         table = {}
         for tid, gate in routes.items():
             after = next((t for t in control[tid] if kind[t] not in ACTIONS), None) or back
-            table[tool_names[tid]] = {"node": tid, "gate": gate, "next": after}
+            for name in ([t["name"] for t in mcp_tools[tid]] if tid in mcp_tools else [tool_names[tid]]):
+                table[name] = {"node": tid, "gate": gate, "next": after}
         routers[rid] = {"routes": table, "exit": exits[0] if exits else None, "back": back}
 
     llms = {}
@@ -521,6 +662,7 @@ def analyze(graph) -> Dict[str, Any]:
         successors[nid] = list(dict.fromkeys(out))
 
     return {"nodes": nodes, "kind": kind, "control": control, "feeds": feeds, "start": start, "end": end,
+            "mcp_tools": mcp_tools,
             "exit": exit_to,
             "loop": loop, "max_steps": max_steps, "tool_names": tool_names, "routers": routers,
             "llms": llms, "critics": critics, "reach": reach, "steps": steps,
@@ -601,6 +743,11 @@ def validate(graph, _stack: tuple = ()) -> List[Dict[str, Any]]:
                 if inner:
                     say("error", f"The saved agent {_params(n)['design']} does not run: {inner[0]['message']}",
                         n["id"])
+        if t == "mcp":
+            if not str(_params(n).get("target") or "").strip():
+                say("error", "Give the MCP server's command or URL.", n["id"])
+            elif not _params(n).get("tools"):
+                say("error", "Discover the MCP server's tools first; the model is offered what it lists.", n["id"])
         if t == "output" and str(_params(n).get("schema") or "").strip() and answer_schema(n) is None:
             say("error", "The answer schema is not a JSON object; check its brackets and quotes.", n["id"])
         if t == "llm" and _params(n).get("provider") == "openai-compatible" and not str(_params(n).get("base_url") or "").strip():
@@ -622,6 +769,9 @@ def label(node) -> str:
         return f"Sub-agent {p.get('name') or ''}".strip()
     if node.get("type") == "subgraph":
         return f"Agent: {p.get('design')}" if p.get("design") else "Saved agent"
+    if node.get("type") == "mcp":
+        tools = p.get("tools") or []
+        return f"MCP: {len(tools)} tool{'s' if len(tools) != 1 else ''}" if tools else "MCP server"
     return BLOCKS.get(node.get("type"), {}).get("name", str(node.get("type")))
 
 
@@ -736,7 +886,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     llm_ids = [nid for nid in of_kind("llm")]
     first_llm = _params(nodes[llm_ids[0]])
     routers, llms, critics = a["routers"], a["llms"], a["critics"]
-    tools = [(tid, a["tool_names"][tid]) for tid in a["given"]]
+    tools = [(tid, name) for tid in a["given"]
+             for name in ([t["name"] for t in a["mcp_tools"][tid]] if tid in a["mcp_tools"] else [a["tool_names"][tid]])]
+    mcp_by_name = {t["name"]: t for ts in a["mcp_tools"].values() for t in ts}
     gates = sorted({r["gate"] for rt in routers.values() for r in rt["routes"].values() if r["gate"]})
     end, start, early = a["end"], a["start"], a["exit"]
 
@@ -758,7 +910,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     imports = ["import json", "import os", "import urllib.request"]
     if subgraphs or embedded:
         imports.append("from pathlib import Path")
-    if any(kind[t] == "code_exec" for t, _ in tools):
+    if any(kind[t] in ("code_exec", "mcp") for t, _ in tools):
         imports += ["import subprocess", "import sys"]
     if present("guard_in") or present("guard_out"):
         imports.append("import re")
@@ -917,6 +1069,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             *[t for t, _ in tools if kind[t] == "sub_agent"])
 
     # ---- hands ----
+    servers_written, mcp_class_written = set(), []
     if tools:
         add(["", "", "# ---- hands: tools ----"])
         for tid, name in tools:
@@ -938,6 +1091,18 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                         '    return (done.stdout + done.stderr)[-4000:] or "(no output)"']
             elif k == "subgraph":
                 body = subgraph_code(tid, name, p, _stack)
+            elif k == "mcp":
+                t = mcp_by_name[name]
+                body = []
+                if tid not in servers_written:
+                    servers_written.add(tid)
+                    if not mcp_class_written:
+                        mcp_class_written.append(True)
+                        body += MCP_CLIENT.rstrip().split("\n") + ["", ""]
+                    body += [f"{const(tid)}_SERVER = MCPServer({json.dumps(p['transport'])}, {json.dumps(p['target'])})",
+                             "", ""]
+                body += [f"def {name}(**args) -> str:", f"    {_doc(t['description'] or t['remote'])}",
+                         f"    return {const(tid)}_SERVER.call({json.dumps(t['remote'])}, args)"]
             else:
                 body = [f"{name.upper()}_ROLE = {_doc(p['role'])}", "", "",
                         f"def {name}(task: str) -> str:",
@@ -950,6 +1115,11 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             add(body, tid)
 
         def schema(tid, name):
+            if kind[tid] == "mcp":
+                t = mcp_by_name[name]
+                return ["    {", f'        "name": {json.dumps(name)},',
+                        f'        "description": {json.dumps(t["description"] or t["remote"])},',
+                        f'        "input_schema": {json.dumps(t["schema"])},', "    },"]
             arg = {"tool": "input", "web_search": "query", "code_exec": "code", "sub_agent": "task",
                    "subgraph": "task"}[kind[tid]]
             p = _params(nodes[tid])
@@ -1709,7 +1879,26 @@ def _m_subgraph(p, node, graph, c):
                 "its context small and hides the inner agent's mistakes."]}
 
 
+def _m_mcp(p, node, graph, c):
+    tools = p.get("tools") or []
+    sizes = sum(_tokens(json.dumps(t)) for t in tools)
+    limit = int(p.get("max_calls") or 0)
+    return {"title": "Tools that live somewhere else",
+            "equation": "o = server.tools/call(name, a)   for name ∈ T",
+            "shape": f"T = {len(tools)} tool{'s' if len(tools) != 1 else ''}: " + ", ".join(t["name"] for t in tools[:6])
+                     + ("…" if len(tools) > 6 else ""),
+            "symbols": [("T", "the tools the server listed when it was discovered"),
+                        ("a", "the arguments the model wrote, checked by the server, not by this file")],
+            "arithmetic": [("schemas sent", f"≈ {_n(sizes)} tokens with every call to a core that is offered them"),
+                           ("effects", effects(node)),
+                           ("calls per run", f"at most {limit} for each of its tools" if limit else "no limit")],
+            "freedom": ["Every tool a server lists costs context on every call, used or not. A server with "
+                        "forty tools is forty descriptions the model re-reads each step.",
+                        "Its output is outside text, so the Safety tab treats it as an injection source."]}
+
+
 MATH: Dict[str, Callable] = {
+    "mcp": _m_mcp,
     "subgraph": _m_subgraph,
     "summarizer": _m_summarizer,
     "user_input": _m_input, "output": _m_output, "llm": _m_llm, "system_prompt": _m_prompt,
@@ -1738,7 +1927,7 @@ def node_view(graph, node_id: Optional[str], target: str = "python") -> Dict[str
 # turns into code — so a finding is a statement about the program that would
 # run, not about the drawing. Findings carry the path that demonstrates them.
 
-UNTRUSTED = {"web_search", "retriever", "long_mem", "tool"}
+UNTRUSTED = {"web_search", "retriever", "long_mem", "tool", "mcp"}
 
 
 def _inside(node) -> Optional[Dict[str, Any]]:
@@ -1773,7 +1962,7 @@ def effects(node) -> str:
             return READS
         a = analyze(inner)
         return CHANGES if any(effects(a["nodes"][t]) == CHANGES and t not in a["gated"] for t in a["given"]) else READS
-    if kind == "tool":
+    if kind in ("tool", "mcp"):
         return _params(node).get("effects", CHANGES)
     return READS
 
@@ -2026,12 +2215,18 @@ class Rehearsal:
         if rounds < min(2, len(tools)):
             self.tool_rounds[key] = rounds + 1
             tool = tools[rounds]
-            arg = tool["input_schema"]["required"][0]
+            spec = tool["input_schema"]
+            props = spec.get("properties") or {}
+            wanted = spec.get("required") or list(props)[:1]
             task = str(messages[0]["content"]).split("Task:\n")[-1][:120]
-            value = "print(round(545000 / 450))" if arg == "code" else task
+            args = {}
+            for arg in wanted:
+                kind_ = (props.get(arg) or {}).get("type")
+                args[arg] = ("print(round(545000 / 450))" if arg == "code" else
+                             2 if kind_ in ("number", "integer") else True if kind_ == "boolean" else task)
             return {"content": [{"type": "text", "text": f"I should check this with {tool['name']}."},
                                 {"type": "tool_use", "id": f"toolu_rehearsal_{uuid.uuid4().hex[:10]}",
-                                 "name": tool["name"], "input": {arg: value}}],
+                                 "name": tool["name"], "input": args}],
                     "stop_reason": "tool_use"}
         seen = []
         for m in messages:
@@ -2126,6 +2321,9 @@ def _drive(ctx, start) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — a failed run is a result to show, not a crash
         error = f"{type(exc).__name__}: {exc}"
         ctx["emit"]("error", message=error)
+    for value in list(ctx["space"].values()):          # stop any MCP servers this run started
+        if type(value).__name__ == "MCPServer":
+            value.close()
     return {"ok": error is None, "answer": answer, "error": error, "events": ctx["events"],
             "nodemap": ctx["built"]["nodemap"], "seconds": round(time.time() - ctx["started"], 2),
             "checkpoints": ctx["checkpoints"]}
@@ -2626,7 +2824,7 @@ def _without(graph, nid) -> Dict[str, Any]:
 
 
 REMOVABLE = {"guard_in", "guard_out", "planner", "reflector", "retriever", "long_mem", "human", "summarizer",
-             "system_prompt", "tool", "web_search", "code_exec", "sub_agent", "subgraph"}
+             "system_prompt", "tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp"}
 
 
 def variants(graph, prompts: Optional[Dict[str, Any]] = None, removals: bool = True) -> List[Dict[str, Any]]:
@@ -2996,3 +3194,98 @@ def load(name: str) -> Dict[str, Any]:
     if not path.exists():
         raise KeyError(name)
     return json.loads(path.read_text())
+
+
+# --------------------------------------------------------------------------
+# release gates: a saved agent may not get worse
+# --------------------------------------------------------------------------
+# A gate is a finished study's baseline kept as a promise: these cases, this
+# pass rate, these Safety guarantees. Saving the agent re-runs the cases and is
+# refused if the pass rate drops or a guarantee stops holding, unless the save
+# is forced; `python3 agentlab.py gate` does the same from a terminal or CI.
+
+def _gates_dir() -> Path:
+    path = _dir() / "gates"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def set_gate(study_id: str) -> Dict[str, Any]:
+    snap = study_snapshot(study_id)
+    base = next((t for t in snap.get("trials") or [] if t.get("block") is None), None)
+    if snap.get("status") != "done" or not base or base.get("score") is None:
+        raise ValueError("Only a finished study can become a gate.")
+    name = _slug(snap.get("design") or "")
+    try:
+        load(name)
+    except KeyError:
+        raise ValueError("Save the design under its name first: a gate guards a saved agent.")
+    held = [p["name"] for p in safety(base["graph"]).get("properties", []) if p["status"] == "holds"]
+    record = {"design": name, "cases": snap.get("cases") or [], "mode": snap.get("mode") or "rehearsal",
+              "repeats": int(snap.get("repeats") or 1), "pass_rate": base["score"], "properties": held,
+              "study": study_id, "set": time.time()}
+    (_gates_dir() / f"{name}.json").write_text(json.dumps(record, indent=1))
+    return record
+
+
+def gate_for(name: str) -> Optional[Dict[str, Any]]:
+    path = _gates_dir() / f"{_slug(name)}.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def check_gate(graph, gate: Dict[str, Any], memory_dir: Optional[Path] = None) -> Dict[str, Any]:
+    """Run the gate's cases on this version and compare with the promise."""
+    errors = [p["message"] for p in validate(graph) if p["level"] == "error"]
+    if errors:
+        return {"passed": False, "pass_rate": 0.0, "threshold": gate["pass_rate"], "lost": [],
+                "failures": [f"the design does not run: {errors[0]}"]}
+    passed_runs, total, failures = 0, 0, []
+    for ci, case in enumerate(gate["cases"]):
+        for _ in range(max(1, int(gate.get("repeats") or 1))):
+            result = run(graph, case["task"], gate["mode"], memory_dir=memory_dir)
+            checks = score(result, case["checks"], case, gate["mode"])
+            total += 1
+            if all(c["passed"] for c in checks):
+                passed_runs += 1
+            else:
+                failures += [f"case {ci + 1}: {c['kind']} {c['value']}".strip() for c in checks if not c["passed"]]
+    rate = passed_runs / total if total else 0.0
+    now = {p["name"]: p["status"] for p in safety(graph).get("properties", [])}
+    lost = [p for p in gate.get("properties") or [] if now.get(p) != "holds"]
+    return {"passed": rate >= gate["pass_rate"] - 1e-9 and not lost, "pass_rate": round(rate, 4),
+            "threshold": gate["pass_rate"], "lost": lost, "failures": failures[:8], "runs": total}
+
+
+def _cli(argv: List[str]) -> int:
+    """python3 agentlab.py gate [name ...] — exit 1 if any saved agent fails its gate."""
+    if not argv or argv[0] != "gate":
+        print("usage: python3 agentlab.py gate [saved agent name ...]")
+        return 2
+    names = argv[1:] or sorted(p.stem for p in _gates_dir().glob("*.json"))
+    if not names:
+        print("No gates are set. Make one from a finished study on the Study tab.")
+        return 0
+    failed = 0
+    for name in names:
+        gate = gate_for(name)
+        if gate is None:
+            print(f"  ?     {name}: no gate")
+            failed += 1
+            continue
+        try:
+            outcome = check_gate(load(name), gate)
+        except KeyError:
+            print(f"  FAIL  {name}: the saved agent is gone")
+            failed += 1
+            continue
+        mark = "pass " if outcome["passed"] else "FAIL "
+        print(f"  {mark} {name}: {outcome['pass_rate']:.0%} against {gate['pass_rate']:.0%}"
+              + (f"; no longer holds: {', '.join(outcome['lost'])}" if outcome["lost"] else ""))
+        failed += 0 if outcome["passed"] else 1
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(_cli(sys.argv[1:]))

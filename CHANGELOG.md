@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.8.0
+
+**Real tools over MCP, and release gates.**
+
+- **MCP server block.** Point it at a Model Context Protocol server — a command
+  to start (stdio) or a URL (streamable HTTP) — and press Discover: every tool
+  the server lists becomes a tool the model can call, routed by the router like
+  any other and limited, gated and studied the same way. The generated file
+  carries a small MCP client written with the standard library; it is the same
+  code the lab uses to discover, so discovery and the run speak the protocol the
+  same way. Servers start on the first call and are stopped when a run ends; one
+  that will not answer is refused after 30 seconds rather than hung on.
+- **The Safety tab treats MCP tools as what they are**: outside text, and side
+  effects when you mark them so. Its Maths entry counts what their schemas cost
+  in context on every call — forty tools are forty descriptions re-read each step.
+- **Release gates**, after LangSmith's regression testing. From a finished study
+  on a saved agent, "Make as drawn the release gate" keeps its cases, its pass
+  rate and the Safety guarantees that held. Saving that agent again re-runs the
+  cases first; a version that passes fewer, or loses a guarantee, is not saved
+  unless you press Save anyway. `python3 agentlab.py gate` checks every gated
+  agent from a terminal or CI, and `release.sh` now runs it after the tests.
+
+Tested with a small MCP server over stdio (in `tests/`) and a stand-in over
+HTTP that answers with a server-sent event and a session id.
+
 ## 2.7.0
 
 **Any model server, call limits, and a required answer shape** — the
