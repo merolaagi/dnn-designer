@@ -301,6 +301,9 @@ The **Timeline** tab keeps a checkpoint for every block a run passed. Edit the
 state at any of them — the task, a message, what a tool returned — and fork the
 run from there, with the original design or the one now on the canvas.
 
+A **Saved agent** block runs another agent you designed, whole, as one tool;
+select it to open that design on the canvas, and Back to return.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

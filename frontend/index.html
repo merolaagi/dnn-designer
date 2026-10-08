@@ -13127,6 +13127,7 @@ function alLabel(n){
   const p = n.params || {};
   if (n.type === "tool") return p.name || "Tool";
   if (n.type === "sub_agent") return "Sub-agent " + (p.name || "");
+  if (n.type === "subgraph") return p.design ? "Agent: " + p.design : "Saved agent";
   const b = alBlock(n.type);
   return b ? b.name : n.type;
 }
@@ -13168,6 +13169,7 @@ function alBuildShell(){
       </select>
       <select id="alOpen" aria-label="Open a saved agent"><option value="">Open saved…</option></select>
       <span class="spacer"></span>
+      <button class="btn" id="alBack" hidden>Back</button>
       <button class="btn" id="alClear">Clear</button>
       <button class="btn" id="alSave">Save</button>
       <button class="btn go" id="alRunTop">Run</button>
@@ -13213,7 +13215,7 @@ function alBuildShell(){
     b.addEventListener("click", () => alTab(b.dataset.altab)));
   $("alName").addEventListener("input", () => { agentLabState.graph.name = $("alName").value; alDraft(); });
   $("alTemplate").addEventListener("change", ev => {
-    if (ev.target.value) alSetGraph(agentLabState.cat.templates[ev.target.value]);
+    if (ev.target.value){ agentLabState.stack = []; alStackButton(); alSetGraph(agentLabState.cat.templates[ev.target.value]); }
     ev.target.value = "";
   });
   $("alOpen").addEventListener("change", async ev => {
@@ -13225,6 +13227,7 @@ function alBuildShell(){
   $("alClear").addEventListener("click", () =>
     alSetGraph({name: agentLabState.graph.name || "MyAgent", nodes: [], edges: []}));
   $("alSave").addEventListener("click", alSaveDesign);
+  $("alBack").addEventListener("click", alDrillOut);
   $("alRunTop").addEventListener("click", () => { alTab("physio"); alRun(); });
   $("alStage").addEventListener("pointerdown", ev => {
     if (ev.target.id === "alStage" || ev.target.id === "alCanvas" || ev.target.id === "alWires"){
@@ -13520,7 +13523,12 @@ function alRenderAnatomy(){
   let fields = "";
   Object.entries(b.params || {}).forEach(([k, d]) => {
     const v = n.params[k] == null ? d.value : n.params[k];
-    fields += d.kind === "choice"
+    fields += d.kind === "design"
+      ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
+           <select id="alf_${k}" data-k="${k}"><option value="">Choose a saved agent…</option>${
+             (agentLabState.designs || []).map(o => `<option${o === v ? " selected" : ""}>${alEsc(o)}</option>`).join("")}</select>
+           <div class="help">Save an agent with the Save button and it appears here.</div></div>`
+      : d.kind === "choice"
       ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
            <select id="alf_${k}" data-k="${k}">${(d.options || []).map(o =>
              `<option${o === v ? " selected" : ""}>${alEsc(o)}</option>`).join("")}</select></div>`
@@ -13545,7 +13553,10 @@ function alRenderAnatomy(){
     <h4>Wiring</h4><p class="al-muted">Receives from: ${ins.join(", ") || "nothing yet"}<br>
       Sends to: ${outs.join(", ") || "nothing yet"}</p>
     ${fields ? `<h4>Settings</h4>${fields}` : ""}
+    ${n.type === "subgraph" && n.params.design && (agentLabState.designs || []).includes(n.params.design)
+      ? `<button class="btn" id="alDrill">Open “${alEsc(n.params.design)}” on the canvas</button> ` : ""}
     <button class="btn danger" id="alDel">Delete block</button>`;
+  if ($("alDrill")) $("alDrill").onclick = () => alDrillInto(n.params.design);
   pane.querySelectorAll("[data-k]").forEach(inp => ["input", "change"].forEach(type =>
     inp.addEventListener(type, () => {
       const k = inp.dataset.k;
@@ -13739,10 +13750,47 @@ async function alRun(){
 /* Every event names the block that reported it, so the replay needs no
    guessing about which LLM core or which router spoke. */
 function alEventNode(ev){
+  // a saved agent's own events carry its block on this canvas as `inside`
+  if (ev.inside) return alNode(ev.inside) || null;
   return ev.node ? alNode(ev.node) || null : null;
 }
 
+/* Opening a saved agent from the block that uses it: the design you were on is
+   kept, and Back returns to it. Save while inside to change the saved agent —
+   every design that uses it picks the change up. */
+async function alDrillInto(name){
+  const S = agentLabState;
+  let r;
+  try{ r = await fetch(API + "/api/agentlab/designs/" + encodeURIComponent(name)); } catch { return; }
+  if (!r.ok) return;
+  const inner = await r.json();
+  S.stack = S.stack || [];
+  S.stack.push(JSON.parse(JSON.stringify(S.graph)));
+  alSetGraph(inner);
+  alStackButton();
+}
+
+function alDrillOut(){
+  const S = agentLabState;
+  if (!(S.stack || []).length) return;
+  alSetGraph(S.stack.pop());
+  alStackButton();
+}
+
+function alStackButton(){
+  const S = agentLabState, b = $("alBack");
+  if (!b) return;
+  const top = (S.stack || [])[S.stack ? S.stack.length - 1 : 0];
+  b.hidden = !top;
+  if (top) b.textContent = `Back to ${top.name || "the outer agent"}`;
+}
+
 function alEventText(ev){
+  if (ev.inside){
+    const host = alNode(ev.inside);
+    const rest = {...ev}; delete rest.inside; rest.node = null;
+    return `Inside ${host ? alLabel(host) : "a saved agent"}: ${alEventText(rest)}`;
+  }
   const who = ev.node && alNode(ev.node);
   const sub = who && who.type === "sub_agent";
   switch (ev.event){
@@ -13756,7 +13804,9 @@ function alEventText(ev){
                        : `Model call ${ev.step}: it answers in text (stop_reason end_turn).`;
     case "dispatch": return `Router dispatches ${ev.tool}.`;
     case "approval": return ev.approved ? `${ev.tool} approved.` : `${ev.tool} denied; the model is told so.`;
-    case "delegate": return "Handed a sub-task to this sub-agent.";
+    case "delegate": return who && who.type === "subgraph"
+      ? `Handed a sub-task to the saved agent ${who.params.design}, which runs its whole design on it.`
+      : "Handed a sub-task to this sub-agent.";
     case "tool_result": return `${ev.tool} returned: ${ev.preview}`;
     case "critique": return ev.passed ? "Critic passed the answer." : `Critic found problems: ${ev.notes}`;
     case "remember": return "Saved this exchange to long-term memory.";
@@ -14235,6 +14285,7 @@ async function alSaveDesign(){
 async function alRefreshDesigns(){
   try{
     const d = await (await fetch(API + "/api/agentlab/designs")).json();
+    agentLabState.designs = d.designs || [];
     $("alOpen").innerHTML = `<option value="">Open saved…</option>` +
       (d.designs || []).map(n => `<option value="${alEsc(n)}">${alEsc(n)}</option>`).join("");
   } catch {}

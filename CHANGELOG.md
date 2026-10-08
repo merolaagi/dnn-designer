@@ -1,5 +1,45 @@
 # Changelog
 
+## 2.5.0
+
+**Saved agents become blocks**, after LangGraph's subgraphs. A new **Saved
+agent** block in the hands palette runs another agent you designed and saved,
+whole, as one tool: its own prompt, tools, router, loop and guardrails, and its
+own state, new on every call. The model hands it a task; only its final answer
+comes back.
+
+- **The file carries its saved agents with it.** Each one is compiled from its
+  own design into a factory function inside the host's file, sharing the host's
+  model connection, approvals and events. The download still runs on its own,
+  standard library only, and the LangGraph export runs it inside the node that
+  calls it — human approval inside it is still a real interrupt.
+- **Its events show inside its block.** The replay lights the Saved agent block
+  for every step the inner agent takes, and the trace says "Inside Agent:
+  researcher: …". Its calls are measured with the rest but are not counted as
+  the host core's, so the growth law still fits the host.
+- **Drill in.** Select the block and open the saved agent on the canvas; Back
+  returns to where you were. Save while inside and every design that uses it
+  picks up the change.
+- **Its maths composes.** The Maths tab gives its own budget N′ and the worst
+  case it adds, N + N·N′ model calls.
+- **Safety looks inside, and across.** A saved agent's own findings appear on
+  the host as "Inside Agent: …". It counts as reading outside text if anything
+  inside it does, and as changing things if it can act without a person of its
+  own — so a researcher that reads the web feeding a host that can run an
+  unapproved coder is reported as the injection path it is, across two agents.
+- **Refused when it cannot work:** a block with no design chosen, a design
+  that does not exist, saved agents that include each other, nesting deeper
+  than four.
+
+Studies can take a saved agent out like any other block. A fork replays one
+whole, since its inner steps are not checkpointed; a test forks a team at every
+checkpoint and requires the same answer. The stand-in model now keeps its count
+of tool rounds per set of tools, so an inner agent rehearses its own run rather
+than inheriting the host's.
+
+Prompts and descriptions are now written into the file on one line, newlines
+escaped, so a saved agent's text survives being indented inside its host.
+
 ## 2.4.0
 
 **Time travel: checkpoints, edits and forks**, after LangGraph's. Every block

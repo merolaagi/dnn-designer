@@ -8007,6 +8007,98 @@ def _():
     assert 'data-altab="timeline"' in PAGE and "function alRenderTimeline" in PAGE
 
 
+# --------------------------------------------------------------------------
+# agent lab 2.5: saved agents as blocks
+# --------------------------------------------------------------------------
+
+def _team():
+    """The supervisor design with its two sub-agents replaced by whole saved agents."""
+    researcher = agentlab.template("react")
+    researcher["name"] = "__test_researcher"
+    agentlab.save(researcher)
+    coder = agentlab.template("planexec")
+    coder["name"] = "__test_coder"
+    agentlab.save(coder)
+    g = agentlab.template("supervisor")
+    g["name"] = "__test_team"
+    for n in g["nodes"]:
+        if n["type"] == "sub_agent":
+            design = "__test_researcher" if n["params"]["name"] == "researcher" else "__test_coder"
+            n["type"] = "subgraph"
+            n["params"] = {"design": design, "description": f"Ask {design} to handle a sub-task."}
+    return g
+
+
+@check("a saved agent runs whole inside another, and its events say where they came from")
+def _():
+    g = _team()
+    assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
+    result = agentlab.run(g, "Estimate the cafes Lisbon can support")
+    assert result["ok"], result["error"]
+    hosts = {n["id"] for n in g["nodes"] if n["type"] == "subgraph"}
+    inner = [e for e in result["events"] if e.get("inside")]
+    assert inner and {e["inside"] for e in inner} == hosts, "both saved agents should have run"
+    assert sum(1 for e in inner if e["event"] == "final") == 2, "each saved agent should reach its own answer"
+    outer_calls = sum(1 for e in result["events"] if e["event"] == "model" and not e.get("inside"))
+    assert result["costs"]["core_calls"] == outer_calls, "the inner agents' calls were counted as the outer core's"
+
+
+@check("the generated file carries its saved agents with it")
+def _():
+    source = agentlab.codegen(_team())["source"]
+    assert "def make_test_researcher_agent(emit, call_model, human_approves, memory_dir):" in source
+    assert "agentlab" not in source.split('"""', 2)[2], "the file should not need the lab to run"
+    for target in ("python", "langgraph"):
+        compile(agentlab.codegen(_team(), target)["source"], target, "exec")
+
+
+@check("saved agents that include each other, or do not exist, are refused")
+def _():
+    a = agentlab.template("rag")
+    a["name"] = "__test_loop_a"
+    b = agentlab.template("rag")
+    b["name"] = "__test_loop_b"
+    for g, other in ((a, "__test_loop_b"), (b, "__test_loop_a")):
+        g["nodes"].append({"id": "sg", "type": "subgraph", "x": 0, "y": 0, "params": {"design": other}})
+        router = {"id": "r", "type": "router", "x": 0, "y": 0, "params": {}}
+        g["nodes"].append(router)
+        llm = next(n["id"] for n in g["nodes"] if n["type"] == "llm")
+        end = next(n["id"] for n in g["nodes"] if n["type"] == "long_mem")
+        g["edges"] = [e for e in g["edges"] if e["source"] != llm]
+        g["edges"] += [{"id": "x1", "source": llm, "target": "r"}, {"id": "x2", "source": "r", "target": "sg"},
+                       {"id": "x3", "source": "sg", "target": llm}, {"id": "x4", "source": "r", "target": end}]
+        agentlab.save(g)
+    problems = [p["message"] for p in agentlab.validate(a) if p["level"] == "error"]
+    assert any("include each other" in m for m in problems), problems
+    missing = _team()
+    next(n for n in missing["nodes"] if n["type"] == "subgraph")["params"]["design"] = "__no_such_agent"
+    assert any("no saved agent" in p["message"] for p in agentlab.validate(missing))
+
+
+@check("safety looks inside saved agents, and across them")
+def _():
+    report = agentlab.safety(_team())
+    messages = [f["message"] for f in report["findings"] if f["level"] == "risk"]
+    assert any(m.startswith("Inside Agent: __test_coder") for m in messages), messages
+    assert any(m.startswith("Text from Agent: __test_") and "can run Agent: __test_coder" in m for m in messages), \
+        "a saved agent's output reaches the core that can run the coder unapproved: that path crosses agents"
+
+
+@check("a study can take out a saved agent, and a fork replays one faithfully")
+def _():
+    g = _team()
+    labels = {v["label"]: v["runnable"] for v in agentlab.variants(g)}
+    assert labels.get("without Agent: __test_coder") is True, labels
+    result = agentlab.run(g, "Estimate the cafes Lisbon can support", keep=True)
+    for cp in result["checkpoints"][:-1]:
+        assert agentlab.fork(result["run_id"], cp["i"], {})["answer"] == result["answer"], cp["i"]
+
+
+@check("the page lets a block choose a saved agent and open it")
+def _():
+    assert 'd.kind === "design"' in PAGE and "function alDrillInto" in PAGE and "function alDrillOut" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

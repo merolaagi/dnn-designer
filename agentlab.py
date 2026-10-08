@@ -177,6 +177,19 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         params={"name": _p("Agent name", "researcher"),
                 "role": _p("Its role (system prompt)",
                            "You research one question thoroughly and return a short, sourced summary.", "area")}),
+    "subgraph": dict(
+        name="Saved agent", system="hands", short="A whole saved agent, used as a tool",
+        anatomy=("Another agent you designed and saved, used here as one tool. It brings all its own blocks: "
+                 "prompt, tools, router, loop, guardrails."),
+        inside=("The saved design, compiled into this file as a function with its own state. It shares this "
+                "agent's model connection, approvals and events."),
+        physiology=("The model calls it with a task; the saved agent runs its whole state machine on that task, "
+                    "and only its final answer comes back."),
+        failure=("Each call costs a whole run of it. Changing the saved design changes every agent that uses it. "
+                 "Its inner steps are not checkpointed, so a fork replays it whole."),
+        params={"design": _p("Saved agent", "", "design"),
+                "description": _p("What it does (the model reads this)",
+                                  "Hand a sub-task to a specialist agent and get back its answer.", "area")}),
     "router": dict(
         name="Router", system="nerve", short="Dispatches tool calls or exits",
         anatomy=("Reads the model's output and decides where control goes: tool requests to the hands, "
@@ -215,7 +228,7 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         failure="Approval fatigue: clicking yes without reading."),
 }
 
-ACTIONS = {"tool", "web_search", "code_exec", "sub_agent"}
+ACTIONS = {"tool", "web_search", "code_exec", "sub_agent", "subgraph"}
 
 
 def catalog() -> Dict[str, Any]:
@@ -373,6 +386,7 @@ def analyze(graph) -> Dict[str, Any]:
         return out
 
     tool_names = {nid: unique(py_id(_params(n)["name"]) if kind[nid] in ("tool", "sub_agent")
+                              else py_id((_params(n)["design"] or "saved") + "_agent") if kind[nid] == "subgraph"
                               else ("web_search" if kind[nid] == "web_search" else "run_python"))
                   for nid, n in nodes.items() if kind[nid] in ACTIONS}
 
@@ -474,7 +488,7 @@ def wiring(graph) -> Dict[str, Any]:
     return {"given": a["given"], "gated": a["gated"]}
 
 
-def validate(graph) -> List[Dict[str, Any]]:
+def validate(graph, _stack: tuple = ()) -> List[Dict[str, Any]]:
     problems = []
 
     def say(level, message, node=None):
@@ -533,6 +547,16 @@ def validate(graph) -> List[Dict[str, Any]]:
             say("warning", f"{label(n)} is not wired from the router, so no model is offered it.", n["id"])
         if t in STEPS and n["id"] not in a["reach"] and t != "output":
             say("warning", f"{label(n)} is never reached from the input.", n["id"])
+        if t == "subgraph":
+            found = saved_agent(_params(n)["design"], _stack)
+            if found["problem"]:
+                say("error", found["problem"], n["id"])
+            else:
+                inner = [p for p in validate(found["graph"], _stack + (_params(n)["design"],))
+                         if p["level"] == "error"]
+                if inner:
+                    say("error", f"The saved agent {_params(n)['design']} does not run: {inner[0]['message']}",
+                        n["id"])
         if t == "summarizer" and not any(l["summarizer"] == n["id"] for l in a["llms"].values()):
             say("warning", "This summarizer is not wired into an LLM core, so nothing is limited.", n["id"])
         if t == "system_prompt" and not any(e.get("source") == n["id"] for e in graph.get("edges", [])):
@@ -548,6 +572,8 @@ def label(node) -> str:
         return p.get("name") or "Tool"
     if node.get("type") == "sub_agent":
         return f"Sub-agent {p.get('name') or ''}".strip()
+    if node.get("type") == "subgraph":
+        return f"Agent: {p.get('design')}" if p.get("design") else "Saved agent"
     return BLOCKS.get(node.get("type"), {}).get("name", str(node.get("type")))
 
 
@@ -560,21 +586,66 @@ TARGETS = {"python": "Plain Python (standard library)", "langgraph": "LangGraph"
 
 def _doc(text: str) -> str:
     """A triple-quoted literal that is safe for any text a person types."""
-    return '"""' + str(text).replace("\\", "\\\\").replace('"', '\\"') + '"""'
+    return '"""' + str(text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"""'
+
+
+MAX_NESTING = 4
+
+
+def saved_agent(name: str, stack=()) -> Dict[str, Any]:
+    """Resolve a Saved agent block's design: the graph, or the reason it cannot be used."""
+    if not name:
+        return {"graph": None, "problem": "Choose which saved agent this block runs."}
+    if name in stack:
+        return {"graph": None, "problem": f"Saved agents include each other: {' → '.join(stack + (name,))}."}
+    if len(stack) >= MAX_NESTING:
+        return {"graph": None, "problem": f"Saved agents are nested more than {MAX_NESTING} deep."}
+    try:
+        graph = load(name)
+    except KeyError:
+        return {"graph": None, "problem": f"There is no saved agent called {name}."}
+    return {"graph": graph, "problem": None}
+
+
+def subgraph_code(tid: str, name: str, p: Dict[str, Any], stack: tuple) -> List[str]:
+    """A saved agent inside this file: a factory holding its whole compiled design, and the tool that calls it."""
+    found = saved_agent(p.get("design") or "", stack)
+    if found["problem"]:
+        return [f"def {name}(task: str) -> str:", f"    {_doc(p.get('description') or '')}",
+                f"    return {json.dumps('Error: ' + found['problem'])}"]
+    factory = f"make_{name}"
+    inner = codegen(found["graph"], "python", embedded={"name": name}, _stack=stack + (p["design"],))
+    body = "\n".join("    " + line if line.strip() else "" for line in inner["source"].rstrip().split("\n"))
+    return [f"def {factory}(emit, call_model, human_approves, memory_dir):",
+            f'    """Saved agent “{p["design"]}”, compiled from its own design. It keeps its own state and',
+            "    shares this file's model connection, approvals and events. Returns its run_agent.\"\"\"",
+            *body.split("\n"), "    return run_agent", "", "",
+            f"def {name}(task: str) -> str:", f"    {_doc(p.get('description') or '')}",
+            f'    emit("delegate", node="{tid}")',
+            f'    inner = {factory}(lambda event, **data: emit(event, inside="{tid}", **data),',
+            "                       call_model, human_approves, MEMORY_DIR)",
+            '    return inner(task) or ""']
 
 
 def fn_name(nid: str, node) -> str:
     return f"{py_id(nid)}_{py_id(label(node))}"
 
 
-def codegen(graph, target: str = "python") -> Dict[str, Any]:
+def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = None,
+            _stack: tuple = ()) -> Dict[str, Any]:
     """Python source for the design, plus which lines each block contributed.
 
     The file is a state machine: one function per block on the control path,
     each returning the next block's id. The plain target drives it with a
     while loop; the LangGraph target hands the same functions to a StateGraph,
     so the two files differ only in what runs the machine.
+
+    embedded={"name": ...} writes the design to sit inside another agent's file,
+    as the body of a factory function: it leaves out what the host supplies —
+    emit, call_model, human_approves — and the module's own entry point.
     """
+    if embedded:
+        target = "python"
     if target not in TARGETS:
         raise ValueError(f"Unknown target {target!r}.")
     errors = [p for p in validate(graph) if p["level"] == "error"]
@@ -623,7 +694,10 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
     parts = ", ".join(label(n) for n in graph.get("nodes", []))
     run_line = ("Run it:  pip install langgraph; ANTHROPIC_API_KEY=... python agent_langgraph.py"
                 if langgraph else "Run it:  ANTHROPIC_API_KEY=... python agent.py")
-    add(['"""Agent generated by Deep Network Designer\'s agent lab'
+    if embedded:
+        add([f"# saved agent {embedded['name']}: {parts}".replace('"""', "'''")])
+    else:
+        add(['"""Agent generated by Deep Network Designer\'s agent lab'
          + (", for LangGraph." if langgraph else "."), "",
          f"Anatomy: {parts}.".replace('"""', "'''"),
          "Each block on the control path is one function: it takes the state, does its work,",
@@ -631,12 +705,15 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
              "A LangGraph StateGraph runs them; human approval is a real interrupt you can resume."
              if langgraph else "A while loop at the bottom runs them."), "",
          run_line, "" if langgraph else "Standard library only.", '"""', ""])
+    subgraphs = [t for t, _ in tools if kind[t] == "subgraph"]
     imports = ["import json", "import os", "import urllib.request"]
+    if subgraphs or embedded:
+        imports.append("from pathlib import Path")
     if any(kind[t] == "code_exec" for t, _ in tools):
         imports += ["import subprocess", "import sys"]
     if present("guard_in") or present("guard_out"):
         imports.append("import re")
-    if any(kind[n] == "long_mem" for n in nodes):
+    if any(kind[n] == "long_mem" for n in nodes) and "from pathlib import Path" not in imports:
         imports.append("from pathlib import Path")
     if langgraph:
         imports += ["import copy", "from typing import Optional, TypedDict"]
@@ -650,10 +727,15 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
     add([f"MAX_STEPS = {a['max_steps']}  # loop controller: model calls allowed across the whole run",
          "MAX_HOPS = 200  # a safety net on block-to-block moves, so a miswired graph cannot spin forever"],
         a["loop"])
-    add(["", "",
-         "def emit(event, **data):",
-         '    """Each block reports here as it works. The lab swaps this in to animate the canvas;',
-         '    on its own it does nothing."""'])
+    if not embedded:
+        add(["", "",
+             "def emit(event, **data):",
+             '    """Each block reports here as it works. The lab swaps this in to animate the canvas;',
+             '    on its own it does nothing."""'])
+    if subgraphs or embedded:
+        add(["MEMORY_DIR = memory_dir" if embedded else
+             'MEMORY_DIR = Path(".")  # where saved agents inside this one keep their long-term memory'],
+            *subgraphs)
 
     # ---- brain: settings and instructions per LLM core ----
     add(["", "", "# ---- brain ----"])
@@ -666,7 +748,8 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
         add([f"{const(sid)}_SYSTEM = {_doc(_params(nodes[sid])['text'])}"], sid, *readers)
     add([f"DEFAULT_SYSTEM = {_doc(DEFAULT_PROMPT)}"])
     add(["", ""])
-    add(["def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048):",
+    add(([] if embedded else [
+         "def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048):",
          '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests."""',
          '    body = {"model": model, "max_tokens": max_tokens, "temperature": temperature,',
          '            "system": system, "messages": messages}',
@@ -677,7 +760,7 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
          '        headers={"content-type": "application/json", "x-api-key": os.environ["ANTHROPIC_API_KEY"],',
          '                 "anthropic-version": "2023-06-01"})',
          "    with urllib.request.urlopen(request, timeout=120) as reply:",
-         "        return json.load(reply)", "", "",
+         "        return json.load(reply)", "", ""]) + [
          "def text_of(response):",
          '    return "".join(b.get("text", "") for b in response.get("content", []) if b.get("type") == "text")'],
         *llm_ids)
@@ -712,6 +795,8 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
                         "    except subprocess.TimeoutExpired:",
                         '        return "Error: timed out after 20 seconds."',
                         '    return (done.stdout + done.stderr)[-4000:] or "(no output)"']
+            elif k == "subgraph":
+                body = subgraph_code(tid, name, p, _stack)
             else:
                 body = [f"{name.upper()}_ROLE = {_doc(p['role'])}", "", "",
                         f"def {name}(task: str) -> str:",
@@ -724,12 +809,14 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
             add(body, tid)
 
         def schema(tid, name):
-            arg = {"tool": "input", "web_search": "query", "code_exec": "code", "sub_agent": "task"}[kind[tid]]
+            arg = {"tool": "input", "web_search": "query", "code_exec": "code", "sub_agent": "task",
+                   "subgraph": "task"}[kind[tid]]
             p = _params(nodes[tid])
             desc = {"tool": p.get("description", ""),
                     "web_search": "Search the web and return short result snippets for a query.",
                     "code_exec": "Run a Python snippet and return what it prints. Use print() to show results.",
-                    "sub_agent": f"Delegate a sub-task to the {p.get('name')} agent. Its role: {p.get('role')}"
+                    "sub_agent": f"Delegate a sub-task to the {p.get('name')} agent. Its role: {p.get('role')}",
+                    "subgraph": p.get("description", ""),
                     }[kind[tid]]
             return ["    {", f'        "name": {json.dumps(name)},', f'        "description": {json.dumps(desc)},',
                     f'        "input_schema": {{"type": "object", "properties": {{"{arg}": {{"type": "string"}}}},'
@@ -749,7 +836,8 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
         add(["", "", "# ---- memory ----",
              "# Keyword overlap keeps this to the standard library. Swap in embeddings for real use."])
         if long_ids:
-            add(['MEMORY_FILE = Path("agent_memory.json")', "", "",
+            add([f'MEMORY_FILE = MEMORY_DIR / "{embedded["name"]}_memory.json"' if embedded
+                 else 'MEMORY_FILE = Path("agent_memory.json")', "", "",
                  "def load_memories():",
                  "    return json.loads(MEMORY_FILE.read_text()) if MEMORY_FILE.exists() else []", "", "",
                  "def save_memory(text):",
@@ -781,7 +869,9 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
              '    return re.sub(r"\\b\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b", "[phone removed]", text)'],
             *of_kind("guard_out"))
     add(["", ""])
-    if langgraph:
+    if embedded:
+        pass                                     # the host agent's approvals are passed in
+    elif langgraph:
         add(["def human_approves(name, args, gate):",
              '    """A real pause: the graph stops here, saves its state, and waits to be resumed.',
              "",
@@ -1090,7 +1180,8 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
              "        on_step(None, state, START)",
              "    return resume(state, START, on_step)"], start, end)
     add(["", ""])
-    add(['if __name__ == "__main__":', '    print(run_agent(input("Task: ")))'], start, end)
+    if not embedded:
+        add(['if __name__ == "__main__":', '    print(run_agent(input("Task: ")))'], start, end)
     add([""])
     return {"source": "\n".join(L), "nodemap": {"tools": {name: tid for tid, name in tools}},
             "node_code": spans, "target": target, "errors": errors}
@@ -1424,7 +1515,34 @@ def _m_summarizer(p, node, graph, c):
     return entry
 
 
+def _m_subgraph(p, node, graph, c):
+    found = saved_agent(p.get("design") or "")
+    if found["problem"]:
+        return {"missing": found["problem"]}
+    inner = found["graph"]
+    ia = analyze(inner)
+    N, n_in = c["N"], ia["max_steps"]
+    extra = [label(ia["nodes"][x]).lower() for x in ia["reach"] if ia["kind"][x] in ("planner", "reflector")]
+    return {"title": "An agent inside an agent",
+            "equation": f"o = Agent_{py_id(p['design'])}(a.task):  a fresh state S′, its own budget N′",
+            "shape": f"{len(inner.get('nodes', []))} blocks,  N′ = {n_in}",
+            "symbols": [("S′", "the saved agent's state, new on every call and thrown away after it"),
+                        ("N′", "its own step budget"), ("a.task", "what this agent's model asked it to do")],
+            "arithmetic": [
+                ("model calls per call", f"≤ N′ = {n_in} by its cores" + (f", plus its {', '.join(extra)}" if extra else "")),
+                ("this agent's budget", "does not count them: the outer counter sees one tool call"),
+                ("worst case", f"≤ N + N·N′ = {N} + {N}·{n_in} = {N + N * n_in} model calls, if every outer step called it"),
+                ("effects", effects(node)),
+                ("reads outside text", "yes" if reads_outside(inner) else "no")],
+            "freedom": [
+                "Composition multiplies budgets: N·N′. A Study can show whether the inner agent's extra calls buy "
+                "anything over a single sub-agent call.",
+                "Only the answer crosses back. The outer agent cannot see how the inner one got there, which keeps "
+                "its context small and hides the inner agent's mistakes."]}
+
+
 MATH: Dict[str, Callable] = {
+    "subgraph": _m_subgraph,
     "summarizer": _m_summarizer,
     "user_input": _m_input, "output": _m_output, "llm": _m_llm, "system_prompt": _m_prompt,
     "planner": _m_planner, "reflector": _m_critic, "short_mem": _m_work, "long_mem": _m_long,
@@ -1455,10 +1573,38 @@ def node_view(graph, node_id: Optional[str], target: str = "python") -> Dict[str
 UNTRUSTED = {"web_search", "retriever", "long_mem", "tool"}
 
 
+def _inside(node) -> Optional[Dict[str, Any]]:
+    """The design a Saved agent block runs, if it resolves."""
+    if node.get("type") != "subgraph":
+        return None
+    return saved_agent(_params(node).get("design") or "")["graph"]
+
+
+def reads_outside(graph, depth: int = 0) -> bool:
+    """Whether outside text can enter this design anywhere, saved agents inside it included."""
+    a = analyze(graph)
+    for n in a["nodes"]:
+        if n not in a["reach"] and n not in a["given"]:
+            continue
+        if a["kind"][n] in UNTRUSTED:
+            return True
+        inner = _inside(a["nodes"][n])
+        if inner and depth < MAX_NESTING and reads_outside(inner, depth + 1):
+            return True
+    return False
+
+
 def effects(node) -> str:
     kind = node.get("type")
     if kind == "code_exec":
         return CHANGES
+    if kind == "subgraph":
+        # it changes things if anything inside can, without a person of its own in front of it
+        inner = _inside(node)
+        if not inner:
+            return READS
+        a = analyze(inner)
+        return CHANGES if any(effects(a["nodes"][t]) == CHANGES and t not in a["gated"] for t in a["given"]) else READS
     if kind == "tool":
         return _params(node).get("effects", CHANGES)
     return READS
@@ -1580,7 +1726,11 @@ def safety(graph) -> Dict[str, Any]:
                              f"{len(risky) - len(ungated)} of {len(risky)} side-effecting tools are gated")})
 
     # 3. injection: can text from outside reach a core that can act without a person?
-    sources = [n for n in live if kind[n] in UNTRUSTED]
+    def untrusted(n):
+        inner = _inside(nodes[n])
+        return kind[n] in UNTRUSTED or bool(inner and reads_outside(inner))
+
+    sources = [n for n in live if untrusted(n)]
     exposures = 0
     for lid in (n for n in live if kind[n] == "llm"):
         acting = [r["node"] for rid in a["control"][lid] if rid in a["routers"]
@@ -1635,6 +1785,15 @@ def safety(graph) -> Dict[str, Any]:
         if skip:
             find("info", "coverage", "Some answers leave without the critic seeing them, such as a spent budget.", skip)
 
+    # a saved agent brings its own findings with it
+    for n in live:
+        inner = _inside(nodes[n])
+        if not inner:
+            continue
+        for f in safety(inner).get("findings", []):
+            if f["level"] in ("risk", "warning"):
+                find(f["level"], f["check"], f"Inside {name(n)}: {f['message']}", focus=[n])
+
     order = {"risk": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda f: order[f["level"]])
     return {"findings": findings, "properties": props}
@@ -1654,13 +1813,16 @@ class Rehearsal:
     is the real generated code.
     """
 
-    def __init__(self, critic_calls: int = 0, tool_rounds: int = 0):
+    def __init__(self, critic_calls: int = 0, tool_rounds=0):
         self.critic_calls = critic_calls
-        self.tool_rounds = tool_rounds    # counted here, not read off the history, which a summarizer rewrites
+        # Counted here, not read off the history, which a summarizer rewrites; and kept per set of
+        # tools offered, so a saved agent inside another one has its own count.
+        self.tool_rounds = dict(tool_rounds) if isinstance(tool_rounds, dict) else {}
+        self.default_rounds = 0 if isinstance(tool_rounds, dict) else int(tool_rounds)
 
-    def snapshot(self) -> Dict[str, int]:
+    def snapshot(self) -> Dict[str, Any]:
         """What it remembers, so a fork from a checkpoint behaves as the original would have."""
-        return {"critic_calls": self.critic_calls, "tool_rounds": self.tool_rounds}
+        return {"critic_calls": self.critic_calls, "tool_rounds": dict(self.tool_rounds)}
 
     def __call__(self, system, messages, tools=None, **_settings):
         if not tools:
@@ -1679,9 +1841,10 @@ class Rehearsal:
                 text = f"(rehearsal) A short, sourced finding on: {str(ask)[:80]}"
             return {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn"}
 
-        rounds = self.tool_rounds
+        key = "|".join(t["name"] for t in tools)
+        rounds = self.tool_rounds.get(key, self.default_rounds)
         if rounds < min(2, len(tools)):
-            self.tool_rounds += 1
+            self.tool_rounds[key] = rounds + 1
             tool = tools[rounds]
             arg = tool["input_schema"]["required"][0]
             task = str(messages[0]["content"]).split("Task:\n")[-1][:120]
@@ -1753,6 +1916,8 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
     space["emit"] = emit_measured
     if "MEMORY_FILE" in space and memory_dir is not None:
         space["MEMORY_FILE"] = Path(memory_dir) / "agent_memory.json"
+    if "MEMORY_DIR" in space and memory_dir is not None:
+        space["MEMORY_DIR"] = Path(memory_dir)
 
     checkpoints: List[Dict[str, Any]] = []
 
@@ -1916,8 +2081,9 @@ def costs(graph, task, events, calls, space, mode) -> Dict[str, Any]:
     """
     a = analyze(graph)
     nodes = a["nodes"]
-    core_events = [e for e in events if e["event"] == "model" and a["kind"].get(e.get("node")) == "llm"
-                   and "tokens" in e]
+    # a saved agent's own calls are tagged `inside`; its node ids belong to its own design
+    core_events = [e for e in events if e["event"] == "model" and "inside" not in e
+                   and a["kind"].get(e.get("node")) == "llm" and "tokens" in e]
     xs = [e["tokens"]["input"] for e in core_events]
     counted = any(c["counted"] for c in calls)
     report: Dict[str, Any] = {"counted": counted, "calls": len(calls),
@@ -2087,7 +2253,7 @@ def _without(graph, nid) -> Dict[str, Any]:
 
 
 REMOVABLE = {"guard_in", "guard_out", "planner", "reflector", "retriever", "long_mem", "human", "summarizer",
-             "system_prompt", "tool", "web_search", "code_exec", "sub_agent"}
+             "system_prompt", "tool", "web_search", "code_exec", "sub_agent", "subgraph"}
 
 
 def variants(graph) -> List[Dict[str, Any]]:
