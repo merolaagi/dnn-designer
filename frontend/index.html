@@ -2450,6 +2450,17 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-unf small{display:block;color:var(--muted)}
 .al-unf .btn{margin-top:4px;font-size:11px;padding:3px 9px}
 .al-err{display:block;color:var(--bad)}
+.al-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+.al-kpis div{background:#fff;border:1px solid var(--paper-3);border-radius:7px;padding:6px 8px;font-size:11px;color:var(--muted)}
+.al-kpis b{display:block;font-size:15px;color:var(--text);font-family:var(--mono)}
+.al-mon{margin:10px 0 4px}
+.al-mon-t{font-size:11.5px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.al-mon-t span{font-weight:400;color:var(--muted);display:inline-flex;gap:4px;align-items:center}
+.al-mon-t i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.al-price{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11.5px;margin:4px 0}
+.al-price input[type=number]{width:70px;border:1px solid var(--paper-3);border-radius:5px;padding:3px 5px}
+.al-price select{border:1px solid var(--paper-3);border-radius:5px;padding:3px 5px;font-size:11.5px}
+.al-price code{font-family:var(--mono);font-size:11px}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13181,6 +13192,7 @@ async function renderAgentLab(){
     alSetGraph(draft && draft.nodes ? draft : agentLabState.cat.templates.react);
   } else alRenderAll();
   alRefreshDesigns();
+  try{ alMonBadge(await (await fetch(API + "/api/agentlab/monitor?days=1")).json()); } catch {}
 }
 
 function alBuildShell(){
@@ -13219,6 +13231,7 @@ function alBuildShell(){
           <button data-altab="safety">Safety<span class="al-badge" id="alSafetyBadge"></span></button>
           <button data-altab="timeline">Timeline</button>
           <button data-altab="study">Study</button>
+          <button data-altab="monitor">Monitor<span class="al-badge bad" id="alMonBadge"></span></button>
         </div>
         <div class="al-pane" id="alPane"></div>
       </div>
@@ -13507,6 +13520,7 @@ function alRenderPane(){
   if (agentLabState.tab === "safety") return alRenderSafety();
   if (agentLabState.tab === "study") return alRenderStudy();
   if (agentLabState.tab === "timeline") return alRenderTimeline();
+  if (agentLabState.tab === "monitor") return alRenderMonitor();
   alRenderAnatomy();
 }
 
@@ -14524,6 +14538,149 @@ function alWireForkOut(){
   alWireSaveCase("f");
   const b = $("alReplayFork"), f = agentLabState.timeline && agentLabState.timeline.fork;
   if (b && f) b.onclick = async () => { agentLabState.trace = []; await alReplay(f); };
+}
+
+/* ---------- monitoring: every finished run, over days ---------- */
+
+/* One line per finished run is logged on the server; this tab asks for it by day.
+   Latency excludes time spent waiting for a person, and cost appears only where you
+   have priced the models involved — the lab ships no prices of its own. */
+async function alRenderMonitor(){
+  const S = agentLabState;
+  S.mon = S.mon || {days: 7, mode: "", scope: "all", studies: false};
+  const m = S.mon, pane = $("alPane");
+  pane.innerHTML = `<div class="al-wait">gathering…</div>`;
+  const q = new URLSearchParams({days: m.days, mode: m.mode,
+    design: m.scope === "this" ? (S.graph.name || "") : "",
+    sources: m.studies ? "page,api,fork,study,gate" : "page,api,fork"});
+  let d;
+  try{ d = await (await fetch(API + "/api/agentlab/monitor?" + q)).json(); }
+  catch { pane.innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
+  if (S.tab !== "monitor") return;
+  S.monData = d;
+  const n = v => v == null ? "—" : Number(v).toLocaleString(undefined, {maximumFractionDigits: 3});
+  const t = d.total;
+  pane.innerHTML = `<h3>Monitoring</h3>
+    <div class="al-row2">
+      <div class="field"><label for="alMonDays">Period</label><select id="alMonDays">
+        ${[1, 7, 30, 90].map(x => `<option value="${x}"${m.days === x ? " selected" : ""}>${x === 1 ? "Today" : `Last ${x} days`}</option>`).join("")}</select></div>
+      <div class="field"><label for="alMonMode">Model</label><select id="alMonMode">
+        <option value=""${m.mode === "" ? " selected" : ""}>All runs</option>
+        <option value="live"${m.mode === "live" ? " selected" : ""}>Live only</option>
+        <option value="rehearsal"${m.mode === "rehearsal" ? " selected" : ""}>Rehearsals only</option></select></div>
+      <div class="field"><label for="alMonScope">Designs</label><select id="alMonScope">
+        <option value="all"${m.scope === "all" ? " selected" : ""}>All</option>
+        <option value="this"${m.scope === "this" ? " selected" : ""}>This one</option></select></div>
+    </div>
+    <label class="al-check"><input type="checkbox" id="alMonStudies"${m.studies ? " checked" : ""}>
+      Include runs made by studies and release gates</label>
+    ${d.fired.length ? `<div class="al-notice bad">${d.fired.map(f => `<b>Alert:</b> ${alEsc(f.label)} today is
+      ${n(f.value)}, above ${n(f.above)}${f.design ? ` for ${alEsc(f.design)}` : ""}.`).join("<br>")}</div>` : ""}
+    <div class="al-kpis">
+      <div><b>${n(t.runs)}</b>runs</div>
+      <div><b>${t.error_rate == null ? "—" : t.error_rate + "%"}</b>errors</div>
+      <div><b>${t.p50 == null ? "—" : n(t.p50) + " s"}</b>p50</div>
+      <div><b>${t.p99 == null ? "—" : n(t.p99) + " s"}</b>p99</div>
+      <div><b>${n(t.input + t.output)}</b>tokens</div>
+      <div><b>${t.cost == null ? "—" : "$" + n(t.cost)}</b>cost</div>
+    </div>
+    ${t.runs ? `
+    ${alMonChart("Runs per day, and errors", d.series, [["runs", "var(--al-brain)"], ["errors", "var(--bad)"]], "bar")}
+    ${alMonChart("Latency (seconds, waiting for a person excluded)", d.series, [["p50", "var(--al-memory)"], ["p99", "var(--amber)"]], "line")}
+    ${alMonChart("Tokens read and written", d.series.map(x => ({...x, tokens: x.input + x.output})), [["tokens", "var(--al-nerve)"]], "bar")}
+    ${t.estimated ? `<p class="al-muted">Some of these tokens are estimates (characters ÷ 4): rehearsals and servers that do not report usage.</p>` : ""}
+    <h4>By design</h4>
+    <table class="al-study"><tr><th>Design</th><th>Runs</th><th>Errors</th><th>p99</th><th>Tokens</th></tr>
+      ${d.designs.map(r => `<tr><td>${alEsc(r.design)}</td><td>${r.runs}</td><td>${r.error_rate}%</td>
+        <td>${r.p99 == null ? "—" : n(r.p99) + " s"}</td><td>${n(r.input + r.output)}</td></tr>`).join("")}</table>
+    <p class="al-muted">Tool errors ${t.tool_errors} · approvals denied ${t.denied} · step budgets spent ${t.budget}</p>`
+    : `<p class="al-muted">No finished runs in this period. Every run from now on is counted, from the page,
+      the API and forks${m.studies ? ", studies and gates" : ""}.</p>`}
+    <h4>Prices</h4>
+    <p class="al-muted">Dollars per million tokens. Cost shows once every model in the period has a price.</p>
+    <div id="alPrices">${alPriceRows(d.unpriced)}</div>
+    <h4>Alerts</h4>
+    <p class="al-muted">Checked against today whenever this tab opens; a firing alert shows a badge on the tab.</p>
+    <div id="alAlerts">${(d.alerts || []).map((a, i) => alAlertRow(a, i, d.metrics)).join("")}</div>
+    <div class="row"><button class="btn" id="alAddAlert">Add an alert</button>
+      <button class="btn" id="alSaveAlerts">Save alerts</button><span class="al-muted" id="alAlertMsg"></span></div>`;
+  const redo = () => alRenderMonitor();
+  $("alMonDays").onchange = e => { m.days = +e.target.value; redo(); };
+  $("alMonMode").onchange = e => { m.mode = e.target.value; redo(); };
+  $("alMonScope").onchange = e => { m.scope = e.target.value; redo(); };
+  $("alMonStudies").onchange = e => { m.studies = e.target.checked; redo(); };
+  $("alAddAlert").onclick = () => $("alAlerts").insertAdjacentHTML("beforeend",
+    alAlertRow({metric: "error_rate", above: 10}, $("alAlerts").children.length, d.metrics));
+  $("alSaveAlerts").onclick = async () => {
+    const rules = [...$("alAlerts").querySelectorAll(".al-alert")].map(row => ({
+      metric: row.querySelector("select").value, above: +row.querySelector("input").value,
+      design: row.querySelector("[data-design]").checked ? (S.graph.name || null) : null}));
+    const r = await fetch(API + "/api/agentlab/alerts", {method: "PUT", headers: {"content-type": "application/json"},
+      body: JSON.stringify({alerts: rules})});
+    const out = await r.json();
+    $("alAlertMsg").textContent = r.ok ? "Saved." : ((out.detail && out.detail.message) || "Not saved.");
+    if (r.ok) setTimeout(redo, 600);
+  };
+  if ($("alSavePrices")) $("alSavePrices").onclick = async () => {
+    const table = {};
+    $("alPrices").querySelectorAll("[data-model]").forEach(row => {
+      table[row.dataset.model] = {in: +row.querySelector("[data-in]").value, out: +row.querySelector("[data-out]").value};
+    });
+    const r = await fetch(API + "/api/agentlab/prices", {method: "PUT", headers: {"content-type": "application/json"},
+      body: JSON.stringify({prices: {...(S.prices || {}), ...table}})});
+    if (r.ok){ S.prices = (await r.json()).prices; redo(); }
+  };
+  alMonBadge(d);
+}
+
+function alMonBadge(d){
+  const b = $("alMonBadge");
+  if (b) b.textContent = d && d.fired && d.fired.length ? String(d.fired.length) : "";
+}
+
+function alPriceRows(models){
+  if (!models.length) return `<p class="al-muted">Every model used in this period is priced, or none is live.</p>`;
+  return models.map(mod => `<div class="al-price" data-model="${alEsc(mod)}"><code>${alEsc(mod)}</code>
+      <label>in <input type="number" step="any" min="0" data-in value="0"></label>
+      <label>out <input type="number" step="any" min="0" data-out value="0"></label></div>`).join("")
+    + `<button class="btn" id="alSavePrices">Save prices</button>`;
+}
+
+function alAlertRow(a, i, metrics){
+  return `<div class="al-alert al-price"><select>${Object.entries(metrics).map(([k, v]) =>
+      `<option value="${k}"${a.metric === k ? " selected" : ""}>${alEsc(v)}</option>`).join("")}</select>
+    <label>above <input type="number" step="any" value="${a.above}"></label>
+    <label><input type="checkbox" data-design${a.design ? " checked" : ""}> this design only</label>
+    <button class="btn" onclick="this.parentElement.remove()">Remove</button></div>`;
+}
+
+/* A small chart: one or two series over the days, bars or lines, labelled at the ends. */
+function alMonChart(title, series, keys, kind){
+  const W = 330, H = 110, L = 34, B = 16, n = series.length;
+  const max = Math.max(1e-9, ...series.flatMap(s => keys.map(([k]) => s[k] || 0)));
+  const X = i => L + (n === 1 ? (W - L) / 2 : i * (W - L - 8) / (n - 1));
+  const Y = v => H - B - (v || 0) * (H - B - 8) / max;
+  const bw = Math.max(3, Math.min(18, (W - L) / n / (keys.length + 1)));
+  let marks = "";
+  keys.forEach(([k, color], ki) => {
+    if (kind === "bar"){
+      series.forEach((s, i) => { if (s[k]) marks += `<rect x="${X(i) - bw * keys.length / 2 + ki * bw}" y="${Y(s[k])}"
+        width="${bw - 1}" height="${H - B - Y(s[k])}" fill="${color}"><title>${s.day}: ${s[k]}</title></rect>`; });
+    } else {
+      const pts = series.map((s, i) => s[k] == null ? null : `${X(i)},${Y(s[k])}`).filter(Boolean);
+      if (pts.length) marks += `<polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2"/>` +
+        pts.map(p => `<circle cx="${p.split(",")[0]}" cy="${p.split(",")[1]}" r="2.5" fill="${color}"/>`).join("");
+    }
+  });
+  const fmt = v => Number(v).toLocaleString(undefined, {maximumFractionDigits: 2});
+  return `<div class="al-mon"><div class="al-mon-t">${alEsc(title)}
+      ${keys.map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")}</div>
+    <svg viewBox="0 0 ${W} ${H}" class="al-chart" role="img" aria-label="${alEsc(title)}">
+      <line x1="${L}" y1="${H - B}" x2="${W}" y2="${H - B}" class="ax"/>
+      <text x="${L - 4}" y="12" text-anchor="end">${fmt(max)}</text><text x="${L - 4}" y="${H - B}" text-anchor="end">0</text>
+      <text x="${X(0)}" y="${H - 3}" text-anchor="middle">${series[0].day.slice(5)}</text>
+      ${n > 1 ? `<text x="${X(n - 1)}" y="${H - 3}" text-anchor="middle">${series[n - 1].day.slice(5)}</text>` : ""}
+      ${marks}</svg></div>`;
 }
 
 /* ---------- saving ---------- */

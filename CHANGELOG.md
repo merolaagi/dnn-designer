@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.2.0
+
+**Monitoring over days**, after LangSmith's Monitoring. A new **Monitor** tab
+in the Agent lab shows, for today or the last 7, 30 or 90 days: runs and errors
+per day, error rate, p50 and p99 latency, tokens read and written, and cost — for
+all designs or just the one on the canvas, live runs, rehearsals or both.
+
+- **Every finished run is logged**, one line in the workspace's
+  `agentlab/metrics.jsonl`, whether it came from the page, the API, a fork, a
+  study or a release gate. Studies and gates are left out of the charts unless
+  you tick them in, so experiments do not drown out real use. The newest 200
+  runs are still kept whole; the log keeps the summary of every one.
+- **Latency is the agent's time, not yours.** Time a run spent waiting for a
+  person's approval is recorded separately and left out, and percentiles are
+  nearest-rank, so a reported p99 is a latency some run really had.
+- **Cost appears where you price it.** The lab ships no prices: models used in
+  the period are listed, you enter dollars per million tokens read and written,
+  and cost shows once every model involved is priced. Rehearsal tokens are kept
+  apart and never priced.
+- **Alerts.** Error rate, p99 latency, tokens, cost or runs per day above a
+  threshold, for every design or this one, checked against today whenever the
+  tab opens; a firing alert puts a badge on the tab.
+
+The test suite now logs its runs to a temporary file, so running the tests no
+longer fills your monitoring with test traffic.
+
+Fixed: a durable run's status could read "waiting" in the page a moment before
+its file on disk said so. A status change and its write are now one step to
+anything reading them.
+
 ## 3.1.0
 
 **Model-written code runs in a sandbox.** Until now the code executor ran

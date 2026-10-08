@@ -7458,6 +7458,11 @@ def _():
 # --------------------------------------------------------------------------
 
 import agentlab  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
+
+# the suite runs hundreds of agents; they must not show up in your Monitoring
+_TEST_METRICS = Path(_tempfile.mkdtemp()) / "metrics.jsonl"
+agentlab._metrics_path = lambda: _TEST_METRICS
 
 
 @check("every agent-lab design generates Python that compiles")
@@ -8800,6 +8805,117 @@ def _():
     loose = _props(_unrestricted(agentlab.template("planexec")))
     assert loose["Model-written code runs in a sandbox"] == "fails"
     assert agentlab.sandbox_report()["guard"]
+
+
+# --------------------------------------------------------------------------
+# agent lab 3.2: monitoring over days
+# --------------------------------------------------------------------------
+
+def _fresh_metrics():
+    path = agentlab._metrics_path()
+    saved = path.read_text() if path.exists() else None
+    path.unlink(missing_ok=True)
+    return path, saved
+
+
+def _restore_metrics(path, saved):
+    path.unlink(missing_ok=True)
+    if saved is not None:
+        path.write_text(saved)
+
+
+@check("every finished run is logged once, tagged with where it came from")
+def _():
+    path, saved = _fresh_metrics()
+    try:
+        agentlab.run(agentlab.template("react"), "x", source="page")
+        kept = agentlab.run(agentlab.template("react"), "x", keep=True)
+        agentlab.fork(kept["run_id"], 2, {})
+        agentlab.start_study(agentlab.template("rag"), "cafes", background=False, removals=False,
+                             prompts={"node": next(n["id"] for n in agentlab.template("rag")["nodes"]
+                                                   if n["type"] == "system_prompt"), "texts": ["Be brief."]})
+        lines = agentlab.read_metrics()
+        assert [l["source"] for l in lines] == ["page", "api", "fork", "study", "study"], [l["source"] for l in lines]
+        assert all(l["by_model"] == {"rehearsal": [l["input"], l["output"]]} for l in lines)
+        default = agentlab.monitor(7)
+        assert default["total"]["runs"] == 3, "studies and gates are left out unless asked for"
+        assert agentlab.monitor(7, sources=list(agentlab.SOURCES))["total"]["runs"] == 5
+    finally:
+        _restore_metrics(path, saved)
+
+
+@check("latency leaves out the time a run spent waiting for a person")
+def _():
+    import time as _t
+    path, saved = _fresh_metrics()
+    try:
+        view = agentlab.start_run(agentlab.template("supervisor"), "note", approvals="ask")
+        _until(view["id"], ("waiting",))
+        _t.sleep(1.2)
+        agentlab.answer_run(view["id"], True)
+        _until(view["id"], ("done",))
+        _t.sleep(0.2)
+        line = agentlab.read_metrics()[-1]
+        assert line["source"] == "page" and line["waited"] >= 1.1 and line["seconds"] < 1.0, line
+    finally:
+        _restore_metrics(path, saved)
+
+
+@check("monitoring buckets by day, and computes rates, percentiles and costs from the log")
+def _():
+    import time as _t
+    path, saved = _fresh_metrics()
+    prices_path, alerts_path = agentlab._dir() / "prices.json", agentlab._dir() / "alerts.json"
+    old_prices = prices_path.read_text() if prices_path.exists() else None
+    old_alerts = alerts_path.read_text() if alerts_path.exists() else None
+    try:
+        now = _t.time()
+        rows = [(now - 2 * 86400, "done", 1.0, {"m": [1000, 100]}), (now, "done", 2.0, {"m": [2000, 200]}),
+                (now, "error", 9.0, {"m": [0, 0]}), (now, "done", 3.0, {"m": [1_000_000, 0]})]
+        with open(path, "a") as out:
+            for t, status, secs, by in rows:
+                out.write(json.dumps({"t": t, "design": "D", "mode": "live", "status": status, "seconds": secs,
+                                      "input": sum(v[0] for v in by.values()), "output": sum(v[1] for v in by.values()),
+                                      "by_model": by, "counted": True, "source": "page"}) + "\n")
+            out.write("{not json, cut off by a crash\n")
+        m = agentlab.monitor(7, now=now)
+        assert len(m["series"]) == 7 and m["total"]["runs"] == 4 and m["unpriced"] == ["m"]
+        today = m["series"][-1]
+        assert today["runs"] == 3 and today["errors"] == 1 and today["error_rate"] == 33.3
+        assert today["p50"] == 3.0 and today["p99"] == 9.0, "nearest rank: a latency a run really had"
+        assert m["series"][-3]["runs"] == 1 and m["total"]["cost"] is None, "no cost until the model is priced"
+        agentlab.set_prices({"m": {"in": 3, "out": 15}})
+        assert agentlab.monitor(7, now=now)["total"]["cost"] == round((1000 + 2000 + 1_000_000) * 3e-6 + 300 * 15e-6, 4)
+        agentlab.set_alerts([{"metric": "error_rate", "above": 20}, {"metric": "runs_per_day", "above": 10}])
+        fired = agentlab.monitor(7, now=now)["fired"]
+        assert [f["metric"] for f in fired] == ["error_rate"] and fired[0]["value"] == 33.3
+        for bad in ([{"metric": "nonsense", "above": 1}], [{"metric": "error_rate"}]):
+            try:
+                agentlab.set_alerts(bad)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"{bad} should be refused")
+    finally:
+        _restore_metrics(path, saved)
+        for f, old in ((prices_path, old_prices), (alerts_path, old_alerts)):
+            f.unlink(missing_ok=True)
+            if old is not None:
+                f.write_text(old)
+
+
+@check("the test suite's own runs stay out of the workspace's monitoring")
+def _():
+    assert agentlab._metrics_path() == _TEST_METRICS and agentlab._dir() not in _TEST_METRICS.parents
+
+
+@check("the monitoring routes answer, and the page has a Monitor tab")
+def _():
+    import main
+    out = main.agentlab_monitor(days=7, sources="page,api,fork")
+    assert len(out["series"]) == 7 and "fired" in out
+    for needle in ('data-altab="monitor"', "async function alRenderMonitor", "function alMonChart"):
+        assert needle in PAGE, needle
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

@@ -329,7 +329,7 @@ def agentlab_run(body: AgentLabRun):
         raise HTTPException(400, detail={"message": "Give the agent a task to work on."})
     try:
         return agentlab.run(body.graph, body.task, body.mode, body.approvals,
-                            memory_dir=auth.sub("agentlab"), keep=True, thread=body.thread)
+                            memory_dir=auth.sub("agentlab"), keep=True, thread=body.thread, source="page")
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
 
@@ -391,6 +391,36 @@ class AgentLabFork(BaseModel):
     checkpoint: int
     edits: Dict[str, Any] = {}
     graph: Optional[Dict[str, Any]] = None      # the design on the canvas, to continue with instead
+
+
+class AgentLabPrices(BaseModel):
+    prices: Dict[str, Dict[str, float]]
+
+
+class AgentLabAlerts(BaseModel):
+    alerts: List[Dict[str, Any]]
+
+
+@app.get("/api/agentlab/monitor")
+def agentlab_monitor(days: int = 7, design: Optional[str] = None, mode: Optional[str] = None,
+                     sources: str = "page,api,fork"):
+    return agentlab.monitor(days, design or None, mode or None, [x for x in sources.split(",") if x])
+
+
+@app.put("/api/agentlab/prices")
+def agentlab_prices(body: AgentLabPrices):
+    try:
+        return {"prices": agentlab.set_prices(body.prices)}
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.put("/api/agentlab/alerts")
+def agentlab_alerts(body: AgentLabAlerts):
+    try:
+        return {"alerts": agentlab.set_alerts(body.alerts)}
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 class AgentLabStart(BaseModel):

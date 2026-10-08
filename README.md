@@ -329,6 +329,9 @@ The **code executor** runs model-written code in a sandbox: a guarded process
 with no secrets, no network and its own throwaway folder, inside macOS's
 `sandbox-exec` or a Linux namespace where available.
 
+The **Monitor** tab charts every finished run by day — runs, errors, p50 and p99
+latency, tokens and cost — with alerts when a threshold is crossed.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

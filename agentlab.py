@@ -2784,7 +2784,8 @@ def thread_turns(thread: str) -> List[Dict[str, Any]]:
 
 
 def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
-        memory_dir: Optional[Path] = None, keep: bool = False, thread: Optional[str] = None) -> Dict[str, Any]:
+        memory_dir: Optional[Path] = None, keep: bool = False, thread: Optional[str] = None,
+        source: str = "api") -> Dict[str, Any]:
     """Run one task. With a thread id this is the next turn of that conversation: the lab keeps
     its turns in the workspace between runs and hands them to the generated file."""
     errors = [p for p in validate(graph) if p["level"] == "error"]
@@ -2802,6 +2803,8 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
     result.update(mode=mode, costs=costs(graph, task, ctx["events"], ctx["calls"], ctx["space"], mode))
     if keep:
         result["run_id"] = save_run(result, graph, task, mode, approvals)
+    record_metric(graph, mode, "done" if result["ok"] else "error", result["events"], result.get("costs"),
+                  result.get("seconds") or 0.0, source, result.get("run_id"))
     return result
 
 
@@ -2904,6 +2907,8 @@ def fork(run_id: str, index: int, edits: Optional[Dict[str, Any]] = None, graph=
                   parent={"run": run_id, "checkpoint": index, "changed": changed})
     result["run_id"] = save_run(result, design, state["task"], parent["mode"], parent["approvals"],
                                 parent=result["parent"])
+    record_metric(design, parent["mode"], "done" if result["ok"] else "error", result["events"],
+                  result.get("costs"), result.get("seconds") or 0.0, "fork", result["run_id"])
     return result
 
 
@@ -3381,7 +3386,7 @@ def run_study(study, cases, mode, repeats, approvals, memory_dir=None, pairwise:
                 for rep in range(repeats):
                     if study.stop.is_set():
                         break
-                    result = run(trial["graph"], case["task"], mode, approvals, memory_dir=memory_dir)
+                    result = run(trial["graph"], case["task"], mode, approvals, memory_dir=memory_dir, source="study")
                     checks = score(result, case["checks"], case, mode)
                     c = result.get("costs") or {}
                     trial["runs"].append({
@@ -3660,6 +3665,203 @@ def load(name: str) -> Dict[str, Any]:
 
 
 
+
+# --------------------------------------------------------------------------
+# monitoring: every finished run, over days, after LangSmith's Monitoring
+# --------------------------------------------------------------------------
+# The lab keeps the newest 200 runs whole; monitoring needs longer memory and
+# much less of each run, so every finished run also appends one line to
+# metrics.jsonl: when, which design, how it ended, how long it took (minus time
+# spent waiting for a person), the tokens each model read and wrote, and where
+# the run came from. Days, percentiles, costs and alerts are all computed from
+# those lines on demand.
+
+SOURCES = ("page", "api", "fork", "study", "gate")
+ALERT_METRICS = {"error_rate": "error rate (%)", "p99_seconds": "p99 latency (s)",
+                 "tokens_per_day": "tokens per day", "cost_per_day": "cost per day ($)",
+                 "runs_per_day": "runs per day"}
+
+
+def _metrics_path() -> Path:
+    return _dir() / "metrics.jsonl"
+
+
+def _model_of(graph) -> Dict[str, str]:
+    """Each LLM core's model; planners, critics and summarizers use the first core's."""
+    cores = [n for n in graph.get("nodes", []) if n.get("type") == "llm"]
+    models = {n["id"]: str(_params(n).get("model") or "") for n in cores}
+    models["*"] = models[cores[0]["id"]] if cores else ""
+    return models
+
+
+def record_metric(graph, mode: str, status: str, events, costs_: Optional[Dict[str, Any]], seconds: float,
+                  source: str, run_id: Optional[str] = None, waited: float = 0.0) -> None:
+    models = _model_of(graph)
+    by_model: Dict[str, List[int]] = {}
+    for e in events or []:
+        tok = e.get("tokens")
+        if not tok or e.get("inside"):
+            continue
+        model = models.get(e.get("node"), models["*"]) if mode == "live" else "rehearsal"
+        pair = by_model.setdefault(model, [0, 0])
+        pair[0] += int(tok.get("input") or 0)
+        pair[1] += int(tok.get("output") or 0)
+    c = costs_ or {}
+    line = {"t": round(time.time(), 3), "design": graph.get("name") or "unsaved", "mode": mode, "status": status,
+            "seconds": round(max(0.0, seconds - waited), 3), "waited": round(waited, 3),
+            "calls": c.get("calls") or 0, "input": c.get("input_total") or 0, "output": c.get("output_total") or 0,
+            "by_model": by_model, "counted": bool(c.get("counted")),
+            "tool_errors": sum(1 for e in events or [] if e.get("event") == "tool_result"
+                               and str(e.get("preview", "")).startswith("Error")),
+            "denied": sum(1 for e in events or [] if e.get("event") == "approval" and not e.get("approved")),
+            "budget": sum(1 for e in events or [] if e.get("event") == "budget"),
+            "source": source if source in SOURCES else "api", "run": run_id}
+    try:
+        with _METRICS_LOCK, open(_metrics_path(), "a") as out:
+            out.write(json.dumps(line) + "\n")
+    except OSError:
+        pass                                     # monitoring must never fail a run
+
+
+_METRICS_LOCK = threading.Lock()
+
+
+def read_metrics(since: float = 0.0) -> List[Dict[str, Any]]:
+    path = _metrics_path()
+    if not path.exists():
+        return []
+    out = []
+    with open(path) as f:
+        for raw in f:
+            try:
+                line = json.loads(raw)
+            except ValueError:
+                continue                         # a line cut off by a crash is skipped, not fatal
+            if line.get("t", 0) >= since:
+                out.append(line)
+    return out
+
+
+def _json_file(name: str, default):
+    path = _dir() / name
+    try:
+        return json.loads(path.read_text()) if path.exists() else default
+    except ValueError:
+        return default
+
+
+def prices() -> Dict[str, Dict[str, float]]:
+    """Dollars per million tokens, read and written, per model name. Set by you; the lab ships none."""
+    return _json_file("prices.json", {})
+
+
+def set_prices(table: Dict[str, Dict[str, float]]) -> Dict[str, Dict[str, float]]:
+    clean = {}
+    for model, rate in (table or {}).items():
+        try:
+            clean[str(model)] = {"in": max(0.0, float(rate.get("in") or 0)), "out": max(0.0, float(rate.get("out") or 0))}
+        except (TypeError, ValueError, AttributeError):
+            raise ValueError(f"The price for {model} needs numbers for in and out.")
+    (_dir() / "prices.json").write_text(json.dumps(clean, indent=1))
+    return clean
+
+
+def alerts() -> List[Dict[str, Any]]:
+    return _json_file("alerts.json", [])
+
+
+def set_alerts(rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    clean = []
+    for r in rules or []:
+        if r.get("metric") not in ALERT_METRICS:
+            raise ValueError(f"Alerts can watch: {', '.join(ALERT_METRICS)}.")
+        try:
+            above = float(r["above"])
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("Each alert needs a number to stay below.")
+        clean.append({"metric": r["metric"], "above": above, "design": r.get("design") or None})
+    (_dir() / "alerts.json").write_text(json.dumps(clean, indent=1))
+    return clean
+
+
+def _cost(line, table) -> Optional[float]:
+    """Dollars for one run, or None when a model it used has no price."""
+    total = 0.0
+    for model, (tin, tout) in (line.get("by_model") or {}).items():
+        if model == "rehearsal":
+            continue
+        rate = table.get(model)
+        if rate is None:
+            return None
+        total += tin / 1e6 * rate["in"] + tout / 1e6 * rate["out"]
+    return round(total, 6)
+
+
+def _pct(values: List[float], q: float) -> Optional[float]:
+    """Nearest-rank percentile, so a reported p99 is a latency some run really had."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, max(0, math.ceil(q * len(ordered)) - 1))]
+
+
+def monitor(days: int = 7, design: Optional[str] = None, mode: Optional[str] = None,
+            sources: Optional[List[str]] = None, now: Optional[float] = None) -> Dict[str, Any]:
+    days = max(1, min(int(days or 7), 90))
+    now = now or time.time()
+    start_day = time.mktime(time.localtime(now - (days - 1) * 86400)[:3] + (0, 0, 0, 0, 0, -1))
+    keep = set(sources or ("page", "api", "fork"))
+    table = prices()
+    lines = [m for m in read_metrics(start_day) if m.get("source", "api") in keep
+             and (not design or m.get("design") == design) and (not mode or m.get("mode") == mode)]
+
+    def bucket_of(t):
+        return time.strftime("%Y-%m-%d", time.localtime(t))
+
+    labels = [bucket_of(start_day + 86400 * i + 3600) for i in range(days)]
+    buckets = {d: [] for d in labels}
+    for m in lines:
+        buckets.setdefault(bucket_of(m["t"]), []).append(m)
+
+    def summary(group):
+        lat = [m["seconds"] for m in group if m.get("status") != "stopped"]
+        costs_ = [_cost(m, table) for m in group]
+        priced = all(c is not None for c in costs_)
+        errors = sum(1 for m in group if m.get("status") == "error")
+        return {"runs": len(group), "errors": errors,
+                "error_rate": round(100 * errors / len(group), 1) if group else None,
+                "p50": _pct(lat, 0.5), "p99": _pct(lat, 0.99),
+                "input": sum(m.get("input", 0) for m in group), "output": sum(m.get("output", 0) for m in group),
+                "cost": round(sum(c for c in costs_ if c is not None), 4) if priced else None,
+                "tool_errors": sum(m.get("tool_errors", 0) for m in group),
+                "denied": sum(m.get("denied", 0) for m in group), "budget": sum(m.get("budget", 0) for m in group),
+                "estimated": any(not m.get("counted") for m in group)}
+
+    series = [{"day": d, **summary(buckets[d])} for d in labels]
+    by_design = {}
+    for m in lines:
+        by_design.setdefault(m.get("design"), []).append(m)
+    unpriced = sorted({mod for m in lines for mod in (m.get("by_model") or {})
+                       if mod != "rehearsal" and mod not in table})
+
+    fired = []
+    today = series[-1]
+    for rule in alerts():
+        scope = [m for m in buckets.get(labels[-1], []) if not rule.get("design") or m.get("design") == rule["design"]]
+        s_ = summary(scope)
+        value = {"error_rate": s_["error_rate"], "p99_seconds": s_["p99"],
+                 "tokens_per_day": s_["input"] + s_["output"], "cost_per_day": s_["cost"],
+                 "runs_per_day": s_["runs"]}[rule["metric"]]
+        if value is not None and value > rule["above"]:
+            fired.append({**rule, "value": value, "label": ALERT_METRICS[rule["metric"]]})
+
+    return {"days": days, "series": series, "total": summary(lines),
+            "designs": sorted(({"design": k, **summary(v)} for k, v in by_design.items()),
+                              key=lambda r: -r["runs"]),
+            "unpriced": unpriced, "alerts": alerts(), "fired": fired, "today": today,
+            "sources": sorted(keep), "metrics": ALERT_METRICS}
+
+
 # --------------------------------------------------------------------------
 # durable runs: written as they go, paused for a person, resumed after a crash
 # --------------------------------------------------------------------------
@@ -3686,6 +3888,7 @@ class Job:
         self.decision: Optional[bool] = None
         self.stop = threading.Event()
         self.abandoned = False      # set by tests to stand for a crash: nothing more gets written
+        self.lock = threading.RLock()   # a status change and its write are one step to anyone looking
 
     def write(self) -> None:
         if not self.abandoned:
@@ -3732,21 +3935,27 @@ def _check_startable(graph, mode, approvals) -> None:
 def _execute(job: Job, memory_dir: Optional[Path], resume_at: Optional[Dict[str, Any]] = None) -> None:
     rec = job.record
     graph, task, mode, approvals, thread = rec["graph"], rec["task"], rec["mode"], rec["approvals"], rec.get("thread")
+    segment_start, waited = time.time(), [0.0]     # this stretch of the run, and time in it spent on a person
 
     def ask(name, args, gate):
-        rec.update(status="waiting", pending={"tool": name, "args": args, "gate": gate, "since": time.time()})
-        job.write()
+        with job.lock:
+            rec.update(status="waiting", pending={"tool": name, "args": args, "gate": gate, "since": time.time()})
+            job.write()
         while not job.answered.wait(0.25):
             if job.stop.is_set():
                 raise StopRun("stopped while waiting for approval")
         job.answered.clear()
+        waited[0] += time.time() - rec["pending"]["since"]
+        rec["waited"] = rec.get("waited", 0.0) + time.time() - rec["pending"]["since"]
         decision, job.decision = bool(job.decision), None
-        rec.update(status="running", pending=None)
-        job.write()
+        with job.lock:
+            rec.update(status="running", pending=None)
+            job.write()
         return decision
 
     def after_step():
-        job.write()
+        with job.lock:
+            job.write()
         if job.stop.is_set():
             raise StopRun("stopped")
 
@@ -3789,7 +3998,10 @@ def _execute(job: Job, memory_dir: Optional[Path], resume_at: Optional[Dict[str,
         rec["thread_turns"] = len(turns)
     # the final status, the last write and leaving the live table happen together, so nothing
     # sees this run as finished while its thread could still write
-    with _JOBS_LOCK:
+    if ctx:
+        record_metric(graph, mode, status, rec["events"], rec.get("costs"), time.time() - segment_start,
+                      "page", rec["id"], waited[0])
+    with _JOBS_LOCK, job.lock:
         rec.update(status=status, pending=None, finished=time.time())
         job.write()
         if _JOBS.get(rec["id"]) is job:
@@ -3838,7 +4050,15 @@ def _record(run_id: str) -> Dict[str, Any]:
 
 def run_view(run_id: str, since: int = 0) -> Dict[str, Any]:
     """What the page needs while it follows a run: status, a waiting request, and new events."""
-    rec = _record(run_id)
+    with _JOBS_LOCK:
+        job = _JOBS.get(run_id)
+    if job is not None:
+        with job.lock:
+            return _view(run_id, job.record, since)
+    return _view(run_id, _record(run_id), since)
+
+
+def _view(run_id: str, rec: Dict[str, Any], since: int) -> Dict[str, Any]:
     events = list(rec.get("events") or [])
     view = {"id": run_id, "status": rec.get("status", "done"), "pending": rec.get("pending"),
             "events": [dict(e) for e in events[since:]], "count": len(events),
@@ -3950,7 +4170,7 @@ def check_gate(graph, gate: Dict[str, Any], memory_dir: Optional[Path] = None) -
     passed_runs, total, failures = 0, 0, []
     for ci, case in enumerate(gate["cases"]):
         for _ in range(max(1, int(gate.get("repeats") or 1))):
-            result = run(graph, case["task"], gate["mode"], memory_dir=memory_dir)
+            result = run(graph, case["task"], gate["mode"], memory_dir=memory_dir, source="gate")
             checks = score(result, case["checks"], case, gate["mode"])
             total += 1
             if all(c["passed"] for c in checks):
