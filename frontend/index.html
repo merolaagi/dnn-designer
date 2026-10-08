@@ -13623,6 +13623,10 @@ function alRenderPhysio(){
     ${hasHuman ? `<div class="field"><label for="alAppr">When a tool needs approval</label>
       <select id="alAppr"><option value="approve"${S.approvals === "approve" ? " selected" : ""}>Approve it</option>
         <option value="deny"${S.approvals === "deny" ? " selected" : ""}>Deny it</option></select></div>` : ""}
+    <label class="al-check"><input type="checkbox" id="alConverse"${S.converse ? " checked" : ""}>
+      Keep the conversation going: each run is the next turn, and earlier turns come with it</label>
+    ${S.converse && S.turn ? `<p class="al-muted">${S.turn} turn${S.turn === 1 ? "" : "s"} so far.
+      <a href="#" id="alNewThread">Start a new conversation</a></p>` : ""}
     <button class="btn go" id="alRunBtn"${S.running ? " disabled" : ""}>${S.running ? "Running…" : "Run the agent"}</button>
     <ol class="al-trace" id="alTrace">${S.trace.map(alTraceRow).join("")}</ol>
     ${S.answer != null ? `<h4>Final answer</h4><pre class="al-answer">${alEsc(S.answer)}</pre>` : ""}
@@ -13633,6 +13637,10 @@ function alRenderPhysio(){
   $("alMode").addEventListener("change", e => S.mode = e.target.value);
   if ($("alAppr")) $("alAppr").addEventListener("change", e => S.approvals = e.target.value);
   $("alRunBtn").addEventListener("click", alRun);
+  $("alConverse").addEventListener("change", e => { S.converse = e.target.checked; alRenderPhysio(); });
+  if ($("alNewThread")) $("alNewThread").addEventListener("click", e => {
+    e.preventDefault(); S.threadId = null; S.turn = 0; alRenderPhysio();
+  });
 }
 
 function alTraceRow(t){
@@ -13765,7 +13773,8 @@ async function alRun(){
   try{
     const r = await fetch(API + "/api/agentlab/run", {method: "POST",
       headers: {"content-type": "application/json"},
-      body: JSON.stringify({graph: S.graph, task: S.task, mode: S.mode, approvals: S.approvals})});
+      body: JSON.stringify({graph: S.graph, task: S.task, mode: S.mode, approvals: S.approvals,
+                            thread: S.converse ? alThreadId() : null})});
     d = await r.json();
     if (!r.ok){
       S.trace.push({who: "Did not start", msg: (d.detail && d.detail.message) || "The run was refused.",
@@ -13782,6 +13791,7 @@ async function alRun(){
     S.answer = d.answer;
     S.costs = d.costs || null;
     S.lastRunId = d.run_id || null;
+    if (d.thread) S.turn = d.thread.turn;
     alRememberRun(d, `Run ${((S.runs || []).length) + 1}: ${S.task.slice(0, 40)}`);
   }
   S.running = false;
@@ -13854,6 +13864,8 @@ function alEventText(ev){
     case "guard_out": return ev.changed ? "Redacted personal data from the answer." : "Checked the answer; nothing to redact.";
     case "final": return `Final answer leaves: ${ev.preview}`;
     case "budget": return `Step budget of ${ev.limit} spent, so control goes straight to the final answer.`;
+    case "fanout": return `Split into ${ev.branches} branches, each on its own copy of the state.`;
+    case "join": return `The ${ev.branches} branches met; their conclusions become notes for the next block.`;
     case "fork": return `Forked from checkpoint ${ev.checkpoint} of an earlier run`
       + (ev.changed && ev.changed.length ? `, with ${ev.changed.join(", ")} changed` : ", with nothing changed")
       + (ev.design === "current" ? ", on the design now on the canvas." : ".");
@@ -13933,6 +13945,13 @@ function alLiveAvailable(){
 function alLocalOnly(){
   const cores = agentLabState.graph.nodes.filter(n => n.type === "llm");
   return cores.length > 0 && cores.every(n => (n.params.provider || "anthropic") === "openai-compatible");
+}
+
+/* A conversation is a thread id the server keeps turns under; a new one starts on demand. */
+function alThreadId(){
+  const S = agentLabState;
+  if (!S.threadId) S.threadId = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return S.threadId;
 }
 
 /* ---------- safety: what the wiring guarantees ---------- */

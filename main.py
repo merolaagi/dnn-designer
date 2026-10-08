@@ -281,6 +281,7 @@ class AgentLabRun(BaseModel):
     task: str
     mode: str = "rehearsal"
     approvals: str = "approve"
+    thread: Optional[str] = None       # continue this conversation; None runs on its own
 
 
 @app.get("/api/agentlab/catalog")
@@ -328,7 +329,7 @@ def agentlab_run(body: AgentLabRun):
         raise HTTPException(400, detail={"message": "Give the agent a task to work on."})
     try:
         return agentlab.run(body.graph, body.task, body.mode, body.approvals,
-                            memory_dir=auth.sub("agentlab"), keep=True)
+                            memory_dir=auth.sub("agentlab"), keep=True, thread=body.thread)
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
 

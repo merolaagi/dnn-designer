@@ -317,6 +317,10 @@ the Model Context Protocol. A finished study can become a saved agent's
 **release gate**: saving a version that does worse is refused, and
 `python3 agentlab.py gate` checks every gate from a terminal.
 
+Runs can **continue a conversation** turn by turn, long-term memory can be kept
+per conversation, and a **Parallel** block runs branches side by side until they
+meet at a **Join**.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

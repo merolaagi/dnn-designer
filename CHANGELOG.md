@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.9.0
+
+**Conversations, memory per conversation, and parallel branches** — LangGraph's
+threads, its namespaced store, and its fan-out and fan-in.
+
+- **Conversations.** On Physiology, "Keep the conversation going" makes each
+  run the next turn: the earlier turns, as task and answer, come first in the
+  model's opening message under "Conversation so far". The lab keeps a
+  conversation's turns in the workspace between runs (the last 20). In the
+  downloaded file, `run_agent(task, thread="…")` does the same in memory; in the
+  LangGraph export, the same `app` and `thread` carry it through the thread's
+  checkpoints.
+- **Memory per conversation.** Long-term memory has a scope: shared, as before,
+  or per conversation, where each conversation keeps notes of its own beside the
+  shared file.
+- **Parallel and Join.** Every block wired out of a Parallel block starts a
+  branch. Each branch works on its own copy of the state until it reaches the
+  Join; then each branch's conclusion becomes a labelled note, working memory
+  starts fresh, and the run carries on. Live, branches run at the same time;
+  rehearsals run them in order so the stand-in answers the same way every time
+  and a fork repeats the original exactly. The step budget is charged with
+  every branch's model calls. A Parallel block with fewer than two branches, or
+  whose branches never meet, or with a branch that reaches the answer without a
+  Join, is refused. The LangGraph export runs the branches inside the Parallel
+  node. A new starting design, **Two views in parallel, then a verdict**, argues
+  for and against at once and has a third core weigh them.
+
+Measurements stay right when branches overlap: each call's tokens are pinned
+to the next event from the same thread, and a test with a slow local server
+checks that live branches really do overlap. The stand-in model now counts
+tool rounds per prompt as well as per set of tools, so two branch cores do not
+share a count.
+
 ## 2.8.0
 
 **Real tools over MCP, and release gates.**

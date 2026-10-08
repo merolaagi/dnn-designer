@@ -259,8 +259,10 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         anatomy="A store outside the model that survives after the run ends.",
         inside="Saved notes, found again by matching. Here, keyword overlap; in production, embeddings.",
         physiology=("Placed on the path before a model call it recalls; placed after one it saves the answer. "
-                    "Wired into a retriever, it adds its notes to what the retriever searches."),
-        failure="Recalling near-misses. Saving junk that misleads the agent later."),
+                    "Wired into a retriever, it adds its notes to what the retriever searches. Scoped per "
+                    "conversation, each conversation keeps notes of its own."),
+        failure="Recalling near-misses. Saving junk that misleads the agent later.",
+        params={"scope": _p("Whose memory", "shared", "choice", ["shared", "per conversation"])}),
     "retriever": dict(
         name="Retriever (RAG)", system="memory", short="Fetches relevant documents",
         anatomy="Turns the task into a query, fetches the best-matching chunks, and puts them in context.",
@@ -336,6 +338,24 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
                 "tools": _p("Tools", [], "mcp_tools"),
                 "effects": _p("What its tools do to the world", CHANGES, "choice", [READS, CHANGES]),
                 LIMIT[0]: _p(LIMIT[1], 0, "number")}),
+    "parallel": dict(
+        name="Parallel", system="nerve", short="Runs its branches at the same time",
+        anatomy=("Splits the run. Every block wired out of it starts a branch, and each branch works on its own "
+                 "copy of the state until it reaches a Join."),
+        inside="A list of branches and the Join they meet at. In live runs the branches run concurrently.",
+        physiology=("Copies the state once per branch, runs the branches, then hands the Join each branch's "
+                    "conclusion. The step budget is charged with every branch's model calls."),
+        failure=("Branches cannot see each other's work until the Join. Every branch costs its own tokens, so "
+                 "three branches cost about three times one. A branch that never reaches the Join is refused."),
+        params={}),
+    "join": dict(
+        name="Join", system="nerve", short="Gathers the branches' conclusions",
+        anatomy="Where parallel branches meet. What each branch concluded becomes a note for the next block.",
+        inside="Nothing of its own: the Parallel block that feeds it does the merging.",
+        physiology=("After the branches finish, each one's answer is added to the context as a labelled note, "
+                    "working memory starts fresh, and control moves on along the Join's wire."),
+        failure="A Join that two branches never reach does nothing. Long branch answers make a long next prompt.",
+        params={}),
     "router": dict(
         name="Router", system="nerve", short="Dispatches tool calls or exits",
         anatomy=("Reads the model's output and decides where control goes: tool requests to the hands, "
@@ -425,6 +445,15 @@ TEMPLATES = {
                            4: {"max_steps": 10},
                            7: {"name": "notes", "effects": READS,
                                "description": "Look up what the team already wrote about a topic."}}},
+    "debate": {"name": "Two views in parallel, then a verdict",
+               "nodes": [("user_input", 40, 250), ("parallel", 270, 250), ("system_prompt", 520, 30),
+                         ("llm", 520, 160), ("llm", 520, 340), ("system_prompt", 520, 470), ("join", 780, 250),
+                         ("system_prompt", 1030, 80), ("llm", 1030, 250), ("output", 1280, 250)],
+               "edges": [(0, 1), (1, 3), (1, 4), (2, 3), (5, 4), (3, 6), (4, 6), (6, 8), (7, 8), (8, 9)],
+               "params": {2: {"text": "Make the strongest case FOR the idea in the task. Be specific."},
+                          5: {"text": "Make the strongest case AGAINST the idea in the task. Be specific."},
+                          7: {"text": "You weigh two opposing briefs and give a balanced verdict, naming the "
+                                      "deciding point."}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -519,7 +548,8 @@ def is_config(src_type: str, dst_type: str) -> bool:
 
 CONFIG_SOURCES = {"system_prompt", "short_mem", "loop", "summarizer"}
 STEPS = {"user_input", "output", "llm", "planner", "reflector", "retriever", "long_mem",
-         "router", "guard_in", "guard_out"}
+         "router", "guard_in", "guard_out", "parallel", "join"}
+HISTORY_TURNS = 20      # earlier turns of a conversation carried into the next one
 DEFAULT_PROMPT = "You are a helpful agent."
 
 
@@ -632,6 +662,36 @@ def analyze(graph) -> Dict[str, Any]:
     gated = {r["node"] for rt in routers.values() for r in rt["routes"].values() if r["gate"]}
     steps = [nid for nid in nodes if kind[nid] in STEPS and nid in reach]
 
+    def moves(cur):
+        out = list(control.get(cur, []))
+        if cur in routers:
+            out += [r["next"] for r in routers[cur]["routes"].values() if r["next"]]
+        return out
+
+    # Each Parallel block: its branches, the Join they all reach, and the blocks inside them.
+    parallels: Dict[str, Dict[str, Any]] = {}
+    for pid in (nid for nid in nodes if kind[nid] == "parallel"):
+        branches, met, inside, escapes = list(control[pid]), [], set(), []
+        for b in branches:
+            seen, todo, joins = set(), [b], set()
+            while todo:
+                cur = todo.pop()
+                if cur in seen or cur not in nodes:
+                    continue
+                if kind[cur] == "join":
+                    joins.add(cur)
+                    continue
+                if kind[cur] == "output":
+                    escapes.append(b)
+                    continue
+                seen.add(cur)
+                todo += moves(cur)
+            met.append(joins)
+            inside |= {s for s in seen if kind[s] in STEPS}
+        common = set.intersection(*met) if met else set()
+        parallels[pid] = {"branches": branches, "join": next(iter(sorted(common)), None),
+                          "inside": sorted(inside), "escapes": escapes}
+
     def reaches(src, dst):
         seen, todo = set(), [src]
         while todo:
@@ -659,10 +719,13 @@ def analyze(graph) -> Dict[str, Any]:
             out.append(exit_to)                  # a blocked task exits here
         if kind[nid] == "output" and answer_schema(nodes[nid]):
             out += [l for l in llms if l in reach]   # a mismatched answer goes back to its core
+        if nid in parallels and parallels[nid]["join"]:
+            out.append(parallels[nid]["join"])         # where the run carries on once the branches are done
         successors[nid] = list(dict.fromkeys(out))
 
     return {"nodes": nodes, "kind": kind, "control": control, "feeds": feeds, "start": start, "end": end,
-            "mcp_tools": mcp_tools,
+            "mcp_tools": mcp_tools, "parallels": parallels,
+            "branch_only": sorted({n for p in parallels.values() for n in p["inside"]}),
             "exit": exit_to,
             "loop": loop, "max_steps": max_steps, "tool_names": tool_names, "routers": routers,
             "llms": llms, "critics": critics, "reach": reach, "steps": steps,
@@ -720,9 +783,21 @@ def validate(graph, _stack: tuple = ()) -> List[Dict[str, Any]]:
         if lid in a["reach"] and not l["prompt"]:
             say("info", f"No system prompt is wired into {label(a['nodes'][lid])}; it uses a one-line default.",
                 lid)
-        if len(a["control"][lid]) > 1:
+        if len(a["control"][lid]) > 1 and a["kind"][a["control"][lid][0]] != "parallel":
             say("warning", f"{label(a['nodes'][lid])} has several outgoing wires; only the first is followed. "
                            "Put a router after it to branch.", lid)
+    for pid, pr in a["parallels"].items():
+        if len(pr["branches"]) < 2:
+            say("error", "A Parallel block needs at least two branches wired out of it.", pid)
+        elif pr["escapes"]:
+            say("error", "A branch reaches the final answer without passing a Join. Every branch must end at one.",
+                pid)
+        elif pr["join"] is None:
+            say("error", "The branches out of this Parallel block never meet: wire each of them into the same Join.",
+                pid)
+    for jid in (n for n in a["nodes"] if a["kind"][n] == "join"):
+        if not any(pr["join"] == jid for pr in a["parallels"].values()):
+            say("info", "No Parallel block's branches meet at this Join, so it only passes control on.", jid)
     for cid, c in a["critics"].items():
         if c["back"] is None:
             say("info", "The critic has no wire back to an LLM core, so it can report but not send work back.",
@@ -912,12 +987,14 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         imports.append("from pathlib import Path")
     if any(kind[t] in ("code_exec", "mcp") for t, _ in tools):
         imports += ["import subprocess", "import sys"]
+    if a["parallels"]:
+        imports += ["import copy", "from concurrent.futures import ThreadPoolExecutor"]
     if present("guard_in") or present("guard_out"):
         imports.append("import re")
     if any(kind[n] == "long_mem" for n in nodes) and "from pathlib import Path" not in imports:
         imports.append("from pathlib import Path")
     if langgraph:
-        imports += ["import copy", "from typing import Optional, TypedDict"]
+        imports += ([] if a["parallels"] else ["import copy"]) + ["from typing import Optional, TypedDict"]
     add(sorted(imports))
     if langgraph:
         add(["", "from langgraph.checkpoint.memory import MemorySaver",
@@ -926,6 +1003,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     add(["", 'API_URL = "https://api.anthropic.com/v1/messages"'])
     add([f'MODEL = os.environ.get("AGENT_MODEL", {json.dumps(str(first_llm["model"]))})'], llm_ids[0])
     add([f"MAX_STEPS = {a['max_steps']}  # loop controller: model calls allowed across the whole run",
+         f"HISTORY_TURNS = {HISTORY_TURNS}  # earlier turns of a conversation carried into the next",
          "MAX_HOPS = 200  # a safety net on block-to-block moves, so a miswired graph cannot spin forever"],
         a["loop"])
     if not embedded:
@@ -1149,11 +1227,18 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         if long_ids:
             add([f'MEMORY_FILE = MEMORY_DIR / "{embedded["name"]}_memory.json"' if embedded
                  else 'MEMORY_FILE = Path("agent_memory.json")', "", "",
-                 "def load_memories():",
-                 "    return json.loads(MEMORY_FILE.read_text()) if MEMORY_FILE.exists() else []", "", "",
-                 "def save_memory(text):",
-                 "    notes = load_memories() + [text]",
-                 "    MEMORY_FILE.write_text(json.dumps(notes[-500:], indent=2))"], *long_ids)
+                 "def memory_path(namespace=None):",
+                 '    """Shared memory lives in MEMORY_FILE; a conversation\'s own notes sit beside it, named for it."""',
+                 "    if not namespace:",
+                 "        return MEMORY_FILE",
+                 '    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(namespace))[:60]',
+                 '    return MEMORY_FILE.with_name(f"{MEMORY_FILE.stem}.{safe}{MEMORY_FILE.suffix}")', "", "",
+                 "def load_memories(namespace=None):",
+                 "    path = memory_path(namespace)",
+                 "    return json.loads(path.read_text()) if path.exists() else []", "", "",
+                 "def save_memory(text, namespace=None):",
+                 "    notes = load_memories(namespace) + [text]",
+                 "    memory_path(namespace).write_text(json.dumps(notes[-500:], indent=2))"], *long_ids)
         if rag_ids:
             add(["", ""])
             add(["DOCUMENTS = [",
@@ -1215,8 +1300,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
 
     # ---- state and the two physiological helpers ----
     add(["", "", "# ---- the state every block reads and writes ----"])
-    add(["def new_state(task):",
+    add(["def new_state(task, history=None, thread=None):",
          '    return {"task": task, "context": [], "messages": [], "draft": "", "answer": None,',
+         '            "history": list(history or []), "thread": thread,',
          '            "pending": [], "steps": 0, "revisions": 0, "next": None,',
          '            "tool_calls": {}, "last_core": None, "format_retries": 0}'], start, *of_kind("short_mem"))
     if summarizers:
@@ -1289,7 +1375,10 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
          '    """The LLM core\'s physiology: re-read everything, return text or tool requests."""',
          '    messages = state["messages"]',
          "    if not messages:",
-         '        messages.append({"role": "user", "content": "\\n\\n".join(state["context"] + ["Task:\\n" + state["task"]])})',
+         "        # earlier turns of the conversation come first, then any notes, then the task",
+         '        earlier = ["Conversation so far:\\n" + "\\n".join(f"User: {t[\'task\']}\\nAssistant: {t[\'answer\']}"',
+         '                                                   for t in state.get("history") or [])] if state.get("history") else []',
+         '        messages.append({"role": "user", "content": "\\n\\n".join(earlier + state["context"] + ["Task:\\n" + state["task"]])})',
          '    elif messages[-1]["role"] == "assistant":',
          "        # two cores in a row: the second reads the first one's draft as its input",
          '        messages.append({"role": "user", "content": "The previous stage wrote:\\n" + state["draft"]',
@@ -1333,8 +1422,51 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '    state["pending"] = []',
              '    return chosen["next"] if chosen else back'], *routers, *of_kind("short_mem"))
 
+    if a["parallels"]:
+        add(["", "", "# ---- branches: copies of the state that run side by side ----"])
+        add(["PARALLEL = True  # False runs the branches one after another, in order",
+             "", "",
+             "def run_branch(state, current, inside):",
+             '    """Run one branch\'s blocks on its own copy of the state until it leaves the branch."""',
+             "    hops = 0",
+             "    while current in inside:",
+             "        hops += 1",
+             "        if hops > MAX_HOPS:",
+             '            raise RuntimeError(f"More than {MAX_HOPS} moves inside a branch: it is circling.")',
+             "        current = NODES[current](state)",
+             "    return state", "", "",
+             "def run_branches(state, node, starts, names, join, inside):",
+             '    """The Parallel block\'s physiology: one copy of the state per branch, then their conclusions merged."""',
+             '    emit("fanout", node=node, branches=len(starts))',
+             "    copies = []",
+             "    for _ in starts:",
+             "        branch = copy.deepcopy(state)",
+             '        branch["messages"], branch["draft"], branch["answer"] = [], "", None',
+             "        copies.append(branch)",
+             "    inside = set(inside)",
+             "    if PARALLEL:",
+             "        with ThreadPoolExecutor(max_workers=len(starts)) as pool:",
+             "            done = list(pool.map(lambda pair: run_branch(pair[0], pair[1], inside), zip(copies, starts)))",
+             "    else:",
+             "        done = [run_branch(branch, start, inside) for branch, start in zip(copies, starts)]",
+             '    steps, calls = state["steps"], dict(state["tool_calls"])',
+             "    for name, branch in zip(names, done):",
+             '        state["steps"] += branch["steps"] - steps          # every branch\'s model calls count against the budget',
+             '        for tool, n in branch["tool_calls"].items():',
+             '            state["tool_calls"][tool] = state["tool_calls"].get(tool, 0) + n - calls.get(tool, 0)',
+             '        said = branch["answer"] or branch["draft"] or "(no conclusion)"',
+             '        state["context"].append(f"Branch {name} concluded:\\n{said}")',
+             '    state["messages"], state["draft"], state["answer"] = [], "", None',
+             '    state["branches"] = len(done)'], *a["parallels"].keys())
+
     # ---- the graph ----
     add(["", "", "# ---- the graph: one function per block, each returning the next block's id ----"])
+    def ns(store):
+        """The namespace a long-term memory block reads and writes: the conversation's, or shared."""
+        if store and _params(nodes[store]).get("scope") == "per conversation":
+            return 'state.get("thread")'
+        return "None"
+
     for nid in a["steps"]:
         n, k = nodes[nid], kind[nid]
         p = _params(n)
@@ -1354,8 +1486,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                      f'    emit("guard_in", node="{nid}", passed=True)',
                      f"    return {to(nxt)}{comment(nxt)}"]
         elif k == "retriever":
-            reads_memory = any(kind[f] == "long_mem" for f in a["feeds"][nid])
-            pool = "list(DOCUMENTS)" + (" + load_memories()" if reads_memory else "")
+            store = next((f for f in a["feeds"][nid] if kind[f] == "long_mem"), None)
+            pool = "list(DOCUMENTS)" + (f" + load_memories({ns(store)})" if store else "")
             body += [f'    notes = retrieve(state["task"], {int(p["top_k"])}, {pool})',
                      f'    emit("recall", node="{nid}", count=len(notes))',
                      "    if notes:",
@@ -1363,10 +1495,11 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                      f"    return {to(nxt)}{comment(nxt)}"]
         elif k == "long_mem":
             body += ['    if state["answer"] or state["draft"]:',
-                     '        save_memory(f"Task: {state[\'task\'][:200]} | Answer: {(state[\'answer\'] or state[\'draft\'])[:300]}")',
+                     '        save_memory(f"Task: {state[\'task\'][:200]} | Answer: {(state[\'answer\'] or state[\'draft\'])[:300]}",'
+                     f' {ns(nid)})',
                      f'        emit("remember", node="{nid}")',
                      "    else:",
-                     '        notes = retrieve(state["task"], 4, load_memories())',
+                     f'        notes = retrieve(state["task"], 4, load_memories({ns(nid)}))',
                      f'        emit("recall", node="{nid}", count=len(notes))',
                      "        if notes:",
                      '            state["context"].append("From earlier runs:\\n" + "\\n".join(f"- {n}" for n in notes))',
@@ -1415,6 +1548,15 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             body += ['    cleaned = redact(state["answer"] or state["draft"])',
                      f'    emit("guard_out", node="{nid}", changed=cleaned != (state["answer"] or state["draft"]))',
                      '    state["answer"] = cleaned', f"    return {to(nxt)}{comment(nxt)}"]
+        elif k == "parallel":
+            pr = a["parallels"][nid]
+            names = [f"{i + 1} ({label(nodes[b])})" for i, b in enumerate(pr["branches"])]
+            body += [f'    run_branches(state, "{nid}", {json.dumps(pr["branches"])}, {json.dumps(names)},',
+                     f'                 "{pr["join"]}", {json.dumps(pr["inside"])})',
+                     f"    return {to(pr['join'])}{comment(pr['join'])}"]
+        elif k == "join":
+            body += [f'    emit("join", node="{nid}", branches=state.get("branches", 0))',
+                     f"    return {to(nxt)}{comment(nxt)}"]
         elif k == "output":
             body += ['    state["answer"] = state["answer"] or state["draft"]']
             if answer_shape is not None:
@@ -1429,14 +1571,17 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                          '        state["messages"].append({"role": "user", "content": "Your final answer must be only JSON '
                          'matching the schema. Fix: " + "; ".join(problems[:5])})',
                          '        return state["last_core"]']
-            body += [f'    emit("final", node="{nid}", preview=state["answer"][:300])', "    return None"]
+            body += ['    state["history"] = (state.get("history") or []) + [{"task": state["task"], "answer": state["answer"]}]',
+                     f'    emit("final", node="{nid}", preview=state["answer"][:300])', "    return None"]
         add(["", ""])
         add(body, nid)
 
     add(["", ""])
     add(["NODES = {" + ", ".join(f'"{nid}": {fn_name(nid, nodes[nid])}' for nid in a["steps"]) + "}",
          f'START = "{start}"',
-         "SUCCESSORS = {" + ", ".join(f'"{k}": {json.dumps(v)}' for k, v in a["successors"].items()) + "}"])
+         "SUCCESSORS = {" + ", ".join(f'"{k}": {json.dumps(v)}' for k, v in a["successors"].items()) + "}"]
+        + ([f"BRANCH_ONLY = {set(a['branch_only'])!r}  # run inside a Parallel block, never on their own"]
+           if langgraph and a["branch_only"] else (["BRANCH_ONLY = set()"] if langgraph else [])))
 
     if langgraph:
         add(["", "", "# ---- LangGraph runs the machine ----"])
@@ -1444,7 +1589,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "    task: str", "    context: list", "    messages: list", "    draft: str",
              "    answer: Optional[str]", "    pending: list", "    steps: int", "    revisions: int",
              "    next: Optional[str]", "    tool_calls: dict", "    last_core: Optional[str]",
-             "    format_retries: int", "", "",
+             "    format_retries: int", "    history: list", "    thread: Optional[str]", "    branches: int", "", "",
              "def as_node(block):",
              '    """Wrap a block so LangGraph sees a state update; its return value picks the next node."""',
              "    def node(state):",
@@ -1455,10 +1600,13 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "def build():",
              "    graph = StateGraph(AgentState)",
              "    for name, block in NODES.items():",
-             "        graph.add_node(name, as_node(block))",
+             "        if name not in BRANCH_ONLY:",
+             "            graph.add_node(name, as_node(block))",
              "    graph.add_edge(GRAPH_START, START)",
              "    for name, targets in SUCCESSORS.items():",
-             "        paths = {t: t for t in targets}",
+             "        if name in BRANCH_ONLY:",
+             "            continue",
+             "        paths = {t: t for t in targets if t not in BRANCH_ONLY}",
              "        paths[END] = END",
              '        graph.add_conditional_edges(name, lambda s: s.get("next") or END, paths)',
              "    return graph", "", "",
@@ -1474,10 +1622,16 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "        result = app.invoke(Command(resume=yes), config)",
              '    return result["answer"]', "", "",
              'def run_agent(task, thread="cli", approve=None, app=None):',
-             '    """Run to the end, answering each approval interrupt with approve(request) or by asking."""',
+             '    """Run one turn of a conversation, answering approval interrupts with approve(request) or by asking.',
+             "",
+             "    Pass the same app and thread to continue a conversation: its earlier turns come from",
+             "    the thread's last checkpoint.",
+             '    """',
              "    app = app or compile_app()",
              '    config = {"configurable": {"thread_id": thread}, "recursion_limit": MAX_HOPS}',
-             "    return finish(app, app.invoke(new_state(task), config), config, approve)", "", "",
+             '    earlier = (app.get_state(config).values or {}).get("history") or []',
+             "    state = new_state(task, earlier[-HISTORY_TURNS:], thread)",
+             "    return finish(app, app.invoke(state, config), config, approve)", "", "",
              "# ---- time travel, LangGraph's way ----",
              'def history(app, thread="cli"):',
              '    """Every checkpoint saved for a thread, newest first. Each has .values, .next and .config."""',
@@ -1505,11 +1659,16 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "        if on_step:",
              "            on_step(block, state, current)",
              '    return state["answer"]', "", "",
-             "def run_agent(task, on_step=None):",
-             "    state = new_state(task)",
+             "THREADS = {}  # conversation id -> its turns so far", "", "",
+             "def run_agent(task, on_step=None, thread=None):",
+             '    """Run one task. Give a thread id to continue a conversation: its earlier turns come with it."""',
+             "    state = new_state(task, THREADS.get(thread, [])[-HISTORY_TURNS:] if thread else [], thread)",
              "    if on_step:",
              "        on_step(None, state, START)",
-             "    return resume(state, START, on_step)"], start, end)
+             "    answer = resume(state, START, on_step)",
+             "    if thread:",
+             '        THREADS[thread] = state["history"][-HISTORY_TURNS:]',
+             "    return answer"], start, end)
     add(["", ""])
     if not embedded:
         add(['if __name__ == "__main__":', '    print(run_agent(input("Task: ")))'], start, end)
@@ -1897,7 +2056,40 @@ def _m_mcp(p, node, graph, c):
                         "Its output is outside text, so the Safety tab treats it as an injection source."]}
 
 
+def _m_parallel(p, node, graph, c):
+    a = analyze(graph)
+    pr = a["parallels"].get(node["id"]) or {"branches": [], "join": None, "inside": []}
+    B = len(pr["branches"])
+    cores = [n for n in pr["inside"] if a["kind"][n] == "llm"]
+    return {"title": "Branches side by side",
+            "equation": "S_b = copy(S),  S_b ← Branch_b(S_b)  for b = 1 … B,   then  ctx ← ctx ⊕ answer(S_1) ⊕ … ⊕ answer(S_B)",
+            "shape": f"B = {B} branch{'es' if B != 1 else ''},  {len(cores)} LLM core{'s' if len(cores) != 1 else ''} inside",
+            "symbols": [("S_b", "a branch's own copy of the state: it cannot see the other branches"),
+                        ("answer(S_b)", "what the branch concluded, added to the context as a labelled note")],
+            "arithmetic": [("tokens", "Σ over branches: every branch pays for its own calls"),
+                           ("wall time", "≈ max over branches when they run concurrently, Σ when they run in order"),
+                           ("step budget", f"charged with every branch's model calls; N = {c['N']} across the whole run"),
+                           ("rehearsals", "run the branches in order, so a fork repeats them exactly")],
+            "freedom": ["Parallel buys independence and speed, not cheapness: B branches cost about B times one.",
+                        "Branches that cannot see each other cannot anchor on each other, which is the point of a "
+                        "for-and-against or a several-drafts design."]}
+
+
+def _m_join(p, node, graph, c):
+    a = analyze(graph)
+    feeds = [pid for pid, pr in a["parallels"].items() if pr["join"] == node["id"]]
+    return {"title": "Many answers become one context",
+            "equation": "H ← ∅,   ctx ← ctx ⊕ { “Branch b concluded: …” }",
+            "symbols": [("H", "working memory, emptied so the next core starts from the notes"),
+                        ("ctx", "the notes the next core reads before the task")],
+            "arithmetic": [("fed by", f"{len(feeds)} Parallel block{'s' if len(feeds) != 1 else ''}"),
+                           ("next call reads", "every branch's whole answer: their lengths add up")],
+            "freedom": ["The join decides nothing by itself; whatever comes next has to weigh the branches."]}
+
+
 MATH: Dict[str, Callable] = {
+    "parallel": _m_parallel,
+    "join": _m_join,
     "mcp": _m_mcp,
     "subgraph": _m_subgraph,
     "summarizer": _m_summarizer,
@@ -2210,7 +2402,10 @@ class Rehearsal:
                 text = f"(rehearsal) A short, sourced finding on: {str(ask)[:80]}"
             return {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn"}
 
-        key = "|".join(t["name"] for t in tools)
+        # per set of tools and per prompt, so two branch cores do not share a count; crc32, not hash(),
+        # because a fork in a later process must find the same key
+        import zlib
+        key = "|".join(t["name"] for t in tools) + "|" + format(zlib.crc32((system or "").encode()), "x")
         rounds = self.tool_rounds.get(key, self.default_rounds)
         if rounds < min(2, len(tools)):
             self.tool_rounds[key] = rounds + 1
@@ -2275,26 +2470,39 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
     calls: List[Dict[str, Any]] = []
     model = space["call_model"]
 
+    # Parallel branches call the model from several threads at once, so a measurement is
+    # pinned to the next event from the same thread, under a lock.
+    import threading
+    lock = threading.Lock()
+
     def measured(system, messages, tools=None, **settings):
         sent = json.dumps({"system": system, "messages": messages, "tools": tools or []})
         response = model(system, messages, tools, **settings)
         usage = response.get("usage") or {}
-        calls.append({"input": usage.get("input_tokens") or _tokens(sent),
-                      "output": usage.get("output_tokens") or _tokens(json.dumps(response.get("content", []))),
-                      "estimate": _tokens(sent), "counted": bool(usage), "event": None})
+        with lock:
+            calls.append({"input": usage.get("input_tokens") or _tokens(sent),
+                          "output": usage.get("output_tokens") or _tokens(json.dumps(response.get("content", []))),
+                          "estimate": _tokens(sent), "counted": bool(usage), "event": None,
+                          "thread": threading.get_ident()})
         return response
 
     def emit_measured(event, **data):
-        emit(event, **data)
-        if event in ("model", "plan", "critique", "compact"):
-            open_call = next((c for c in calls if c["event"] is None), None)
-            if open_call is not None:
-                open_call["event"] = len(events) - 1
-                events[-1]["tokens"] = {"input": open_call["input"], "output": open_call["output"],
-                                        "estimate": open_call["estimate"]}
+        with lock:
+            emit(event, **data)
+            if event in ("model", "plan", "critique", "compact"):
+                me = threading.get_ident()
+                open_call = next((c for c in calls if c["event"] is None and c["thread"] == me), None)
+                if open_call is not None:
+                    open_call["event"] = len(events) - 1
+                    events[-1]["tokens"] = {"input": open_call["input"], "output": open_call["output"],
+                                            "estimate": open_call["estimate"]}
 
     space["call_model"] = measured
     space["emit"] = emit_measured
+    if "PARALLEL" in space:
+        # a rehearsal runs branches in order, so its stand-in model answers the same way every
+        # time and a fork from a checkpoint repeats the original; live runs keep them concurrent
+        space["PARALLEL"] = mode == "live"
     # long-term memory lands in the workspace, never in whatever folder the server was started from
     memory_dir = Path(memory_dir) if memory_dir is not None else _dir()
     if "MEMORY_FILE" in space:
@@ -2329,13 +2537,33 @@ def _drive(ctx, start) -> Dict[str, Any]:
             "checkpoints": ctx["checkpoints"]}
 
 
+def _threads_dir() -> Path:
+    path = _dir() / "threads"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def thread_turns(thread: str) -> List[Dict[str, Any]]:
+    path = _threads_dir() / f"{_slug(thread)}.json"
+    return json.loads(path.read_text()) if path.exists() else []
+
+
 def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
-        memory_dir: Optional[Path] = None, keep: bool = False) -> Dict[str, Any]:
+        memory_dir: Optional[Path] = None, keep: bool = False, thread: Optional[str] = None) -> Dict[str, Any]:
+    """Run one task. With a thread id this is the next turn of that conversation: the lab keeps
+    its turns in the workspace between runs and hands them to the generated file."""
     errors = [p for p in validate(graph) if p["level"] == "error"]
     if errors:
         return {"ok": False, "problems": errors, "events": [], "answer": None, "mode": mode}
     ctx = _prepare(graph, mode, approvals, memory_dir)
-    result = _drive(ctx, lambda: ctx["space"]["run_agent"](task, ctx["on_step"]))
+    if thread:
+        ctx["space"]["THREADS"][thread] = thread_turns(thread)
+    result = _drive(ctx, lambda: ctx["space"]["run_agent"](task, ctx["on_step"], thread))
+    if thread:
+        turns = ctx["space"]["THREADS"].get(thread, [])
+        if result["ok"]:
+            (_threads_dir() / f"{_slug(thread)}.json").write_text(json.dumps(turns))
+        result["thread"] = {"id": thread, "turn": len(turns)}
     result.update(mode=mode, costs=costs(graph, task, ctx["events"], ctx["calls"], ctx["space"], mode))
     if keep:
         result["run_id"] = save_run(result, graph, task, mode, approvals)

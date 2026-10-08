@@ -7670,6 +7670,7 @@ def _():
         space = {"__name__": "lg"}
         exec(compile(agentlab.codegen(g, "langgraph")["source"], key, "exec"), space)  # noqa: S102
         space["call_model"] = agentlab.Rehearsal()
+        space["PARALLEL"] = False            # branches in order, as a rehearsal runs them, so the order is comparable
         if "MEMORY_FILE" in space:
             space["MEMORY_FILE"] = Path(tempfile.mkdtemp()) / "m.json"
         seen = []
@@ -8473,6 +8474,127 @@ def _():
 def _():
     for needle in ('d.kind === "mcp_tools"', "/api/agentlab/mcp/discover", 'id="alNotice"', "alSaveDesign(true)"):
         assert needle in PAGE, needle
+
+
+# --------------------------------------------------------------------------
+# agent lab 2.9: conversations, scoped memory, parallel branches
+# --------------------------------------------------------------------------
+
+@check("a conversation carries its earlier turns into the next one")
+def _():
+    import tempfile
+    thread = "__t_" + uuid.uuid4().hex[:6]
+    g = agentlab.template("react")
+    first = agentlab.run(g, "Find the population of Lisbon", thread=thread, memory_dir=tempfile.mkdtemp())
+    second = agentlab.run(g, "Now estimate its cafes", thread=thread, memory_dir=tempfile.mkdtemp())
+    assert first["thread"]["turn"] == 1 and second["thread"]["turn"] == 2
+    opening = next(c for c in second["checkpoints"] if c["state"]["messages"])["state"]["messages"][0]["content"]
+    assert opening.startswith("Conversation so far:") and "Find the population of Lisbon" in opening
+    assert opening.rstrip().endswith("Now estimate its cafes")
+    alone = agentlab.run(g, "Now estimate its cafes")
+    assert "thread" not in alone
+    assert "Conversation so far" not in next(c for c in alone["checkpoints"] if c["state"]["messages"])["state"]["messages"][0]["content"]
+    (agentlab._threads_dir() / f"{agentlab._slug(thread)}.json").unlink()
+
+
+@check("long-term memory can be kept per conversation")
+def _():
+    import tempfile
+    for scope, expect_shared in (("shared", True), ("per conversation", False)):
+        g = agentlab.template("rag")
+        next(n for n in g["nodes"] if n["type"] == "long_mem")["params"]["scope"] = scope
+        folder = tempfile.mkdtemp()
+        agentlab.run(g, "Lisbon cafes", memory_dir=folder, thread="a")
+        later = agentlab.run(g, "Lisbon cafes", memory_dir=folder, thread="b")
+        recalled = [e["count"] for e in later["events"] if e["event"] == "recall"]
+        assert (recalled[0] > 0) == expect_shared, (scope, recalled)
+
+
+@check("parallel branches run on their own copies and meet at the join")
+def _():
+    g = agentlab.template("debate")
+    assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
+    result = agentlab.run(g, "Should Lisbon ban cars downtown?", keep=True)
+    events = [(e["event"], e.get("node")) for e in result["events"]]
+    names = [ev for ev, _ in events]
+    assert names.index("fanout") < names.index("join") < len(names) - 2, names
+    branch_cores = [n for ev, n in events[names.index("fanout"):names.index("join")] if ev == "model"]
+    assert len(branch_cores) == 2 and len(set(branch_cores)) == 2
+    after = next(c for c in result["checkpoints"] if c["block"] and agentlab.analyze(g)["kind"][c["block"]] == "parallel")
+    notes = after["state"]["context"]
+    assert [n.split(" concluded")[0] for n in notes] == ["Branch 1 (LLM core)", "Branch 2 (LLM core)"], notes
+    assert after["state"]["messages"] == [] and after["state"]["steps"] == 2
+    for cp in result["checkpoints"][:-1]:
+        assert agentlab.fork(result["run_id"], cp["i"], {})["answer"] == result["answer"], cp["i"]
+
+
+@check("live branches really overlap, and their token counts stay with their own calls")
+def _():
+    import threading
+    import time as _time
+    active, peak = [0], [0]
+    lock = threading.Lock()
+
+    def script(body, n):
+        with lock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        _time.sleep(0.3)
+        with lock:
+            active[0] -= 1
+        return {"role": "assistant", "content": "x" * (40 if "FOR" in body["messages"][0]["content"] else 4000)}, "stop"
+
+    url, seen, server = _fake_openai(script)
+    try:
+        result = agentlab.run(_local(agentlab.template("debate"), url), "Ban cars?", mode="live")
+    finally:
+        server.shutdown()
+    assert result["ok"] and peak[0] >= 2, f"the branches did not overlap (peak {peak[0]})"
+    nodes = agentlab.template("debate")["nodes"]
+    pro = next(n["id"] for n in nodes if n["type"] == "llm")      # wired to the FOR prompt
+    tokens = {e["node"]: e["tokens"]["output"] for e in result["events"] if e["event"] == "model"}
+    assert tokens[pro] == 10, "the measurement for each call should be pinned to that call's own event"
+
+
+@check("a parallel block whose branches do not meet, or escape, is refused")
+def _():
+    g = agentlab.template("debate")
+    join = next(n["id"] for n in g["nodes"] if n["type"] == "join")
+    end = next(n["id"] for n in g["nodes"] if n["type"] == "output")
+    cores = [n["id"] for n in g["nodes"] if n["type"] == "llm"][:2]
+    escape = json.loads(json.dumps(g))
+    for e in escape["edges"]:
+        if e["source"] == cores[1] and e["target"] == join:
+            e["target"] = end
+    assert any("without passing a Join" in p["message"] for p in agentlab.validate(escape))
+    one = json.loads(json.dumps(g))
+    par = next(n["id"] for n in one["nodes"] if n["type"] == "parallel")
+    one["edges"] = [e for e in one["edges"] if not (e["source"] == par and e["target"] == cores[1])]
+    assert any("at least two branches" in p["message"] for p in agentlab.validate(one))
+
+
+@check("the LangGraph export runs branches inside the parallel node and keeps the conversation")
+def _():
+    try:
+        import langgraph  # noqa: F401
+    except ImportError:
+        return
+    space = {"__name__": "lg"}
+    exec(compile(agentlab.codegen(agentlab.template("debate"), "langgraph")["source"], "lg", "exec"), space)  # noqa: S102
+    space["call_model"] = agentlab.Rehearsal()
+    space["PARALLEL"] = False
+    seen = []
+    space["emit"] = lambda ev, **d: seen.append(ev)
+    app = space["compile_app"]()
+    space["run_agent"]("Ban cars?", thread="x", app=app)
+    space["run_agent"]("And bikes?", thread="x", app=app)
+    assert seen.count("fanout") == 2 and seen.count("final") == 2
+    assert len(app.get_state({"configurable": {"thread_id": "x"}}).values["history"]) == 2
+
+
+@check("the page can keep a conversation going")
+def _():
+    assert 'id="alConverse"' in PAGE and "function alThreadId" in PAGE and 'case "fanout"' in PAGE
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
