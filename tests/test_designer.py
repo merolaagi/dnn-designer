@@ -7689,6 +7689,86 @@ def _():
     assert "StateGraph" in view["source"], "the route ignored the target"
 
 
+# --------------------------------------------------------------------------
+# agent lab 2.1: static safety, and predictions checked against runs
+# --------------------------------------------------------------------------
+
+def _props(graph):
+    return {p["name"]: p["status"] for p in agentlab.safety(graph)["properties"]}
+
+
+@check("the safety check finds the injection path from search to code execution")
+def _():
+    g = agentlab.template("planexec")
+    report = agentlab.safety(g)
+    risk = [f for f in report["findings"] if f["check"] == "injection" and f["level"] == "risk"]
+    assert risk, "web search feeds a core that can run code unapproved, and nothing was flagged"
+    kinds = [next(n["type"] for n in g["nodes"] if n["id"] == i) for i in risk[0]["path"]]
+    assert kinds[0] == "web_search" and kinds[-1] == "code_exec" and "llm" in kinds, kinds
+    # put a person in front of the executor and the path closes
+    router = next(n["id"] for n in g["nodes"] if n["type"] == "router")
+    code = next(n["id"] for n in g["nodes"] if n["type"] == "code_exec")
+    g["nodes"].append({"id": "h", "type": "human", "x": 0, "y": 0, "params": {}})
+    g["edges"] = [e for e in g["edges"] if not (e["source"] == router and e["target"] == code)]
+    g["edges"] += [{"id": "eh1", "source": router, "target": "h"}, {"id": "eh2", "source": "h", "target": code}]
+    props = _props(g)
+    assert props["Outside text cannot trigger side effects"] == "holds", props
+    assert props["Side effects need a person's yes"] == "holds", props
+
+
+@check("every starting design except the planner's ends, and the ReAct one holds everything")
+def _():
+    for key in agentlab.TEMPLATES:
+        assert _props(agentlab.template(key))["Every run ends"] == "holds", key
+    assert all(v in ("holds", "n/a") for v in _props(agentlab.template("react")).values())
+
+
+@check("a loop with no model call in it is reported as unbounded")
+def _():
+    g = _agent([("in", "user_input", {}), ("r", "retriever", {}), ("p", "planner", {}),
+                ("a", "llm", {}), ("out", "output", {})],
+               [("in", "r"), ("r", "p"), ("p", "r"), ("p", "a"), ("a", "out")])
+    report = agentlab.safety(g)
+    assert any(f["check"] == "termination" and f["level"] == "risk" for f in report["findings"])
+    assert _props(g)["Every run ends"] == "fails"
+
+
+@check("routing around the output guardrail is caught; early exits no longer skip it")
+def _():
+    g = agentlab.template("react")
+    assert _props(g)["Every answer passes the output guardrail"] == "holds"
+    next(n for n in g["nodes"] if n["type"] == "loop")["params"]["max_steps"] = 1
+    events = [e["event"] for e in agentlab.run(g, "x")["events"]]
+    assert events.index("budget") < events.index("guard_out"), f"the budget exit skipped the guardrail: {events}"
+    router = next(n["id"] for n in g["nodes"] if n["type"] == "router")
+    end = next(n["id"] for n in g["nodes"] if n["type"] == "output")
+    g["edges"].append({"id": "bypass", "source": router, "target": end})
+    g["edges"] = [e for e in g["edges"] if not (e["source"] == router and
+                  next(n["type"] for n in g["nodes"] if n["id"] == e["target"]) == "guard_out")]
+    assert _props(g)["Every answer passes the output guardrail"] == "fails"
+
+
+@check("a run sets the growth law against what it measured")
+def _():
+    result = agentlab.run(agentlab.template("react"), "Estimate the cafes Lisbon can support.")
+    c = result["costs"]
+    cores = [e for e in result["events"] if e["event"] == "model"]
+    assert c["core_calls"] == len(cores) == len(c["rows"]) and c["within_budget"]
+    assert c["total_measured"] == sum(r["measured"] for r in c["rows"])
+    assert c["x1_predicted"] == c["x1"], "with no context before the first call, x1 is known before the run"
+    assert c["at_budget"] >= c["total_measured"]
+    planned = agentlab.run(agentlab.template("planexec"), "Estimate the cafes Lisbon can support.")["costs"]
+    assert planned["x1"] > planned["x1_predicted"], "the plan's tokens should show up as the gap in x1"
+
+
+@check("the check route reports safety, and the page shows it")
+def _():
+    import main
+    out = main.agentlab_check(main.AgentLabGraph(graph=agentlab.template("planexec")))
+    assert out["safety"]["findings"]
+    assert 'data-altab="safety"' in PAGE and "function alRenderSafety" in PAGE and "function alCostsHtml" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -47,8 +47,14 @@ SYSTEMS = {
 SYSTEM_ORDER = ["senses", "brain", "memory", "hands", "nerve", "immune"]
 
 
-def _p(label, value, kind="text"):
-    return {"label": label, "value": value, "kind": kind}
+def _p(label, value, kind="text", options=None):
+    out = {"label": label, "value": value, "kind": kind}
+    if options:
+        out["options"] = options
+    return out
+
+
+READS, CHANGES = "only reads", "changes things"
 
 
 BLOCKS: Dict[str, Dict[str, Any]] = {
@@ -126,9 +132,12 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         anatomy=("The model never runs code. It writes a request, a tool name plus JSON arguments; your "
                  "program runs the function and hands back the result."),
         inside="A name, a description the model reads, an input schema, and the Python function.",
-        physiology="Model emits tool_use, the router dispatches it, the function runs, the result returns as tool_result.",
+        physiology=("Model emits tool_use, the router dispatches it, the function runs, the result returns as "
+                    "tool_result. Say whether it only reads or changes things; the Safety tab checks that "
+                    "anything that changes things has a person in front of it."),
         failure="Vague descriptions, so the wrong tool gets picked. Side effects with no undo.",
         params={"name": _p("Tool name", "calculator"),
+                "effects": _p("What it does to the world", CHANGES, "choice", [READS, CHANGES]),
                 "description": _p("What it does (the model reads this)",
                                   "Evaluate an arithmetic expression and return the number.", "area")}),
     "web_search": dict(
@@ -220,7 +229,8 @@ TEMPLATES = {
                         ("web_search", 1030, 90), ("tool", 1030, 270), ("guard_out", 1030, 450),
                         ("output", 1280, 450)],
               "edges": [(0, 1), (1, 4), (2, 4), (3, 4), (5, 4), (4, 6), (6, 7), (6, 8), (7, 4), (8, 4),
-                        (6, 9), (9, 10)]},
+                        (6, 9), (9, 10)],
+              "params": {8: {"effects": READS}}},
     "rag": {"name": "Retrieval (RAG) agent with memory",
             "nodes": [("user_input", 40, 220), ("retriever", 290, 220), ("long_mem", 790, 420),
                       ("system_prompt", 540, 50), ("llm", 540, 220), ("output", 1040, 220)],
@@ -400,18 +410,35 @@ def analyze(graph) -> Dict[str, Any]:
     gated = {r["node"] for rt in routers.values() for r in rt["routes"].values() if r["gate"]}
     steps = [nid for nid in nodes if kind[nid] in STEPS and nid in reach]
 
+    def reaches(src, dst):
+        seen, todo = set(), [src]
+        while todo:
+            cur = todo.pop()
+            if cur == dst:
+                return True
+            if cur in seen:
+                continue
+            seen.add(cur)
+            todo += control.get(cur, [])
+        return False
+
+    # Early exits — a spent step budget, a blocked task — still leave through the
+    # output guardrail when one stands before the answer, so no path skips it.
+    exit_to = next((g for g in steps if kind[g] == "guard_out" and end and reaches(g, end)), end)
+
     successors: Dict[str, List[str]] = {}
     for nid in steps:
         out = [t for t in control[nid] if kind.get(t) in STEPS]
         if nid in routers:
             out += [r["next"] for r in routers[nid]["routes"].values() if r["next"]]
-        if kind[nid] == "llm" and end:
-            out.append(end)                      # the step budget exits here
-        if kind[nid] == "guard_in" and end:
-            out.append(end)                      # a blocked task exits here
+        if kind[nid] == "llm" and exit_to:
+            out.append(exit_to)                  # the step budget exits here
+        if kind[nid] == "guard_in" and exit_to:
+            out.append(exit_to)                  # a blocked task exits here
         successors[nid] = list(dict.fromkeys(out))
 
     return {"nodes": nodes, "kind": kind, "control": control, "feeds": feeds, "start": start, "end": end,
+            "exit": exit_to,
             "loop": loop, "max_steps": max_steps, "tool_names": tool_names, "routers": routers,
             "llms": llms, "critics": critics, "reach": reach, "steps": steps,
             "given": given, "gated": gated, "successors": successors}
@@ -564,7 +591,7 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
     routers, llms, critics = a["routers"], a["llms"], a["critics"]
     tools = [(tid, a["tool_names"][tid]) for tid in a["given"]]
     gates = sorted({r["gate"] for rt in routers.values() for r in rt["routes"].values() if r["gate"]})
-    end, start = a["end"], a["start"]
+    end, start, early = a["end"], a["start"], a["exit"]
 
     parts = ", ".join(label(n) for n in graph.get("nodes", []))
     run_line = ("Run it:  pip install langgraph; ANTHROPIC_API_KEY=... python agent_langgraph.py"
@@ -818,7 +845,7 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
             body += ['    if looks_injected(state["task"]):',
                      f'        emit("guard_in", node="{nid}", passed=False)',
                      '        state["answer"] = "Blocked by the input guardrail: this looks like prompt injection."',
-                     f"        return {to(end)}{comment(end)}",
+                     f"        return {to(early)}{comment(early)}",
                      f'    emit("guard_in", node="{nid}", passed=True)',
                      f"    return {to(nxt)}{comment(nxt)}"]
         elif k == "retriever":
@@ -850,7 +877,7 @@ def codegen(graph, target: str = "python") -> Dict[str, Any]:
             body += ['    if state["steps"] >= MAX_STEPS:',
                      f'        emit("budget", node="{a["loop"] or nid}", limit=MAX_STEPS)',
                      '        state["answer"] = state["draft"] or "Stopped: the step budget ran out before a final answer."',
-                     f"        return {to(end)}{comment(end)}",
+                     f"        return {to(early)}{comment(early)}",
                      f'    think(state, "{nid}", {system}, {json.dumps(l["tools"])}, {const(nid)}_SETTINGS)',
                      f"    return {to(l['next'])}{comment(l['next'])}"]
         elif k == "router":
@@ -1153,6 +1180,7 @@ def _m_tool(p, node, graph, c):
         eq, shape = "o = f(a.input)", "a = { input: string }"
     desc = p.get("description") or ""
     rows = [("given to the model", f"yes, as {name}" if given else "no: not wired from the router"),
+            ("effects", effects(node)),
             ("needs approval", "yes" if gated else "no")]
     if desc:
         rows.append(("description", f"≈ {_n(_tokens(desc))} tokens, sent with every call as part of the tool list"))
@@ -1258,6 +1286,202 @@ def node_view(graph, node_id: Optional[str], target: str = "python") -> Dict[str
 
 
 # --------------------------------------------------------------------------
+# static safety analysis: what the wiring guarantees before anything runs
+# --------------------------------------------------------------------------
+# Each check reads the state machine analyze() builds — the same one codegen
+# turns into code — so a finding is a statement about the program that would
+# run, not about the drawing. Findings carry the path that demonstrates them.
+
+UNTRUSTED = {"web_search", "retriever", "long_mem", "tool"}
+
+
+def effects(node) -> str:
+    kind = node.get("type")
+    if kind == "code_exec":
+        return CHANGES
+    if kind == "tool":
+        return _params(node).get("effects", CHANGES)
+    return READS
+
+
+def _flow(a) -> Dict[str, List[str]]:
+    """Every move a run can make: control wires, dispatch to tools, and the way back."""
+    flow = {nid: list(a["successors"].get(nid, [])) for nid in a["nodes"]}
+    for rid, r in a["routers"].items():
+        for route in r["routes"].values():
+            if route["gate"]:
+                flow.setdefault(rid, []).append(route["gate"])
+                flow.setdefault(route["gate"], []).append(route["node"])
+            else:
+                flow.setdefault(rid, []).append(route["node"])
+            if route["next"]:
+                flow.setdefault(route["node"], []).append(route["next"])
+    return {k: list(dict.fromkeys(v)) for k, v in flow.items()}
+
+
+def _path(flow, src, dst, avoid=()):
+    if src in avoid:
+        return None
+    parent, queue = {src: None}, deque([src])
+    while queue:
+        cur = queue.popleft()
+        if cur == dst:
+            out = []
+            while cur is not None:
+                out.append(cur)
+                cur = parent[cur]
+            return out[::-1]
+        for nxt in flow.get(cur, []):
+            if nxt not in parent and nxt not in avoid:
+                parent[nxt] = cur
+                queue.append(nxt)
+    return None
+
+
+def _cycles(flow, members) -> List[List[str]]:
+    """Strongly connected components with a cycle in them (Tarjan)."""
+    index, low, stack, on, out, counter = {}, {}, [], set(), [], [0]
+
+    def visit(v):
+        index[v] = low[v] = counter[0]
+        counter[0] += 1
+        stack.append(v)
+        on.add(v)
+        for w in flow.get(v, []):
+            if w not in members:
+                continue
+            if w not in index:
+                visit(w)
+                low[v] = min(low[v], low[w])
+            elif w in on:
+                low[v] = min(low[v], index[w])
+        if low[v] == index[v]:
+            comp = []
+            while True:
+                w = stack.pop()
+                on.discard(w)
+                comp.append(w)
+                if w == v:
+                    break
+            if len(comp) > 1 or v in flow.get(v, []):
+                out.append(comp)
+
+    for v in members:
+        if v not in index:
+            visit(v)
+    return out
+
+
+def safety(graph) -> Dict[str, Any]:
+    if [p for p in validate(graph) if p["level"] == "error"]:
+        return {"findings": [], "properties": [],
+                "blocked": "Fix the errors on the Anatomy tab first; an agent that cannot run has no behaviour to check."}
+    a = analyze(graph)
+    nodes, kind = a["nodes"], a["kind"]
+    flow = _flow(a)
+    live = {nid for nid in nodes if _path(flow, a["start"], nid)}
+    name = lambda nid: label(nodes[nid])  # noqa: E731
+    findings, props = [], []
+
+    def find(level, check, message, path=None, focus=None):
+        findings.append({"level": level, "check": check, "message": message,
+                         "path": path or [], "nodes": focus or (path or [])})
+
+    # 1. termination
+    loops = _cycles(flow, live)
+    unbounded = []
+    for comp in loops:
+        if not any(kind[n] == "llm" for n in comp):
+            unbounded.append(comp)
+            find("risk", "termination",
+                 "These blocks form a loop with no LLM core in it, so the step budget never counts a lap. "
+                 "Only the 200-move safety net would stop it: " + " → ".join(name(n) for n in comp) + ".",
+                 comp)
+        for n in comp:
+            if kind[n] == "planner":
+                find("warning", "termination",
+                     f"{name(n)} sits inside a loop and calls the model on every lap, outside the step budget.",
+                     [n])
+    props.append({"name": "Every run ends",
+                  "status": "fails" if unbounded else "holds",
+                  "detail": ("a loop has no model call to count" if unbounded else
+                             f"every loop passes an LLM core, and cores share a budget of {a['max_steps']} calls")})
+
+    # 2. side effects behind a person
+    risky = [t for t in a["given"] if effects(nodes[t]) == CHANGES and t in live]
+    ungated = [t for t in risky if t not in a["gated"]]
+    for t in ungated:
+        find("warning", "approval",
+             f"{name(t)} can change things and runs whenever a model asks; no Human approval stands in front of it.",
+             focus=[t])
+    props.append({"name": "Side effects need a person's yes",
+                  "status": "n/a" if not risky else ("fails" if ungated else "holds"),
+                  "detail": ("no tool here changes anything" if not risky else
+                             f"{len(risky) - len(ungated)} of {len(risky)} side-effecting tools are gated")})
+
+    # 3. injection: can text from outside reach a core that can act without a person?
+    sources = [n for n in live if kind[n] in UNTRUSTED]
+    exposures = 0
+    for lid in (n for n in live if kind[n] == "llm"):
+        acting = [r["node"] for rid in a["control"][lid] if rid in a["routers"]
+                  for r in a["routers"][rid]["routes"].values()
+                  if effects(nodes[r["node"]]) == CHANGES and not r["gate"]]
+        if not acting:
+            continue
+        for src in sources:
+            path = _path(flow, src, lid)
+            if not path:
+                continue
+            exposures += 1
+            router = next(rid for rid in a["control"][lid] if rid in a["routers"])
+            find("risk", "injection",
+                 f"Text from {name(src)} reaches {name(lid)}, which can run {name(acting[0])} without approval. "
+                 f"Instructions hidden in that text could make the agent act on them.",
+                 path + [router, acting[0]])
+            break
+    props.append({"name": "Outside text cannot trigger side effects",
+                  "status": "n/a" if not sources else ("fails" if exposures else "holds"),
+                  "detail": ("nothing outside the task enters the context" if not sources else
+                             ("an injection path exists" if exposures else
+                              "no core that reads outside text can act without a person"))})
+    if sources and any(kind[n] == "guard_in" for n in live):
+        find("info", "injection",
+             "The input guardrail screens the task only. Tool results and retrieved text reach the model unscreened.",
+             focus=[n for n in live if kind[n] == "guard_in"] + sources)
+
+    # 4. guardrail coverage
+    # a guardrail placed on the canvas is a promise; check it whether or not anything reaches it
+    gouts = [n for n in nodes if kind[n] == "guard_out"]
+    if gouts:
+        bypass = _path(flow, a["start"], a["end"], avoid=set(gouts))
+        if bypass:
+            find("warning", "coverage",
+                 "An answer can reach the final answer without passing the output guardrail.", bypass)
+        props.append({"name": "Every answer passes the output guardrail",
+                      "status": "fails" if bypass else "holds",
+                      "detail": "a path goes around it" if bypass else "including early exits"})
+    gins = [n for n in nodes if kind[n] == "guard_in"]
+    if gins:
+        first_core = next((n for n in live if kind[n] == "llm" and _path(flow, a["start"], n, avoid=set(gins))), None)
+        if first_core:
+            find("warning", "coverage", f"The task can reach {name(first_core)} without passing the input guardrail.",
+                 _path(flow, a["start"], first_core, avoid=set(gins)))
+        props.append({"name": "Every task is screened before a model reads it",
+                      "status": "fails" if first_core else "holds",
+                      "detail": "a path goes around it" if first_core else "no path skips the input guardrail"})
+    critics = [n for n in nodes if kind[n] == "reflector"]
+    if critics:
+        skip = _path(flow, a["start"], a["end"], avoid=set(critics))
+        if skip:
+            find("info", "coverage", "Some answers leave without the critic seeing them, such as a spent budget.", skip)
+
+    order = {"risk": 0, "warning": 1, "info": 2}
+    findings.sort(key=lambda f: order[f["level"]])
+    return {"findings": findings, "properties": props}
+
+
+
+# --------------------------------------------------------------------------
 # running a design
 # --------------------------------------------------------------------------
 
@@ -1331,10 +1555,33 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
 
     space: Dict[str, Any] = {"__name__": "agentlab_run"}
     exec(compile(built["source"], "<agent>", "exec"), space)  # noqa: S102 — our own generated file
-    space["emit"] = emit
     space["human_approves"] = approve
     if mode == "rehearsal":
         space["call_model"] = Rehearsal()
+
+    # Measure every model call, and pin each measurement to the event the call produced.
+    calls: List[Dict[str, Any]] = []
+    model = space["call_model"]
+
+    def measured(system, messages, tools=None, **settings):
+        sent = json.dumps({"system": system, "messages": messages, "tools": tools or []})
+        response = model(system, messages, tools, **settings)
+        usage = response.get("usage") or {}
+        calls.append({"input": usage.get("input_tokens") or _tokens(sent),
+                      "output": usage.get("output_tokens") or _tokens(json.dumps(response.get("content", []))),
+                      "estimate": _tokens(sent), "counted": bool(usage), "event": None})
+        return response
+
+    def emit_measured(event, **data):
+        emit(event, **data)
+        if event in ("model", "plan", "critique"):
+            open_call = next((c for c in calls if c["event"] is None), None)
+            if open_call is not None:
+                open_call["event"] = len(events) - 1
+                events[-1]["tokens"] = {"input": open_call["input"], "output": open_call["output"]}
+
+    space["call_model"] = measured
+    space["emit"] = emit_measured
     if "MEMORY_FILE" in space and memory_dir is not None:
         space["MEMORY_FILE"] = Path(memory_dir) / "agent_memory.json"
 
@@ -1345,7 +1592,59 @@ def run(graph, task: str, mode: str = "rehearsal", approvals: str = "approve",
         error = f"{type(exc).__name__}: {exc}"
         emit("error", message=error)
     return {"ok": error is None, "answer": answer, "error": error, "events": events,
-            "mode": mode, "nodemap": built["nodemap"], "seconds": round(time.time() - started, 2)}
+            "mode": mode, "nodemap": built["nodemap"], "seconds": round(time.time() - started, 2),
+            "costs": costs(graph, task, events, calls, space, mode)}
+
+
+def costs(graph, task, events, calls, space, mode) -> Dict[str, Any]:
+    """Set what the run cost against what the maths predicted.
+
+    The Maths tab says a core's input on call k grows as x_k = x_1 + (k − 1)ρ,
+    because the history only ever grows by one request and one result per step.
+    Here that law meets the run: x_1 is predicted before the run from the
+    prompt, the tool schemas and the task; ρ is fitted from the calls; and the
+    residuals say how far a real run is from a straight line.
+    """
+    a = analyze(graph)
+    nodes = a["nodes"]
+    core_events = [e for e in events if e["event"] == "model" and a["kind"].get(e.get("node")) == "llm"
+                   and "tokens" in e]
+    xs = [e["tokens"]["input"] for e in core_events]
+    counted = any(c["counted"] for c in calls)
+    report: Dict[str, Any] = {"counted": counted, "calls": len(calls),
+                              "input_total": sum(c["input"] for c in calls),
+                              "output_total": sum(c["output"] for c in calls),
+                              "core_calls": len(xs), "budget": a["max_steps"]}
+    first = core_events[0]["node"] if core_events else next(iter(a["llms"]), None)
+    if first:
+        prompt = a["llms"][first]["prompt"]
+        system = _params(nodes[prompt])["text"] if prompt else DEFAULT_PROMPT
+        schemas = [space.get("SCHEMAS", {}).get(t) for t in a["llms"][first]["tools"]]
+        predicted_x1 = _tokens(json.dumps({"system": system,
+                                           "messages": [{"role": "user", "content": "Task:\n" + task}],
+                                           "tools": [s for s in schemas if s]}))
+        report["x1_predicted"] = predicted_x1
+    if xs:
+        x1 = xs[0]
+        k = list(range(1, len(xs) + 1))
+        denom = sum((i - 1) ** 2 for i in k)
+        rho = (sum((i - 1) * (x - x1) for i, x in zip(k, xs)) / denom) if denom else 0.0
+        rows = [{"k": i, "predicted": round(x1 + (i - 1) * rho), "measured": x} for i, x in zip(k, xs)]
+        N = a["max_steps"]
+        report.update({
+            "x1": x1, "rho": round(rho, 1), "rows": rows,
+            "total_predicted": round(len(xs) * x1 + rho * len(xs) * (len(xs) - 1) / 2),
+            "total_measured": sum(xs),
+            "at_budget": round(N * x1 + rho * N * (N - 1) / 2),
+            "worst_residual": max(abs(r["predicted"] - r["measured"]) for r in rows),
+            "within_budget": len(xs) <= N,
+        })
+        caps = [int(_params(nodes[e["node"]])["max_tokens"]) for e in core_events]
+        report["output_within_cap"] = all(e["tokens"]["output"] <= cap for e, cap in zip(core_events, caps))
+    if counted:
+        pairs = [(c["input"], c["estimate"]) for c in calls if c["counted"] and c["estimate"]]
+        report["estimator_ratio"] = round(sum(m for m, _ in pairs) / sum(e for _, e in pairs), 3) if pairs else None
+    return report
 
 
 # --------------------------------------------------------------------------

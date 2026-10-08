@@ -288,6 +288,12 @@ LLM core uses. The Python tab generates for plain Python or LangGraph; the
 LangGraph file turns human approval into a resumable interrupt
 (`pip install langgraph` to run it).
 
+The **Safety** tab checks the wiring before anything runs: that every loop is
+bounded, that tools which change things wait for a person, that no search
+result or retrieved text can reach a model that can act unapproved, and that
+guardrails cannot be routed around. After a run, Physiology sets the predicted
+token growth against what the run measured.
+
 Run executes the Python the Python tab shows and replays what each block
 reported across the canvas. Rehearsal runs need no key; live runs need
 `ANTHROPIC_API_KEY` in the server's environment, and `AGENTLAB_MODEL` picks

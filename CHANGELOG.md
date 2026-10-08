@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.1.0
+
+**A Safety tab: what the wiring guarantees, checked before anything runs.**
+Each check reads the state machine the code is generated from, so a finding
+is about the program that would run, and each one carries the path that shows
+it. Select a finding and that path lights up on the canvas.
+
+- **Every run ends.** Every loop must pass an LLM core, whose calls the step
+  budget counts. A loop with no model call in it is reported as unbounded; a
+  planner inside a loop is flagged for calling the model outside the budget.
+- **Side effects need a person's yes.** Tools now say whether they only read or
+  change things (the code executor always changes things). Anything that
+  changes things without a Human approval in front of it is flagged.
+- **Outside text cannot trigger side effects.** Search results, retrieved
+  documents, long-term memory and tool output are treated as untrusted. If any
+  of them can reach an LLM core that can run a side-effecting tool without a
+  person, that is a prompt-injection path, reported end to end — on the
+  planner-executor design: Web search → LLM core → Router → Code executor.
+- **Guardrails cannot be routed around.** A guardrail on the canvas is checked
+  whether or not anything reaches it.
+
+**Early exits now leave through the output guardrail.** A spent step budget or
+a blocked task used to jump straight to the final answer, skipping redaction.
+The safety check found it; the compiler now routes those exits through the
+output guardrail when one stands before the answer.
+
+**Predicted against measured.** Every model call in a run is measured — real
+token counts in live runs, characters ÷ 4 in rehearsals — and pinned to the
+block that made it. After a run, Physiology sets the Maths tab's growth law,
+x_k = x_1 + (k − 1)ρ, against the measurements: x_1 predicted before the run
+from the prompt, tool schemas and task; ρ fitted; the residuals; the cost of a
+run that used the whole budget; and, in live runs, how far characters ÷ 4 is
+from the real tokenizer.
+
 ## 2.0.0
 
 **The agent canvas is now a real graph.** Until this release the Agent lab

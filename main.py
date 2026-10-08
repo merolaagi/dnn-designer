@@ -290,7 +290,7 @@ def agentlab_catalog():
 
 @app.post("/api/agentlab/check")
 def agentlab_check(body: AgentLabGraph):
-    return {"problems": agentlab.validate(body.graph)}
+    return {"problems": agentlab.validate(body.graph), "safety": agentlab.safety(body.graph)}
 
 
 class AgentLabCode(BaseModel):

@@ -2331,8 +2331,8 @@ body.sizing{user-select:none}
 .al-insp{width:370px;flex:none;display:flex;flex-direction:column;border-left:1px solid var(--paper-3);
   background:var(--paper);min-height:0}
 .al-tabs{display:flex;border-bottom:1px solid var(--paper-3);background:#fff;flex:none}
-.al-tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:9px 2px;
-  font-size:12px;color:var(--muted)}
+.al-tabs button{flex:1 0 auto;background:none;border:0;border-bottom:2px solid transparent;padding:9px 6px;
+  font-size:12px;color:var(--muted);white-space:nowrap}
 .al-tabs button.on{color:var(--text);border-bottom-color:var(--amber);font-weight:600}
 .al-pane{flex:1;overflow-y:auto;padding:14px 16px 32px;font-size:13px;line-height:1.5}
 .al-pane h3{margin:0 0 2px;font-size:16px}
@@ -2356,6 +2356,35 @@ body.sizing{user-select:none}
   word-break:break-word}
 .al-trace li.warn{border-left-color:var(--bad)}
 .al-t{color:var(--muted);font-size:11px;font-family:var(--mono);margin-left:6px}
+.al-badge{display:inline-block;min-width:15px;margin-left:4px;padding:0 4px;border-radius:8px;font-size:10px;
+  background:var(--paper-3);color:var(--text);line-height:15px}
+.al-badge:empty{display:none}
+.al-badge.bad{background:var(--bad);color:#fff}
+.al-tabs{overflow-x:auto}
+.al-node.risk::after{content:"";position:absolute;top:-5px;right:-5px;width:11px;height:11px;border-radius:50%;
+  background:var(--bad);box-shadow:0 0 0 2px #fff}
+.al-node.trail{box-shadow:0 0 0 3px var(--amber)}
+.al-wire.trail{stroke:var(--amber);stroke-width:3.5;stroke-dasharray:none;opacity:1}
+.al-props,.al-findings{list-style:none;margin:8px 0;padding:0}
+.al-props li{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 0;border-bottom:1px solid var(--paper-3)}
+.al-props li span{font-size:11.5px;font-weight:600}
+.al-props li.holds span{color:var(--good)}
+.al-props li.fails span{color:var(--bad)}
+.al-props li.na span{color:var(--muted)}
+.al-props li small{grid-column:1/-1;color:var(--muted);font-size:11.5px}
+.al-findings li{border-left:3px solid var(--muted);padding:5px 0 6px 9px;margin:5px 0;cursor:pointer;font-size:12.5px}
+.al-findings li.risk{border-left-color:var(--bad)}
+.al-findings li.warning{border-left-color:var(--amber)}
+.al-findings li.on{background:#FFF8E6}
+.al-findings li b{text-transform:capitalize}
+.al-findings li small{display:block;color:var(--muted);font-family:var(--mono);font-size:10.5px;margin-top:2px}
+.al-chart{width:100%;height:auto;background:#fff;border:1px solid var(--paper-3);border-radius:7px;margin:6px 0}
+.al-chart .ax{stroke:var(--paper-3)}
+.al-chart text{font-size:9px;fill:var(--muted);font-family:var(--mono)}
+.al-chart .fit{stroke:var(--al-brain);stroke-width:2;fill:none}
+.al-chart .proj{stroke:var(--al-brain);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+.al-chart .m{fill:var(--amber)}
+.al-costs .key{width:120px}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13119,6 +13148,7 @@ function alBuildShell(){
           <button data-altab="maths">Maths</button>
           <button data-altab="physio">Physiology</button>
           <button data-altab="code">Python</button>
+          <button data-altab="safety">Safety<span class="al-badge" id="alSafetyBadge"></span></button>
         </div>
         <div class="al-pane" id="alPane"></div>
       </div>
@@ -13214,7 +13244,9 @@ function alRenderNodes(){
     if (!b) return;
     const el = document.createElement("div");
     el.className = "al-node" + (sel && sel.kind === "node" && sel.id === n.id ? " sel" : "") +
-      (agentLabState.problems.some(p => p.node === n.id && p.level !== "info") ? " warn" : "");
+      (agentLabState.problems.some(p => p.node === n.id && p.level !== "info") ? " warn" : "") +
+      (alRiskNodes().has(n.id) ? " risk" : "") +
+      ((agentLabState.trail || []).includes(n.id) ? " trail" : "");
     el.dataset.id = n.id;
     el.style.cssText = `left:${n.x}px;top:${n.y}px;--c:${alColor(n.type)}`;
     el.tabIndex = 0;
@@ -13254,8 +13286,9 @@ function alRenderEdges(){
     const a = alNode(e.source), b = alNode(e.target);
     if (!a || !b) return;
     const p = alEdgePath(a, b), on = sel && sel.kind === "edge" && sel.id === e.id;
-    const cfg = alIsConfig(a.type, b.type);
-    svg += `<path class="al-wire${cfg ? " cfg" : p.back ? " back" : ""}${on ? " sel" : ""}" id="alw_${e.id}" d="${p.d}"/>` +
+    const cfg = alIsConfig(a.type, b.type), trail = agentLabState.trail || [];
+    const lit = trail.some((id, i) => id === e.source && trail[i + 1] === e.target);
+    svg += `<path class="al-wire${cfg ? " cfg" : p.back ? " back" : ""}${on ? " sel" : ""}${lit ? " trail" : ""}" id="alw_${e.id}" d="${p.d}"/>` +
            `<path class="al-hit" data-edge="${e.id}" d="${p.d}"/>`;
   });
   svg += `<path class="al-wire temp" id="alTemp" d=""/>`;
@@ -13376,16 +13409,20 @@ function alScheduleCheck(){
     try{
       const r = await fetch(API + "/api/agentlab/check", {method: "POST",
         headers: {"content-type": "application/json"}, body: JSON.stringify({graph: agentLabState.graph})});
-      agentLabState.problems = (await r.json()).problems || [];
+      const d = await r.json();
+      agentLabState.problems = d.problems || [];
+      agentLabState.safety = d.safety || null;
     } catch { return; }
     alRenderNodes();
-    if (agentLabState.tab === "anatomy" && !agentLabState.sel) alRenderPane();
+    alSafetyBadge();
+    if ((agentLabState.tab === "anatomy" && !agentLabState.sel) || agentLabState.tab === "safety") alRenderPane();
   }, 250);
 }
 
 /* ---------- inspector ---------- */
 
 function alTab(tab){
+  if (tab !== "safety" && (agentLabState.trail || []).length) alShowTrail([]);
   agentLabState.tab = tab;
   document.querySelectorAll("[data-altab]").forEach(b => b.classList.toggle("on", b.dataset.altab === tab));
   alRenderPane();
@@ -13396,6 +13433,7 @@ function alRenderPane(){
   if (agentLabState.tab === "code") return alRenderCode();
   if (agentLabState.tab === "lines") return alRenderLines();
   if (agentLabState.tab === "maths") return alRenderMaths();
+  if (agentLabState.tab === "safety") return alRenderSafety();
   alRenderAnatomy();
 }
 
@@ -13439,7 +13477,11 @@ function alRenderAnatomy(){
   let fields = "";
   Object.entries(b.params || {}).forEach(([k, d]) => {
     const v = n.params[k] == null ? d.value : n.params[k];
-    fields += d.kind === "area"
+    fields += d.kind === "choice"
+      ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
+           <select id="alf_${k}" data-k="${k}">${(d.options || []).map(o =>
+             `<option${o === v ? " selected" : ""}>${alEsc(o)}</option>`).join("")}</select></div>`
+      : d.kind === "area"
       ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
            <textarea id="alf_${k}" data-k="${k}">${alEsc(v)}</textarea></div>`
       : `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
@@ -13461,13 +13503,14 @@ function alRenderAnatomy(){
       Sends to: ${outs.join(", ") || "nothing yet"}</p>
     ${fields ? `<h4>Settings</h4>${fields}` : ""}
     <button class="btn danger" id="alDel">Delete block</button>`;
-  pane.querySelectorAll("[data-k]").forEach(inp => inp.addEventListener("input", () => {
-    const k = inp.dataset.k;
-    n.params[k] = b.params[k].kind === "number" ? Number(inp.value) : inp.value;
-    const title = document.querySelector(`#alCanvas .al-node[data-id="${n.id}"] .hd b`);
-    if (title) title.textContent = alLabel(n);
-    alDraft(); alScheduleCheck();
-  }));
+  pane.querySelectorAll("[data-k]").forEach(inp => ["input", "change"].forEach(type =>
+    inp.addEventListener(type, () => {
+      const k = inp.dataset.k;
+      n.params[k] = b.params[k].kind === "number" ? Number(inp.value) : inp.value;
+      const title = document.querySelector(`#alCanvas .al-node[data-id="${n.id}"] .hd b`);
+      if (title) title.textContent = alLabel(n);
+      alDraft(); alScheduleCheck();
+    })));
   $("alDel").onclick = alDeleteSel;
 }
 
@@ -13490,7 +13533,8 @@ function alRenderPhysio(){
         <option value="deny"${S.approvals === "deny" ? " selected" : ""}>Deny it</option></select></div>` : ""}
     <button class="btn go" id="alRunBtn"${S.running ? " disabled" : ""}>${S.running ? "Running…" : "Run the agent"}</button>
     <ol class="al-trace" id="alTrace">${S.trace.map(alTraceRow).join("")}</ol>
-    ${S.answer != null ? `<h4>Final answer</h4><pre class="al-answer">${alEsc(S.answer)}</pre>` : ""}`;
+    ${S.answer != null ? `<h4>Final answer</h4><pre class="al-answer">${alEsc(S.answer)}</pre>` : ""}
+    ${S.costs && !S.running ? alCostsHtml(S.costs) : ""}`;
   $("alTask").addEventListener("input", e => S.task = e.target.value);
   $("alMode").addEventListener("change", e => S.mode = e.target.value);
   if ($("alAppr")) $("alAppr").addEventListener("change", e => S.approvals = e.target.value);
@@ -13621,7 +13665,7 @@ async function alRenderCode(){
 async function alRun(){
   const S = agentLabState;
   if (S.running) return;
-  S.running = true; S.trace = []; S.answer = null;
+  S.running = true; S.trace = []; S.answer = null; S.costs = null;
   if (S.tab !== "physio") alTab("physio"); else alRenderPhysio();
   let d;
   try{
@@ -13642,6 +13686,7 @@ async function alRun(){
   } else if (d){
     await alReplay(d);
     S.answer = d.answer;
+    S.costs = d.costs || null;
   }
   S.running = false;
   if (S.tab === "physio") alRenderPhysio();
@@ -13733,6 +13778,103 @@ async function alReplay(d){
                $("alPane").scrollTop = $("alPane").scrollHeight; }
     if (node){ await alFire(node); prev = node; }
   }
+}
+
+/* ---------- safety: what the wiring guarantees ---------- */
+
+function alRiskNodes(){
+  const out = new Set(), sf = agentLabState.safety;
+  if (sf && sf.findings) sf.findings.filter(f => f.level === "risk").forEach(f => f.nodes.forEach(n => out.add(n)));
+  return out;
+}
+
+function alSafetyBadge(){
+  const badge = $("alSafetyBadge"), sf = agentLabState.safety;
+  if (!badge) return;
+  const n = sf && sf.findings ? sf.findings.filter(f => f.level !== "info").length : 0;
+  badge.textContent = n ? String(n) : "";
+  badge.classList.toggle("bad", !!(sf && sf.findings && sf.findings.some(f => f.level === "risk")));
+}
+
+/* Lighting a finding's path on the canvas: the blocks and the wires between
+   consecutive ones, so the argument for the finding can be followed by eye. */
+function alShowTrail(path){
+  agentLabState.trail = path || [];
+  alRenderNodes();
+  alRenderEdges();
+  const first = path && path.length && document.querySelector(`#alCanvas .al-node[data-id="${path[0]}"]`);
+  if (first) first.scrollIntoView({block: "nearest", inline: "nearest"});
+}
+
+function alRenderSafety(){
+  const sf = agentLabState.safety, pane = $("alPane");
+  if (!sf){ pane.innerHTML = `<div class="al-wait">checking…</div>`; alScheduleCheck(); return; }
+  if (sf.blocked){ pane.innerHTML = `<h3>Safety</h3><p>${alEsc(sf.blocked)}</p>`; return; }
+  const word = {holds: "holds", fails: "fails", "n/a": "does not apply"};
+  pane.innerHTML = `<h3>What the wiring guarantees</h3>
+    <p class="al-muted">Checked on the state machine the code is generated from, before anything runs.
+    Select a finding to light its path on the canvas.</p>
+    <ul class="al-props">${sf.properties.map(p => `<li class="${p.status === "n/a" ? "na" : p.status}">
+      <b>${alEsc(p.name)}</b><span>${word[p.status]}</span><small>${alEsc(p.detail)}</small></li>`).join("")}</ul>
+    ${sf.findings.length ? `<h4>Findings</h4><ul class="al-findings">${sf.findings.map((f, i) =>
+      `<li class="${f.level}" data-finding="${i}" tabindex="0"><b>${alEsc(f.level)}</b> ${alEsc(f.message)}
+        ${f.path.length ? `<small>${f.path.map(id => alEsc(alLabel(alNode(id) || {type: id}))).join(" → ")}</small>` : ""}</li>`
+      ).join("")}</ul>` : `<p>No findings.</p>`}
+    <h4>What is checked</h4>
+    <p class="al-muted">Every loop contains a model call, so the step budget bounds it. Tools set to
+    “changes things”, and the code executor, have a Human approval in front of them. No text from
+    outside the task — search results, retrieved documents, memory, tool output — can reach a core
+    that can act without a person. Guardrails cannot be routed around, early exits included.</p>`;
+  pane.querySelectorAll("[data-finding]").forEach(li => {
+    const go = () => {
+      pane.querySelectorAll("[data-finding]").forEach(x => x.classList.toggle("on", x === li));
+      const f = sf.findings[+li.dataset.finding];
+      alShowTrail(f.path.length ? f.path : f.nodes);
+    };
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", ev => { if (ev.key === "Enter") go(); });
+  });
+}
+
+/* ---------- predicted against measured ---------- */
+
+function alCostsHtml(c){
+  const est = c.counted ? "" : " (estimated: a rehearsal has no real token counts, so these are ≈ characters ÷ 4)";
+  if (!c.rows || !c.rows.length) return `<h4>Predicted against measured</h4>
+    <p class="al-muted">No LLM core was called, so there is nothing to measure.</p>`;
+  const N = c.budget, rows = c.rows;
+  const W = 300, H = 140, pad = 30;
+  const maxY = Math.max(1, ...rows.map(r => r.measured), c.x1 + c.rho * (N - 1)) * 1.08;
+  const X = k => pad + (k - 1) * (W - pad - 8) / Math.max(1, N - 1);
+  const Y = v => H - 18 - v * (H - 30) / maxY;
+  const line = `M${X(1)},${Y(c.x1)} L${X(rows.length)},${Y(c.x1 + c.rho * (rows.length - 1))}`;
+  const proj = `M${X(rows.length)},${Y(c.x1 + c.rho * (rows.length - 1))} L${X(N)},${Y(c.x1 + c.rho * (N - 1))}`;
+  const pts = rows.map(r => `<circle cx="${X(r.k)}" cy="${Y(r.measured)}" r="3.5" class="m"/>`).join("");
+  const n = v => Math.round(v).toLocaleString();
+  return `<h4>Predicted against measured</h4>
+    <p class="al-muted">The Maths tab says each core call reads x<sub>k</sub> = x<sub>1</sub> + (k − 1)ρ tokens,
+    because history only grows. Here that law meets the run${est}.</p>
+    <svg class="al-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Input tokens per core call">
+      <line x1="${pad}" y1="${H - 18}" x2="${W - 4}" y2="${H - 18}" class="ax"/>
+      <line x1="${pad}" y1="8" x2="${pad}" y2="${H - 18}" class="ax"/>
+      <text x="${pad - 4}" y="${Y(maxY / 1.08) + 4}" text-anchor="end">${n(maxY / 1.08)}</text>
+      <text x="${pad - 4}" y="${H - 18}" text-anchor="end">0</text>
+      <text x="${X(1)}" y="${H - 4}" text-anchor="middle">k=1</text>
+      <text x="${X(N)}" y="${H - 4}" text-anchor="middle">N=${N}</text>
+      <path d="${line}" class="fit"/><path d="${proj}" class="proj"/>${pts}
+    </svg>
+    <table class="mathtab al-costs">
+      <tr><td class="key">x₁ before the run</td><td class="val">${n(c.x1_predicted)} tokens from prompt, tool schemas and task</td></tr>
+      <tr><td class="key">x₁ measured</td><td class="val">${n(c.x1)}${c.x1 !== c.x1_predicted
+        ? ` (${c.x1 > c.x1_predicted ? "+" : ""}${n(c.x1 - c.x1_predicted)}: context added before the first call)` : ""}</td></tr>
+      <tr><td class="key">ρ fitted</td><td class="val">${n(c.rho)} tokens per step</td></tr>
+      <tr><td class="key">this run</td><td class="val">predicted ${n(c.total_predicted)}, measured ${n(c.total_measured)},
+        worst step off by ${n(c.worst_residual)}</td></tr>
+      <tr><td class="key">at the budget</td><td class="val">a run using all ${N} calls would read ≈ ${n(c.at_budget)}</td></tr>
+      <tr><td class="key">bounds</td><td class="val">${c.core_calls} of ${N} calls${c.within_budget ? "" : " — over the budget"};
+        output ${c.output_within_cap ? "within" : "over"} each core's cap</td></tr>
+      ${c.estimator_ratio ? `<tr><td class="key">estimator</td><td class="val">real tokens ÷ (characters ÷ 4) = ${c.estimator_ratio}</td></tr>` : ""}
+    </table>`;
 }
 
 /* ---------- saving ---------- */
