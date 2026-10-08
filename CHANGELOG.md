@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.98.0
+
+**Agent lab: language-model agents, built from organs.** A new page on the
+rail, beside Blocks & recipes. Eighteen blocks in six body systems: senses
+(input, answer), brain (LLM core, system prompt, planner, critic), memory
+(working memory, long-term memory, retriever), hands (tool, web search, code
+executor, sub-agent), nervous system (router, loop controller) and immune
+system (input and output guardrails, human approval). Select any block for
+what it is made of, how it behaves at runtime and how it fails. Four starting
+designs: ReAct, RAG, planner–executor–critic, supervisor with sub-agents.
+
+**A run executes the file, not a picture of it.** The Python tab shows a
+standard-library agent generated from the canvas; Run generates that same
+file, executes it, and records what each organ reported as it worked. The
+canvas replay and the trace are those records, so they cannot drift from the
+code. Rehearsal mode puts a scripted stand-in where the model goes, so a
+design runs with no key and no cost; tools, guardrails and the loop are still
+the real generated code. Live mode uses ANTHROPIC_API_KEY.
+
+**Wiring means something.** Only tools wired out of the router are given to
+the model, and only tools wired out of a Human approval block wait for a yes.
+A denial reaches the model as the tool's result.
+
+`agentlab.py` is separate from `agents.py`, whose agents are experiment loops
+that train networks. Runtime data goes to the workspace's `agentlab/` folder,
+which is ignored by git.
+
 ## 1.97.0
 
 **Every layer on the palette has its mathematics now.** The remaining 29

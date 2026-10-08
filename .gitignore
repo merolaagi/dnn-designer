@@ -27,6 +27,7 @@ scouts/
 problems/
 physics/
 codebases/
+agentlab/
 
 # datasets pulled or uploaded at runtime
 data/

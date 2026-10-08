@@ -226,7 +226,8 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
 #pageAgents, #pagePad, #pageDomains, #pageScouts,
-#pageCodebase, #pageMaths, #pageWorkbench, #pagePhysics{background:var(--paper)}
+#pageCodebase, #pageMaths, #pageWorkbench, #pagePhysics,
+#pageAgentLab{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -2274,9 +2275,102 @@ body.sizing{user-select:none}
  * a rewrite.
  * ------------------------------------------------------------------ */
 
+/* ---------------- agent lab ---------------- */
+#pageAgentLab{
+  --al-senses:#4F6170; --al-brain:#4656C9; --al-memory:#16857E;
+  --al-hands:#B67A0A; --al-nerve:#8C3D92; --al-immune:#BC3B28;
+}
+.al-ghost{--al-senses:#4F6170;--al-brain:#4656C9;--al-memory:#16857E;
+  --al-hands:#B67A0A;--al-nerve:#8C3D92;--al-immune:#BC3B28;
+  position:fixed;pointer-events:none;opacity:.85;z-index:999}
+#alMain{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
+.al-wait{padding:24px;color:var(--muted)}
+.al-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#fff;
+  border-bottom:1px solid var(--paper-3);flex:none;flex-wrap:wrap}
+.al-bar input,.al-bar select{border:1px solid var(--paper-3);border-radius:6px;padding:6px 9px;
+  background:#fff;font-size:12.5px}
+.al-bar input{font-weight:600;min-width:180px}
+.al-bar .spacer{flex:1}
+.al-body{display:flex;flex:1;min-height:0}
+.al-pal{width:200px;flex:none;overflow-y:auto;padding:10px 10px 24px;border-right:1px solid var(--paper-3)}
+.al-sys{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--text);margin:14px 2px 6px}
+.al-sys:first-child{margin-top:2px}
+.al-sys i{width:9px;height:9px;border-radius:3px}
+.al-palitem{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--paper-3);
+  border-left:4px solid var(--c);border-radius:6px;padding:5px 9px;margin:0 0 4px;font-size:12.5px;
+  cursor:grab;touch-action:none;user-select:none}
+.al-palitem:hover{border-color:var(--c)}
+.al-hint{font-size:11px;color:var(--muted);margin:16px 2px 0;line-height:1.4}
+.al-stage{flex:1;overflow:auto;position:relative;background-color:var(--board);
+  background-image:radial-gradient(var(--board-grid) 1.1px,transparent 1.2px);background-size:22px 22px}
+.al-canvas{position:relative;width:1600px;height:1000px}
+.al-wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.al-wire{fill:none;stroke:var(--board-line);stroke-width:2}
+.al-wire.back{stroke-dasharray:6 5}
+.al-wire.sel{stroke:var(--amber);stroke-width:3}
+.al-wire.temp{stroke:var(--al-brain);stroke-dasharray:4 4}
+.al-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
+.al-empty{position:absolute;left:40px;top:40px;max-width:340px;color:var(--muted);font-size:13px;
+  line-height:1.5;pointer-events:none}
+.al-empty b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
+.al-node{position:absolute;width:180px;background:#fff;border:1px solid var(--paper-3);border-radius:9px;
+  cursor:grab;touch-action:none;user-select:none;box-shadow:0 1px 0 var(--paper-3)}
+.al-node .hd{display:flex;align-items:center;gap:8px;padding:8px 11px 6px;border-bottom:1px solid var(--paper-2)}
+.al-node .hd i{width:9px;height:9px;border-radius:3px;background:var(--c);flex:none}
+.al-node .hd b{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-node .bd{padding:5px 11px 8px;font-size:11px;color:var(--muted);line-height:1.35}
+.al-node.sel{border-color:var(--c);box-shadow:0 0 0 2px var(--c)}
+.al-node.warn{border-style:dashed}
+.al-node.firing{box-shadow:0 0 0 3px var(--c),0 0 20px var(--c)}
+.al-node .port{position:absolute;top:13px;width:15px;height:15px;border-radius:50%;background:#fff;
+  border:2px solid var(--c);cursor:crosshair;touch-action:none}
+.al-node .port.in{left:-8px}
+.al-node .port.out{right:-8px}
+.al-node .port.out:hover,.al-node .port.in.target{background:var(--c)}
+.al-insp{width:370px;flex:none;display:flex;flex-direction:column;border-left:1px solid var(--paper-3);
+  background:var(--paper);min-height:0}
+.al-tabs{display:flex;border-bottom:1px solid var(--paper-3);background:#fff;flex:none}
+.al-tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:9px 4px;
+  font-size:12.5px;color:var(--muted)}
+.al-tabs button.on{color:var(--text);border-bottom-color:var(--amber);font-weight:600}
+.al-pane{flex:1;overflow-y:auto;padding:14px 16px 32px;font-size:13px;line-height:1.5}
+.al-pane h3{margin:0 0 2px;font-size:16px}
+.al-pane h4{margin:14px 0 3px;font-size:12.5px}
+.al-pane p{margin:0 0 8px}
+.al-muted{color:var(--muted)}
+.al-sysline{font-size:12px;font-weight:600;margin-bottom:10px}
+.al-cycle{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:10px 0 4px}
+.al-cycle div{background:#fff;border:1px solid var(--paper-3);border-radius:7px;padding:7px 4px;
+  text-align:center;font-size:11px;color:var(--muted)}
+.al-cycle b{display:block;color:var(--text);font-size:12px}
+.al-legend{list-style:none;margin:6px 0;padding:0}
+.al-legend li{display:flex;gap:9px;margin:6px 0}
+.al-legend i{width:9px;height:9px;border-radius:3px;background:var(--c);margin-top:5px;flex:none}
+.al-probs{list-style:none;margin:6px 0 10px;padding:0}
+.al-probs li{border-left:3px solid var(--muted);padding:3px 0 3px 9px;margin:4px 0;font-size:12.5px}
+.al-probs li.error{border-left-color:var(--bad)}
+.al-probs li.warning{border-left-color:var(--amber)}
+.al-trace{list-style:none;margin:14px 0 0;padding:0}
+.al-trace li{border-left:3px solid var(--c);padding:4px 0 6px 10px;margin-bottom:5px;font-size:12.5px;
+  word-break:break-word}
+.al-trace li.warn{border-left-color:var(--bad)}
+.al-t{color:var(--muted);font-size:11px;font-family:var(--mono);margin-left:6px}
+.al-answer,.al-code{background:var(--ink);color:#DCE6EC;font-family:var(--mono);font-size:11.5px;
+  line-height:1.55;padding:12px;border-radius:7px;overflow-x:auto;margin:8px 0 0}
+.al-answer{white-space:pre-wrap}
+.al-code{white-space:pre}
+
 #railToggle{display:none}
 
 @media (max-width: 880px){
+  /* agent lab: palette strip, canvas, then the inspector */
+  .al-body{flex-direction:column;overflow-y:auto}
+  .al-pal{width:auto;border-right:0;border-bottom:1px solid var(--paper-3);display:flex;gap:5px;
+    overflow-x:auto;padding:8px}
+  .al-sys,.al-hint{display:none}
+  .al-palitem{width:auto;white-space:nowrap;margin:0;flex:none}
+  .al-stage{flex:none;height:58vh}
+  .al-insp{width:auto;border-left:0;border-top:1px solid var(--paper-3);min-height:50vh}
   #railToggle{
     display:block;position:fixed;left:10px;top:10px;z-index:130;
     width:38px;height:38px;border-radius:10px;border:1px solid var(--paper-3);
@@ -2426,6 +2520,7 @@ body.sizing{user-select:none}
     <button data-page="pageDomains"><i>&#9673;</i>Implicit domains</button>
     <button data-page="pagePaper"><i>&#128196;</i>Paper &rarr; spec</button>
     <button data-page="pageExtend"><i>&#9881;</i>Blocks &amp; recipes</button>
+    <button data-page="pageAgentLab"><i>&#10070;</i>Agent lab</button>
 
     <div class="group">Executions</div>
     <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
@@ -2636,6 +2731,10 @@ body.sizing{user-select:none}
       <div class="runlist" id="agentSide"></div>
       <div class="rundetail" id="agentMain"></div>
     </div>
+  </section>
+
+  <section class="page" id="pageAgentLab">
+    <div id="alMain"></div>
   </section>
 
   <section class="page" id="pageRuns">
@@ -5521,6 +5620,7 @@ const PAGE_SETUP = {
   pageBuild: () => loadProjects(),
   pageRuns: () => refreshRuns(),
   pageAgents: () => refreshAgents(),
+  pageAgentLab: () => renderAgentLab(),
   pageChat: () => refreshChatModels(),
   pageExtend: () => refreshBlocks(),
 };
@@ -12921,6 +13021,643 @@ function drawChart(){
   line("val_loss", "#6FD0E0");
 }
 window.addEventListener("resize", () => { drawChart(); drawMinimap(); });
+
+/* =============================== agent lab ===============================
+
+   Language-model agents built from organs. The canvas is drawn here; what an
+   organ is, the Python it becomes, and what happens when it runs all come from
+   the server (agentlab.py), so a run on this page replays the real events the
+   generated file emitted rather than a story told about them. */
+
+const agentLabState = {
+  cat: null, graph: null, sel: null, tab: "anatomy", trace: [], answer: null,
+  running: false, problems: [], seq: 1, task:
+    "Find the population of Lisbon and estimate how many cafes it could support.",
+  mode: "rehearsal", approvals: "approve", checkTimer: null,
+};
+const AL_W = 180, AL_PORT_Y = 21;
+
+function alEsc(value){
+  return String(value == null ? "" : value).replace(/[&<>"]/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+}
+function alBlock(type){ return agentLabState.cat.blocks.find(b => b.type === type); }
+function alColor(type){ const b = alBlock(type); return `var(--al-${b ? b.system : "senses"})`; }
+function alNode(id){ return agentLabState.graph.nodes.find(n => n.id === id); }
+function alLabel(n){
+  const p = n.params || {};
+  if (n.type === "tool") return p.name || "Tool";
+  if (n.type === "sub_agent") return "Sub-agent " + (p.name || "");
+  const b = alBlock(n.type);
+  return b ? b.name : n.type;
+}
+function alDefaults(type){
+  const out = {}, params = (alBlock(type) || {}).params || {};
+  Object.keys(params).forEach(k => out[k] = params[k].value);
+  return out;
+}
+
+async function renderAgentLab(){
+  const host = $("alMain");
+  if (!agentLabState.cat){
+    host.innerHTML = `<div class="al-wait">loading…</div>`;
+    try{
+      agentLabState.cat = await (await fetch(API + "/api/agentlab/catalog")).json();
+    } catch {
+      host.innerHTML = `<div class="runfail">The server did not answer.</div>`;
+      return;
+    }
+  }
+  if (!$("alCanvas")) alBuildShell();
+  if (!agentLabState.graph){
+    let draft = null;
+    try{ draft = JSON.parse(localStorage.getItem("agentlab-draft") || "null"); } catch {}
+    alSetGraph(draft && draft.nodes ? draft : agentLabState.cat.templates.react);
+  } else alRenderAll();
+  alRefreshDesigns();
+}
+
+function alBuildShell(){
+  const cat = agentLabState.cat;
+  $("alMain").innerHTML = `
+    <div class="al-bar">
+      <input id="alName" spellcheck="false" aria-label="Agent name">
+      <select id="alTemplate" aria-label="Start from a design">
+        <option value="">Start from…</option>
+        ${Object.entries(cat.template_names).map(([k, v]) =>
+          `<option value="${k}">${alEsc(v)}</option>`).join("")}
+      </select>
+      <select id="alOpen" aria-label="Open a saved agent"><option value="">Open saved…</option></select>
+      <span class="spacer"></span>
+      <button class="btn" id="alClear">Clear</button>
+      <button class="btn" id="alSave">Save</button>
+      <button class="btn go" id="alRunTop">Run</button>
+    </div>
+    <div class="al-body">
+      <div class="al-pal" id="alPal"></div>
+      <div class="al-stage" id="alStage">
+        <div class="al-canvas" id="alCanvas"><svg class="al-wires" id="alWires"></svg>
+          <div class="al-empty" id="alEmpty"><b>An empty body</b>
+            Drag an organ from the left, or start from a design above. Connect blocks by dragging
+            from a right-hand port to a left-hand port.</div></div>
+      </div>
+      <div class="al-insp">
+        <div class="al-tabs" role="tablist">
+          <button data-altab="anatomy" class="on">Anatomy</button>
+          <button data-altab="physio">Physiology</button>
+          <button data-altab="code">Python</button>
+        </div>
+        <div class="al-pane" id="alPane"></div>
+      </div>
+    </div>`;
+
+  let pal = "";
+  cat.order.forEach(sys => {
+    pal += `<div class="al-sys"><i style="background:var(--al-${sys})"></i>${alEsc(cat.systems[sys].label)}</div>`;
+    cat.blocks.filter(b => b.system === sys).forEach(b => {
+      pal += `<button class="al-palitem" data-type="${b.type}" style="--c:var(--al-${sys})"
+                title="${alEsc(b.short)}">${alEsc(b.name)}</button>`;
+    });
+  });
+  pal += `<p class="al-hint">Click to add or drag onto the canvas. Select a block or wire and press
+          Delete to remove it.</p>`;
+  $("alPal").innerHTML = pal;
+  $("alPal").querySelectorAll(".al-palitem").forEach(el =>
+    el.addEventListener("pointerdown", ev => alPaletteDrag(ev, el.dataset.type)));
+
+  document.querySelectorAll("[data-altab]").forEach(b =>
+    b.addEventListener("click", () => alTab(b.dataset.altab)));
+  $("alName").addEventListener("input", () => { agentLabState.graph.name = $("alName").value; alDraft(); });
+  $("alTemplate").addEventListener("change", ev => {
+    if (ev.target.value) alSetGraph(agentLabState.cat.templates[ev.target.value]);
+    ev.target.value = "";
+  });
+  $("alOpen").addEventListener("change", async ev => {
+    const name = ev.target.value; ev.target.value = "";
+    if (!name) return;
+    const r = await fetch(API + "/api/agentlab/designs/" + encodeURIComponent(name));
+    if (r.ok) alSetGraph(await r.json());
+  });
+  $("alClear").addEventListener("click", () =>
+    alSetGraph({name: agentLabState.graph.name || "MyAgent", nodes: [], edges: []}));
+  $("alSave").addEventListener("click", alSaveDesign);
+  $("alRunTop").addEventListener("click", () => { alTab("physio"); alRun(); });
+  $("alStage").addEventListener("pointerdown", ev => {
+    if (ev.target.id === "alStage" || ev.target.id === "alCanvas" || ev.target.id === "alWires"){
+      agentLabState.sel = null; alRenderNodes(); alRenderEdges(); alRenderPane();
+    }
+  });
+  document.addEventListener("keydown", ev => {
+    if (state.page !== "pageAgentLab" || !agentLabState.sel) return;
+    if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    ev.preventDefault();
+    alDeleteSel();
+  });
+}
+
+function alSetGraph(graph){
+  const g = JSON.parse(JSON.stringify(graph));
+  g.name = g.name || "MyAgent";
+  g.nodes = g.nodes || []; g.edges = g.edges || [];
+  agentLabState.graph = g;
+  agentLabState.seq = 1 + Math.max(0, ...g.nodes.concat(g.edges)
+    .map(x => parseInt(String(x.id).replace(/\D/g, ""), 10) || 0));
+  agentLabState.sel = null; agentLabState.trace = []; agentLabState.answer = null;
+  alRenderAll(); alDraft();
+}
+
+function alRenderAll(){
+  $("alName").value = agentLabState.graph.name || "";
+  alRenderNodes(); alRenderEdges(); alRenderPane(); alScheduleCheck();
+}
+
+function alDraft(){
+  try{ localStorage.setItem("agentlab-draft", JSON.stringify(agentLabState.graph)); } catch {}
+}
+
+function alAddNode(type, x, y){
+  const n = {id: "n" + (agentLabState.seq++), type, x: Math.round(x), y: Math.round(y),
+             params: alDefaults(type)};
+  agentLabState.graph.nodes.push(n);
+  return n;
+}
+
+function alAddEdge(source, target){
+  const g = agentLabState.graph;
+  if (source === target || g.edges.some(e => e.source === source && e.target === target)) return;
+  g.edges.push({id: "e" + (agentLabState.seq++), source, target});
+}
+
+/* ---------- canvas ---------- */
+
+function alRenderNodes(){
+  const canvas = $("alCanvas");
+  canvas.querySelectorAll(".al-node").forEach(el => el.remove());
+  $("alEmpty").style.display = agentLabState.graph.nodes.length ? "none" : "block";
+  const sel = agentLabState.sel;
+  agentLabState.graph.nodes.forEach(n => {
+    const b = alBlock(n.type);
+    if (!b) return;
+    const el = document.createElement("div");
+    el.className = "al-node" + (sel && sel.kind === "node" && sel.id === n.id ? " sel" : "") +
+      (agentLabState.problems.some(p => p.node === n.id && p.level !== "info") ? " warn" : "");
+    el.dataset.id = n.id;
+    el.style.cssText = `left:${n.x}px;top:${n.y}px;--c:${alColor(n.type)}`;
+    el.tabIndex = 0;
+    el.innerHTML = `<div class="hd"><i></i><b>${alEsc(alLabel(n))}</b></div>
+      <div class="bd">${alEsc(b.short)}</div>
+      ${b.no_in ? "" : `<span class="port in" data-port="in"></span>`}
+      ${b.no_out ? "" : `<span class="port out" data-port="out" title="Drag to connect"></span>`}`;
+    el.addEventListener("pointerdown", ev => alNodeDown(ev, n, el));
+    el.addEventListener("keydown", ev => { if (ev.key === "Enter") alSelect("node", n.id); });
+    canvas.appendChild(el);
+  });
+}
+
+function alEdgePath(a, b){
+  const sx = a.x + AL_W, sy = a.y + AL_PORT_Y, tx = b.x, ty = b.y + AL_PORT_Y;
+  if (tx > sx + 30){
+    const dx = Math.max(50, (tx - sx) / 2);
+    return {d: `M${sx},${sy} C${sx + dx},${sy} ${tx - dx},${ty} ${tx},${ty}`, back: false};
+  }
+  const low = Math.max(sy, ty) + 120;
+  return {d: `M${sx},${sy} C${sx + 140},${sy} ${sx + 140},${low} ${(sx + tx) / 2},${low} ` +
+             `S${tx - 140},${ty} ${tx},${ty}`, back: true};
+}
+
+function alRenderEdges(){
+  const sel = agentLabState.sel;
+  let svg = "";
+  agentLabState.graph.edges.forEach(e => {
+    const a = alNode(e.source), b = alNode(e.target);
+    if (!a || !b) return;
+    const p = alEdgePath(a, b), on = sel && sel.kind === "edge" && sel.id === e.id;
+    svg += `<path class="al-wire${p.back ? " back" : ""}${on ? " sel" : ""}" id="alw_${e.id}" d="${p.d}"/>` +
+           `<path class="al-hit" data-edge="${e.id}" d="${p.d}"/>`;
+  });
+  svg += `<path class="al-wire temp" id="alTemp" d=""/>`;
+  $("alWires").innerHTML = svg;
+  $("alWires").querySelectorAll(".al-hit").forEach(h => h.addEventListener("pointerdown", ev => {
+    ev.stopPropagation(); alSelect("edge", h.dataset.edge);
+  }));
+}
+
+function alNodeDown(ev, n, el){
+  const port = ev.target.dataset.port;
+  if (port === "out"){ ev.stopPropagation(); alStartWire(ev, n); return; }
+  if (port === "in") return;
+  ev.preventDefault();
+  alSelect("node", n.id, false);
+  const sx = ev.clientX, sy = ev.clientY, ox = n.x, oy = n.y;
+  const move = e => {
+    n.x = Math.max(0, ox + e.clientX - sx); n.y = Math.max(0, oy + e.clientY - sy);
+    el.style.left = n.x + "px"; el.style.top = n.y + "px";
+    alRenderEdges();
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    alDraft();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+function alStartWire(ev, n){
+  ev.preventDefault();
+  const temp = $("alTemp"), sx = n.x + AL_W, sy = n.y + AL_PORT_Y;
+  let over = null;
+  const move = e => {
+    const r = $("alCanvas").getBoundingClientRect(), tx = e.clientX - r.left, ty = e.clientY - r.top;
+    temp.setAttribute("d", `M${sx},${sy} C${sx + 80},${sy} ${tx - 80},${ty} ${tx},${ty}`);
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    if (over) over.classList.remove("target");
+    over = hit && hit.dataset && hit.dataset.port === "in" ? hit : null;
+    if (over) over.classList.add("target");
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    temp.setAttribute("d", "");
+    if (over){
+      alAddEdge(n.id, over.closest(".al-node").dataset.id);
+      alRenderEdges(); alDraft(); alScheduleCheck();
+      if (agentLabState.sel) alRenderPane();
+    }
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+function alPaletteDrag(ev, type){
+  ev.preventDefault();
+  const sx = ev.clientX, sy = ev.clientY;
+  let ghost = null, moved = false;
+  const move = e => {
+    if (!moved && Math.hypot(e.clientX - sx, e.clientY - sy) > 6){
+      moved = true;
+      ghost = document.createElement("div");
+      ghost.className = "al-node al-ghost";
+      ghost.style.setProperty("--c", alColor(type));
+      ghost.innerHTML = `<div class="hd"><i></i><b>${alEsc(alBlock(type).name)}</b></div>`;
+      document.body.appendChild(ghost);
+    }
+    if (ghost){ ghost.style.left = (e.clientX - 90) + "px"; ghost.style.top = (e.clientY - 18) + "px"; }
+  };
+  const up = e => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    if (ghost) ghost.remove();
+    const stage = $("alStage"), r = $("alCanvas").getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    let x, y;
+    if (moved){
+      if (e.clientX < sr.left || e.clientX > sr.right || e.clientY < sr.top || e.clientY > sr.bottom) return;
+      x = e.clientX - r.left - 90; y = e.clientY - r.top - 18;
+    } else {
+      const k = agentLabState.graph.nodes.length % 5;
+      x = stage.scrollLeft + 40 + k * 30; y = stage.scrollTop + 40 + k * 30;
+    }
+    const n = alAddNode(type, Math.max(10, x), Math.max(10, y));
+    agentLabState.sel = {kind: "node", id: n.id};
+    alRenderNodes(); alRenderEdges(); alRenderPane(); alDraft(); alScheduleCheck();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+function alSelect(kind, id, toAnatomy = true){
+  agentLabState.sel = {kind, id};
+  document.querySelectorAll("#alCanvas .al-node").forEach(el =>
+    el.classList.toggle("sel", kind === "node" && el.dataset.id === id));
+  alRenderEdges();
+  if (toAnatomy && agentLabState.tab !== "anatomy") alTab("anatomy");
+  else if (agentLabState.tab === "anatomy") alRenderPane();
+}
+
+function alDeleteSel(){
+  const g = agentLabState.graph, sel = agentLabState.sel;
+  if (!sel) return;
+  if (sel.kind === "node"){
+    g.nodes = g.nodes.filter(n => n.id !== sel.id);
+    g.edges = g.edges.filter(e => e.source !== sel.id && e.target !== sel.id);
+  } else g.edges = g.edges.filter(e => e.id !== sel.id);
+  agentLabState.sel = null;
+  alRenderAll(); alDraft();
+}
+
+function alScheduleCheck(){
+  clearTimeout(agentLabState.checkTimer);
+  agentLabState.checkTimer = setTimeout(async () => {
+    try{
+      const r = await fetch(API + "/api/agentlab/check", {method: "POST",
+        headers: {"content-type": "application/json"}, body: JSON.stringify({graph: agentLabState.graph})});
+      agentLabState.problems = (await r.json()).problems || [];
+    } catch { return; }
+    alRenderNodes();
+    if (agentLabState.tab === "anatomy" && !agentLabState.sel) alRenderPane();
+  }, 250);
+}
+
+/* ---------- inspector ---------- */
+
+function alTab(tab){
+  agentLabState.tab = tab;
+  document.querySelectorAll("[data-altab]").forEach(b => b.classList.toggle("on", b.dataset.altab === tab));
+  alRenderPane();
+}
+
+function alRenderPane(){
+  if (agentLabState.tab === "physio") return alRenderPhysio();
+  if (agentLabState.tab === "code") return alRenderCode();
+  alRenderAnatomy();
+}
+
+function alRenderAnatomy(){
+  const pane = $("alPane"), sel = agentLabState.sel, cat = agentLabState.cat;
+  if (sel && sel.kind === "edge"){
+    const e = agentLabState.graph.edges.find(x => x.id === sel.id);
+    const a = e && alNode(e.source), b = e && alNode(e.target);
+    if (a && b){
+      const back = alEdgePath(a, b).back;
+      pane.innerHTML = `<h3>Wire</h3><p class="al-muted">${alEsc(alLabel(a))} to ${alEsc(alLabel(b))}</p>
+        <p>${back
+          ? "A dashed wire runs backward. That is feedback: a later stage's output returns to an earlier one, which is what turns a pipeline into a loop."
+          : "The signal flows forward along this wire. The output of one stage becomes part of the input to the next."}</p>
+        <button class="btn danger" id="alDel">Delete wire</button>`;
+      $("alDel").onclick = alDeleteSel;
+      return;
+    }
+  }
+  const n = sel && sel.kind === "node" && alNode(sel.id);
+  if (!n){
+    const probs = agentLabState.problems;
+    pane.innerHTML = `<h3>What an agent is</h3>
+      <p>A language model running in a loop, with tools it can ask to use. The model only ever predicts
+      text. The program around it turns some of that text into actions and feeds the results back.</p>
+      <div class="al-cycle"><div><b>Perceive</b>read context</div><div><b>Think</b>model call</div>
+        <div><b>Act</b>run a tool</div><div><b>Observe</b>append result</div></div>
+      <p class="al-muted">The cycle repeats until the model answers in plain text or the step budget runs out.</p>
+      <h4>Body systems</h4>
+      <ul class="al-legend">${cat.order.map(s => `<li style="--c:var(--al-${s})"><i></i>
+        <span><b>${alEsc(cat.systems[s].label)}.</b> ${alEsc(cat.systems[s].blurb)}</span></li>`).join("")}</ul>
+      <h4>This design</h4>
+      ${probs.length ? `<ul class="al-probs">${probs.map(p => `<li class="${p.level}">${alEsc(p.message)}</li>`).join("")}</ul>`
+                     : `<p class="al-muted">Nothing to fix. Open Physiology and run it.</p>`}`;
+    return;
+  }
+  const b = alBlock(n.type), sys = cat.systems[b.system];
+  let fields = "";
+  Object.entries(b.params || {}).forEach(([k, d]) => {
+    const v = n.params[k] == null ? d.value : n.params[k];
+    fields += d.kind === "area"
+      ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
+           <textarea id="alf_${k}" data-k="${k}">${alEsc(v)}</textarea></div>`
+      : `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
+           <input id="alf_${k}" data-k="${k}" type="${d.kind === "number" ? "number" : "text"}"
+             ${d.kind === "number" ? 'step="any"' : ""} value="${alEsc(v)}"></div>`;
+  });
+  const g = agentLabState.graph;
+  const ins = g.edges.filter(e => e.target === n.id).map(e => alEsc(alLabel(alNode(e.source))));
+  const outs = g.edges.filter(e => e.source === n.id).map(e => alEsc(alLabel(alNode(e.target))));
+  const mine = agentLabState.problems.filter(p => p.node === n.id);
+  pane.innerHTML = `<h3>${alEsc(alLabel(n))}</h3>
+    <div class="al-sysline" style="color:var(--al-${b.system})">${alEsc(sys.label)}</div>
+    ${mine.length ? `<ul class="al-probs">${mine.map(p => `<li class="${p.level}">${alEsc(p.message)}</li>`).join("")}</ul>` : ""}
+    <p>${alEsc(b.anatomy)}</p>
+    <h4>What it is made of</h4><p>${alEsc(b.inside)}</p>
+    <h4>How it behaves at runtime</h4><p>${alEsc(b.physiology)}</p>
+    <h4>How it fails</h4><p>${alEsc(b.failure)}</p>
+    <h4>Wiring</h4><p class="al-muted">Receives from: ${ins.join(", ") || "nothing yet"}<br>
+      Sends to: ${outs.join(", ") || "nothing yet"}</p>
+    ${fields ? `<h4>Settings</h4>${fields}` : ""}
+    <button class="btn danger" id="alDel">Delete block</button>`;
+  pane.querySelectorAll("[data-k]").forEach(inp => inp.addEventListener("input", () => {
+    const k = inp.dataset.k;
+    n.params[k] = b.params[k].kind === "number" ? Number(inp.value) : inp.value;
+    const title = document.querySelector(`#alCanvas .al-node[data-id="${n.id}"] .hd b`);
+    if (title) title.textContent = alLabel(n);
+    alDraft(); alScheduleCheck();
+  }));
+  $("alDel").onclick = alDeleteSel;
+}
+
+function alRenderPhysio(){
+  const S = agentLabState, live = S.cat.live_available;
+  const hasHuman = S.graph.nodes.some(n => n.type === "human");
+  $("alPane").innerHTML = `<h3>Run it</h3>
+    <p class="al-muted">The server generates the Python on the Python tab, executes it, and records what
+    each organ reported. Then the signal is replayed across the canvas.</p>
+    <div class="field"><label for="alTask">Task</label><textarea id="alTask">${alEsc(S.task)}</textarea></div>
+    <div class="field"><label for="alMode">Model</label>
+      <select id="alMode">
+        <option value="rehearsal"${S.mode === "rehearsal" ? " selected" : ""}>Rehearsal: a scripted stand-in, free</option>
+        <option value="live"${S.mode === "live" ? " selected" : ""}${live ? "" : " disabled"}>Live: the real model</option>
+      </select>
+      <div class="help">${live ? "Live runs call the Messages API and cost tokens."
+        : "Live runs need ANTHROPIC_API_KEY in the server's environment."} Tools run for real either way.</div></div>
+    ${hasHuman ? `<div class="field"><label for="alAppr">When a tool needs approval</label>
+      <select id="alAppr"><option value="approve"${S.approvals === "approve" ? " selected" : ""}>Approve it</option>
+        <option value="deny"${S.approvals === "deny" ? " selected" : ""}>Deny it</option></select></div>` : ""}
+    <button class="btn go" id="alRunBtn"${S.running ? " disabled" : ""}>${S.running ? "Running…" : "Run the agent"}</button>
+    <ol class="al-trace" id="alTrace">${S.trace.map(alTraceRow).join("")}</ol>
+    ${S.answer != null ? `<h4>Final answer</h4><pre class="al-answer">${alEsc(S.answer)}</pre>` : ""}`;
+  $("alTask").addEventListener("input", e => S.task = e.target.value);
+  $("alMode").addEventListener("change", e => S.mode = e.target.value);
+  if ($("alAppr")) $("alAppr").addEventListener("change", e => S.approvals = e.target.value);
+  $("alRunBtn").addEventListener("click", alRun);
+}
+
+function alTraceRow(t){
+  return `<li class="${t.warn ? "warn" : ""}" style="--c:${t.color}"><b>${alEsc(t.who)}</b>
+    ${t.t != null ? `<span class="al-t">${t.t.toFixed(2)}s</span>` : ""}<br>${alEsc(t.msg)}</li>`;
+}
+
+async function alRenderCode(){
+  const pane = $("alPane");
+  pane.innerHTML = `<div class="al-wait">writing…</div>`;
+  let d;
+  try{
+    const r = await fetch(API + "/api/agentlab/codegen", {method: "POST",
+      headers: {"content-type": "application/json"}, body: JSON.stringify({graph: agentLabState.graph})});
+    d = await r.json();
+  } catch {
+    pane.innerHTML = `<div class="runfail">The server did not answer.</div>`;
+    return;
+  }
+  if (agentLabState.tab !== "code") return;
+  pane.innerHTML = `<h3>Your agent in Python</h3>
+    <p class="al-muted">Standard library only. This is the exact file a run executes, so every organ
+    on the canvas is a named function or constant here.</p>
+    <div class="row"><button class="btn" id="alCopy">Copy</button>
+      <button class="btn" id="alDownload">Download agent.py</button><span class="al-muted" id="alCopied"></span></div>
+    <pre class="al-code" tabindex="0">${alEsc(d.source)}</pre>`;
+  $("alCopy").onclick = async () => {
+    try{ await navigator.clipboard.writeText(d.source); $("alCopied").textContent = "Copied."; }
+    catch { $("alCopied").textContent = "The browser blocked the clipboard; select the code instead."; }
+  };
+  $("alDownload").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([d.source], {type: "text/x-python"}));
+    a.download = (agentLabState.graph.name || "agent").replace(/[^\w-]+/g, "_") + ".py";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+}
+
+/* ---------- running and replaying ---------- */
+
+async function alRun(){
+  const S = agentLabState;
+  if (S.running) return;
+  S.running = true; S.trace = []; S.answer = null;
+  if (S.tab !== "physio") alTab("physio"); else alRenderPhysio();
+  let d;
+  try{
+    const r = await fetch(API + "/api/agentlab/run", {method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({graph: S.graph, task: S.task, mode: S.mode, approvals: S.approvals})});
+    d = await r.json();
+    if (!r.ok){
+      S.trace.push({who: "Did not start", msg: (d.detail && d.detail.message) || "The run was refused.",
+                    color: "var(--al-immune)", warn: true});
+      d = null;
+    }
+  } catch {
+    S.trace.push({who: "Did not start", msg: "The server did not answer.", color: "var(--al-immune)", warn: true});
+  }
+  if (d && d.problems && d.problems.length){
+    d.problems.forEach(p => S.trace.push({who: "Fix first", msg: p.message, color: "var(--al-immune)", warn: true}));
+  } else if (d){
+    await alReplay(d);
+    S.answer = d.answer;
+  }
+  S.running = false;
+  if (S.tab === "physio") alRenderPhysio();
+}
+
+function alEventNode(ev, map){
+  const g = agentLabState.graph, first = t => g.nodes.find(n => n.type === t);
+  const agentNode = name => map.agents && map.agents[name] ? alNode(map.agents[name]) : null;
+  switch (ev.event){
+    case "input": return first("user_input");
+    case "guard_in": return first("guard_in");
+    case "recall": return first("retriever") || first("long_mem");
+    case "plan": return first("planner");
+    case "model": return ev.agent === "main" ? first("llm") : agentNode(ev.agent);
+    case "dispatch": return ev.agent === "main" ? first("router") : agentNode(ev.agent);
+    case "approval": return first("human");
+    case "delegate": return agentNode(ev.agent);
+    case "tool_result": return map.tools && map.tools[ev.tool] ? alNode(map.tools[ev.tool]) : null;
+    case "critique": return first("reflector");
+    case "remember": return first("long_mem");
+    case "guard_out": return first("guard_out");
+    case "final": return first("output");
+    case "budget": return first("loop");
+    default: return null;
+  }
+}
+
+function alEventText(ev){
+  const inside = ev.agent && ev.agent !== "main" ? ` (inside ${ev.agent})` : "";
+  switch (ev.event){
+    case "input": return `Task arrives: “${ev.task}”`;
+    case "guard_in": return ev.passed ? "Screened the task; nothing blocked." : "Blocked the task as likely prompt injection.";
+    case "recall": return `Pulled ${ev.count} matching note${ev.count === 1 ? "" : "s"} into context.`;
+    case "plan": return `Wrote a plan: ${ev.preview}`;
+    case "model": return ev.wants_tools
+      ? `Model call ${ev.step}${inside}: it asks for a tool (stop_reason tool_use).`
+      : `Model call ${ev.step}${inside}: it answers in text (stop_reason end_turn).`;
+    case "dispatch": return `Router dispatches ${ev.tool}${inside}.`;
+    case "approval": return ev.approved ? `${ev.tool} approved.` : `${ev.tool} denied; the model is told so.`;
+    case "delegate": return `Handed the sub-task to ${ev.agent}, which runs its own loop.`;
+    case "tool_result": return `${ev.tool} returned: ${ev.preview}`;
+    case "critique": return ev.passed ? "Critic passed the answer." : `Critic sent it back: ${ev.notes}`;
+    case "remember": return "Saved this exchange to long-term memory.";
+    case "guard_out": return ev.changed ? "Redacted personal data from the answer." : "Checked the answer; nothing to redact.";
+    case "final": return `Final answer leaves: ${ev.preview}`;
+    case "budget": return `Step budget of ${ev.limit} spent without a final answer.`;
+    case "error": return ev.message;
+    default: return ev.event;
+  }
+}
+
+function alSleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+function alPulse(edge, color, reverse){
+  return new Promise(done => {
+    const path = document.getElementById("alw_" + edge.id);
+    if (!path) return done();
+    const len = path.getTotalLength();
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("r", 6); dot.setAttribute("class", "al-pulse");
+    dot.style.fill = color;
+    $("alWires").appendChild(dot);
+    const quick = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dur = quick ? 100 : 550, t0 = performance.now();
+    (function step(t){
+      const k = Math.min(1, (t - t0) / dur), pt = path.getPointAtLength(len * (reverse ? 1 - k : k));
+      dot.setAttribute("cx", pt.x); dot.setAttribute("cy", pt.y);
+      if (k < 1) requestAnimationFrame(step); else { dot.remove(); done(); }
+    })(t0);
+  });
+}
+
+async function alFire(node){
+  const el = document.querySelector(`#alCanvas .al-node[data-id="${node.id}"]`);
+  if (!el) return;
+  el.classList.add("firing");
+  el.scrollIntoView({block: "nearest", inline: "nearest"});
+  await alSleep(380);
+  el.classList.remove("firing");
+}
+
+async function alReplay(d){
+  const S = agentLabState, g = S.graph;
+  let prev = null;
+  for (const ev of d.events){
+    const node = alEventNode(ev, d.nodemap || {});
+    if (node && prev && node.id !== prev.id){
+      const fwd = g.edges.find(e => e.source === prev.id && e.target === node.id);
+      const rev = !fwd && g.edges.find(e => e.source === node.id && e.target === prev.id);
+      if (fwd || rev) await alPulse(fwd || rev, alColor(prev.type), !fwd);
+    }
+    if (node && node.type === "llm"){
+      const feeds = g.edges.filter(e => e.target === node.id &&
+        ["system_prompt", "short_mem", "loop"].includes((alNode(e.source) || {}).type));
+      await Promise.all(feeds.map(e => alPulse(e, alColor(alNode(e.source).type))));
+    }
+    S.trace.push({who: node ? alLabel(node) : (ev.event === "error" ? "Run failed" : ev.event),
+                  msg: alEventText(ev), t: ev.t, color: node ? alColor(node.type) : "var(--al-immune)",
+                  warn: ev.event === "error" || ev.event === "budget" ||
+                        (ev.event === "approval" && !ev.approved)});
+    const list = $("alTrace");
+    if (list){ list.insertAdjacentHTML("beforeend", alTraceRow(S.trace[S.trace.length - 1]));
+               $("alPane").scrollTop = $("alPane").scrollHeight; }
+    if (node){ await alFire(node); prev = node; }
+  }
+}
+
+/* ---------- saving ---------- */
+
+async function alSaveDesign(){
+  const btn = $("alSave");
+  try{
+    const r = await fetch(API + "/api/agentlab/designs", {method: "POST",
+      headers: {"content-type": "application/json"}, body: JSON.stringify({graph: agentLabState.graph})});
+    btn.textContent = r.ok ? "Saved" : "Not saved";
+    if (r.ok) alRefreshDesigns();
+  } catch { btn.textContent = "Not saved"; }
+  setTimeout(() => { btn.textContent = "Save"; }, 1400);
+}
+
+async function alRefreshDesigns(){
+  try{
+    const d = await (await fetch(API + "/api/agentlab/designs")).json();
+    $("alOpen").innerHTML = `<option value="">Open saved…</option>` +
+      (d.designs || []).map(n => `<option value="${alEsc(n)}">${alEsc(n)}</option>`).join("");
+  } catch {}
+}
 
 boot();
 </script>

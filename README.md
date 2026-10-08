@@ -270,6 +270,19 @@ Freezing is a count of trailing stages left trainable. Zero trains only your
 head; raise it once the head has settled. A non-RGB Input is handled by averaging
 the pretrained stem's kernels across the colour axis.
 
+## Agent lab
+
+The same idea applied to language-model agents. **Agent lab** on the rail
+gives a second canvas whose blocks are an agent's organs: the model, its
+system prompt, memory, tools, the router and loop that keep it running, and
+the guardrails around it. Select a block to read what it is made of, how it
+behaves and how it fails.
+
+Run executes the Python the Python tab shows and replays what each block
+reported across the canvas. Rehearsal runs need no key; live runs need
+`ANTHROPIC_API_KEY` in the server's environment, and `AGENTLAB_MODEL` picks
+the model. The downloaded file uses only the standard library.
+
 ## Saved designs
 
 Save writes a new version each time rather than overwriting. The selector beside

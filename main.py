@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, Streamin
 from pydantic import BaseModel
 
 import agents
+import agentlab
 import advisor
 import assistant
 import auth
@@ -265,6 +266,66 @@ def agent_trial_graph(agent_id: str, index: int):
     if not 0 <= index < len(trials):
         raise HTTPException(404, detail={"message": "No such trial."})
     return trials[index]["graph"]
+
+
+# ---------------------------- agent lab ----------------------------
+# Language-model agents built from parts. Separate from the studies above,
+# whose "agents" train networks rather than call a model.
+
+class AgentLabGraph(BaseModel):
+    graph: Dict[str, Any]
+
+
+class AgentLabRun(BaseModel):
+    graph: Dict[str, Any]
+    task: str
+    mode: str = "rehearsal"
+    approvals: str = "approve"
+
+
+@app.get("/api/agentlab/catalog")
+def agentlab_catalog():
+    return agentlab.catalog()
+
+
+@app.post("/api/agentlab/check")
+def agentlab_check(body: AgentLabGraph):
+    return {"problems": agentlab.validate(body.graph)}
+
+
+@app.post("/api/agentlab/codegen")
+def agentlab_codegen(body: AgentLabGraph):
+    built = agentlab.codegen(body.graph)
+    return {**built, "problems": agentlab.validate(body.graph)}
+
+
+@app.post("/api/agentlab/run")
+def agentlab_run(body: AgentLabRun):
+    if not body.task.strip():
+        raise HTTPException(400, detail={"message": "Give the agent a task to work on."})
+    try:
+        return agentlab.run(body.graph, body.task, body.mode, body.approvals,
+                            memory_dir=auth.sub("agentlab"))
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/agentlab/designs")
+def agentlab_designs():
+    return {"designs": agentlab.listing()}
+
+
+@app.post("/api/agentlab/designs")
+def agentlab_save(body: AgentLabGraph):
+    return agentlab.save(body.graph)
+
+
+@app.get("/api/agentlab/designs/{name}")
+def agentlab_load(name: str):
+    try:
+        return agentlab.load(name)
+    except KeyError:
+        raise HTTPException(404, detail={"message": f"No saved agent called {name}."})
 
 
 class AssistantPayload(BaseModel):

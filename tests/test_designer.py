@@ -7452,6 +7452,78 @@ def _():
     assert not missing, f"PAGE_SETUP calls undefined functions: {missing}"
 
 
+# --------------------------------------------------------------------------
+# agent lab: language-model agents built from organs
+# --------------------------------------------------------------------------
+
+import agentlab  # noqa: E402
+
+
+@check("every agent-lab design generates Python that compiles")
+def _():
+    for key in agentlab.TEMPLATES:
+        source = agentlab.codegen(agentlab.template(key))["source"]
+        compile(source, f"<{key}>", "exec")
+
+
+@check("a rehearsal run executes the generated file and reports each organ")
+def _():
+    import tempfile
+    for key in agentlab.TEMPLATES:
+        result = agentlab.run(agentlab.template(key), "Estimate the cafes Lisbon can support.",
+                              memory_dir=tempfile.mkdtemp())
+        events = [e["event"] for e in result["events"]]
+        assert result["ok"], f"{key}: {result.get('error')}"
+        assert events[0] == "input" and events[-1] == "final", f"{key} ran {events}"
+        assert "model" in events, f"{key} never called the model"
+
+
+@check("only tools wired from the router are given to the model")
+def _():
+    g = agentlab.template("react")
+    tool = next(n for n in g["nodes"] if n["type"] == "tool")
+    g["edges"] = [e for e in g["edges"] if e["target"] != tool["id"]]
+    built = agentlab.codegen(g)
+    assert "calculator" not in built["nodemap"]["tools"]
+    assert any("not wired from the router" in p["message"] for p in agentlab.validate(g))
+
+
+@check("a denied approval reaches the model as the tool's result")
+def _():
+    result = agentlab.run(agentlab.template("supervisor"), "Write a note.", approvals="deny")
+    denied = [e for e in result["events"] if e["event"] == "approval"]
+    assert denied and not denied[0]["approved"]
+    after = result["events"][result["events"].index(denied[0]) + 1]
+    assert after["event"] == "tool_result" and "declined" in after["preview"]
+
+
+@check("text typed into an agent's settings cannot break out of the generated file")
+def _():
+    g = agentlab.template("react")
+    for n in g["nodes"]:
+        if n["type"] == "system_prompt":
+            n["params"]["text"] = 'ends with a quote" and \\ a backslash """ and more"'
+        if n["type"] == "tool":
+            n["params"]["name"] = "import os; os.system('x')"
+            n["params"]["description"] = '"""\nraise SystemExit\n"""'
+    compile(agentlab.codegen(g)["source"], "<hostile>", "exec")
+    assert agentlab.run(g, "hello")["ok"]
+
+
+@check("an agent design with no model is refused, not run")
+def _():
+    g = agentlab.template("rag")
+    g["nodes"] = [n for n in g["nodes"] if n["type"] != "llm"]
+    result = agentlab.run(g, "anything")
+    assert not result["ok"] and result["problems"]
+
+
+@check("the agent lab page is on the rail and wired to its loader")
+def _():
+    assert 'data-page="pageAgentLab"' in PAGE and 'id="pageAgentLab"' in PAGE
+    assert "pageAgentLab: () => renderAgentLab()" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
