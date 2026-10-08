@@ -393,10 +393,69 @@ class AgentLabFork(BaseModel):
     graph: Optional[Dict[str, Any]] = None      # the design on the canvas, to continue with instead
 
 
+class AgentLabStart(BaseModel):
+    graph: Dict[str, Any]
+    task: str
+    mode: str = "rehearsal"
+    approvals: str = "ask"                 # ask: wait for a person; approve or deny: decide for them
+    thread: Optional[str] = None
+
+
+class AgentLabAnswer(BaseModel):
+    approved: bool
+
+
+@app.post("/api/agentlab/runs")
+def agentlab_run_start(body: AgentLabStart):
+    """Start a durable run in the background; follow it with /live."""
+    try:
+        return agentlab.start_run(body.graph, body.task, body.mode, body.approvals,
+                                  memory_dir=auth.sub("agentlab"), thread=body.thread)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/agentlab/runs")
+def agentlab_runs_unfinished():
+    return {"runs": agentlab.unfinished_runs()}
+
+
+@app.get("/api/agentlab/runs/{run_id}/live")
+def agentlab_run_live(run_id: str, since: int = 0):
+    try:
+        return agentlab.run_view(run_id, since)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+
+
+def _run_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/agentlab/runs/{run_id}/answer")
+def agentlab_run_answer(run_id: str, body: AgentLabAnswer):
+    return _run_action(agentlab.answer_run, run_id, body.approved)
+
+
+@app.post("/api/agentlab/runs/{run_id}/stop")
+def agentlab_run_stop(run_id: str):
+    return _run_action(agentlab.stop_run, run_id)
+
+
+@app.post("/api/agentlab/runs/{run_id}/resume")
+def agentlab_run_resume(run_id: str):
+    return _run_action(agentlab.resume_run, run_id, auth.sub("agentlab"))
+
+
 @app.get("/api/agentlab/runs/{run_id}")
 def agentlab_run_read(run_id: str):
     try:
-        return agentlab.load_run(run_id)
+        return agentlab._record(run_id)
     except KeyError:
         raise HTTPException(404, detail={"message": "No such run; only the newest 200 are kept."})
 

@@ -24,6 +24,7 @@ import json
 import math
 import os
 import re
+import threading
 import time
 import uuid
 from collections import deque
@@ -2439,22 +2440,26 @@ class Rehearsal:
 
 
 def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None,
-             model_state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+             model_state: Optional[Dict[str, Any]] = None, ask: Optional[Callable] = None,
+             after_step: Optional[Callable] = None, carry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Load the generated file and wire the lab into it: events, measurement, approvals, the model."""
     if mode == "live" and uses_provider(graph, "anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
         raise ValueError("A live run needs ANTHROPIC_API_KEY in the server's environment, or LLM cores set to "
                          "an OpenAI-compatible server such as a local Ollama. Rehearsal runs need neither.")
     if mode not in ("live", "rehearsal"):
         raise ValueError(f"Unknown mode {mode!r}.")
+    if approvals not in ("approve", "deny", "ask") or (approvals == "ask" and ask is None):
+        raise ValueError("Approvals are approve, deny, or ask — and asking needs someone to ask.")
     built = codegen(graph, "python")
-    events: List[Dict[str, Any]] = []
-    started = time.time()
+    # a resumed run continues the same lists, and its clock, where the last segment stopped
+    events: List[Dict[str, Any]] = carry["events"] if carry else []
+    started = time.time() - (events[-1]["t"] if events else 0.0)
 
     def emit(event, **data):
         events.append({"event": event, "t": round(time.time() - started, 3), **data})
 
     def approve(name, args, gate):
-        ok = approvals == "approve"
+        ok = bool(ask(name, args, gate)) if approvals == "ask" else approvals == "approve"
         emit("approval", node=gate, tool=name, approved=ok)
         return ok
 
@@ -2467,7 +2472,7 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
         space["call_model"] = rehearsal
 
     # Measure every model call, and pin each measurement to the event the call produced.
-    calls: List[Dict[str, Any]] = []
+    calls: List[Dict[str, Any]] = carry["calls"] if carry else []
     model = space["call_model"]
 
     # Parallel branches call the model from several threads at once, so a measurement is
@@ -2510,16 +2515,24 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
     if "MEMORY_DIR" in space:
         space["MEMORY_DIR"] = memory_dir
 
-    checkpoints: List[Dict[str, Any]] = []
+    checkpoints: List[Dict[str, Any]] = carry["checkpoints"] if carry else []
 
     def on_step(block, state, nxt):
         """A checkpoint: the whole state after a block, and which block runs next."""
         checkpoints.append({"i": len(checkpoints), "block": block, "next": nxt, "events": len(events),
                             "state": json.loads(json.dumps(state)),
                             "model": rehearsal.snapshot() if rehearsal else None})
+        if after_step:
+            after_step()
 
     return {"space": space, "events": events, "calls": calls, "emit": emit, "started": started,
             "built": built, "checkpoints": checkpoints, "on_step": on_step}
+
+
+def _close_servers(ctx) -> None:
+    for value in list(ctx["space"].values()):          # stop any MCP servers this run started
+        if type(value).__name__ == "MCPServer":
+            value.close()
 
 
 def _drive(ctx, start) -> Dict[str, Any]:
@@ -2529,9 +2542,7 @@ def _drive(ctx, start) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — a failed run is a result to show, not a crash
         error = f"{type(exc).__name__}: {exc}"
         ctx["emit"]("error", message=error)
-    for value in list(ctx["space"].values()):          # stop any MCP servers this run started
-        if type(value).__name__ == "MCPServer":
-            value.close()
+    _close_servers(ctx)
     return {"ok": error is None, "answer": answer, "error": error, "events": ctx["events"],
             "nodemap": ctx["built"]["nodemap"], "seconds": round(time.time() - ctx["started"], 2),
             "checkpoints": ctx["checkpoints"]}
@@ -3422,6 +3433,251 @@ def load(name: str) -> Dict[str, Any]:
     if not path.exists():
         raise KeyError(name)
     return json.loads(path.read_text())
+
+
+
+# --------------------------------------------------------------------------
+# durable runs: written as they go, paused for a person, resumed after a crash
+# --------------------------------------------------------------------------
+# LangGraph's promise, kept by the same checkpoints the Timeline already uses.
+# A run started from the page executes in the background and its record is
+# rewritten after every checkpoint, so whatever happens to the server, the run
+# is on disk up to its last finished block. Approvals set to "ask" wait for a
+# person — minutes or days — with the waiting request in the record. A run
+# whose server went away while it was running or waiting reads back as
+# interrupted, and resuming starts the generated file's resume() from its last
+# checkpoint: a block that was half done when it stopped runs again from its
+# start, and anything it had already done outside the state (a tool's side
+# effect) may happen twice.
+
+class StopRun(BaseException):
+    """Raised inside a run when a person stops it. BaseException, so a tool's own
+    `except Exception` cannot swallow it."""
+
+
+class Job:
+    def __init__(self, record: Dict[str, Any]):
+        self.record = record
+        self.answered = threading.Event()
+        self.decision: Optional[bool] = None
+        self.stop = threading.Event()
+        self.abandoned = False      # set by tests to stand for a crash: nothing more gets written
+
+    def write(self) -> None:
+        if not self.abandoned:
+            write_record(self.record)
+
+
+_JOBS: Dict[str, Job] = {}
+_JOBS_LOCK = threading.Lock()
+LIVE_STATUSES = ("running", "waiting")
+
+
+def write_record(record: Dict[str, Any]) -> None:
+    """Replace the run's file in one step, so a crash mid-write cannot leave half a record."""
+    path = _runs_dir() / f"{record['id']}.json"
+    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+    tmp.write_text(json.dumps(record))
+    os.replace(tmp, path)
+
+
+def _prune_runs() -> None:
+    kept = sorted(_runs_dir().glob("*.json"), key=lambda p: p.stat().st_mtime)
+    for old in kept[:-200]:
+        try:
+            if json.loads(old.read_text()).get("status") in LIVE_STATUSES + ("interrupted",):
+                continue                          # never throw away a run someone may still resume
+        except ValueError:
+            pass
+        old.unlink(missing_ok=True)
+
+
+def _check_startable(graph, mode, approvals) -> None:
+    errors = [p["message"] for p in validate(graph) if p["level"] == "error"]
+    if errors:
+        raise ValueError(errors[0])
+    if mode not in ("live", "rehearsal"):
+        raise ValueError(f"Unknown mode {mode!r}.")
+    if approvals not in ("approve", "deny", "ask"):
+        raise ValueError("Approvals are approve, deny or ask.")
+    if mode == "live" and uses_provider(graph, "anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError("A live run needs ANTHROPIC_API_KEY in the server's environment, or LLM cores set to "
+                         "an OpenAI-compatible server.")
+
+
+def _execute(job: Job, memory_dir: Optional[Path], resume_at: Optional[Dict[str, Any]] = None) -> None:
+    rec = job.record
+    graph, task, mode, approvals, thread = rec["graph"], rec["task"], rec["mode"], rec["approvals"], rec.get("thread")
+
+    def ask(name, args, gate):
+        rec.update(status="waiting", pending={"tool": name, "args": args, "gate": gate, "since": time.time()})
+        job.write()
+        while not job.answered.wait(0.25):
+            if job.stop.is_set():
+                raise StopRun("stopped while waiting for approval")
+        job.answered.clear()
+        decision, job.decision = bool(job.decision), None
+        rec.update(status="running", pending=None)
+        job.write()
+        return decision
+
+    def after_step():
+        job.write()
+        if job.stop.is_set():
+            raise StopRun("stopped")
+
+    ctx = None
+    try:
+        ctx = _prepare(graph, mode, approvals, memory_dir, model_state=(resume_at or {}).get("model"),
+                       ask=ask, after_step=after_step,
+                       carry={"events": rec["events"], "calls": rec["calls"], "checkpoints": rec["checkpoints"]})
+        if resume_at is None:
+            if thread:
+                ctx["space"]["THREADS"][thread] = thread_turns(thread)
+            ctx["on_step"](None, ctx["space"]["new_state"](task, ctx["space"]["THREADS"].get(thread, [])
+                                                          [-HISTORY_TURNS:] if thread else [], thread),
+                           ctx["space"]["START"])
+            state = json.loads(json.dumps(rec["checkpoints"][-1]["state"]))
+            start_at = ctx["space"]["START"]
+        else:
+            state = json.loads(json.dumps(resume_at["state"]))
+            start_at = resume_at["next"]
+            ctx["emit"]("resumed", node=start_at, checkpoint=resume_at["i"])
+        result = _drive(ctx, lambda: ctx["space"]["resume"](state, start_at, ctx["on_step"]))
+        status = "done" if result["ok"] else "error"
+        rec.update(ok=result["ok"], answer=result["answer"], error=result["error"])
+    except StopRun as stop:
+        status = "stopped"
+        rec.update(ok=False, answer=None, error=str(stop))
+        if ctx:
+            ctx["emit"]("stopped", message=str(stop))
+    except Exception as exc:  # noqa: BLE001 — a run that cannot start is still a record to show
+        status = "error"
+        rec.update(ok=False, answer=None, error=f"{type(exc).__name__}: {exc}")
+    finally:
+        if ctx:
+            _close_servers(ctx)
+    if ctx:
+        rec["costs"] = costs(graph, task, ctx["events"], ctx["calls"], ctx["space"], mode)
+    if thread and status == "done":
+        turns = (rec["checkpoints"][-1]["state"].get("history") or [])[-HISTORY_TURNS:]
+        (_threads_dir() / f"{_slug(thread)}.json").write_text(json.dumps(turns))
+        rec["thread_turns"] = len(turns)
+    # the final status, the last write and leaving the live table happen together, so nothing
+    # sees this run as finished while its thread could still write
+    with _JOBS_LOCK:
+        rec.update(status=status, pending=None, finished=time.time())
+        job.write()
+        if _JOBS.get(rec["id"]) is job:
+            _JOBS.pop(rec["id"])
+
+
+def _launch(job: Job, memory_dir, resume_at, background: bool) -> None:
+    with _JOBS_LOCK:
+        if job.record["id"] in _JOBS:
+            raise ValueError("That run is still running.")
+        _JOBS[job.record["id"]] = job
+    job.write()
+    if background:
+        threading.Thread(target=_execute, args=(job, memory_dir, resume_at), daemon=True).start()
+    else:
+        _execute(job, memory_dir, resume_at)
+
+
+def start_run(graph, task: str, mode: str = "rehearsal", approvals: str = "ask",
+              memory_dir: Optional[Path] = None, thread: Optional[str] = None,
+              background: bool = True) -> Dict[str, Any]:
+    """Start a durable run and return its record at once; follow it with run_view()."""
+    _check_startable(graph, mode, approvals)
+    if not str(task or "").strip():
+        raise ValueError("Give the agent a task to work on.")
+    record = {"id": uuid.uuid4().hex[:10], "parent": None, "graph": graph, "task": task, "mode": mode,
+              "approvals": approvals, "thread": thread, "started": time.time(), "status": "running",
+              "events": [], "calls": [], "checkpoints": [], "pending": None, "ok": None, "answer": None,
+              "error": None, "costs": None, "resumes": 0}
+    _launch(Job(record), memory_dir, None, background)
+    _prune_runs()
+    return run_view(record["id"])
+
+
+def _record(run_id: str) -> Dict[str, Any]:
+    with _JOBS_LOCK:
+        job = _JOBS.get(run_id)
+        if job is not None:
+            return job.record
+        record = load_run(run_id)
+    if record.get("status") in LIVE_STATUSES:
+        # on disk as running or waiting, but no process here owns it: the server went away
+        record = {**record, "status": "interrupted", "pending": None}
+    return record
+
+
+def run_view(run_id: str, since: int = 0) -> Dict[str, Any]:
+    """What the page needs while it follows a run: status, a waiting request, and new events."""
+    rec = _record(run_id)
+    events = list(rec.get("events") or [])
+    view = {"id": run_id, "status": rec.get("status", "done"), "pending": rec.get("pending"),
+            "events": [dict(e) for e in events[since:]], "count": len(events),
+            "checkpoints": len(rec.get("checkpoints") or []), "resumes": rec.get("resumes", 0)}
+    if view["status"] not in LIVE_STATUSES:
+        view.update(ok=rec.get("ok"), answer=rec.get("answer"), error=rec.get("error"), costs=rec.get("costs"))
+        if rec.get("thread"):
+            view["thread"] = {"id": rec["thread"], "turn": rec.get("thread_turns", 0)}
+    return view
+
+
+def answer_run(run_id: str, approved: bool) -> Dict[str, Any]:
+    with _JOBS_LOCK:
+        job = _JOBS.get(run_id)
+    if job is None or job.record.get("status") != "waiting":
+        raise ValueError("That run is not waiting for an approval.")
+    job.decision = bool(approved)
+    job.answered.set()
+    return {"ok": True}
+
+
+def stop_run(run_id: str) -> Dict[str, Any]:
+    with _JOBS_LOCK:
+        job = _JOBS.get(run_id)
+    if job is None:
+        raise ValueError("That run is not running here.")
+    job.stop.set()
+    return {"ok": True}
+
+
+def resume_run(run_id: str, memory_dir: Optional[Path] = None, background: bool = True) -> Dict[str, Any]:
+    """Carry an interrupted or stopped run on from its last checkpoint, under the same id."""
+    rec = _record(run_id)
+    if rec.get("status") not in ("interrupted", "stopped"):
+        raise ValueError("Only an interrupted or stopped run can be resumed.")
+    last = next((c for c in reversed(rec.get("checkpoints") or []) if c["next"] is not None), None)
+    if last is None:
+        raise ValueError("That run has no checkpoint to resume from.")
+    if (rec.get("checkpoints") or [])[-1]["next"] is None:
+        raise ValueError("That run already reached its end.")
+    _check_startable(rec["graph"], rec["mode"], rec["approvals"])
+    rec = json.loads(json.dumps(rec))
+    rec.setdefault("calls", [])
+    # events after the last checkpoint belong to the block that was cut off; it runs again
+    del rec["events"][last["events"]:]
+    rec.update(status="running", pending=None, error=None, ok=None, answer=None, resumes=rec.get("resumes", 0) + 1)
+    _launch(Job(rec), memory_dir, last, background)
+    return run_view(run_id)
+
+
+def unfinished_runs() -> List[Dict[str, Any]]:
+    out = []
+    for path in sorted(_runs_dir().glob("*.json"), key=lambda p: -p.stat().st_mtime):
+        try:
+            head = json.loads(path.read_text())
+        except ValueError:
+            continue
+        if head.get("status") in LIVE_STATUSES + ("interrupted", "stopped"):
+            rec = _record(head["id"])
+            out.append({"id": rec["id"], "status": rec["status"], "task": (rec.get("task") or "")[:80],
+                        "design": (rec.get("graph") or {}).get("name"), "started": rec.get("started"),
+                        "checkpoints": len(rec.get("checkpoints") or []), "pending": rec.get("pending")})
+    return out[:20]
 
 
 # --------------------------------------------------------------------------

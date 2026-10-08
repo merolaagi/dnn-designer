@@ -1,5 +1,38 @@
 # Changelog
 
+## 3.0.0
+
+**Durable runs: written as they go, paused for a person, resumed after a
+crash** — LangGraph's durable execution and human-in-the-loop, inside the lab.
+
+- **Runs execute in the background and are saved after every block.** The run's
+  record — its checkpoints, events and state — is rewritten after each one, in
+  a single step, so whatever happens to the server the run is on disk up to its
+  last finished block. The page follows it live: events are animated as they
+  arrive instead of replayed after the run ends.
+- **Approvals can ask, and wait.** "When a tool needs approval" now defaults to
+  "Ask me, and wait": the run pauses at the gate, the request (the tool and its
+  arguments) is saved with it, and a card on Physiology offers Approve and
+  Deny. It waits as long as it takes — close the page and come back, and the
+  waiting run is listed under Unfinished runs with a Follow button.
+- **Resume after a crash.** A run that was running or waiting when its server
+  went away reads back as interrupted. Resume carries it on from its last
+  checkpoint, under the same id: a block that was cut off runs again from its
+  start, so a pending approval is asked again. Anything that block had already
+  done outside the state — a tool's side effect — may happen twice, the same
+  caveat LangGraph gives.
+- **Stop.** A running or waiting run can be stopped, and a stopped run resumed.
+
+A test cuts a finished run's record off after every one of its checkpoints, as
+if the server had died there, resumes each, and requires the same answer. Studies,
+gates and the older synchronous run route are unchanged and still decide
+approvals for you (approve or deny); asking needs a person on the page.
+
+Fixed while testing: a stopped run could read as finished while its thread was
+still writing, and a resume started in that moment was then dropped from the
+live table. Finishing — the final status, the last write and leaving the table —
+now happens as one step.
+
 ## 2.9.0
 
 **Conversations, memory per conversation, and parallel branches** — LangGraph's

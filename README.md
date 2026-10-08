@@ -321,6 +321,10 @@ Runs can **continue a conversation** turn by turn, long-term memory can be kept
 per conversation, and a **Parallel** block runs branches side by side until they
 meet at a **Join**.
 
+Runs are **durable**: saved after every block, followed live, paused at a
+Human approval until you answer, and resumable after a crash or restart from
+their last checkpoint.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.

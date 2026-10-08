@@ -2443,6 +2443,13 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-mcp{list-style:none;margin:4px 0 6px;padding:0;font-size:11.5px}
 .al-mcp li{padding:2px 0;border-bottom:1px solid var(--paper-2)}
 .al-mcp b{font-family:var(--mono);font-weight:600}
+.al-ask-card{margin:10px 0;padding:10px 12px;border:1px solid var(--amber);border-radius:8px;background:#FFF8E6;font-size:12.5px}
+.al-ask-card code{font-family:var(--mono)}
+.al-unf{list-style:none;margin:6px 0;padding:0;font-size:12px}
+.al-unf li{padding:6px 0;border-bottom:1px solid var(--paper-2)}
+.al-unf small{display:block;color:var(--muted)}
+.al-unf .btn{margin-top:4px;font-size:11px;padding:3px 9px}
+.al-err{display:block;color:var(--bad)}
 .al-where{font-size:11px;color:var(--muted);margin:12px 0 4px;font-family:var(--mono)}
 .al-src{background:#fff;border:1px solid var(--paper-3);border-radius:7px;font-family:var(--mono);
   font-size:11px;line-height:1.65;color:#3C4453;overflow-x:auto;padding:7px 0;margin-bottom:10px}
@@ -13131,7 +13138,7 @@ const agentLabState = {
   cat: null, graph: null, sel: null, tab: "anatomy", trace: [], answer: null,
   running: false, problems: [], seq: 1, task:
     "Find the population of Lisbon and estimate how many cafes it could support.",
-  mode: "rehearsal", approvals: "approve", checkTimer: null,
+  mode: "rehearsal", approvals: "ask", checkTimer: null,
 };
 const AL_W = 180, AL_PORT_Y = 21;
 
@@ -13621,22 +13628,29 @@ function alRenderPhysio(){
           : "Live runs call the model and cost tokens.")
         : "Live runs need ANTHROPIC_API_KEY in the server's environment, or LLM cores set to an OpenAI-compatible server such as a local Ollama."} Tools run for real either way.</div></div>
     ${hasHuman ? `<div class="field"><label for="alAppr">When a tool needs approval</label>
-      <select id="alAppr"><option value="approve"${S.approvals === "approve" ? " selected" : ""}>Approve it</option>
+      <select id="alAppr"><option value="ask"${(S.approvals || "ask") === "ask" ? " selected" : ""}>Ask me, and wait</option>
+        <option value="approve"${S.approvals === "approve" ? " selected" : ""}>Approve it</option>
         <option value="deny"${S.approvals === "deny" ? " selected" : ""}>Deny it</option></select></div>` : ""}
     <label class="al-check"><input type="checkbox" id="alConverse"${S.converse ? " checked" : ""}>
       Keep the conversation going: each run is the next turn, and earlier turns come with it</label>
     ${S.converse && S.turn ? `<p class="al-muted">${S.turn} turn${S.turn === 1 ? "" : "s"} so far.
       <a href="#" id="alNewThread">Start a new conversation</a></p>` : ""}
-    <button class="btn go" id="alRunBtn"${S.running ? " disabled" : ""}>${S.running ? "Running…" : "Run the agent"}</button>
+    <div class="row"><button class="btn go" id="alRunBtn"${S.running ? " disabled" : ""}>${S.running ? "Running…" : "Run the agent"}</button>
+      ${S.running ? `<button class="btn" id="alStopRun">Stop</button>` : ""}</div>
+    <div id="alWaiting"></div>
     <ol class="al-trace" id="alTrace">${S.trace.map(alTraceRow).join("")}</ol>
     ${S.answer != null ? `<h4>Final answer</h4><pre class="al-answer">${alEsc(S.answer)}</pre>` : ""}
     ${S.costs && !S.running ? alCostsHtml(S.costs) : ""}
-    ${S.lastRunId && !S.running ? alSaveCaseHtml(S.lastRunId, "p") : ""}`;
+    ${S.lastRunId && !S.running ? alSaveCaseHtml(S.lastRunId, "p") : ""}
+    <div id="alUnfinished"></div>`;
   alWireSaveCase("p");
   $("alTask").addEventListener("input", e => S.task = e.target.value);
   $("alMode").addEventListener("change", e => S.mode = e.target.value);
   if ($("alAppr")) $("alAppr").addEventListener("change", e => S.approvals = e.target.value);
   $("alRunBtn").addEventListener("click", alRun);
+  if ($("alStopRun")) $("alStopRun").onclick = () => fetch(API + `/api/agentlab/runs/${S.liveId}/stop`, {method: "POST"});
+  alShowWaiting();
+  alLoadUnfinished();
   $("alConverse").addEventListener("change", e => { S.converse = e.target.checked; alRenderPhysio(); });
   if ($("alNewThread")) $("alNewThread").addEventListener("click", e => {
     e.preventDefault(); S.threadId = null; S.turn = 0; alRenderPhysio();
@@ -13764,38 +13778,98 @@ async function alRenderCode(){
 
 /* ---------- running and replaying ---------- */
 
+/* A run now executes in the background on the server, written to disk after
+   every block. The page follows it: new events are animated as they arrive, an
+   approval set to "ask" shows as a card and waits for an answer, and a run left
+   unfinished — the page closed, the server restarted — can be picked up again. */
 async function alRun(){
   const S = agentLabState;
   if (S.running) return;
-  S.running = true; S.trace = []; S.answer = null; S.costs = null;
-  if (S.tab !== "physio") alTab("physio"); else alRenderPhysio();
-  let d;
+  S.trace = []; S.answer = null; S.costs = null;
+  let r, d;
   try{
-    const r = await fetch(API + "/api/agentlab/run", {method: "POST",
-      headers: {"content-type": "application/json"},
-      body: JSON.stringify({graph: S.graph, task: S.task, mode: S.mode, approvals: S.approvals,
+    r = await fetch(API + "/api/agentlab/runs", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({graph: S.graph, task: S.task, mode: S.mode, approvals: S.approvals || "ask",
                             thread: S.converse ? alThreadId() : null})});
     d = await r.json();
-    if (!r.ok){
-      S.trace.push({who: "Did not start", msg: (d.detail && d.detail.message) || "The run was refused.",
-                    color: "var(--al-immune)", warn: true});
-      d = null;
-    }
-  } catch {
-    S.trace.push({who: "Did not start", msg: "The server did not answer.", color: "var(--al-immune)", warn: true});
+  } catch { d = null; }
+  if (!r || !r.ok){
+    S.trace.push({who: "Did not start", msg: (d && d.detail && d.detail.message) || "The server did not answer.",
+                  color: "var(--al-immune)", warn: true});
+    if (S.tab !== "physio") alTab("physio"); else alRenderPhysio();
+    return;
   }
-  if (d && d.problems && d.problems.length){
-    d.problems.forEach(p => S.trace.push({who: "Fix first", msg: p.message, color: "var(--al-immune)", warn: true}));
-  } else if (d){
-    await alReplay(d);
-    S.answer = d.answer;
-    S.costs = d.costs || null;
-    S.lastRunId = d.run_id || null;
-    if (d.thread) S.turn = d.thread.turn;
-    alRememberRun(d, `Run ${((S.runs || []).length) + 1}: ${S.task.slice(0, 40)}`);
+  await alFollow(d.id, false);
+}
+
+async function alFollow(id, resumed){
+  const S = agentLabState;
+  S.running = true; S.liveId = id; S.pending = null; S.animPrev = null;
+  if (!resumed){ S.trace = []; }
+  if (S.tab !== "physio") alTab("physio"); else alRenderPhysio();
+  let seen = 0, view = null;
+  while (true){
+    try{ view = await (await fetch(API + `/api/agentlab/runs/${id}/live?since=${seen}`)).json(); }
+    catch { await alSleep(1000); continue; }
+    seen = view.count;
+    if (view.events.length) await alAnimateEvents(view.events);
+    S.pending = view.pending || null;
+    alShowWaiting();
+    if (!["running", "waiting"].includes(view.status)) break;
+    await alSleep(view.status === "waiting" ? 700 : 300);
   }
-  S.running = false;
+  let rec = null;
+  try{ rec = await (await fetch(API + "/api/agentlab/runs/" + id)).json(); } catch {}
+  S.running = false; S.liveId = null; S.pending = null;
+  S.answer = view.answer != null ? view.answer : (view.error ? null : S.answer);
+  S.costs = view.costs || null;
+  S.lastRunId = id;
+  if (view.thread) S.turn = view.thread.turn;
+  if (rec && view.status === "done") alRememberRun({...rec, run_id: id}, `Run ${((S.runs || []).length) + 1}: ${(rec.task || "").slice(0, 40)}`);
   if (S.tab === "physio") alRenderPhysio();
+}
+
+function alShowWaiting(){
+  const S = agentLabState, host = $("alWaiting");
+  if (!host) return;
+  const p = S.pending;
+  if (!p){ host.innerHTML = ""; return; }
+  host.innerHTML = `<div class="al-ask-card"><b>Waiting for you.</b> The agent wants to run
+    <code>${alEsc(p.tool)}</code> with:
+    <pre class="al-ask">${alEsc(JSON.stringify(p.args, null, 2))}</pre>
+    <p class="al-muted">The run is saved and will wait as long as it takes — close the page and come back, or
+    restart the server and resume it.</p>
+    <div class="row"><button class="btn go" id="alApprove">Approve</button>
+      <button class="btn danger" id="alDeny">Deny</button></div></div>`;
+  const send = async yes => {
+    host.querySelectorAll("button").forEach(b => b.disabled = true);
+    await fetch(API + `/api/agentlab/runs/${S.liveId}/answer`, {method: "POST",
+      headers: {"content-type": "application/json"}, body: JSON.stringify({approved: yes})});
+  };
+  $("alApprove").onclick = () => send(true);
+  $("alDeny").onclick = () => send(false);
+}
+
+async function alLoadUnfinished(){
+  const host = $("alUnfinished");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/agentlab/runs")).json(); } catch { return; }
+  const runs = (d.runs || []).filter(r => r.id !== agentLabState.liveId);
+  if (!$("alUnfinished")) return;
+  host.innerHTML = runs.length ? `<h4>Unfinished runs</h4><ul class="al-unf">${runs.map(r => `<li>
+      <b>${alEsc(r.status)}</b> · ${alEsc(r.design || "agent")} · “${alEsc(r.task)}”
+      <small>${r.checkpoints} checkpoint${r.checkpoints === 1 ? "" : "s"}${r.pending ? ` · waiting to run ${alEsc(r.pending.tool)}` : ""}</small>
+      ${["interrupted", "stopped"].includes(r.status) ? `<button class="btn" data-resume="${r.id}">Resume</button>`
+        : `<button class="btn" data-follow="${r.id}">Follow</button>`}</li>`).join("")}</ul>` : "";
+  host.querySelectorAll("[data-resume]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await fetch(API + `/api/agentlab/runs/${b.dataset.resume}/resume`, {method: "POST"});
+    const out = await r.json();
+    if (!r.ok){ b.disabled = false; b.insertAdjacentHTML("afterend", `<small class="al-err">${alEsc((out.detail && out.detail.message) || "Not resumed.")}</small>`); return; }
+    alFollow(b.dataset.resume, false);
+  });
+  host.querySelectorAll("[data-follow]").forEach(b => b.onclick = () => alFollow(b.dataset.follow, false));
 }
 
 /* Every event names the block that reported it, so the replay needs no
@@ -13864,6 +13938,8 @@ function alEventText(ev){
     case "guard_out": return ev.changed ? "Redacted personal data from the answer." : "Checked the answer; nothing to redact.";
     case "final": return `Final answer leaves: ${ev.preview}`;
     case "budget": return `Step budget of ${ev.limit} spent, so control goes straight to the final answer.`;
+    case "resumed": return `Resumed from checkpoint ${ev.checkpoint}; the block that was cut off runs again from its start.`;
+    case "stopped": return "Stopped by a person.";
     case "fanout": return `Split into ${ev.branches} branches, each on its own copy of the state.`;
     case "join": return `The ${ev.branches} branches met; their conclusions become notes for the next block.`;
     case "fork": return `Forked from checkpoint ${ev.checkpoint} of an earlier run`
@@ -13910,9 +13986,15 @@ async function alFire(node){
 }
 
 async function alReplay(d){
+  agentLabState.animPrev = null;
+  await alAnimateEvents(d.events);
+}
+
+/* Animate events in order, carrying on from wherever the last batch left off. */
+async function alAnimateEvents(events){
   const S = agentLabState, g = S.graph;
-  let prev = null;
-  for (const ev of d.events){
+  let prev = S.animPrev || null;
+  for (const ev of events){
     const node = alEventNode(ev);
     if (node && prev && node.id !== prev.id){
       const fwd = g.edges.find(e => e.source === prev.id && e.target === node.id);
@@ -13933,6 +14015,7 @@ async function alReplay(d){
                $("alPane").scrollTop = $("alPane").scrollHeight; }
     if (node){ await alFire(node); prev = node; }
   }
+  S.animPrev = prev;
 }
 
 /* Live runs are possible with a key for Anthropic, or with every core pointed at an

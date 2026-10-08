@@ -8597,6 +8597,136 @@ def _():
     assert 'id="alConverse"' in PAGE and "function alThreadId" in PAGE and 'case "fanout"' in PAGE
 
 
+# --------------------------------------------------------------------------
+# agent lab 3.0: durable runs — written as they go, paused for a person, resumed
+# --------------------------------------------------------------------------
+
+def _until(run_id, statuses, timeout=20):
+    import time as _t
+    end = _t.time() + timeout
+    while _t.time() < end:
+        view = agentlab.run_view(run_id)
+        if view["status"] in statuses:
+            return view
+        _t.sleep(0.05)
+    raise AssertionError(f"run {run_id} never reached {statuses}: {agentlab.run_view(run_id)['status']}")
+
+
+def _crash(run_id):
+    """Stand for the server going away: the run's thread stops and writes nothing more."""
+    job = agentlab._JOBS[run_id]
+    job.abandoned = True
+    job.stop.set()
+    with agentlab._JOBS_LOCK:
+        agentlab._JOBS.pop(run_id, None)
+
+
+@check("a run waits for a person's approval, on disk, and goes on when answered")
+def _():
+    g = agentlab.template("supervisor")
+    view = agentlab.start_run(g, "Write a note on Lisbon cafes", approvals="ask")
+    waiting = _until(view["id"], ("waiting",))
+    assert waiting["pending"]["tool"] and waiting["pending"]["gate"]
+    on_disk = json.loads((agentlab._runs_dir() / f"{view['id']}.json").read_text())
+    assert on_disk["status"] == "waiting" and on_disk["pending"]["tool"] == waiting["pending"]["tool"]
+    agentlab.answer_run(view["id"], True)
+    done = _until(view["id"], ("done", "error"))
+    assert done["status"] == "done"
+    assert done["answer"] == agentlab.run(g, "Write a note on Lisbon cafes", approvals="approve")["answer"]
+    try:
+        agentlab.answer_run(view["id"], True)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a finished run cannot be answered")
+
+
+@check("a denial given from the page reaches the model, as before")
+def _():
+    g = agentlab.template("supervisor")
+    view = agentlab.start_run(g, "Write a note", approvals="ask")
+    _until(view["id"], ("waiting",))
+    agentlab.answer_run(view["id"], False)
+    _until(view["id"], ("done",))
+    events = agentlab.load_run(view["id"])["events"]
+    denied = next(i for i, e in enumerate(events) if e["event"] == "approval")
+    assert not events[denied]["approved"] and "declined" in events[denied + 1]["preview"]
+
+
+@check("a run cut off while waiting is interrupted, then resumes and finishes the same")
+def _():
+    g = agentlab.template("supervisor")
+    view = agentlab.start_run(g, "Write a note on Lisbon cafes", approvals="ask")
+    _until(view["id"], ("waiting",))
+    _crash(view["id"])
+    assert agentlab.run_view(view["id"])["status"] == "interrupted"
+    assert any(r["id"] == view["id"] and r["status"] == "interrupted" for r in agentlab.unfinished_runs())
+    agentlab.resume_run(view["id"])
+    again = _until(view["id"], ("waiting",))
+    assert again["resumes"] == 1, "resuming must re-ask the approval that was pending"
+    agentlab.answer_run(view["id"], True)
+    done = _until(view["id"], ("done",))
+    assert done["answer"] == agentlab.run(g, "Write a note on Lisbon cafes", approvals="approve")["answer"]
+    names = [e["event"] for e in agentlab.load_run(view["id"])["events"]]
+    assert names.count("resumed") == 1 and names.count("final") == 1
+
+
+@check("a run cut off at any checkpoint resumes to the same answer")
+def _():
+    import time as _t
+    g = agentlab.template("planexec")
+    whole = agentlab.start_run(g, "Estimate the cafes Lisbon can support", approvals="approve", background=False)
+    finished = agentlab.load_run(whole["id"])
+    for cp in finished["checkpoints"][:-1]:
+        # what the file would hold if the server had died just after this checkpoint
+        cut = json.loads(json.dumps(finished))
+        cut["id"] = "cut" + uuid.uuid4().hex[:7]
+        cut["checkpoints"] = cut["checkpoints"][:cp["i"] + 1]
+        cut["events"] = cut["events"][:cp["events"]]
+        cut.update(status="running", answer=None, ok=None, costs=None)
+        agentlab.write_record(cut)
+        agentlab.resume_run(cut["id"], background=False)
+        out = agentlab.load_run(cut["id"])
+        assert out["status"] == "done" and out["answer"] == finished["answer"], f"cut at {cp['i']}"
+        (agentlab._runs_dir() / f"{cut['id']}.json").unlink()
+
+
+@check("a run can be stopped, and a stopped run resumed")
+def _():
+    g = agentlab.template("supervisor")
+    view = agentlab.start_run(g, "Write a note", approvals="ask")
+    _until(view["id"], ("waiting",))
+    agentlab.stop_run(view["id"])
+    stopped = _until(view["id"], ("stopped",))
+    assert "stopped" in stopped["error"]
+    agentlab.resume_run(view["id"])
+    _until(view["id"], ("waiting",))
+    agentlab.answer_run(view["id"], True)
+    assert _until(view["id"], ("done",))["status"] == "done"
+    for bad in (lambda: agentlab.resume_run(view["id"]), lambda: agentlab.stop_run(view["id"])):
+        try:
+            bad()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("a finished run cannot be resumed or stopped")
+
+
+@check("the durable-run routes start, follow and answer a run; the page follows it live")
+def _():
+    import main
+    out = main.agentlab_run_start(main.AgentLabStart(graph=agentlab.template("supervisor"), task="note"))
+    _until(out["id"], ("waiting",))
+    live = main.agentlab_run_live(out["id"], since=0)
+    assert live["events"] and live["pending"]
+    later = main.agentlab_run_live(out["id"], since=live["count"])
+    assert later["events"] == [], "since should skip what the page already has"
+    main.agentlab_run_answer(out["id"], main.AgentLabAnswer(approved=True))
+    assert _until(out["id"], ("done",))["status"] == "done"
+    for needle in ("async function alFollow", 'id="alWaiting"', "function alLoadUnfinished", 'value="ask"'):
+        assert needle in PAGE, needle
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
