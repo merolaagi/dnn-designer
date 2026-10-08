@@ -1,5 +1,40 @@
 # Changelog
 
+## 3.1.0
+
+**Model-written code runs in a sandbox.** Until now the code executor ran
+whatever the model wrote as you: your files, your network, your keys. It is
+now sandboxed by default, in layers, each stronger where the machine allows.
+
+- **Always: a separate, guarded process.** A fresh Python in a throwaway
+  folder, with an environment holding no secrets (no API keys), CPU, memory and
+  file-size limits, and a time limit you set on the block. Inside it, an audit
+  hook refuses network access, starting programs, writing outside its folder,
+  writing compiled extensions, loading native code through ctypes, and reading
+  or listing your home folder (apart from Python's own install, so libraries
+  such as numpy still import). The one way to start programs that raises no
+  audit event, `_posixsubprocess.fork_exec`, is replaced before the code runs.
+- **On top, where the machine has one: the operating system's sandbox.** On
+  macOS, `sandbox-exec` with a profile that denies the network and forking,
+  allows writes only to the folder, and hides the home folder. On Linux, a
+  namespace with no network (`unshare -rn`). Each is probed once before first
+  use; if it will not start, code still runs under the guard and the block's
+  Maths tab says which layer this machine got, and why not the stronger one.
+- **Safety knows the difference.** A sandboxed executor no longer counts as a
+  side effect, so the planner-executor design now passes every Safety property.
+  Set the block to "unrestricted (runs as you, no limits)" and the Safety tab
+  reports a risk, a new property — "Model-written code runs in a sandbox" —
+  fails, and the injection path from search results to code returns.
+
+The download carries the sandbox with it, standard library only.
+
+Tested here with fifteen escape attempts — network, raw sockets, shell,
+subprocess, fork, fork_exec, writes and symlinks outside the folder, deletion,
+reading and listing the home folder, ctypes, compiled extensions, secrets in
+the environment, an endless loop — each refused with and without the
+operating-system layer. The macOS profile could not be run here; its probe
+falls back to the guard if your Mac refuses it, and the Maths tab will say so.
+
 ## 3.0.0
 
 **Durable runs: written as they go, paused for a person, resumed after a

@@ -60,6 +60,187 @@ READS, CHANGES = "only reads", "changes things"
 # the chat-completions protocol, including one running on this machine.
 PROVIDERS = {"anthropic": "Anthropic Messages API", "openai-compatible": "OpenAI-compatible server"}
 LIMIT = ("max_calls", "Calls allowed per run (0 for no limit)")
+SANDBOXED, UNRESTRICTED = "sandboxed", "unrestricted (runs as you, no limits)"
+
+# The code sandbox every generated file carries when its code executor is sandboxed, and the
+# lab uses to report which layer this machine gets: one copy of the code, as with MCP_CLIENT.
+SANDBOX_CODE = r'''# ---- the code sandbox: model-written code never runs as you ----
+SANDBOX_GUARD = r"""
+import json, os, sys
+limits = json.loads(os.environ.get("SANDBOX_LIMITS") or "{}")
+try:
+    import resource
+
+    def cap(kind, value):
+        try:
+            resource.setrlimit(kind, (value, value))
+        except (ValueError, OSError):
+            pass
+
+    cap(resource.RLIMIT_CPU, int(limits.get("seconds", 20)) + 1)
+    cap(resource.RLIMIT_FSIZE, int(limits.get("file_mb", 10)) * 2 ** 20)
+    if sys.platform != "darwin":
+        cap(resource.RLIMIT_AS, int(limits.get("memory_mb", 1024)) * 2 ** 20)
+except ImportError:
+    pass
+
+WORK = os.path.realpath(os.getcwd())
+KEEP = [WORK] + sorted({os.path.realpath(p) for p in (sys.prefix, sys.base_prefix, sys.exec_prefix,
+                                                      os.path.dirname(os.path.realpath(sys.executable)))})
+PRIVATE = [os.path.realpath(p) for p in json.loads(os.environ.get("SANDBOX_PRIVATE") or "[]")]
+REFUSED = ("socket.", "subprocess.", "os.system", "os.exec", "os.posix_spawn", "os.spawn", "os.fork",
+           "os.forkpty", "os.kill", "os.killpg", "pty.", "ctypes.", "webbrowser.", "urllib.Request")
+WRITES = ("os.remove", "os.rename", "os.rmdir", "os.mkdir", "os.chmod", "os.chown", "os.symlink", "os.link",
+          "os.truncate", "os.utime", "shutil.rmtree", "shutil.copyfile", "shutil.move")
+LISTS = ("os.listdir", "os.scandir")
+
+
+def inside(path, roots):
+    try:
+        p = os.path.realpath(os.fsdecode(path))
+    except TypeError:
+        return False
+    return any(p == r or p.startswith(r.rstrip(os.sep) + os.sep) for r in roots)
+
+
+def private(path):
+    return inside(path, PRIVATE) and not inside(path, KEEP)
+
+
+def hook(event, args):
+    if event.startswith(REFUSED):
+        raise PermissionError(f"sandbox: {event} is not allowed")
+    if event == "import" and args and args[0] in ("ctypes", "_ctypes"):
+        raise ImportError("sandbox: ctypes is not available")
+    if event == "open":
+        path, mode, flags = (list(args) + [None, None])[:3]
+        if path is None or isinstance(path, int):
+            return
+        writing = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (
+            isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC))
+        if writing and str(os.fsdecode(path)).endswith((".so", ".dylib", ".pyd")):
+            raise PermissionError("sandbox: writing compiled extensions is not allowed")
+        if writing and not inside(path, [WORK]):
+            raise PermissionError(f"sandbox: writing {os.fsdecode(path)} is not allowed; write inside the working folder")
+        if private(path):
+            raise PermissionError(f"sandbox: reading {os.fsdecode(path)} is not allowed")
+    elif event.startswith(WRITES):
+        for a in args:
+            if isinstance(a, (str, bytes, os.PathLike)) and not inside(a, [WORK]):
+                raise PermissionError(f"sandbox: {event} outside the working folder is not allowed")
+    elif event in LISTS and args and args[0] is not None and private(args[0]):
+        raise PermissionError(f"sandbox: listing {os.fsdecode(args[0])} is not allowed")
+
+
+try:
+    # fork_exec starts programs without raising an audit event, so it is replaced outright;
+    # subprocess still imports, and refuses when used
+    import _posixsubprocess
+
+    def _refused(*args, **kwargs):
+        raise PermissionError("sandbox: starting programs is not allowed")
+
+    _posixsubprocess.fork_exec = _refused
+except ImportError:
+    pass
+
+sys.addaudithook(hook)
+del hook
+exec(compile(sys.argv[1], "<agent code>", "exec"), {"__name__": "__main__"})
+"""
+
+SANDBOX_LIMITS = {"seconds": 20, "memory_mb": 1024, "file_mb": 10, "output": 4000}
+_SANDBOX_LAYER = None   # decided once per process: (command prefix, description, why not stronger)
+
+
+def _probe(prefix, work, env):
+    try:
+        done = subprocess.run(prefix + [sys.executable, "-I", "-c", SANDBOX_GUARD, "print('ok')"], cwd=work,
+                              env=env, capture_output=True, text=True, timeout=20)
+        return done.stdout.strip() == "ok", (done.stderr or done.stdout).strip()[-200:]
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return False, str(error)
+
+
+def _sbpl(text):
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def sandbox_layer(work, env):
+    """The strongest operating-system sandbox this machine offers, checked once with a probe."""
+    global _SANDBOX_LAYER
+    if _SANDBOX_LAYER is None:
+        import platform
+        import shutil
+        system, candidates = platform.system(), []
+        if system == "Darwin" and shutil.which("sandbox-exec"):
+            candidates.append(("macos", "macOS sandbox-exec: no network, writes only to the working folder, "
+                                        "home folder unreadable"))
+        if system == "Linux" and shutil.which("unshare"):
+            candidates.append(("unshare", "Linux namespace with no network (unshare -rn)"))
+        _SANDBOX_LAYER = (None, None, f"no operating-system sandbox is available on {system}")
+        for kind, description in candidates:
+            ok, why = _probe(_prefix(kind, work), work, env)
+            if ok:
+                _SANDBOX_LAYER = (kind, description, None)
+                break
+            _SANDBOX_LAYER = (None, None, f"{description.split(':')[0]} would not start ({why or 'no reason given'})")
+    return _SANDBOX_LAYER
+
+
+def _prefix(kind, work):
+    if kind == "unshare":
+        return ["unshare", "-rn"]
+    if kind == "macos":
+        home = os.path.realpath(os.path.expanduser("~"))
+        keep = sorted({os.path.realpath(p) for p in (work, sys.prefix, sys.base_prefix, sys.exec_prefix,
+                                                     os.path.dirname(os.path.realpath(sys.executable)))})
+        profile = "\n".join(["(version 1)", "(allow default)", "(deny network*)", "(deny process-fork)",
+                             "(deny file-write*)",
+                             f'(allow file-write* (subpath "{_sbpl(os.path.realpath(work))}") (literal "/dev/null"))',
+                             f'(deny file-read* (subpath "{_sbpl(home)}"))',
+                             "(allow file-read* " + " ".join(f'(subpath "{_sbpl(k)}")' for k in keep) + ")"])
+        return ["sandbox-exec", "-p", profile]
+    return []
+
+
+def run_sandboxed(code, seconds=None):
+    """Run model-written code in a throwaway folder, as a separate process with no secrets, under limits,
+    inside the strongest sandbox this machine has. Returns what it printed, or why it was stopped."""
+    import tempfile
+    limits = dict(SANDBOX_LIMITS, **({"seconds": seconds} if seconds else {}))
+    with tempfile.TemporaryDirectory(prefix="agent-code-") as work:
+        env = {"PATH": "/usr/bin:/bin", "HOME": work, "TMPDIR": work, "LANG": "C.UTF-8",
+               "SANDBOX_LIMITS": json.dumps(limits),
+               "SANDBOX_PRIVATE": json.dumps([os.path.expanduser("~")])}
+        kind, _, _ = sandbox_layer(work, env)
+        command = _prefix(kind, work) + [sys.executable, "-I", "-c", SANDBOX_GUARD, code]
+        try:
+            done = subprocess.run(command, cwd=work, env=env, capture_output=True, text=True,
+                                  timeout=limits["seconds"])
+        except subprocess.TimeoutExpired:
+            return f"Error: stopped after {limits['seconds']} seconds."
+        out = (done.stdout + done.stderr)[-limits["output"]:]
+        return out or "(no output)"
+'''
+_SANDBOX_REPORT: Optional[Dict[str, Any]] = None
+
+
+def sandbox_report() -> Dict[str, Any]:
+    """Which sandbox layers model-written code gets on this machine, probed once."""
+    global _SANDBOX_REPORT
+    if _SANDBOX_REPORT is None:
+        import subprocess
+        import sys
+        import tempfile
+        space: Dict[str, Any] = {"json": json, "os": os, "subprocess": subprocess, "sys": sys}
+        exec(SANDBOX_CODE, space)  # noqa: S102 — our own sandbox code
+        with tempfile.TemporaryDirectory() as work:
+            kind, description, why = space["sandbox_layer"](work, {"PATH": "/usr/bin:/bin", "HOME": work})
+        _SANDBOX_REPORT = {"os_layer": description, "why_not": why,
+                           "guard": "process guard: no network, no programs, writes only to its folder, "
+                                    "home folder unreadable, no secrets, CPU, memory and file limits"}
+    return _SANDBOX_REPORT
 
 
 # The MCP client every generated file carries when it uses an MCP server, and the lab uses to
@@ -295,11 +476,18 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
     "code_exec": dict(
         name="Code executor", system="hands", short="Runs code the model writes",
         anatomy="Runs code the model writes and returns the output, for exact maths and data handling.",
-        inside="A Python subprocess with a timeout. Not a sandbox.",
-        physiology="The model writes code as the tool argument; stdout and errors come back as the result.",
-        failure=("In a live run this executes model-written code on this machine. Put a Human approval block "
-                 "in front of it unless you trust every prompt the agent will see."),
-        params={LIMIT[0]: _p(LIMIT[1], 0, "number")}),
+        inside=("Sandboxed by default: a separate Python process in a throwaway folder, with no secrets in its "
+                "environment, CPU, memory and file-size limits, and a guard that refuses network access, "
+                "starting programs, writing outside its folder and reading your home folder — inside the "
+                "operating system's own sandbox where this machine has one (macOS sandbox-exec, or a Linux "
+                "namespace with no network)."),
+        physiology="The model writes code as the tool argument; what it prints, and any refusal, comes back as the result.",
+        failure=("Sandboxed, the code can still burn its time limit and read files outside your home folder. "
+                 "Set to unrestricted it runs as you, with your files and network: then put a Human approval "
+                 "in front of it, and the Safety tab will insist."),
+        params={"isolation": _p("Where the code runs", SANDBOXED, "choice", [SANDBOXED, UNRESTRICTED]),
+                "seconds": _p("Time limit (seconds)", 20, "number"),
+                LIMIT[0]: _p(LIMIT[1], 0, "number")}),
     "sub_agent": dict(
         name="Sub-agent", system="hands", short="A whole agent used as a tool",
         anatomy="A second model with its own instructions, wrapped as a tool the parent can delegate to.",
@@ -1148,7 +1336,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             *[t for t, _ in tools if kind[t] == "sub_agent"])
 
     # ---- hands ----
-    servers_written, mcp_class_written = set(), []
+    servers_written, mcp_class_written, sandbox_written = set(), [], []
     if tools:
         add(["", "", "# ---- hands: tools ----"])
         for tid, name in tools:
@@ -1160,14 +1348,24 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                 body = [f"def {name}(query: str) -> str:", '    """Plug a real search API in here."""',
                         '    return f"[placeholder results for: {query}]"']
             elif k == "code_exec":
-                body = [f"def {name}(code: str) -> str:",
-                        '    """Runs model-written code in a subprocess. That is not a sandbox."""',
-                        "    try:",
-                        "        done = subprocess.run([sys.executable, \"-c\", code], capture_output=True,",
-                        "                              text=True, timeout=20)",
-                        "    except subprocess.TimeoutExpired:",
-                        '        return "Error: timed out after 20 seconds."',
-                        '    return (done.stdout + done.stderr)[-4000:] or "(no output)"']
+                secs = max(1, int(p.get("seconds") or 20))
+                if p.get("isolation", SANDBOXED) == UNRESTRICTED:
+                    body = [f"def {name}(code: str) -> str:",
+                            '    """Runs model-written code as you, with your files and network. No sandbox."""',
+                            "    try:",
+                            '        done = subprocess.run([sys.executable, "-c", code], capture_output=True,',
+                            f"                              text=True, timeout={secs})",
+                            "    except subprocess.TimeoutExpired:",
+                            f'        return "Error: timed out after {secs} seconds."',
+                            '    return (done.stdout + done.stderr)[-4000:] or "(no output)"']
+                else:
+                    body = []
+                    if not sandbox_written:
+                        sandbox_written.append(True)
+                        body += SANDBOX_CODE.strip().split("\n") + ["", ""]
+                    body += [f"def {name}(code: str) -> str:",
+                             '    """Runs model-written code in the sandbox: see run_sandboxed."""',
+                             f"    return run_sandboxed(code, seconds={secs})"]
             elif k == "subgraph":
                 body = subgraph_code(tid, name, p, _stack)
             elif k == "mcp":
@@ -1885,14 +2083,26 @@ def _m_tool(p, node, graph, c):
     name = next((t for t, nid in c["tools"].items() if nid == node["id"]), None)
     kind = node["type"]
     if kind == "code_exec":
-        eq, shape = "o = (stdout ⊕ stderr)(exec(a.code))[−4000:]", "a = { code: string },  timeout 20 s"
+        secs = int(p.get("seconds") or 20)
+        boxed = p.get("isolation", SANDBOXED) != UNRESTRICTED
+        eq = "o = (stdout ⊕ stderr)(" + ("sandbox(" if boxed else "") + "exec(a.code)" + (")" if boxed else "") + ")[−4000:]"
+        shape = f"a = {{ code: string }},  stopped after {secs} s" + ("" if boxed else ",  runs as you")
     elif kind == "web_search":
         eq, shape = "o = search(a.query)", "a = { query: string }   (the generated stub returns a placeholder)"
     else:
         eq, shape = "o = f(a.input)", "a = { input: string }"
     desc = p.get("description") or ""
     limit = int(p.get("max_calls") or 0)
-    rows = [("given to the model", f"yes, as {name}" if given else "no: not wired from the router"),
+    if kind == "code_exec" and p.get("isolation", SANDBOXED) != UNRESTRICTED:
+        try:
+            rep_ = sandbox_report()
+            layer = rep_["os_layer"] or f"none ({rep_['why_not']})"
+        except Exception as exc:  # noqa: BLE001 — a panel must never break the canvas
+            layer = f"could not be checked ({exc})"
+        extra = [("sandbox on this machine", f"operating system: {layer}; always: the process guard")]
+    else:
+        extra = []
+    rows = extra + [("given to the model", f"yes, as {name}" if given else "no: not wired from the router"),
             ("effects", effects(node)),
             ("needs approval", "yes" if gated else "no"),
             ("calls per run", f"at most {limit}; after that the model is told it is used up" if limit else "no limit")]
@@ -2147,7 +2357,8 @@ def reads_outside(graph, depth: int = 0) -> bool:
 def effects(node) -> str:
     kind = node.get("type")
     if kind == "code_exec":
-        return CHANGES
+        # sandboxed code has no network and writes only to a folder that is thrown away
+        return CHANGES if _params(node).get("isolation", SANDBOXED) == UNRESTRICTED else READS
     if kind == "subgraph":
         # it changes things if anything inside can, without a person of its own in front of it
         inner = _inside(node)
@@ -2262,6 +2473,19 @@ def safety(graph) -> Dict[str, Any]:
                   "status": "fails" if unbounded else "holds",
                   "detail": ("a loop has no model call to count" if unbounded else
                              f"every loop passes an LLM core, and cores share a budget of {a['max_steps']} calls")})
+
+    # 1b. model-written code
+    open_code = [n for n in live if kind[n] == "code_exec" and n in a["given"]
+                 and _params(nodes[n]).get("isolation", SANDBOXED) == UNRESTRICTED]
+    for n in open_code:
+        find("risk" if n not in a["gated"] else "warning", "sandbox",
+             f"{name(n)} runs model-written code as you, with your files and network, outside any sandbox"
+             + ("." if n not in a["gated"] else ", though a person approves each run."), focus=[n])
+    if any(kind[n] == "code_exec" for n in live):
+        props.append({"name": "Model-written code runs in a sandbox",
+                      "status": "fails" if open_code else "holds",
+                      "detail": ("a code executor is set to unrestricted" if open_code else
+                                 "every code executor is sandboxed")})
 
     # 2. side effects behind a person
     risky = [t for t in a["given"] if effects(nodes[t]) == CHANGES and t in live]

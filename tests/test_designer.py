@@ -7699,9 +7699,17 @@ def _props(graph):
     return {p["name"]: p["status"] for p in agentlab.safety(graph)["properties"]}
 
 
+def _unrestricted(g):
+    """The executor as it was before 3.1: running model-written code as you."""
+    for n in g["nodes"]:
+        if n["type"] == "code_exec":
+            n["params"]["isolation"] = agentlab.UNRESTRICTED
+    return g
+
+
 @check("the safety check finds the injection path from search to code execution")
 def _():
-    g = agentlab.template("planexec")
+    g = _unrestricted(agentlab.template("planexec"))
     report = agentlab.safety(g)
     risk = [f for f in report["findings"] if f["check"] == "injection" and f["level"] == "risk"]
     assert risk, "web search feeds a core that can run code unapproved, and nothing was flagged"
@@ -8018,7 +8026,7 @@ def _team():
     researcher = agentlab.template("react")
     researcher["name"] = "__test_researcher"
     agentlab.save(researcher)
-    coder = agentlab.template("planexec")
+    coder = _unrestricted(agentlab.template("planexec"))
     coder["name"] = "__test_coder"
     agentlab.save(coder)
     g = agentlab.template("supervisor")
@@ -8725,6 +8733,73 @@ def _():
     assert _until(out["id"], ("done",))["status"] == "done"
     for needle in ("async function alFollow", 'id="alWaiting"', "function alLoadUnfinished", 'value="ask"'):
         assert needle in PAGE, needle
+
+
+# --------------------------------------------------------------------------
+# agent lab 3.1: model-written code runs in a sandbox
+# --------------------------------------------------------------------------
+
+def _boxed(code, seconds=5):
+    import subprocess
+    space = {"json": json, "os": os, "subprocess": subprocess, "sys": sys}
+    exec(agentlab.SANDBOX_CODE, space)  # noqa: S102
+    return space["run_sandboxed"](code, seconds=seconds).strip()
+
+
+@check("sandboxed code computes, and keeps its own folder")
+def _():
+    assert _boxed("print(round(545000 / 450))") == "1211"
+    assert _boxed("open('notes.txt', 'w').write('kept'); print(open('notes.txt').read())") == "kept"
+
+
+@check("sandboxed code cannot reach the network, start programs, or leave its folder")
+def _():
+    attempts = {
+        "network": "import urllib.request; urllib.request.urlopen('http://example.com', timeout=3)",
+        "socket": "import socket; socket.create_connection(('1.1.1.1', 80), 2)",
+        "raw socket": "import _socket; _socket.socket()",
+        "shell": "import os; os.system('echo pwned')",
+        "subprocess": "import subprocess; subprocess.run(['id'])",
+        "fork_exec": "import _posixsubprocess as p; p.fork_exec()",
+        "fork": "import os; os.fork()",
+        "write outside": "open('/tmp/__agentlab_escape', 'w').write('x')",
+        "os.open outside": "import os; os.open('/tmp/__agentlab_escape', os.O_WRONLY | os.O_CREAT)",
+        "symlink out": "import os; os.symlink('/tmp', 'out')",
+        "delete": "import os; os.remove('/tmp/__agentlab_never_there')",
+        "home": f"print(open({str(Path.home() / '.profile')!r}).read())",
+        "list home": f"import os; print(os.listdir({str(Path.home())!r}))",
+        "ctypes": "import ctypes",
+        "extension": "open('evil.so', 'wb').write(b'x')",
+    }
+    for what, code in attempts.items():
+        out = _boxed(code)
+        assert "sandbox:" in out, f"{what} was not refused: {out[-200:]}"
+    assert not Path("/tmp/__agentlab_escape").exists()
+
+
+@check("sandboxed code sees no secrets, and is stopped at its time limit")
+def _():
+    os.environ["AGENTLAB_TEST_SECRET"] = "s3cret"
+    try:
+        assert _boxed("import os; print(os.environ.get('AGENTLAB_TEST_SECRET'))") == "None"
+    finally:
+        del os.environ["AGENTLAB_TEST_SECRET"]
+    assert "stopped after 2 seconds" in _boxed("while True: pass", seconds=2)
+
+
+@check("the code executor is sandboxed by default, and Safety knows the difference")
+def _():
+    g = agentlab.template("planexec")
+    props = _props(g)
+    assert props["Model-written code runs in a sandbox"] == "holds"
+    assert props["Outside text cannot trigger side effects"] == "holds"
+    source = agentlab.codegen(g)["source"]
+    assert "def run_sandboxed(code" in source and "return run_sandboxed(code, seconds=20)" in source
+    result = agentlab.run(g, "What is 545000 divided by 450?")
+    assert any(e["event"] == "tool_result" and e["preview"].strip() == "1211" for e in result["events"])
+    loose = _props(_unrestricted(agentlab.template("planexec")))
+    assert loose["Model-written code runs in a sandbox"] == "fails"
+    assert agentlab.sandbox_report()["guard"]
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

@@ -325,6 +325,10 @@ Runs are **durable**: saved after every block, followed live, paused at a
 Human approval until you answer, and resumable after a crash or restart from
 their last checkpoint.
 
+The **code executor** runs model-written code in a sandbox: a guarded process
+with no secrets, no network and its own throwaway folder, inside macOS's
+`sandbox-exec` or a Linux namespace where available.
+
 The **Study** tab removes one block at a time, runs your cases on every version,
 and reports which blocks earn their tokens, which ones only cost them, and which
 guarantees a removal would lose.
