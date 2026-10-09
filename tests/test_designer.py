@@ -9820,6 +9820,78 @@ def _():
             "/api/settings/ollama", "/api/settings/ollama/pull"} <= paths
     assert agentlab.BLOCKS["llm"]["params"]["provider"]["value"] == "default"
 
+
+@check("Ollama is found under any local name, past a shell proxy, and can be started from Settings")
+def _():
+    import providers
+    import socket
+    import subprocess as _sp
+    import tempfile
+    home, restore = _private_workspace()
+    server, url, seen = _mock_models_server()
+    port = server.server_port
+    saved = {k: os.environ.get(k) for k in ("HTTP_PROXY", "http_proxy")}
+    real_installed = providers.ollama_installed
+    started = []
+    try:
+        # the address in Settings says IPv6, the server listens on IPv4: found anyway, and remembered
+        providers.save({"providers": {"ollama": {"base_url": f"http://[::1]:{port}/v1"}}})
+        st = providers.ollama_status()
+        assert st["running"] and providers.base_url_for("ollama") == f"http://127.0.0.1:{port}/v1"
+        assert providers.ready("ollama"), "an Ollama that answered may be used"
+        os.environ["HTTP_PROXY"] = os.environ["http_proxy"] = "http://127.0.0.1:9"
+        assert providers.ollama_status()["running"], "a shell proxy does not stand between the server and Ollama"
+        for k in ("HTTP_PROXY", "http_proxy"):
+            os.environ.pop(k, None)
+        # installed but not running: Start launches it and waits for an answer
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            free = sock.getsockname()[1]
+        folder = Path(tempfile.mkdtemp())
+        (folder / "serve.py").write_text(
+            "import json\nfrom http.server import BaseHTTPRequestHandler, HTTPServer\n"
+            "class H(BaseHTTPRequestHandler):\n"
+            "    def log_message(self, *a): pass\n"
+            "    def do_GET(self):\n"
+            "        body = json.dumps({'version': '9'} if self.path.endswith('version') else {'models': []}).encode()\n"
+            "        self.send_response(200); self.send_header('content-length', str(len(body))); self.end_headers()\n"
+            "        self.wfile.write(body)\n"
+            f"HTTPServer(('127.0.0.1', {free}), H).serve_forever()\n")
+        fake = folder / "ollama"
+        fake.write_text(f"#!/bin/sh\nexec {sys.executable} {folder / 'serve.py'}\n")
+        fake.chmod(0o755)
+        providers.ollama_installed = lambda: {"installed": True, "binary": str(fake), "app": None}
+        real_platform, providers.sys.platform = providers.sys.platform, "linux"
+        real_popen = providers.subprocess.Popen
+        providers.subprocess.Popen = lambda *a, **k: started.append(real_popen(*a, **k)) or started[-1]
+        try:
+            providers.save({"providers": {"ollama": {"base_url": f"http://127.0.0.1:{free}/v1"}}})
+            assert not providers.ollama_status()["running"]
+            st = providers.ollama_start()
+            assert st["running"] and st.get("started")
+        finally:
+            providers.sys.platform = real_platform
+            providers.subprocess.Popen = real_popen
+        providers.ollama_installed = lambda: {"installed": False, "binary": None, "app": None}
+        providers.save({"providers": {"ollama": {"base_url": "http://127.0.0.1:9/v1"}}})
+        try:
+            providers.ollama_start()
+            raise AssertionError("started something that is not installed")
+        except ValueError as exc:
+            assert "not installed" in str(exc)
+        assert 'id="stOllamaStart"' in PAGE and "/api/settings/ollama/start" in PAGE
+    finally:
+        providers.ollama_installed = real_installed
+        for proc in started:
+            proc.kill()
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        server.shutdown()
+        restore()
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

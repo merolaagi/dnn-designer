@@ -377,6 +377,11 @@ def settings_ollama():
     return providers.ollama_status()
 
 
+@app.post("/api/settings/ollama/start")
+def settings_ollama_start():
+    return _settings_call(providers.ollama_start)
+
+
 @app.post("/api/settings/ollama/pull")
 def settings_ollama_pull(body: Dict[str, Any]):
     return _settings_call(providers.ollama_pull, str(body.get("name") or ""))

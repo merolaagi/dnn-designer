@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.1.1
+
+**Settings finds Ollama more reliably, and can start it.**
+
+- **Any local name.** If Ollama does not answer at the address in Settings,
+  the same port is tried as 127.0.0.1, localhost and [::1], since a Mac can
+  resolve "localhost" to IPv6 while Ollama listens on IPv4 (or the reverse).
+  The address that answers is remembered.
+- **No proxy in the way.** A proxy set in the shell (HTTP_PROXY) no longer
+  stands between the server and a model on this computer, in Settings and in
+  generated agent files.
+- **Start Ollama.** When Ollama is installed but not running, Settings says so
+  and offers a Start button: on a Mac it opens the Ollama app, elsewhere it runs
+  `ollama serve`, then waits for it to answer.
+- **What was tried** is listed under the message, address by address, so a
+  wrong port or a refused connection is plain to see.
+- An Ollama that answers is switched on for agents straight away.
+
 ## 4.1.0
 
 **Settings: every model provider in one place.** A Settings page (the gear at

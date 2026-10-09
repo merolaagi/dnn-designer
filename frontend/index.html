@@ -15834,10 +15834,16 @@ async function stOllama(){
   const gb = n => n ? (n / 1e9).toFixed(1) + " GB" : "";
   const pulls = (o.pulls || []).filter(p => p.status !== "done" || !(o.models || []).some(m => m.name === p.name));
   host.innerHTML = !o.running
-    ? `<div class="st-note"><b>Ollama is not running at ${alEsc(o.url || "")}.</b> Install it from
-        <a class="al-link" href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com</a>, open it, then press
-        Refresh. Models you pull then run on this computer: free, private, and as fast as its chip allows.
-        <div class="st-msg" style="margin-top:6px">${alEsc(o.error || "")}</div></div>`
+    ? (o.installed
+      ? `<div class="st-note"><b>Ollama is installed but not running.</b> It answers on ${alEsc(o.url || "")} only while
+          the Ollama app (or <code>ollama serve</code>) is open.
+          <div class="st-actions"><button class="btn go" id="stOllamaStart">Start Ollama</button><span class="st-msg" id="stOllamaStartMsg"></span></div>
+          <details style="margin-top:8px"><summary class="st-msg">What was tried</summary><div class="st-msg">${alEsc(o.error || "")}</div></details></div>`
+      : `<div class="st-note"><b>Ollama was not found on this computer, and nothing answers at ${alEsc(o.url || "")}.</b>
+          Install it from <a class="al-link" href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com</a>,
+          open it, then press Refresh. If it is installed somewhere unusual or runs on another port, open
+          <b>Ollama (on this computer)</b> under Providers above and set its address.
+          <details style="margin-top:8px"><summary class="st-msg">What was tried</summary><div class="st-msg">${alEsc(o.error || "")}</div></details></div>`)
     : `<div class="st-msg" style="margin-bottom:10px">Ollama ${alEsc(o.version || "")} is running at ${alEsc(o.url)}.
          ${(o.models || []).length} model${(o.models || []).length === 1 ? "" : "s"} installed.</div>
        ${(o.models || []).length ? `<table class="st-table"><thead><tr><th>Model</th><th>Size</th><th>Parameters</th><th>Quantization</th><th></th></tr></thead><tbody>
@@ -15852,6 +15858,14 @@ async function stOllama(){
        ${pulls.map(p => `<div style="margin-top:12px"><div class="st-msg">${alEsc(p.name)}: ${alEsc(p.status === "error" ? p.error : p.message)}
           ${p.total ? ` · ${gb(p.done)} of ${gb(p.total)}` : ""}</div>
           <div class="st-bar"><i style="width:${p.total ? Math.round(100 * p.done / p.total) : p.status === "done" ? 100 : 3}%"></i></div></div>`).join("")}`;
+  if ($("stOllamaStart")) $("stOllamaStart").onclick = async () => {
+    $("stOllamaStart").disabled = true; $("stOllamaStartMsg").textContent = "Starting… this can take a few seconds";
+    const r = await fetch(API + "/api/settings/ollama/start", {method: "POST"});
+    const d = await r.json();
+    if (!r.ok){ $("stOllamaStart").disabled = false; $("stOllamaStartMsg").textContent = (d.detail && d.detail.message) || "It did not start";
+      $("stOllamaStartMsg").className = "st-msg bad"; return; }
+    await stLoad(); stRender();
+  };
   host.querySelectorAll("[data-osug]").forEach(b => b.onclick = () => { $("stPull").value = b.dataset.osug; $("stPull").focus(); });
   if ($("stPullGo")) $("stPullGo").onclick = async () => {
     const name = $("stPull").value.trim();

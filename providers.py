@@ -18,7 +18,11 @@ import json
 import os
 import threading
 import time
+import shutil
+import subprocess
+import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -208,11 +212,22 @@ def save(update: Dict[str, Any]) -> Dict[str, Any]:
 # talking to a provider
 # --------------------------------------------------------------------------
 
+# A proxy set in the shell (HTTP_PROXY and friends) must never get between the server and a model
+# running on this computer: it would answer "not running" for an Ollama that is up.
+_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _open(req, timeout: float):
+    host = urllib.parse.urlsplit(req.full_url).hostname or ""
+    local = host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or host.endswith(".local")
+    return (_DIRECT if local else urllib.request.build_opener()).open(req, timeout=timeout)
+
+
 def _request(url: str, body: Optional[Dict[str, Any]], headers: Dict[str, str], timeout: float):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, headers={"content-type": "application/json", **headers},
                                  method="POST" if body is not None else "GET")
-    with urllib.request.urlopen(req, timeout=timeout) as reply:
+    with _open(req, timeout) as reply:
         return json.loads(reply.read() or b"{}")
 
 
@@ -341,18 +356,92 @@ def _ollama_root() -> str:
     return base[:-3] if base.rstrip("/").endswith("/v1") else base.rstrip("/")
 
 
+def _ollama_candidates(root: str) -> List[str]:
+    """The address in Settings, then the same port by its other local names.
+
+    "localhost" can resolve to IPv6 first while Ollama listens on IPv4 only, or the other way
+    round; trying each spelling finds it whichever this Mac prefers.
+    """
+    out = [root]
+    parts = urllib.parse.urlsplit(root)
+    if parts.hostname in ("localhost", "127.0.0.1", "::1"):
+        port = parts.port or 11434
+        for host in ("127.0.0.1", "localhost", "[::1]"):
+            alt = f"{parts.scheme}://{host}:{port}"
+            if alt not in out:
+                out.append(alt)
+    return out
+
+
+def ollama_installed() -> Dict[str, Any]:
+    """Whether Ollama is on this computer, found the way a Mac or Linux install puts it."""
+    app = Path("/Applications/Ollama.app")
+    found = shutil.which("ollama")
+    if not found:
+        for guess in ("/usr/local/bin/ollama", "/opt/homebrew/bin/ollama", str(app / "Contents/Resources/ollama"),
+                      os.path.expanduser("~/.local/bin/ollama")):
+            if os.path.exists(guess):
+                found = guess
+                break
+    return {"installed": bool(found or app.exists()), "binary": found, "app": str(app) if app.exists() else None}
+
+
 def ollama_status() -> Dict[str, Any]:
     root = _ollama_root()
-    try:
-        version = _request(root + "/api/version", None, {}, 5).get("version")
-        tags = _request(root + "/api/tags", None, {}, 10)
-    except Exception as exc:  # noqa: BLE001
-        return {"running": False, "url": root, "error": _why(exc), "models": [], "pulls": _pull_view()}
+    errors = []
+    for candidate in _ollama_candidates(root):
+        try:
+            version = _request(candidate + "/api/version", None, {}, 4).get("version")
+            tags = _request(candidate + "/api/tags", None, {}, 10)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{candidate}: {_why(exc)}")
+            continue
+        if candidate != root:
+            # found it under another name for this computer: remember that one
+            save({"providers": {"ollama": {"base_url": candidate + "/v1"}}})
+            root = candidate
+        break
+    else:
+        return {"running": False, "url": root, "error": "; ".join(errors), "models": [], "pulls": _pull_view(),
+                **ollama_installed()}
     models = [{"name": m.get("name"), "size": m.get("size"), "modified": m.get("modified_at"),
                "family": (m.get("details") or {}).get("family"),
                "parameters": (m.get("details") or {}).get("parameter_size"),
                "quantization": (m.get("details") or {}).get("quantization_level")} for m in tags.get("models") or []]
-    return {"running": True, "url": root, "version": version, "models": models, "pulls": _pull_view()}
+    with _LOCK:
+        data = load()
+        mine = data["providers"].setdefault("ollama", {})
+        if mine.get("enabled") is None:
+            mine["enabled"] = True          # it answered, so agents may use it
+            _write(data)
+    return {"running": True, "url": root, "version": version, "models": models, "pulls": _pull_view(),
+            **ollama_installed()}
+
+
+def ollama_start() -> Dict[str, Any]:
+    """Start Ollama when it is installed but not running, and wait for it to answer."""
+    if ollama_status()["running"]:
+        return ollama_status()
+    where = ollama_installed()
+    if not where["installed"]:
+        raise ValueError("Ollama is not installed on this computer. Download it from ollama.com, then try again.")
+    if sys.platform == "darwin" and where["app"]:
+        cmd = ["open", "-a", "Ollama"]                      # the menu-bar app runs the server
+    elif where["binary"]:
+        cmd = [where["binary"], "serve"]
+    else:
+        raise ValueError("Ollama is installed but its program could not be found. Open the Ollama app yourself.")
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                         start_new_session=True)
+    except OSError as exc:
+        raise ValueError(f"Could not start Ollama: {exc}") from None
+    for _ in range(40):
+        time.sleep(0.5)
+        st = ollama_status()
+        if st["running"]:
+            return {**st, "started": True}
+    raise ValueError("Ollama was started but has not answered after 20 seconds. Open the Ollama app and check it.")
 
 
 _PULLS: Dict[str, Dict[str, Any]] = {}
@@ -376,7 +465,7 @@ def ollama_pull(name: str) -> Dict[str, Any]:
         try:
             req = urllib.request.Request(root + "/api/pull", data=json.dumps({"name": name, "stream": True}).encode(),
                                          headers={"content-type": "application/json"})
-            with urllib.request.urlopen(req, timeout=3600) as reply:
+            with _open(req, 3600) as reply:
                 for line in reply:
                     if not line.strip():
                         continue
@@ -398,7 +487,7 @@ def ollama_delete(name: str) -> Dict[str, Any]:
     req = urllib.request.Request(root + "/api/delete", data=json.dumps({"name": name}).encode(),
                                  headers={"content-type": "application/json"}, method="DELETE")
     try:
-        with urllib.request.urlopen(req, timeout=30):
+        with _open(req, 30):
             pass
     except Exception as exc:  # noqa: BLE001
         raise ValueError(_why(exc)) from None

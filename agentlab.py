@@ -1606,7 +1606,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              if langgraph else "A while loop at the bottom runs them."), "",
          run_line, "" if langgraph else "Standard library only.", '"""', ""])
     subgraphs = [t for t, _ in tools if kind[t] == "subgraph"]
-    imports = ["import json", "import os", "import time", "import urllib.error", "import urllib.request"]
+    imports = ["import json", "import os", "import time", "import urllib.error", "import urllib.parse",
+               "import urllib.request"]
     if subgraphs or embedded:
         imports.append("from pathlib import Path")
     if any(kind[t] in ("code_exec", "mcp") for t, _ in tools):
@@ -1665,10 +1666,15 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '    return (KEYS.get(name) or os.environ.get(name, "")) if name else ""',
              "", "",
              "def send(request):",
-             '    """Open a model call, trying again after 429, 5xx and dropped connections, with growing pauses."""',
+             '    """Open a model call, trying again after 429, 5xx and dropped connections, with growing pauses.',
+             "",
+             "    A model on this computer is reached directly, never through a proxy set in the shell.",
+             '    """',
+             '    local = (urllib.parse.urlsplit(request.full_url).hostname or "") in ("localhost", "127.0.0.1", "::1")',
+             "    opener = urllib.request.build_opener(*([urllib.request.ProxyHandler({})] if local else []))",
              "    for attempt in range(RETRIES + 1):",
              "        try:",
-             "            return urllib.request.urlopen(request, timeout=TIMEOUT)",
+             "            return opener.open(request, timeout=TIMEOUT)",
              "        except urllib.error.HTTPError as exc:",
              "            if exc.code not in (408, 409, 429, 500, 502, 503, 504, 529) or attempt == RETRIES:",
              "                raise",
