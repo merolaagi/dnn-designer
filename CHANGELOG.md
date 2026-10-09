@@ -1,5 +1,83 @@
 # Changelog
 
+## 3.8.0
+
+**Math search, a critic that needs proof, and agents that train networks.**
+
+- **A seventh starting design: Math search.** New → *Math search: generate,
+  verify, remember*. Long-term memory recalls earlier best candidates and
+  failed ideas; a planner sets the approach; the core proposes candidates and
+  runs code that builds each one and checks it from scratch; web search finds
+  the best known result; a critic gates the answer on that check; the answer is
+  remembered for the next run. Thirty steps, a summarizer to keep a long
+  search inside the context, and a minute per code run.
+- **A critic that needs proof.** The Critic has a new setting, *What it needs
+  to pass*. Set to *a verifier's line, then the review*, it does not even ask
+  its model until some tool result has printed a line starting `VERIFIED` (or a
+  marker you choose), and the line is shown to the reviewer. If no check ever
+  passes, the answer goes out marked *Not verified* rather than looking
+  finished. Its Maths tab states the gate.
+- **A Train network block** (Hands). The agent can train a network you saved on
+  the network canvas: it names a built-in dataset, or writes a table as CSV
+  text, and gets back training and validation loss. Given a table, the design's
+  Input is resized to the table's columns and the last column is the target.
+  The call waits for training up to a limit you set (600 seconds by default),
+  then reports; the run is kept in Run history. Rehearsals train nothing and say
+  so. It counts as changing things, so the Safety tab wants a Human approval in
+  front of it, and Math search has one.
+- **ScoreMLP**, a small network for tables of numbers (two hidden layers of 64,
+  one regression output), ships with the examples, ready for Train network.
+- **The downloaded file trains too**, by asking the designer at
+  `DNN_DESIGNER_URL` (default `http://127.0.0.1:8770`); with accounts on, put
+  your session cookie in `DNN_DESIGNER_COOKIE`.
+- **Fixed:** durable runs and studies run in a background thread, which lost
+  track of who was signed in; anything they saved through the account's
+  workspace could land in the wrong one. They now carry the account with them.
+
+## 3.7.0
+
+**A one-line header.** The two rows at the top are now a single 54-pixel bar:
+the app's mark and name with its version, then Designs / the design's name
+(click to rename) and its saved-versions pill, then the layer and learnable
+counts, then the actions.
+
+- **Quieter actions.** Import, Code (the download) and Open are icon-and-label
+  buttons without boxes; Delete is a bin icon that turns red only on hover;
+  Save is outlined and Train is the one solid button.
+- **You, on the right.** Your initial in a circle, your name, and a sign-out
+  icon.
+- **The learnables count works.** It always showed a dash; it now shows the
+  design's trainable parameters after each check.
+- **The Agent lab gets its own header.** On that page the network's name,
+  versions, counts and buttons are hidden, and the bar says Agent lab, so the
+  only Save and Run are the agent's own.
+- **Narrow windows.** Below about 1560 pixels the three quiet actions show
+  icons only; below 1240 the counts and your name tuck away.
+
+## 3.6.0
+
+**Undo on the agent canvas, a cleaner toolbar, and a guide to the lab.**
+
+- **Undo and redo.** Every edit on the agent canvas — dropping a block, moving
+  it, wiring, deleting, changing a setting, renaming, clearing, loading a
+  design — is one step of history. Use the arrows in the toolbar, ⌘Z / Ctrl+Z,
+  and ⇧⌘Z / Ctrl+Y. Typing in a field folds into one step, so undo removes a
+  word rather than a letter. The last 30 steps survive a page reload.
+- **Clear can be undone.** It says how many blocks it removed, with an Undo
+  button, and so do New and Open when they replace the canvas.
+- **A new toolbar.** The agent's name is the title; under it, whether the
+  canvas is a browser-only draft, saved, or has unsaved changes. **New** opens
+  a blank canvas or one of the six starting designs, each described; **Open**
+  lists agents saved in your workspace. ⌘S / Ctrl+S saves.
+- **How the Agent lab works.** The ? button opens a guide: the workflow from
+  design to monitoring, with a link to each tab, and where each kind of thing
+  is kept, with counts and the workspace folder's path.
+- **Open lists agents only.** The lab's settings files (prices, alerts, online
+  evaluators) no longer appear as saved agents.
+- **Fixed on the network page:** the status bar under the canvas updates again
+  after each check. Two functions it called had gone missing, which stopped the
+  check part way through.
+
 ## 3.5.0
 
 **Model replies streamed, word by word.** During a run, each LLM core's words

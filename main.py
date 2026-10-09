@@ -334,6 +334,11 @@ def agentlab_run(body: AgentLabRun):
         raise HTTPException(400, detail={"message": str(exc)})
 
 
+@app.get("/api/agentlab/where")
+def agentlab_where():
+    return agentlab.where()
+
+
 @app.get("/api/agentlab/designs")
 def agentlab_designs():
     return {"designs": agentlab.listing()}
@@ -2059,6 +2064,84 @@ def post_train(body: TrainPayload):
     job = T.start(source, cfg, in_shapes, in_ids, out_shape, tasks, class_name)
     return {"job": job.snapshot(), "source": source,
             "inputs": [{"id": i, "shape": s} for i, s in zip(in_ids, in_shapes)]}
+
+
+# --------------------------------------------------------------------------
+# training on an agent's behalf
+# --------------------------------------------------------------------------
+
+def agent_train(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Train a saved network design for the Agent lab's Train network block, and wait.
+
+    The agent names the data; the design is whatever was saved on the canvas, with its
+    Input resized to a table's feature columns. Problems come back as an error to show the
+    model, never as an exception, so a bad request costs the agent one tool call.
+    """
+    import hashlib
+
+    name = str(request.get("design") or "").strip()
+    versions = _versions(name) if name else []
+    if not versions:
+        have = ", ".join(p.stem for p in sorted(saved_dir().glob("*.json"))[:12])
+        return {"error": f"No network design called {name or '(none)'} is saved. Saved ones: {have or 'none'}."}
+    graph = json.loads(versions[-1]["path"].read_text())
+    graph.pop("_version", None)
+    version = versions[-1]["version"]
+    dataset = str(request.get("dataset") or "synthetic").strip().lower()
+    csv_text = str(request.get("csv") or "")
+    epochs = max(1, min(int(request.get("epochs") or 5), 200))
+    wait = max(5, min(float(request.get("wait") or 600), 3600))
+    cfg: Dict[str, Any] = {"dataset": dataset, "epochs": epochs, "design_name": name, "design_version": version}
+    if csv_text:
+        dataset = cfg["dataset"] = "csv"
+        if len(csv_text) > 2_000_000:
+            return {"error": "The table is over 2 MB of text. Send fewer rows."}
+        rows = [line for line in csv_text.strip().splitlines() if line.strip()]
+        header = [h.strip() for h in rows[0].split(",")] if rows else []
+        if len(rows) < 10 or len(header) < 2:
+            return {"error": "Send a header row and at least ten rows, with at least one feature column and a target."}
+        target = str(request.get("target_column") or "").strip() or header[-1]
+        if target not in header:
+            return {"error": f"The table has no column {target}. Its columns: {', '.join(header)}."}
+        file = f"agent_{hashlib.sha1(csv_text.encode()).hexdigest()[:12]}.csv"
+        (T.UPLOADS / file).write_text(csv_text)
+        cfg.update(csv_file=file, target_column=target)
+        inputs = [n for n in graph.get("nodes", []) if n.get("type") == "Input"]
+        if len(inputs) == 1:
+            inputs[0].setdefault("params", {})["shape"] = [len(header) - 1]
+    elif dataset == "csv":
+        return {"error": "Pass the table itself as CSV text in csv."}
+    elif dataset not in T.BUILTIN_DATASETS or dataset in ("folder", "text"):
+        usable = [k for k in T.BUILTIN_DATASETS if k not in ("folder", "text")]
+        return {"error": f"Unknown dataset {dataset}. Use csv with a table, or one of: {', '.join(usable)}."}
+    try:
+        started = post_train(TrainPayload(graph=graph, config=cfg))
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+        more = "; ".join(str(e) for e in (detail.get("errors") or [])[:3])
+        return {"error": detail.get("message", "Training was refused.") + (f" ({more})" if more else "")}
+    job = T.JOBS[started["job"]["id"]]
+    deadline = time.time() + wait
+    while job.status in ("starting", "running") and time.time() < deadline:
+        time.sleep(0.5)
+    snap = job.snapshot()
+    history = snap.get("history") or []
+    losses = [row.get("val_loss") for row in history if isinstance(row.get("val_loss"), (int, float))]
+    out = {"design": name, "version": version, "dataset": dataset, "status": snap["status"],
+           "epoch": snap["epoch"], "epochs": snap["epochs"], "learnables": snap.get("learnables"),
+           "id": snap["id"], "history": history[-3:], "best": min(losses) if losses else None,
+           "notes": [str(n) for n in (snap.get("notes") or [])][-3:], "problem": snap.get("error")}
+    if snap["status"] in ("starting", "running"):
+        out["notes"].append(f"Still training after {int(wait)} seconds; it carries on in Run history.")
+    return out
+
+
+agentlab.TRAINER = agent_train
+
+
+@app.post("/api/agentlab/train-network")
+def agentlab_train_network(body: Dict[str, Any]):
+    return agent_train(body)
 
 
 # --------------------------------------------------------------------------

@@ -45,26 +45,58 @@ button{cursor:pointer}
 /* Two rows, the way a definition page reads: identity and actions on top,
    the canvas toolbar beneath it. */
 header{
-  display:flex;flex-direction:column;background:#fff;flex:none;
-  border-bottom:1px solid var(--paper-3);color:var(--text);
+  display:flex;align-items:center;gap:10px;height:54px;padding:0 14px 0 16px;flex:none;
+  background:#fff;border-bottom:1px solid var(--paper-3);color:var(--text);
+  box-shadow:0 1px 0 rgba(22,32,46,.02);position:relative;z-index:40;
 }
-.topline{display:flex;align-items:center;gap:14px;padding:9px 18px 0}
-.brand{display:flex;align-items:baseline;gap:9px;min-width:196px}
-.brand b{font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--text)}
-.brand span{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#98A6B8}
-.crumbs{font-size:11.5px;color:var(--muted);margin-bottom:1px}
-.crumbs a{color:#2D7DD2;text-decoration:none}
-.titleline{display:flex;align-items:center;gap:12px;padding:1px 18px 9px}
-.titleline h1{
-  margin:0;font-size:21px;font-weight:600;letter-spacing:-.02em;
-}
+.hd-brand{display:flex;align-items:center;gap:9px;flex:none}
+.hd-mark{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(145deg,#3B8BE0,#1F5FAD);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 1px 2px rgba(31,95,173,.35)}
+.hd-brand b{font-size:14px;font-weight:650;letter-spacing:-.015em;white-space:nowrap}
+.hd-ver{font:600 10px/1 var(--mono);color:#6B7A8E;background:var(--paper);border:1px solid var(--paper-3);
+  border-radius:20px;padding:3px 7px;text-transform:lowercase}
+.hd-div{width:1px;height:24px;background:var(--paper-3);flex:none;margin:0 4px}
+.hd-crumbs{display:flex;align-items:center;gap:6px;flex:none}
+.hd-crumbs select{flex:none}
+.hd-crumbs a{color:var(--muted);text-decoration:none;font-size:13px;padding:4px 6px;border-radius:6px}
+.hd-crumbs a:hover{color:var(--text);background:var(--paper)}
+.hd-slash{color:#B5C0CD;font-size:14px}
 #gname{
   background:transparent;border:1px solid transparent;border-radius:6px;
-  padding:3px 8px;color:var(--text);width:270px;font-size:21px;font-weight:600;
-  letter-spacing:-.02em;margin-left:-8px;
+  padding:4px 7px;color:var(--text);font:600 14px var(--ui);letter-spacing:-.01em;
+  field-sizing:content;min-width:70px;max-width:260px;
 }
 #gname:hover{border-color:var(--paper-3)}
-#gname:focus{outline:none;border-color:var(--amber);background:#fff}
+#gname:focus{outline:none;border-color:#2D7DD2;background:#fff;box-shadow:0 0 0 3px rgba(45,125,210,.15)}
+.hd-pagename{display:none;font-size:14px;font-weight:600}
+.hd-stats{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);white-space:nowrap;
+  padding:5px 11px;border-radius:20px;background:var(--paper);margin-right:4px}
+.hd-stats i{font:600 12px var(--mono);font-style:normal;color:var(--text)}
+.hd-stats .dot{width:3px;height:3px;border-radius:50%;background:#A5B1C0}
+.hd-group{display:flex;align-items:center;gap:2px}
+.hb{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:7px;
+  border:1px solid transparent;background:transparent;color:#3C4B5F;font:500 12.5px var(--ui);cursor:pointer;
+  white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+.hb:hover{background:var(--paper);color:var(--text)}
+.hb:focus-visible{outline:2px solid #2D7DD2;outline-offset:1px}
+.hb svg{flex:none}
+.hb.icon{width:32px;padding:0;justify-content:center}
+.hb.danger{color:#8A97A8}
+.hb.danger:hover{color:#C0392B;background:#FDECEA}
+.hb.outline{border-color:var(--paper-3);background:#fff}
+.hb.outline:hover{background:var(--paper);border-color:#B7C3D1}
+.hb.primary{background:#2D7DD2;border-color:#2D7DD2;color:#fff;font-weight:600;padding:0 14px}
+.hb.primary:hover{background:#2569B3;border-color:#2569B3;color:#fff}
+.hb:disabled{opacity:.45;cursor:not-allowed}
+header > *{flex:none}
+header > .spacer{flex:1;min-width:8px}
+@media (max-width:1560px){.hd-group .hb span{display:none}.hd-group .hb{width:32px;padding:0;justify-content:center}}
+@supports not (field-sizing:content){#gname{width:170px}}
+@media (max-width:1240px){.hd-stats,#whoami b{display:none}}
+@media (max-width:1000px){.hd-brand b{display:none}}
+/* the network's name, versions and actions belong to the network pages, not the agent lab */
+body[data-page="pageAgentLab"] .hd-design{display:none}
+body[data-page="pageAgentLab"] .hd-pagename{display:inline}
 .spacer{flex:1}
 .stat{display:flex;flex-direction:column;line-height:1.15;padding-right:6px}
 .stat i{font-style:normal;font-family:var(--mono);font-size:13px;color:#2D7DD2}
@@ -326,10 +358,12 @@ body.resizing-v{cursor:row-resize;user-select:none}
 #rail .count.bad{background:var(--bad)}
 
 #versionPick{
-  background:#fff;border:1px solid var(--paper-3);color:#3C4B5F;border-radius:6px;
-  padding:5px 9px;font-size:12px;max-width:158px;
+  appearance:none;-webkit-appearance:none;background:var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4.5 6.5 3.5 3.5 3.5-3.5' fill='none' stroke='%235C6B7F' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 7px center/12px;
+  border:1px solid transparent;color:#3C4B5F;border-radius:20px;
+  padding:4px 24px 4px 10px;font:500 11.5px var(--ui);max-width:170px;cursor:pointer;
 }
-#versionPick:focus{outline:none;border-color:var(--amber)}
+#versionPick:hover{border-color:var(--paper-3)}
+#versionPick:focus{outline:none;border-color:#2D7DD2}
 .pane.full{position:absolute;inset:0;background:var(--paper);z-index:5;overflow:auto}
 .panel{background:var(--paper);display:flex;flex-direction:column;min-height:0}
 #palette{
@@ -493,14 +527,17 @@ body.resizing-v{cursor:row-resize;user-select:none}
   border-radius:9px;padding:1px 7px;
 }
 .modelchip:hover{background:#DCEAF9;border-color:#2D7DD2}
-#whoami{display:flex;align-items:center;gap:6px;margin-right:4px;font-size:11.5px;
-  color:var(--muted)}
+#whoami{display:flex;align-items:center;gap:8px;margin-left:6px;padding-left:12px;
+  border-left:1px solid var(--paper-3);height:28px;font-size:12.5px;color:var(--muted)}
+#whoami .avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:none;
+  background:#E6F0FB;color:#1F5FAD;font:700 12px var(--ui);text-transform:uppercase}
 #whoami b{color:var(--text);font-weight:600}
 #whoami button{
-  background:none;border:1px solid var(--paper-3);border-radius:5px;font-size:10.5px;
-  padding:2px 7px;color:var(--muted);
+  display:grid;place-items:center;width:28px;height:28px;background:none;border:0;border-radius:7px;
+  color:#8A97A8;cursor:pointer;
 }
-#whoami button:hover{border-color:var(--amber);color:var(--text)}
+#whoami button:hover{background:var(--paper);color:var(--text)}
+#whoami button.text{width:auto;padding:0 10px;border:1px solid var(--paper-3);font:500 12px var(--ui);color:#3C4B5F}
 
 #picker{
   position:fixed;inset:0;background:rgba(22,32,46,.34);z-index:210;
@@ -2285,12 +2322,78 @@ body.sizing{user-select:none}
   position:fixed;pointer-events:none;opacity:.85;z-index:999}
 #alMain{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
 .al-wait{padding:24px;color:var(--muted)}
-.al-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#fff;
-  border-bottom:1px solid var(--paper-3);flex:none;flex-wrap:wrap}
-.al-bar input,.al-bar select{border:1px solid var(--paper-3);border-radius:6px;padding:6px 9px;
-  background:#fff;font-size:12.5px}
-.al-bar input{font-weight:600;min-width:180px}
+.al-bar{display:flex;align-items:center;gap:6px;padding:8px 14px;min-height:52px;background:#fff;
+  border-bottom:1px solid var(--paper-3);flex:none;flex-wrap:wrap;position:relative;z-index:30}
 .al-bar .spacer{flex:1}
+.al-ident{display:flex;align-items:center;gap:10px;min-width:0}
+.al-mark{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;
+  color:#2D7DD2;background:linear-gradient(180deg,#EEF5FD,#E1ECF9);border:1px solid #CFE0F4}
+.al-titles{display:flex;flex-direction:column;min-width:0;line-height:1.15}
+.al-bar input.al-title{border:1px solid transparent;border-radius:5px;padding:2px 6px;margin-left:-6px;background:transparent;
+  font:600 14px/1.3 var(--ui);color:var(--text);min-width:200px;max-width:320px}
+.al-bar input.al-title:hover{border-color:var(--paper-3)}
+.al-bar input.al-title:focus{border-color:#2D7DD2;background:#fff;outline:none;box-shadow:0 0 0 3px rgba(45,125,210,.15)}
+.al-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);padding-left:1px}
+.al-status::before{content:"";width:6px;height:6px;border-radius:50%;background:#9AA8BA}
+.al-status.saved::before{background:var(--good)}
+.al-status.dirty::before{background:var(--amber)}
+.al-sep{width:1px;height:22px;background:var(--paper-3);margin:0 6px}
+.al-ib,.al-tb{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;border-radius:7px;
+  border:1px solid transparent;background:transparent;color:#3C4B5F;font:500 12.5px var(--ui);cursor:pointer;
+  transition:background .12s,border-color .12s,color .12s}
+.al-ib{width:32px;padding:0}
+.al-ib[hidden],.al-tb[hidden]{display:none}
+.al-tb{padding:0 11px}
+.al-ib:hover:not(:disabled),.al-tb:hover:not(:disabled){background:var(--paper);color:var(--text)}
+.al-ib:disabled{color:#B5C0CD;cursor:default}
+.al-ib.on{background:#E6F0FB;color:#2D7DD2}
+.al-ib:focus-visible,.al-tb:focus-visible,.al-menu button:focus-visible{outline:2px solid #2D7DD2;outline-offset:1px}
+.al-tb .chev{width:12px;height:12px;opacity:.6;margin-left:-2px}
+.al-tb.quiet{color:var(--muted)}
+.al-tb.quiet:hover{color:var(--bad)}
+#alSave,#alBack{border-color:var(--paper-3);background:#fff}
+#alSave:hover,#alBack:hover{background:var(--paper)}
+.al-tb.primary{background:#2D7DD2;border-color:#2D7DD2;color:#fff;font-weight:600;padding:0 14px}
+.al-tb.primary:hover:not(:disabled){background:#2569B3;color:#fff}
+.al-menuwrap{position:relative}
+.al-menu{position:absolute;top:calc(100% + 6px);left:0;width:300px;max-height:420px;overflow-y:auto;background:#fff;
+  border:1px solid var(--paper-3);border-radius:10px;box-shadow:0 12px 32px rgba(22,32,46,.16);padding:6px;z-index:60}
+.al-menu button{display:block;width:100%;text-align:left;border:0;background:none;border-radius:7px;padding:7px 10px;cursor:pointer;color:var(--text)}
+.al-menu button:hover{background:var(--paper)}
+.al-menu b{display:block;font-size:12.5px;font-weight:600}
+.al-menu small{display:block;font-size:11.5px;color:var(--muted);margin-top:1px;line-height:1.35}
+.al-menuhead{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:9px 10px 4px}
+.al-menufoot{font-size:11px;color:var(--muted);border-top:1px solid var(--paper-2);margin-top:4px;padding:7px 10px 3px}
+.al-menuempty{font-size:12px;color:var(--muted);padding:6px 10px 10px;line-height:1.45}
+.al-toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,8px);display:flex;align-items:center;gap:14px;
+  background:#22303F;color:#E4EBF3;padding:9px 10px 9px 16px;border-radius:9px;font-size:12.5px;z-index:210;
+  box-shadow:0 10px 28px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .16s,transform .16s}
+.al-toast.on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.al-toast button{background:#33465C;border:0;color:#fff;font:600 12px var(--ui);border-radius:6px;padding:5px 11px;cursor:pointer}
+.al-toast button:hover{background:#41597A}
+.al-emptyundo{display:block;margin-top:8px;font-size:12px}
+.al-help{font-family:var(--ui);flex:none;background:#fff;border-bottom:1px solid var(--paper-3);padding:14px 18px 16px;max-height:52vh;overflow-y:auto}
+.al-helphead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.al-helphead b{font-size:14px}
+.al-helpcols{display:grid;grid-template-columns:1.1fr 1fr;gap:28px}
+@media (max-width:980px){.al-helpcols{grid-template-columns:1fr}}
+.al-help h4{margin:4px 0 8px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.al-steps{list-style:none;margin:0;padding:0}
+.al-steps li{display:flex;gap:10px;padding:5px 0}
+.al-steps .n{flex:none;width:20px;height:20px;border-radius:50%;background:#E6F0FB;color:#2D7DD2;font-size:11px;font-weight:700;display:grid;place-items:center}
+.al-steps b{font-size:12.5px}
+.al-steps p{margin:2px 0 0;font-size:12px;color:#3C4B5F;line-height:1.45}
+.al-link{border:0;background:none;color:#2D7DD2;font-size:11.5px;cursor:pointer;padding:0 0 0 4px}
+.al-link:hover{text-decoration:underline}
+.al-store{list-style:none;margin:0;padding:0}
+.al-store li{padding:5px 0;border-bottom:1px solid var(--paper-2);font-size:12.5px}
+.al-store li:last-child{border-bottom:0}
+.al-store em{font-style:normal;font-size:11px;color:var(--muted);margin-left:6px}
+.al-store span{display:block;font-size:12px;color:#3C4B5F;line-height:1.45;margin-top:1px}
+.al-store code,.al-dir code{font-family:var(--mono);font-size:11px;background:var(--paper);padding:1px 4px;border-radius:3px}
+.al-dir{margin-top:10px;padding:8px 10px;background:var(--paper);border-radius:7px}
+.al-dir small{display:block;font-size:10.5px;color:var(--muted);margin-bottom:3px}
+.al-dir code{background:none;padding:0;word-break:break-all;font-size:11.5px}
 .al-body{display:flex;flex:1;min-height:0}
 .al-pal{width:200px;flex:none;overflow-y:auto;padding:10px 10px 24px;border-right:1px solid var(--paper-3)}
 .al-sys{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--text);margin:14px 2px 6px}
@@ -2621,26 +2724,33 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 
 <button id="railToggle" aria-label="Menu">&#9776;</button>
 <header>
-  <div class="topline">
-    <div class="brand"><b>Deep Network Designer</b><span id="ver">v</span></div>
-    <div class="crumbs"><a href="#" id="crumbHome">Designs</a> / <span id="crumbName">MyNet</span></div>
-    <div class="spacer"></div>
-    <div class="stat"><i id="statParams">&mdash;</i><u>learnables</u></div>
-    <div class="stat"><i id="statLayers">0</i><u>layers</u></div>
+  <div class="hd-brand">
+    <span class="hd-mark"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="currentColor"><circle cx="5" cy="7" r="2.1"/><circle cx="5" cy="17" r="2.1"/><circle cx="12" cy="5" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="12" cy="19" r="2.1"/><circle cx="19" cy="12" r="2.4"/></g><g stroke="currentColor" stroke-width="1.1" opacity=".55"><path d="M5 7 12 5M5 7l7 5M5 7l7 12M5 17l7-12M5 17l7-5M5 17l7 2M12 5l7 7M12 12h7M12 19l7-7"/></g></svg></span>
+    <b>Deep Network Designer</b><span class="hd-ver" id="ver">v</span>
   </div>
-
-  <div class="titleline">
-    <input id="gname" value="MyNet" spellcheck="false" aria-label="Design name">
-    <select id="versionPick" title="Saved versions"><option value="">unsaved</option></select>
-    <div class="spacer"></div>
-    <button class="btn danger" id="btnDelete">Delete</button>
-    <span id="whoami" style="display:none"></span>
-    <button class="btn" id="btnImport">Import</button>
-    <button class="btn" id="btnDownload">Download</button>
-    <button class="btn" id="btnOpen">Open</button>
-    <button class="btn" id="btnSave">Save</button>
-    <button class="btn go" id="btnTrain">Train</button>
+  <span class="hd-div"></span>
+  <div class="hd-crumbs" role="navigation" aria-label="Breadcrumb">
+    <a href="#" id="crumbHome" class="hd-design">Designs</a>
+    <span class="hd-slash hd-design">/</span>
+    <input id="gname" class="hd-design" value="MyNet" spellcheck="false" aria-label="Design name" title="Rename this design">
+    <span id="crumbName" hidden>MyNet</span>
+    <select id="versionPick" class="hd-design" title="Saved versions"><option value="">Not saved</option></select>
+    <span class="hd-pagename" id="hdPageName">Agent lab</span>
   </div>
+  <div class="spacer"></div>
+  <div class="hd-stats hd-design" title="Layers and trainable parameters in this design">
+    <span><i id="statLayers">0</i> layers</span><span class="dot"></span><span><i id="statParams">&mdash;</i> learnables</span>
+  </div>
+  <div class="hd-group hd-design">
+    <button class="hb" id="btnImport" title="Import a model or file"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v7.5M4.8 6.8 8 10l3.2-3.2"/><path d="M2.5 11v1.5A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/></svg><span>Import</span></button>
+    <button class="hb" id="btnDownload" title="Download the generated code"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5h-.5A1.5 1.5 0 0 0 3 5v7.5A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V5a1.5 1.5 0 0 0-1.5-1.5H11"/><path d="m6.3 8.3-1.6 1.7 1.6 1.7M9.7 8.3l1.6 1.7-1.6 1.7"/><path d="M6 2h4v2.5H6z"/></svg><span>Code</span></button>
+    <button class="hb" id="btnOpen" title="Open a saved design"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.6 1.8h4.8A1.5 1.5 0 0 1 14 6.3v5.2a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/></svg><span>Open</span></button>
+    <button class="hb icon danger" id="btnDelete" title="Delete this design" aria-label="Delete this design"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
+  </div>
+  <span class="hd-div hd-design"></span>
+  <button class="hb outline hd-design" id="btnSave" title="Save this design"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h5.8L13 4.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 12.5z"/><path d="M5.5 2v3h4V2M5.5 14v-4h5v4"/></svg><span>Save</span></button>
+  <button class="hb primary hd-design" id="btnTrain" title="Train this network"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg><span>Train</span></button>
+  <span id="whoami" style="display:none"></span>
 </header>
 
 <div class="shell">
@@ -4992,9 +5102,11 @@ async function runAnalyze(){
   state.nodeCode = data.node_code || {};
   state.requires = data.requires || null;
 
+  showProblems();
   const ok = single ? state.report.ok : data.ok;
   const total = single ? state.report.total_learnables : data.total_learnables;
   const approx = single ? state.report.approximate : data.approximate;
+  $("statParams").textContent = ok ? `${(total || 0).toLocaleString()}${approx ? "≈" : ""}` : "—";
   if (ok){
     const scope = single ? "" : ` across ${book.sheets.length} sheets`;
     setStatus("ok", `${(total || 0).toLocaleString()}${approx ? "≈" : ""} trainable parameters${scope}`);
@@ -5004,12 +5116,21 @@ async function runAnalyze(){
     const errors = cycle.concat(state.report.errors || []);
     setStatus("bad", errors[0] || "Something does not resolve");
   }
-  renderProblems();
   render();
   if (state.sidePanel === "code") showCode();
   if (state.sidePanel === "network") renderNetworkPanel();
   if (state.sidePanel === "needs") renderNeedsPanel();
   if (state.sidePanel === "math"){ state.mathFor = null; renderMathPanel(); }
+}
+
+/* The status bar under the canvas. showProblems sets the problem count; this adds the
+   one-line summary (parameter count, or why the server did not answer). */
+function setStatus(kind, msg){
+  const bar = $("statusbar"), text = $("statusText");
+  if (!bar || !text) return;
+  if (kind === "bad" && bar.classList.contains("bad")) return;
+  bar.classList.toggle("bad", kind !== "ok");
+  text.textContent = msg;
 }
 
 function showProblems(){
@@ -5316,12 +5437,12 @@ $("btnSave").addEventListener("click", async () => {
 
 async function refreshVersions(name, select){
   const pick = $("versionPick");
-  if (!name){ pick.innerHTML = `<option value="">unsaved</option>`; return; }
+  if (!name){ pick.innerHTML = `<option value="">Not saved</option>`; return; }
   let d;
   try { d = await (await fetch(API + "/api/graphs/"
                                + encodeURIComponent(name) + "/versions")).json(); }
   catch { return; }
-  if (!d.versions){ pick.innerHTML = `<option value="">unsaved</option>`; return; }
+  if (!d.versions){ pick.innerHTML = `<option value="">Not saved</option>`; return; }
   pick.innerHTML = d.versions.slice().reverse().map(v =>
     `<option value="${v.version}">Version ${v.version}`
     + `${v.version === d.latest ? " (latest)" : ""} · ${v.saved_at.slice(5)}</option>`
@@ -5768,6 +5889,7 @@ function showPage(pageId){
   document.querySelectorAll(".page").forEach(p =>
     p.classList.toggle("on", p.id === pageId));
   state.page = pageId;
+  document.body.dataset.page = pageId;
   if (PAGE_SETUP[pageId]) PAGE_SETUP[pageId]();
   if (pageId === "pageDesign"){
     render();
@@ -10164,11 +10286,14 @@ async function loadAccount(){
   const chip = $("whoami");
   if (d.enabled && d.user){
     chip.style.display = "";
-    chip.innerHTML = `<b>${d.user}</b><button id="btnSignOut">sign out</button>`;
+    chip.innerHTML = `<span class="avatar" aria-hidden="true">${alEsc(d.user.slice(0, 1))}</span><b>${alEsc(d.user)}</b>
+      <button id="btnSignOut" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 16 16" width="15" height="15" fill="none"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 2.5H4A1.5 1.5 0 0 0 2.5 4v8A1.5 1.5 0 0 0 4 13.5h2M10.5 11 13.5 8l-3-3M13.5 8H6"/></svg></button>`;
     $("btnSignOut").addEventListener("click", signOut);
   } else if (!d.enabled){
     chip.style.display = "";
-    chip.innerHTML = `<button id="btnMakeAccount">Set up an account</button>`;
+    chip.innerHTML = `<button class="text" id="btnMakeAccount">Set up an account</button>`;
     $("btnMakeAccount").addEventListener("click", () => showSignIn("register"));
   } else {
     chip.style.display = "none";
@@ -13188,6 +13313,7 @@ function alLabel(n){
   if (n.type === "tool") return p.name || "Tool";
   if (n.type === "sub_agent") return "Sub-agent " + (p.name || "");
   if (n.type === "subgraph") return p.design ? "Agent: " + p.design : "Saved agent";
+  if (n.type === "train_net") return p.design ? "Train " + p.design : "Train network";
   const b = alBlock(n.type);
   return b ? b.name : n.type;
 }
@@ -13210,9 +13336,20 @@ async function renderAgentLab(){
   }
   if (!$("alCanvas")) alBuildShell();
   if (!agentLabState.graph){
-    let draft = null;
-    try{ draft = JSON.parse(localStorage.getItem("agentlab-draft") || "null"); } catch {}
-    alSetGraph(draft && draft.nodes ? draft : agentLabState.cat.templates.react);
+    let draft = null, hist = null;
+    try{
+      draft = JSON.parse(localStorage.getItem("agentlab-draft") || "null");
+      hist = JSON.parse(localStorage.getItem("agentlab-history") || "null");
+      agentLabState.saved = JSON.parse(localStorage.getItem("agentlab-saved") || "null");
+    } catch {}
+    const start = draft && draft.nodes ? draft : agentLabState.cat.templates.react;
+    agentLabState.hist = {past: [], future: [], cur: null, at: 0, typing: false};
+    alSetGraph(start);
+    if (hist && draft && draft.nodes){
+      agentLabState.hist.past = (hist.past || []).filter(s => typeof s === "string");
+      agentLabState.hist.future = (hist.future || []).filter(s => typeof s === "string");
+      alHistoryChanged();
+    }
   } else alRenderAll();
   alRefreshDesigns();
   try{ alMonBadge(await (await fetch(API + "/api/agentlab/monitor?days=1")).json()); } catch {}
@@ -13222,27 +13359,41 @@ function alBuildShell(){
   const cat = agentLabState.cat;
   $("alMain").innerHTML = `
     <div class="al-bar">
-      <input id="alName" spellcheck="false" aria-label="Agent name">
-      <select id="alTemplate" aria-label="Start from a design">
-        <option value="">Start from…</option>
-        ${Object.entries(cat.template_names).map(([k, v]) =>
-          `<option value="${k}">${alEsc(v)}</option>`).join("")}
-      </select>
-      <select id="alOpen" aria-label="Open a saved agent"><option value="">Open saved…</option></select>
+      <div class="al-ident">
+        <span class="al-mark" aria-hidden="true">${AL_ICON.mark}</span>
+        <div class="al-titles">
+          <input id="alName" class="al-title" spellcheck="false" aria-label="Agent name" title="Rename this agent">
+          <span class="al-status" id="alStatus" aria-live="polite"></span>
+        </div>
+      </div>
+      <span class="al-sep"></span>
+      <button class="al-ib" id="alUndo" title="Undo (${AL_MOD}Z)" aria-label="Undo">${AL_ICON.undo}</button>
+      <button class="al-ib" id="alRedo" title="Redo (${AL_MOD === "⌘" ? "⇧⌘Z" : "Ctrl+Y"})" aria-label="Redo">${AL_ICON.redo}</button>
+      <span class="al-sep"></span>
+      <div class="al-menuwrap">
+        <button class="al-tb" id="alNewBtn" aria-haspopup="menu" aria-expanded="false">${AL_ICON.plus}New${AL_ICON.chev}</button>
+        <div class="al-menu" id="alNewMenu" role="menu" hidden></div>
+      </div>
+      <div class="al-menuwrap">
+        <button class="al-tb" id="alOpenBtn" aria-haspopup="menu" aria-expanded="false">${AL_ICON.folder}Open${AL_ICON.chev}</button>
+        <div class="al-menu" id="alOpenMenu" role="menu" hidden></div>
+      </div>
+      <button class="al-tb quiet" id="alClear" title="Remove every block. You can undo this.">${AL_ICON.trash}Clear</button>
       <span class="spacer"></span>
-      <button class="btn" id="alBack" hidden>Back</button>
-      <button class="btn" id="alClear">Clear</button>
-      <button class="btn" id="alSave">Save</button>
-      <button class="btn go" id="alRunTop">Run</button>
+      <button class="al-tb" id="alBack" hidden></button>
+      <button class="al-ib" id="alHelpBtn" title="How the Agent lab works" aria-label="How the Agent lab works">${AL_ICON.help}</button>
+      <button class="al-tb" id="alSave" title="Save to your workspace (${AL_MOD}S)">${AL_ICON.save}<span>Save</span></button>
+      <button class="al-tb primary" id="alRunTop" title="Run on the Physiology tab">${AL_ICON.play}Run</button>
     </div>
     <div class="al-notice" id="alNotice" hidden></div>
+    <div class="al-help" id="alHelp" hidden></div>
     <div class="al-body">
       <div class="al-pal" id="alPal"></div>
       <div class="al-stage" id="alStage">
         <div class="al-canvas" id="alCanvas"><svg class="al-wires" id="alWires"></svg>
           <div class="al-empty" id="alEmpty"><b>An empty body</b>
-            Drag an organ from the left, or start from a design above. Connect blocks by dragging
-            from a right-hand port to a left-hand port.</div></div>
+            Drag an organ from the left, or pick a starting design from New above. Connect blocks by dragging
+            from a right-hand port to a left-hand port.<span class="al-emptyundo">Cleared it by mistake? Undo with ${AL_MOD}Z.</span></div></div>
       </div>
       <div class="al-insp">
         <div class="al-tabs" role="tablist">
@@ -13277,24 +13428,67 @@ function alBuildShell(){
   document.querySelectorAll("[data-altab]").forEach(b =>
     b.addEventListener("click", () => alTab(b.dataset.altab)));
   $("alName").addEventListener("input", () => { agentLabState.graph.name = $("alName").value; alDraft(); });
-  $("alTemplate").addEventListener("change", ev => {
-    if (ev.target.value){ agentLabState.stack = []; alStackButton(); alSetGraph(agentLabState.cat.templates[ev.target.value]); }
-    ev.target.value = "";
+  $("alName").addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === "Escape") ev.target.blur(); });
+  $("alUndo").addEventListener("click", alUndo);
+  $("alRedo").addEventListener("click", alRedo);
+  $("alNewBtn").addEventListener("click", () => alToggleMenu("alNewMenu"));
+  $("alOpenBtn").addEventListener("click", () => { alRefreshDesigns(); alToggleMenu("alOpenMenu"); });
+  $("alNewMenu").addEventListener("click", ev => {
+    const item = ev.target.closest("[data-new]");
+    if (!item) return;
+    alCloseMenus();
+    agentLabState.stack = []; alStackButton();
+    const key = item.dataset.new;
+    if (key === "blank"){
+      alSetGraph({name: "MyAgent", nodes: [], edges: []});
+      alUndoToast("Started a blank canvas.");
+    } else {
+      alSetGraph(agentLabState.cat.templates[key]);
+      alUndoToast(`Loaded ${agentLabState.cat.template_names[key]}.`);
+    }
+    alMarkSaved(null);
   });
-  $("alOpen").addEventListener("change", async ev => {
-    const name = ev.target.value; ev.target.value = "";
-    if (!name) return;
-    const r = await fetch(API + "/api/agentlab/designs/" + encodeURIComponent(name));
-    if (r.ok) alSetGraph(await r.json());
+  $("alOpenMenu").addEventListener("click", async ev => {
+    const item = ev.target.closest("[data-open]");
+    if (!item) return;
+    alCloseMenus();
+    const r = await fetch(API + "/api/agentlab/designs/" + encodeURIComponent(item.dataset.open));
+    if (!r.ok) return;
+    agentLabState.stack = []; alStackButton();
+    alSetGraph(await r.json());
+    alMarkSaved(agentLabState.graph);
+    alUndoToast(`Opened ${agentLabState.graph.name}.`);
   });
-  $("alClear").addEventListener("click", () =>
-    alSetGraph({name: agentLabState.graph.name || "MyAgent", nodes: [], edges: []}));
+  document.addEventListener("pointerdown", ev => {
+    if (!ev.target.closest(".al-menuwrap")) alCloseMenus();
+  });
+  $("alClear").addEventListener("click", () => {
+    const g = agentLabState.graph;
+    if (!g.nodes.length && !g.edges.length) return;
+    const n = g.nodes.length;
+    alSetGraph({name: g.name || "MyAgent", nodes: [], edges: []});
+    alUndoToast(`Removed ${n} block${n === 1 ? "" : "s"}.`);
+  });
+  $("alHelpBtn").addEventListener("click", alToggleHelp);
   $("alSave").addEventListener("click", () => alSaveDesign(false));
   $("alBack").addEventListener("click", alDrillOut);
   $("alRunTop").addEventListener("click", () => { alTab("physio"); alRun(); });
   $("alStage").addEventListener("pointerdown", ev => {
     if (ev.target.id === "alStage" || ev.target.id === "alCanvas" || ev.target.id === "alWires"){
       agentLabState.sel = null; alRenderNodes(); alRenderEdges(); alRenderPane();
+    }
+  });
+  /* On this page, ⌘Z / Ctrl+Z belong to the agent canvas, not the network
+     designer behind it, so the event stops here. */
+  document.addEventListener("keydown", ev => {
+    if (state.page !== "pageAgentLab") return;
+    const mod = ev.metaKey || ev.ctrlKey, key = ev.key.toLowerCase();
+    if (ev.key === "Escape"){ alCloseMenus(); if (!$("alHelp").hidden) alToggleHelp(); return; }
+    if (mod && key === "s"){ ev.preventDefault(); ev.stopPropagation(); alSaveDesign(false); return; }
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    if (mod && (key === "z" || key === "y")){
+      ev.preventDefault(); ev.stopPropagation();
+      (key === "y" || ev.shiftKey) ? alRedo() : alUndo();
     }
   });
   document.addEventListener("keydown", ev => {
@@ -13322,8 +13516,203 @@ function alRenderAll(){
   alRenderNodes(); alRenderEdges(); alRenderPane(); alScheduleCheck();
 }
 
+const AL_MOD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl+";
+const AL_SVG = (d, extra = "") => `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor"
+  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+const AL_ICON = {
+  mark: `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="5" cy="10" r="2.6" fill="currentColor"/>
+    <circle cx="15" cy="4.5" r="2.2" fill="currentColor" opacity=".75"/><circle cx="15" cy="15.5" r="2.2" fill="currentColor" opacity=".75"/>
+    <path d="M7.3 9 12.9 5.6M7.3 11l5.6 3.4" stroke="currentColor" stroke-width="1.5"/></svg>`,
+  undo: AL_SVG(`<path d="M5.5 3.5 2.5 6.5l3 3"/><path d="M2.5 6.5h7a4 4 0 0 1 0 8H7"/>`),
+  redo: AL_SVG(`<path d="m10.5 3.5 3 3-3 3"/><path d="M13.5 6.5h-7a4 4 0 0 0 0 8H9"/>`),
+  plus: AL_SVG(`<path d="M8 3v10M3 8h10"/>`),
+  folder: AL_SVG(`<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.6 1.8h4.8A1.5 1.5 0 0 1 14 6.3v5.2a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>`),
+  chev: AL_SVG(`<path d="m4.5 6.5 3.5 3.5 3.5-3.5"/>`, 'class="chev"'),
+  trash: AL_SVG(`<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/>`),
+  help: AL_SVG(`<circle cx="8" cy="8" r="6"/><path d="M6.3 6.3a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.3"/><path d="M8 11.6v.1"/>`),
+  save: AL_SVG(`<path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h5.8L13 4.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 12.5z"/><path d="M5.5 2v3h4V2M5.5 14v-4h5v4"/>`),
+  play: `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg>`,
+  close: AL_SVG(`<path d="m4 4 8 8M12 4l-8 8"/>`),
+};
+
+/* Every edit lands here: the draft is kept in this browser, and the change becomes
+   one step of undo history. Typing in a field within a second of the last change
+   folds into the same step, so undo removes a word, not a letter. */
+const AL_HISTORY = 60;
 function alDraft(){
-  try{ localStorage.setItem("agentlab-draft", JSON.stringify(agentLabState.graph)); } catch {}
+  const S = agentLabState, snap = JSON.stringify(S.graph);
+  try{ localStorage.setItem("agentlab-draft", snap); } catch {}
+  const H = S.hist || (S.hist = {past: [], future: [], cur: null, at: 0, typing: false});
+  if (H.restoring || snap === H.cur) return alHistoryChanged();
+  const typing = /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || "");
+  const now = Date.now();
+  if (H.cur !== null && !(typing && H.typing && now - H.at < 1000)){
+    H.past.push(H.cur);
+    if (H.past.length > AL_HISTORY) H.past.shift();
+    H.future = [];
+  }
+  H.cur = snap; H.at = now; H.typing = typing;
+  alHistoryChanged();
+}
+
+function alHistoryChanged(){
+  const S = agentLabState, H = S.hist || {past: [], future: []};
+  try{
+    localStorage.setItem("agentlab-history", JSON.stringify({past: H.past.slice(-30), future: H.future.slice(-30)}));
+  } catch {}
+  if ($("alUndo")){ $("alUndo").disabled = !H.past.length; $("alRedo").disabled = !H.future.length; }
+  alStatus();
+}
+
+function alRestore(snap){
+  const S = agentLabState, H = S.hist;
+  const g = JSON.parse(snap);
+  S.graph = g;
+  S.seq = Math.max(S.seq || 1, 1 + Math.max(0, ...g.nodes.concat(g.edges)
+    .map(x => parseInt(String(x.id).replace(/\D/g, ""), 10) || 0)));
+  if (S.sel && !g.nodes.concat(g.edges).some(x => x.id === S.sel.id)) S.sel = null;
+  H.restoring = true;
+  try{ alRenderAll(); alDraft(); } finally { H.restoring = false; }
+  H.cur = snap; H.typing = false;
+  alHistoryChanged();
+}
+
+function alUndo(){
+  const H = agentLabState.hist;
+  if (!H || !H.past.length) return;
+  H.future.push(H.cur);
+  alRestore(H.past.pop());
+}
+
+function alRedo(){
+  const H = agentLabState.hist;
+  if (!H || !H.future.length) return;
+  H.past.push(H.cur);
+  alRestore(H.future.pop());
+}
+
+/* A short notice with an Undo button, for anything that replaces the canvas. */
+function alUndoToast(msg){
+  let t = $("alToast");
+  if (!t){
+    t = document.createElement("div");
+    t.id = "alToast"; t.className = "al-toast"; t.setAttribute("role", "status");
+    document.body.appendChild(t);
+  }
+  t.innerHTML = `<span>${alEsc(msg)}</span><button type="button">Undo</button>`;
+  t.querySelector("button").onclick = () => { alUndo(); t.classList.remove("on"); };
+  t.classList.add("on");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 6000);
+}
+
+/* Saved or not: compared with the last version saved to (or opened from) the workspace. */
+function alMarkSaved(graph){
+  const S = agentLabState;
+  S.saved = graph ? {name: graph.name, snap: JSON.stringify(graph)} : null;
+  try{ localStorage.setItem("agentlab-saved", JSON.stringify(S.saved)); } catch {}
+  alStatus();
+}
+
+function alStatus(){
+  const el = $("alStatus"), S = agentLabState;
+  if (!el || !S.graph) return;
+  const n = S.graph.nodes.length, blocks = `${n} block${n === 1 ? "" : "s"}`;
+  let cls = "draft", text = `Draft · ${blocks}`, tip = "Kept in this browser only. Save puts it in your workspace.";
+  if (S.saved && S.saved.name === S.graph.name){
+    if (S.saved.snap === JSON.stringify(S.graph)){ cls = "saved"; text = `Saved · ${blocks}`; tip = "Matches the copy in your workspace."; }
+    else { cls = "dirty"; text = `Unsaved changes · ${blocks}`; tip = "Edited since the last save. The draft is kept in this browser."; }
+  }
+  el.className = "al-status " + cls; el.textContent = text; el.title = tip;
+}
+
+function alToggleMenu(id){
+  const menu = $(id), open = menu.hidden;
+  alCloseMenus();
+  if (!open) return;
+  if (id === "alNewMenu") alFillNewMenu(); else alFillOpenMenu();
+  menu.hidden = false;
+  menu.previousElementSibling.setAttribute("aria-expanded", "true");
+  const first = menu.querySelector("button"); if (first) first.focus();
+}
+
+function alCloseMenus(){
+  document.querySelectorAll(".al-menu").forEach(m => {
+    m.hidden = true; m.previousElementSibling.setAttribute("aria-expanded", "false");
+  });
+}
+
+function alFillNewMenu(){
+  const cat = agentLabState.cat;
+  const blurbs = {
+    react: "Model, router and tools in a loop, with guards and an approval step.",
+    rag: "Recalls notes from long-term memory before answering, and saves new ones.",
+    planexec: "Writes a plan, works through it, and a critic checks the answer.",
+    longrun: "A long loop that summarises its history to stay inside the context limit.",
+    debate: "Two models argue in parallel; a third gives the verdict.",
+    supervisor: "A supervisor hands sub-tasks to specialist sub-agents.",
+    mathsearch: "Generates candidates, proves them with code, remembers the best, and can train a network to guide the search.",
+  };
+  $("alNewMenu").innerHTML =
+    `<button role="menuitem" data-new="blank"><b>Blank canvas</b><small>An empty body to build from the palette.</small></button>
+     <div class="al-menuhead">Starting designs</div>` +
+    Object.entries(cat.template_names).map(([k, v]) =>
+      `<button role="menuitem" data-new="${k}"><b>${alEsc(v)}</b><small>${alEsc(blurbs[k] ||
+        `${(cat.templates[k].nodes || []).length} blocks, wired and ready to run.`)}</small></button>`).join("") +
+    `<div class="al-menufoot">Replacing the canvas can be undone (${AL_MOD}Z).</div>`;
+}
+
+function alFillOpenMenu(){
+  const list = agentLabState.designs || [];
+  $("alOpenMenu").innerHTML = `<div class="al-menuhead">Saved in your workspace</div>` + (list.length
+    ? list.map(n => `<button role="menuitem" data-open="${alEsc(n)}"><b>${alEsc(n)}</b></button>`).join("")
+    : `<div class="al-menuempty">Nothing saved yet. Save keeps the agent on the canvas in your workspace.</div>`);
+}
+
+async function alToggleHelp(){
+  const box = $("alHelp");
+  box.hidden = !box.hidden;
+  $("alHelpBtn").classList.toggle("on", !box.hidden);
+  if (box.hidden) return;
+  let w = null;
+  try{ w = await (await fetch(API + "/api/agentlab/where")).json(); } catch {}
+  box.innerHTML = alHelpHtml(w);
+  box.querySelector(".al-helpclose").onclick = alToggleHelp;
+  box.querySelectorAll("[data-goto]").forEach(b => b.onclick = () => { alToggleHelp(); alTab(b.dataset.goto); });
+}
+
+function alHelpHtml(w){
+  const dir = w ? w.dir : "the agentlab folder of your workspace";
+  const c = (k, one, many) => w ? ` <em>${w[k] || 0} ${(w[k] === 1 ? one : many)}</em>` : "";
+  const step = (n, tab, title, body) =>
+    `<li><span class="n">${n}</span><div><b>${title}</b>${tab ? ` <button class="al-link" data-goto="${tab}">open</button>` : ""}<p>${body}</p></div></li>`;
+  return `
+    <div class="al-helphead"><b>How the Agent lab works</b><button class="al-ib al-helpclose" aria-label="Close">${AL_ICON.close}</button></div>
+    <div class="al-helpcols">
+      <section>
+        <h4>The workflow</h4>
+        <ol class="al-steps">
+          ${step(1, "", "Design", `Drag blocks from the palette onto the canvas and wire right-hand ports to left-hand ports. <b>New</b> starts from a blank canvas or a starting design; ${AL_MOD}Z undoes any edit.`)}
+          ${step(2, "anatomy", "Inspect", "Select a block: <b>Anatomy</b> says what it does, <b>Code</b> and <b>Maths</b> show how, <b>Safety</b> lists what the design can and cannot do.")}
+          ${step(3, "physio", "Run", "<b>Run</b> opens <b>Physiology</b>. Rehearsal uses a scripted stand-in model and costs nothing; Live calls your provider. Tools that need approval pause the run for you.")}
+          ${step(4, "timeline", "Replay and fork", "<b>Timeline</b> keeps every checkpoint of a run. Fork from any step with an edit and compare.")}
+          ${step(5, "study", "Study", "<b>Study</b> runs many cases or a dataset, scores them with evaluators, A/B tests prompts, and can set a release gate that guards Save.")}
+          ${step(6, "monitor", "Monitor", "<b>Monitor</b> charts runs, cost and latency from every source, raises alerts, and can send traces to LangSmith.")}
+          ${step(7, "code", "Take it away", "<b>Python</b> is the agent as a plain Python file, or as LangGraph, to download and run anywhere.")}
+        </ol>
+      </section>
+      <section>
+        <h4>Where things are kept</h4>
+        <ul class="al-store">
+          <li><b>What's on the canvas</b><span>This browser, automatically, after every edit, with the undo history. Clearing your browser data loses it, so Save anything you want to keep.</span></li>
+          <li><b>Saved agents</b>${c("designs", "agent", "agents")}<span>Save writes <code>&lt;name&gt;.json</code> in the workspace folder below. Open lists them.</span></li>
+          <li><b>Runs</b>${c("runs", "run", "runs")}<span><code>runs/</code>, newest 200, each with its checkpoints. Running ones carry on if you leave the page.</span></li>
+          <li><b>Studies, datasets, prompts</b><span><code>studies/</code>, <code>datasets/</code>, <code>prompts/</code>, and release gates in <code>gates/</code>.</span></li>
+          <li><b>Conversations and memory</b><span><code>threads/</code> and <code>agent_memory.json</code>.</span></li>
+          <li><b>Monitoring</b>${c("metrics", "record", "records")}<span><code>metrics.jsonl</code>, with <code>prices.json</code>, <code>alerts.json</code>, <code>online.json</code> and <code>langsmith.json</code> for its settings.</span></li>
+        </ul>
+        <div class="al-dir"><small>Workspace folder</small><code>${alEsc(dir)}</code></div>
+      </section>
+    </div>`;
 }
 
 function alAddNode(type, x, y){
@@ -13597,6 +13986,12 @@ function alRenderAnatomy(){
            <select id="alf_${k}" data-k="${k}"><option value="">Choose a saved agent…</option>${
              (agentLabState.designs || []).map(o => `<option${o === v ? " selected" : ""}>${alEsc(o)}</option>`).join("")}</select>
            <div class="help">Save an agent with the Save button and it appears here.</div></div>`
+      : d.kind === "net_design"
+      ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
+           <select id="alf_${k}" data-k="${k}"><option value="">Choose a network design…</option>${
+             [...new Set([...(agentLabState.netDesigns || []), ...(v ? [v] : [])])].map(o =>
+               `<option${o === v ? " selected" : ""}>${alEsc(o)}</option>`).join("")}</select>
+           <div class="help">Designs saved on the network canvas. ScoreMLP is a small network for tables of numbers.</div></div>`
       : d.kind === "choice"
       ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
            <select id="alf_${k}" data-k="${k}">${(d.options || []).map(o =>
@@ -14898,7 +15293,7 @@ async function alPromptVersions(n){
 /* Saving an agent that has a release gate runs the gate's cases first. A version
    that does worse, or loses a Safety guarantee, is not saved unless you insist. */
 async function alSaveDesign(force){
-  const btn = $("alSave"), note = $("alNotice");
+  const btn = $("alSave").querySelector("span"), note = $("alNotice");
   btn.textContent = "Saving…";
   let r, d;
   try{
@@ -14920,6 +15315,7 @@ async function alSaveDesign(force){
     return;
   }
   btn.textContent = r.ok ? "Saved" : "Not saved";
+  if (r.ok) alMarkSaved(agentLabState.graph);
   note.hidden = !(r.ok && d.gate);
   if (r.ok && d.gate){
     note.className = "al-notice ok";
@@ -14931,10 +15327,13 @@ async function alSaveDesign(force){
 
 async function alRefreshDesigns(){
   try{
+    const nets = await (await fetch(API + "/api/graphs")).json();
+    agentLabState.netDesigns = (nets.graphs || []).map(x => x.name);
+  } catch {}
+  try{
     const d = await (await fetch(API + "/api/agentlab/designs")).json();
     agentLabState.designs = d.designs || [];
-    $("alOpen").innerHTML = `<option value="">Open saved…</option>` +
-      (d.designs || []).map(n => `<option value="${alEsc(n)}">${alEsc(n)}</option>`).join("");
+    if (!$("alOpenMenu").hidden) alFillOpenMenu();
   } catch {}
 }
 

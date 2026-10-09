@@ -60,6 +60,8 @@ READS, CHANGES = "only reads", "changes things"
 # the chat-completions protocol, including one running on this machine.
 PROVIDERS = {"anthropic": "Anthropic Messages API", "openai-compatible": "OpenAI-compatible server"}
 LIMIT = ("max_calls", "Calls allowed per run (0 for no limit)")
+REVIEW_ONLY = "the critic model's review"
+VERIFIER_GATE = "a verifier's line, then the review"
 SANDBOXED, UNRESTRICTED = "sandboxed", "unrestricted (runs as you, no limits)"
 
 # The code sandbox every generated file carries when its code executor is sandboxed, and the
@@ -147,6 +149,68 @@ def read_openai_stream(reply, on_text):
                "tool_calls": [{"id": c["id"], "function": {"name": c["name"], "arguments": c["arguments"]}}
                               for _, c in sorted(calls.items())]}
     return {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}
+'''
+
+TRAIN_DESCRIPTION = (
+    "Train the network design {design} from the network canvas and get back its training and validation "
+    "loss (and accuracy, for classes). Pass a table as CSV text in csv, header first; the last column is the "
+    "target unless target_column names another, and every other column is a feature. Or name a built-in "
+    "dataset instead. Training takes seconds to minutes.")
+TRAIN_SCHEMA = {"type": "object", "properties": {
+    "dataset": {"type": "string", "description": "csv for a table you pass, or a built-in set: synthetic, mnist, "
+                                                 "fashion_mnist, cifar10, pendulum"},
+    "csv": {"type": "string", "description": "The table, as CSV text with a header row"},
+    "target_column": {"type": "string", "description": "The column to predict (default: the last one)"},
+    "epochs": {"type": "integer", "description": "How many passes over the data"}},
+    "required": ["dataset"]}
+
+TRAIN_CODE = r'''# ---- training a network from the designer ----
+TRAIN_BACKEND = None    # the app sets this to train in-process; on its own, this file asks the app over HTTP
+APP_URL = os.environ.get("DNN_DESIGNER_URL", "http://127.0.0.1:8770")
+
+
+def train_with(design, args, most_epochs, wait):
+    """Ask the designer to train a saved network, wait for it, and describe the result.
+
+    Run outside the app, the designer must be running at APP_URL. With accounts switched
+    on, put your session cookie (dnn_session=...) in DNN_DESIGNER_COOKIE.
+    """
+    request = {"design": design, "dataset": str(args.get("dataset") or "synthetic"),
+               "csv": str(args.get("csv") or ""), "target_column": str(args.get("target_column") or ""),
+               "epochs": max(1, min(int(args.get("epochs") or 1), most_epochs)), "wait": wait}
+    if request["csv"]:
+        request["dataset"] = "csv"
+    if TRAIN_BACKEND is not None:
+        report = TRAIN_BACKEND(request)
+    else:
+        sent = urllib.request.Request(APP_URL + "/api/agentlab/train-network", data=json.dumps(request).encode(),
+                                      headers={"content-type": "application/json",
+                                               "cookie": os.environ.get("DNN_DESIGNER_COOKIE", "")})
+        try:
+            with urllib.request.urlopen(sent, timeout=wait + 60) as reply:
+                report = json.loads(reply.read())
+        except urllib.request.HTTPError as exc:
+            report = {"error": f"The designer refused: {exc.read().decode(errors='replace')[:300]}"}
+        except OSError as exc:
+            report = {"error": f"Could not reach the designer at {APP_URL}: {exc}"}
+    return describe_training(report)
+
+
+def describe_training(report):
+    if report.get("error"):
+        return "Training did not run: " + report["error"]
+    lines = [f"Trained {report.get('design')} v{report.get('version')} on {report.get('dataset')}: "
+             f"{report.get('status')}, epoch {report.get('epoch')} of {report.get('epochs')}, "
+             f"{report.get('learnables') or '?'} learnable parameters (run {report.get('id')})."]
+    for row in report.get("history") or []:
+        lines.append("  epoch " + str(row.get("epoch")) + ": " + ", ".join(
+            f"{k} {v}" for k, v in row.items() if k != "epoch" and isinstance(v, (int, float))))
+    if report.get("best") is not None:
+        lines.append(f"Best validation loss: {report['best']}")
+    if report.get("problem"):
+        lines.append("Problem: " + report["problem"])
+    lines += [f"Note: {n}" for n in report.get("notes") or []]
+    return "\n".join(lines)
 '''
 
 SANDBOX_CODE = r'''# ---- the code sandbox: model-written code never runs as you ----
@@ -499,7 +563,9 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         inside="A review prompt, the task, and the draft.",
         physiology="Runs after a draft. Notes become a new message to the core, which triggers another lap.",
         failure="Rubber-stamping. Revising forever without a limit.",
-        params={"max_revisions": _p("Max revisions", 2, "number")}),
+        params={"max_revisions": _p("Max revisions", 2, "number"),
+                "gate": _p("What it needs to pass", REVIEW_ONLY, "choice", [REVIEW_ONLY, VERIFIER_GATE]),
+                "marker": _p("The verifier's line starts with", "VERIFIED")}),
     "short_mem": dict(
         name="Working memory", system="memory", short="The context window",
         anatomy=("The message list: everything said, every tool call and result, in order. It is the agent's "
@@ -575,6 +641,24 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         params={"isolation": _p("Where the code runs", SANDBOXED, "choice", [SANDBOXED, UNRESTRICTED]),
                 "seconds": _p("Time limit (seconds)", 20, "number"),
                 LIMIT[0]: _p(LIMIT[1], 0, "number")}),
+    "train_net": dict(
+        name="Train network", system="hands", short="Trains a network from the designer",
+        anatomy=("Hands the agent the network canvas. It names the data and how long to train; the app trains "
+                 "a network design you saved on the canvas and reports back how well it learned."),
+        inside=("A saved network design, a dataset — a built-in one, or a table the model writes as CSV text — "
+                "and the same training loop as the Train button. Given a table, the design's Input is resized to "
+                "the table's feature columns, and the last column is the target unless the model names one."),
+        physiology=("The model asks for a training run with JSON arguments. The run trains in the app, the call "
+                    "waits for it to finish up to a time limit, and the losses (and accuracy, for classes) come "
+                    "back as the tool result. Every run is kept in Run history like any other. In a rehearsal "
+                    "nothing trains: a stand-in report comes back."),
+        failure=("Slow next to every other tool, so a few calls can take most of a run's time. A small table "
+                 "trains a network that memorises it, which a low training loss and a high validation loss give "
+                 "away. A design whose Input cannot take the data fails, and the model is told why."),
+        params={"design": _p("Network design", "ScoreMLP", "net_design"),
+                "epochs": _p("Most epochs per call", 20, "number"),
+                "wait": _p("Wait for training (seconds)", 600, "number"),
+                LIMIT[0]: _p(LIMIT[1], 3, "number")}),
     "sub_agent": dict(
         name="Sub-agent", system="hands", short="A whole agent used as a tool",
         anatomy="A second model with its own instructions, wrapped as a tool the parent can delegate to.",
@@ -670,7 +754,7 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         failure="Approval fatigue: clicking yes without reading."),
 }
 
-ACTIONS = {"tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp"}
+ACTIONS = {"tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp", "train_net"}
 
 
 def catalog() -> Dict[str, Any]:
@@ -691,6 +775,20 @@ def catalog() -> Dict[str, Any]:
 # --------------------------------------------------------------------------
 # starting designs
 # --------------------------------------------------------------------------
+
+MATH_PROMPT = (
+    "You are a mathematical search agent working on one well-defined problem with a score. Each round, "
+    "propose a construction or an improvement, then write Python that builds the candidate AND checks it "
+    "from scratch, and run it with run_python. The check must test every condition independently of how "
+    "the candidate was built, and print one line `VERIFIED score=<number>` only when all of them hold; "
+    "otherwise it prints what failed. Never claim a result the check did not print.\n\n"
+    "Use web_search once for the best known result, so you know what counts as progress. Notes recalled at "
+    "the start hold earlier best candidates and failed ideas: build on the best and do not repeat failures.\n\n"
+    "When a learned heuristic would help, such as scoring partial constructions so the search tries the "
+    "promising ones first, generate rows of (features, score) and call train_network with them as CSV text; "
+    "use what it reports to decide whether the heuristic is worth using.\n\n"
+    "Finish with: the best verified score, the candidate or the code that regenerates it, the VERIFIED line "
+    "word for word, and what to try next.")
 
 TEMPLATES = {
     "react": {"name": "ReAct tool agent",
@@ -730,6 +828,19 @@ TEMPLATES = {
                           5: {"text": "Make the strongest case AGAINST the idea in the task. Be specific."},
                           7: {"text": "You weigh two opposing briefs and give a balanced verdict, naming the "
                                       "deciding point."}}},
+    "mathsearch": {"name": "Math search: generate, verify, remember",
+                   "nodes": [("user_input", 40, 260), ("long_mem", 270, 260), ("planner", 500, 260),
+                             ("system_prompt", 740, 40), ("llm", 740, 260), ("loop", 500, 470),
+                             ("summarizer", 740, 470), ("router", 980, 260), ("code_exec", 1230, 40),
+                             ("web_search", 1230, 190), ("human", 1230, 340), ("train_net", 1480, 340),
+                             ("reflector", 1230, 510), ("long_mem", 1480, 510), ("output", 1730, 510)],
+                   "edges": [(0, 1), (1, 2), (2, 4), (3, 4), (5, 4), (6, 4), (4, 7), (7, 8), (7, 9), (7, 10),
+                             (10, 11), (8, 4), (9, 4), (11, 4), (7, 12), (12, 4), (12, 13), (13, 14)],
+                   "params": {3: {"text": MATH_PROMPT},
+                              5: {"max_steps": 30},
+                              6: {"limit": 3000, "keep": 6},
+                              8: {"seconds": 60},
+                              12: {"gate": VERIFIER_GATE, "max_revisions": 3}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -866,6 +977,7 @@ def analyze(graph) -> Dict[str, Any]:
 
     tool_names = {nid: unique(py_id(_params(n)["name"]) if kind[nid] in ("tool", "sub_agent")
                               else py_id((_params(n)["design"] or "saved") + "_agent") if kind[nid] == "subgraph"
+                              else "train_network" if kind[nid] == "train_net"
                               else ("web_search" if kind[nid] == "web_search" else "run_python"))
                   for nid, n in nodes.items() if kind[nid] in ACTIONS and kind[nid] != "mcp"}
     # an MCP server offers several tools, each a route of its own to the same block
@@ -1099,6 +1211,10 @@ def validate(graph, _stack: tuple = ()) -> List[Dict[str, Any]]:
                 say("error", "Give the MCP server's command or URL.", n["id"])
             elif not _params(n).get("tools"):
                 say("error", "Discover the MCP server's tools first; the model is offered what it lists.", n["id"])
+        if t == "train_net" and not str(_params(n).get("design") or "").strip():
+            say("error", "Choose which saved network design it trains.", n["id"])
+        if t == "reflector" and _params(n).get("gate") == VERIFIER_GATE and not str(_params(n).get("marker") or "").strip():
+            say("error", "Give the line a check prints when it passes, such as VERIFIED.", n["id"])
         if t == "output" and str(_params(n).get("schema") or "").strip() and answer_schema(n) is None:
             say("error", "The answer schema is not a JSON object; check its brackets and quotes.", n["id"])
         if t == "llm" and _params(n).get("provider") == "openai-compatible" and not str(_params(n).get("base_url") or "").strip():
@@ -1120,6 +1236,8 @@ def label(node) -> str:
         return f"Sub-agent {p.get('name') or ''}".strip()
     if node.get("type") == "subgraph":
         return f"Agent: {p.get('design')}" if p.get("design") else "Saved agent"
+    if node.get("type") == "train_net":
+        return f"Train {p.get('design')}" if p.get("design") else "Train network"
     if node.get("type") == "mcp":
         tools = p.get("tools") or []
         return f"MCP: {len(tools)} tool{'s' if len(tools) != 1 else ''}" if tools else "MCP server"
@@ -1431,7 +1549,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             *[t for t, _ in tools if kind[t] == "sub_agent"])
 
     # ---- hands ----
-    servers_written, mcp_class_written, sandbox_written = set(), [], []
+    servers_written, mcp_class_written, sandbox_written, train_written = set(), [], [], []
     if tools:
         add(["", "", "# ---- hands: tools ----"])
         for tid, name in tools:
@@ -1461,6 +1579,16 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                     body += [f"def {name}(code: str) -> str:",
                              '    """Runs model-written code in the sandbox: see run_sandboxed."""',
                              f"    return run_sandboxed(code, seconds={secs})"]
+            elif k == "train_net":
+                body = []
+                if not train_written:
+                    train_written.append(True)
+                    body += TRAIN_CODE.strip().split("\n") + ["", ""]
+                epochs, wait = max(1, int(p.get("epochs") or 20)), max(10, int(p.get("wait") or 600))
+                body += [f"def {name}(dataset=\"synthetic\", csv=\"\", target_column=\"\", epochs=5):",
+                         f'    """Train the saved network design {p.get("design") or "(none chosen)"} and report how it learned."""',
+                         f"    return train_with({json.dumps(p.get('design') or '')}, dict(dataset=dataset, csv=csv,",
+                         f"                      target_column=target_column, epochs=epochs), most_epochs={epochs}, wait={wait})"]
             elif k == "subgraph":
                 body = subgraph_code(tid, name, p, _stack)
             elif k == "mcp":
@@ -1487,6 +1615,11 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             add(body, tid)
 
         def schema(tid, name):
+            if kind[tid] == "train_net":
+                design = _params(nodes[tid]).get("design") or "the chosen design"
+                return ["    {", f'        "name": {json.dumps(name)},',
+                        f'        "description": {json.dumps(TRAIN_DESCRIPTION.format(design=design))},',
+                        f'        "input_schema": {json.dumps(TRAIN_SCHEMA)},', "    },"]
             if kind[tid] == "mcp":
                 t = mcp_by_name[name]
                 return ["    {", f'        "name": {json.dumps(name)},',
@@ -1591,6 +1724,20 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "def critique(task, answer):",
              '    verdict = complete(CRITIC_PROMPT, f"Task:\\n{task}\\n\\nDraft answer:\\n{answer}")',
              '    return None if verdict.strip().upper().startswith("PASS") else verdict'], *of_kind("reflector"))
+        gated_critics = [c for c in of_kind("reflector") if _params(nodes[c]).get("gate") == VERIFIER_GATE]
+        if gated_critics:
+            add(["", ""])
+            add(["def verifier_line(state, marker):",
+                 '    """The newest tool result line that starts with the marker: proof a check passed."""',
+                 '    for message in reversed(state["messages"]):',
+                 '        if message["role"] != "user" or not isinstance(message["content"], list):',
+                 "            continue",
+                 '        for block in message["content"]:',
+                 '            if block.get("type") == "tool_result":',
+                 '                for line in str(block.get("content", "")).splitlines():',
+                 "                    if line.strip().startswith(marker):",
+                 "                        return line.strip()",
+                 "    return None"], *gated_critics)
 
     # ---- state and the two physiological helpers ----
     add(["", "", "# ---- the state every block reads and writes ----"])
@@ -1829,16 +1976,29 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                     f"    return {to(r['exit'])}{comment(r['exit'])}"]
         elif k == "reflector":
             c = critics[nid]
+            gated = p.get("gate") == VERIFIER_GATE
+            marker = re.sub(r"[^\w=:+.\- ]", "", str(p.get("marker") or "")).strip() or "VERIFIED"
             body += [f"    MAX_REVISIONS = {int(p['max_revisions'])}",
-                     '    draft = state["answer"] or state["draft"]',
-                     '    notes = critique(state["task"], draft)',
-                     f'    emit("critique", node="{nid}", passed=notes is None, notes=(notes or "PASS")[:200])']
+                     '    draft = state["answer"] or state["draft"]']
+            if gated:
+                body += [f"    proof = verifier_line(state, {json.dumps(marker)})",
+                         "    if proof is None:",
+                         f'        notes = ("No check has printed a line starting {marker} yet, so nothing is verified. "',
+                         '                 "Run code that checks the candidate from scratch and prints that line only if it holds.")',
+                         "    else:",
+                         '        notes = critique(state["task"], f"{draft}\\n\\nThe check printed: {proof}")']
+            else:
+                body += ['    notes = critique(state["task"], draft)']
+            body += [f'    emit("critique", node="{nid}", passed=notes is None, notes=(notes or "PASS")[:200])']
             if c["back"]:
                 body += ['    if notes and state["revisions"] < MAX_REVISIONS:',
                          '        state["revisions"] += 1',
                          '        state["answer"] = None',
                          '        state["messages"].append({"role": "user", "content": f"A reviewer found problems:\\n{notes}\\n\\nRevise."})',
                          f"        return {to(c['back'])}{comment(c['back'])}"]
+            if gated:
+                body += ["    if proof is None:",
+                         f'        draft = f"{{draft}}\\n\\n[Not verified: no check printed a line starting {marker}.]"']
             body += ['    state["answer"] = draft', f"    return {to(c['next'])}{comment(c['next'])}"]
         elif k == "guard_out":
             body += ['    cleaned = redact(state["answer"] or state["draft"])',
@@ -2121,6 +2281,17 @@ def _m_planner(p, node, graph, c):
 
 def _m_critic(p, node, graph, c):
     R, N = int(p["max_revisions"]), c["N"]
+    if p.get("gate") == VERIFIER_GATE:
+        marker = p.get("marker") or "VERIFIED"
+        return {"title": "Accept only what a check has proved",
+                "equation": f"accept(y) ⇔ ∃ tool result line ℓ starting “{marker}”  ∧  π_θ(P_critic, x, y, ℓ) begins with PASS",
+                "symbols": [("y", "the draft answer"), ("ℓ", "the newest line a check printed"), ("R", f"the revision limit, {R}")],
+                "arithmetic": [("critic calls", f"≤ R = {R}: none while no check has passed"),
+                               ("after R failed revisions", "the answer goes out marked Not verified")],
+                "freedom": ["The first half is a string test on code's output, which the model cannot talk its way "
+                            "past: only a program printing the line opens the gate.",
+                            "The gate is only as strong as the check. A check that tests the wrong property, or "
+                            "trusts the construction it was handed, verifies nothing."]}
     return {"title": "Accept, or loop again",
             "equation": "accept(y) ⇔ π_θ(P_critic, x, y) begins with PASS",
             "symbols": [("y", "the draft answer"), ("R", f"the revision limit, {R}")],
@@ -2186,6 +2357,10 @@ def _m_tool(p, node, graph, c):
         shape = f"a = {{ code: string }},  stopped after {secs} s" + ("" if boxed else ",  runs as you")
     elif kind == "web_search":
         eq, shape = "o = search(a.query)", "a = { query: string }   (the generated stub returns a placeholder)"
+    elif kind == "train_net":
+        eq = "θ* ≈ argmin_θ  Σ_{(x,y) ∈ D} L(f_θ(x), y),   o = report(L_train, L_val)"
+        shape = (f"a = {{ dataset, csv?, target_column?, epochs ≤ {int(p.get('epochs') or 20)} }},  "
+                 f"waits ≤ {int(p.get('wait') or 600)} s;  f = the saved design {p.get('design') or '(none chosen)'}")
     else:
         eq, shape = "o = f(a.input)", "a = { input: string }"
     desc = p.get("description") or ""
@@ -2403,7 +2578,7 @@ MATH: Dict[str, Callable] = {
     "summarizer": _m_summarizer,
     "user_input": _m_input, "output": _m_output, "llm": _m_llm, "system_prompt": _m_prompt,
     "planner": _m_planner, "reflector": _m_critic, "short_mem": _m_work, "long_mem": _m_long,
-    "retriever": _m_rag, "tool": _m_tool, "web_search": _m_tool, "code_exec": _m_tool,
+    "retriever": _m_rag, "tool": _m_tool, "web_search": _m_tool, "code_exec": _m_tool, "train_net": _m_tool,
     "sub_agent": _m_sub, "router": _m_router, "loop": _m_loop, "guard_in": _m_gin,
     "guard_out": _m_gout, "human": _m_human,
 }
@@ -2465,6 +2640,8 @@ def effects(node) -> str:
         return CHANGES if any(effects(a["nodes"][t]) == CHANGES and t not in a["gated"] for t in a["given"]) else READS
     if kind in ("tool", "mcp"):
         return _params(node).get("effects", CHANGES)
+    if kind == "train_net":
+        return CHANGES        # it starts a training run that writes to your workspace
     return READS
 
 
@@ -2748,7 +2925,8 @@ class Rehearsal:
             args = {}
             for arg in wanted:
                 kind_ = (props.get(arg) or {}).get("type")
-                args[arg] = ("print(round(545000 / 450))" if arg == "code" else
+                args[arg] = (('print("VERIFIED score=7  (rehearsal: a stand-in check)")' if "VERIFIED" in (system or "")
+                              else "print(round(545000 / 450))") if arg == "code" else
                              2 if kind_ in ("number", "integer") else True if kind_ == "boolean" else task)
             return {"content": [{"type": "text", "text": f"I should check this with {tool['name']}."},
                                 {"type": "tool_use", "id": f"toolu_rehearsal_{uuid.uuid4().hex[:10]}",
@@ -2767,6 +2945,23 @@ class Rehearsal:
             except ValueError:
                 pass
         return {"content": [{"type": "text", "text": text}], "stop_reason": "end_turn"}
+
+
+# The app sets this to a function that trains a saved network design and waits for it
+# (main.py: agent_train). The lab itself knows nothing about training.
+TRAINER: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None
+
+
+def _no_trainer(request):
+    return {"error": "This copy of the lab is not running inside the designer, so there is nothing to train with."}
+
+
+def _rehearsal_trainer(request):
+    epochs = int(request.get("epochs") or 1)
+    return {"design": request.get("design"), "version": "?", "dataset": request.get("dataset"),
+            "status": "rehearsal", "epoch": epochs, "epochs": epochs, "learnables": None, "id": "none",
+            "history": [{"epoch": epochs, "train_loss": 0.42, "val_loss": 0.47}], "best": 0.47,
+            "notes": ["A rehearsal trains nothing: these numbers stand in for a real run."]}
 
 
 def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None,
@@ -2845,6 +3040,8 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
     space["emit"] = emit_measured
     if "STREAM" in space:
         space["STREAM"] = on_stream
+    if "TRAIN_BACKEND" in space:
+        space["TRAIN_BACKEND"] = (TRAINER or _no_trainer) if mode == "live" else _rehearsal_trainer
     if "PARALLEL" in space:
         # a rehearsal runs branches in order, so its stand-in model answers the same way every
         # time and a fork from a checkpoint repeats the original; live runs keep them concurrent
@@ -3670,7 +3867,7 @@ def _without(graph, nid) -> Dict[str, Any]:
 
 
 REMOVABLE = {"guard_in", "guard_out", "planner", "reflector", "retriever", "long_mem", "human", "summarizer",
-             "system_prompt", "tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp"}
+             "system_prompt", "tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp", "train_net"}
 
 
 def variants(graph, prompts: Optional[Dict[str, Any]] = None, removals: bool = True) -> List[Dict[str, Any]]:
@@ -3885,7 +4082,8 @@ def start_study(graph, cases_text: str, mode: str = "rehearsal", repeats: int = 
     study.pairwise = pairwise
     args = (study, parsed["cases"], mode, repeats, approvals, memory, pairwise)
     if background:
-        threading.Thread(target=run_study, args=args, daemon=True).start()
+        import contextvars
+        threading.Thread(target=contextvars.copy_context().run, args=(run_study, *args), daemon=True).start()
     else:
         run_study(*args)
     return study
@@ -4032,8 +4230,34 @@ def save(graph) -> Dict[str, Any]:
     return {"ok": True, "name": name}
 
 
+def _is_design(path: Path) -> bool:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and isinstance(data.get("nodes"), list)
+
+
 def listing() -> List[str]:
-    return sorted(p.stem for p in _dir().glob("*.json") if p.stem != "agent_memory")
+    """Saved agents only: the folder also holds settings files (prices, alerts, ...)."""
+    return sorted(p.stem for p in _dir().glob("*.json") if p.stem != "agent_memory" and _is_design(p))
+
+
+def where() -> Dict[str, Any]:
+    """Where the Agent lab keeps things, and how much of each there is."""
+    root = _dir()
+    count = lambda sub, pattern="*": len(list((root / sub).glob(pattern))) if (root / sub).is_dir() else 0
+    metrics = _metrics_path()
+    return {
+        "dir": str(root),
+        "designs": len(listing()),
+        "runs": count("runs", "*.json"),
+        "studies": count("studies", "*.json"),
+        "datasets": count("datasets", "*.json"),
+        "prompts": count("prompts"),
+        "threads": count("threads"),
+        "metrics": metrics.exists() and sum(1 for _ in open(metrics)),
+    }
 
 
 def load(name: str) -> Dict[str, Any]:
@@ -4630,7 +4854,10 @@ def _launch(job: Job, memory_dir, resume_at, background: bool) -> None:
         _JOBS[job.record["id"]] = job
     job.write()
     if background:
-        threading.Thread(target=_execute, args=(job, memory_dir, resume_at), daemon=True).start()
+        # copy the request's context, so the run sees the signed-in account's workspace
+        import contextvars
+        threading.Thread(target=contextvars.copy_context().run, args=(_execute, job, memory_dir, resume_at),
+                         daemon=True).start()
     else:
         _execute(job, memory_dir, resume_at)
 

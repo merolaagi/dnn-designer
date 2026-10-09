@@ -1,0 +1,20 @@
+{
+  "name": "ScoreMLP",
+  "nodes": [
+    {"id": "in", "type": "Input", "label": "features", "params": {"shape": [8], "dtype": "float"}, "x": 0, "y": 0},
+    {"id": "h1", "type": "Linear", "params": {"units": 64, "bias": true}, "x": 0, "y": 110},
+    {"id": "a1", "type": "Activation", "params": {"kind": "relu"}, "x": 0, "y": 220},
+    {"id": "h2", "type": "Linear", "params": {"units": 64, "bias": true}, "x": 0, "y": 330},
+    {"id": "a2", "type": "Activation", "params": {"kind": "relu"}, "x": 0, "y": 440},
+    {"id": "head", "type": "Linear", "params": {"units": 1, "bias": true}, "x": 0, "y": 550},
+    {"id": "out", "type": "Output", "label": "score", "params": {"task": "regression"}, "x": 0, "y": 660}
+  ],
+  "edges": [
+    {"id": "e1", "source": "in", "target": "h1"},
+    {"id": "e2", "source": "h1", "target": "a1"},
+    {"id": "e3", "source": "a1", "target": "h2"},
+    {"id": "e4", "source": "h2", "target": "a2"},
+    {"id": "e5", "source": "a2", "target": "head"},
+    {"id": "e6", "source": "head", "target": "out"}
+  ]
+}

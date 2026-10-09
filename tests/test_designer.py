@@ -9341,6 +9341,155 @@ def _():
     assert "function alShowStreaming" in PAGE and 'id="alStream"' in PAGE
 
 
+
+# --------------------------------------------------------------------------
+# agent lab 3.6: undo, toolbar, where things are kept
+# --------------------------------------------------------------------------
+
+@check("Open lists saved agents only, not the lab's settings files")
+def _():
+    folder = agentlab._dir()
+    made = []
+    for name, body in (("zz_settings_like", {"a": 1}), ("zz_agent_like", {"name": "zz", "nodes": [], "edges": []})):
+        path = folder / f"{name}.json"
+        assert not path.exists()
+        path.write_text(json.dumps(body)); made.append(path)
+    try:
+        listed = agentlab.listing()
+        assert "zz_agent_like" in listed and "zz_settings_like" not in listed
+        for settings in ("prices", "alerts", "online", "agent_memory"):
+            assert settings not in listed
+    finally:
+        for path in made:
+            path.unlink()
+
+
+@check("the lab says where it keeps things")
+def _():
+    # called directly: with accounts switched on, an HTTP request here would need a session
+    import main
+    assert any(getattr(r, "path", "") == "/api/agentlab/where" for r in main.app.routes)
+    got = main.agentlab_where()
+    assert got["dir"] == str(agentlab._dir())
+    assert got["designs"] == len(agentlab.listing())
+    for key in ("runs", "studies", "datasets", "metrics"):
+        assert key in got
+
+
+@check("the agent canvas has undo, redo, and an undoable Clear")
+def _():
+    for needle in ('id="alUndo"', 'id="alRedo"', "function alUndo", "function alRedo",
+                   "agentlab-history", "alUndoToast(`Removed", 'id="alNewMenu"', 'id="alOpenMenu"',
+                   'data-new="blank"', "function alStatus", "function alHelpHtml", "/api/agentlab/where"):
+        assert needle in PAGE, needle
+    assert 'id="alTemplate"' not in PAGE, "the old Start from select is gone"
+    # the agent page stops ⌘Z before the network designer's handler sees it
+    assert "ev.stopPropagation();\n      (key === \"y\" || ev.shiftKey) ? alRedo() : alUndo();" in PAGE
+
+
+@check("the network page's status bar functions exist")
+def _():
+    assert "function setStatus(" in PAGE
+    assert "renderProblems()" not in PAGE
+
+
+@check("the header is one line, and hides the network's controls on the agent lab")
+def _():
+    head = PAGE[PAGE.index("<header>"):PAGE.index("</header>")]
+    assert 'class="titleline"' not in head and 'class="topline"' not in head
+    for needle in ('id="gname"', 'id="versionPick"', 'id="btnSave"', 'id="btnTrain"', 'id="btnDelete"',
+                   'id="btnImport"', 'id="btnDownload"', 'id="btnOpen"', 'id="statParams"', 'id="whoami"',
+                   'id="crumbName"', 'id="ver"'):
+        assert needle in head, needle
+    assert 'body[data-page="pageAgentLab"] .hd-design{display:none}' in PAGE
+    assert "document.body.dataset.page = pageId;" in PAGE
+    assert '$("statParams").textContent' in PAGE
+
+
+# --------------------------------------------------------------------------
+# agent lab 3.8: math search, a verifier-gated critic, training a network
+# --------------------------------------------------------------------------
+
+@check("the math search design runs: a check passes, the critic accepts, the best is remembered")
+def _():
+    g = agentlab.template("mathsearch")
+    assert [p for p in agentlab.validate(g) if p["level"] == "error"] == []
+    for target in ("python", "langgraph"):
+        compile(agentlab.codegen(g, target)["source"], target, "exec")
+    import tempfile
+    work = Path(tempfile.mkdtemp())
+    r = agentlab.run(g, "Find a large cap set in F_3^4.", "rehearsal", "approve", memory_dir=work)
+    kinds = [e["event"] for e in r["events"]]
+    assert "remember" in kinds and kinds[-1] == "final"
+    verdicts = [e["passed"] for e in r["events"] if e["event"] == "critique"]
+    assert verdicts[-1] is True
+    assert "VERIFIED" in r["answer"] and "Not verified" not in r["answer"]
+    props = {p["name"]: p["status"] for p in agentlab.safety(g)["properties"]}
+    assert props["Side effects need a person's yes"] == "holds", props
+
+
+@check("a verifier-gated critic never passes an answer no check proved")
+def _():
+    g = agentlab.template("planexec")
+    for n in g["nodes"]:
+        if n["type"] == "reflector":
+            n["params"]["gate"] = agentlab.VERIFIER_GATE
+    import tempfile
+    r = agentlab.run(g, "How many cafes can Lisbon support?", "rehearsal", "approve", memory_dir=Path(tempfile.mkdtemp()))
+    verdicts = [e for e in r["events"] if e["event"] == "critique"]
+    assert verdicts and not any(e["passed"] for e in verdicts)
+    assert r["answer"].rstrip().endswith("[Not verified: no check printed a line starting VERIFIED.]")
+    assert "∃ tool result line" in agentlab.explain(g, next(n["id"] for n in g["nodes"] if n["type"] == "reflector"))["equation"]
+
+
+@check("Train network calls the designer, and says so plainly when it cannot")
+def _():
+    g = agentlab.template("mathsearch")
+    tid = next(n["id"] for n in g["nodes"] if n["type"] == "train_net")
+    assert agentlab.effects(next(n for n in g["nodes"] if n["id"] == tid)) == agentlab.CHANGES
+    space = {"__name__": "agent"}
+    exec(compile(agentlab.codegen(g)["source"], "agent", "exec"), space)  # noqa: S102
+    asked = []
+    space["TRAIN_BACKEND"] = lambda req: asked.append(req) or {"error": "nope"}
+    assert space["train_network"](dataset="mnist", epochs=500) == "Training did not run: nope"
+    assert asked[0]["epochs"] == 20 and asked[0]["design"] == "ScoreMLP"
+    space["train_network"](dataset="x", csv="a,b\n1,2")
+    assert asked[1]["dataset"] == "csv"
+    space["TRAIN_BACKEND"] = None
+    space["APP_URL"] = "http://127.0.0.1:9"
+    assert space["train_network"](dataset="mnist").startswith("Training did not run: Could not reach the designer")
+    report = agentlab._rehearsal_trainer({"design": "ScoreMLP", "dataset": "csv", "epochs": 3})
+    assert "trains nothing" in space["describe_training"](report)
+    g["nodes"][[n["id"] for n in g["nodes"]].index(tid)]["params"]["design"] = ""
+    assert any("network design" in p["message"] for p in agentlab.validate(g))
+
+
+@check("the app trains on an agent's behalf, refusing bad requests with a reason")
+def _():
+    # called directly: with accounts switched on, an HTTP request here would need a session
+    import main
+    assert agentlab.TRAINER is main.agent_train
+    assert any(getattr(r, "path", "") == "/api/agentlab/train-network" for r in main.app.routes)
+    main.list_graphs()                      # delivers the shipped examples, ScoreMLP among them
+    said = main.agent_train({"design": "NoSuchNet"})
+    assert "No network design called NoSuchNet" in said["error"] and "ScoreMLP" in said["error"]
+    said = main.agent_train({"design": "ScoreMLP", "dataset": "weird"})
+    assert said["error"].startswith("Unknown dataset weird")
+    said = main.agent_train({"design": "ScoreMLP", "csv": "a,b\n1,2"})
+    assert "at least ten rows" in said["error"]
+    said = main.agent_train({"design": "ScoreMLP", "csv": "a,b\n" + "\n".join(f"{i},{i}" for i in range(12)),
+                             "target_column": "zz"})
+    assert said["error"].startswith("The table has no column zz")
+
+
+@check("ScoreMLP ships as a small network for tables of numbers")
+def _():
+    import graph as G
+    blob = json.loads((ROOT / "examples" / "ScoreMLP.json").read_text())
+    report = G.analyze(G.parse(blob))
+    assert report["ok"], report["errors"]
+    assert 'd.kind === "net_design"' in PAGE and "/api/graphs" in PAGE
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

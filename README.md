@@ -278,6 +278,19 @@ system prompt, memory, tools, the router and loop that keep it running, and
 the guardrails around it. Select a block to read what it is made of, how it
 behaves and how it fails.
 
+**New** starts from a blank canvas or one of six starting designs, **Open**
+brings back an agent saved in your workspace, and every edit can be undone
+(⌘Z / Ctrl+Z). What's on the canvas is kept in your browser as a draft until
+you **Save**, which writes `agentlab/<name>.json` in your workspace; runs,
+studies, datasets, prompts and monitoring records live beside it. The **?**
+button in the toolbar walks through the workflow and shows the folder.
+
+**Math search** is a starting design for problems whose answers a program can
+check: the agent proposes candidates, runs code that verifies each one, and a
+critic refuses any answer no check has proved. Its **Train network** block lets
+the agent train a network saved on the network canvas (such as the shipped
+ScoreMLP) on a table it generates, to learn a heuristic that guides the search.
+
 As with layers, each block has a **Code** tab with the exact lines of the
 generated file it contributes, and a **Maths** tab with its equation and this
 design's numbers worked through.
