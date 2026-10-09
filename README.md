@@ -296,6 +296,11 @@ gives the agent the canvas as tools (list, catalog, design, check, review,
 edit), and with **Train network** and **Experiment** it trains what it designed
 and improves it with sweeps and searches. Ask it for a model in plain words.
 
+**Talk to agents**, on the rail under Agent lab, is where you use them: pick a
+saved agent or a starting design and chat. Each message is a run you can watch,
+tools that change things ask you first in the conversation, and the agent
+remembers what was said.
+
 As with layers, each block has a **Code** tab with the exact lines of the
 generated file it contributes, and a **Maths** tab with its equation and this
 design's numbers worked through.

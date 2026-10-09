@@ -5308,3 +5308,134 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(_cli(sys.argv[1:]))
+
+
+# --------------------------------------------------------------------------
+# conversations: talking to an agent, one message at a time
+# --------------------------------------------------------------------------
+#
+# A conversation is a list of turns with one agent. Each message you send starts an
+# ordinary durable run of that agent, as a turn of a thread named for the conversation,
+# so the agent sees what was said before, approvals wait for you, and every turn can be
+# opened in the lab. What is kept here is only the index: who you were talking to, what
+# you said, and what came back — the runs themselves keep everything else.
+
+def _convs_dir() -> Path:
+    path = _dir() / "conversations"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def conversation_agents() -> List[Dict[str, Any]]:
+    """Who you can talk to: the starting designs, and every agent you saved."""
+    out = [{"kind": "starting", "key": k, "name": t["name"]} for k, t in TEMPLATES.items()]
+    out += [{"kind": "saved", "key": n, "name": n} for n in listing()]
+    return out
+
+
+def _agent_graph(agent: Dict[str, Any]) -> Dict[str, Any]:
+    kind, key = agent.get("kind"), str(agent.get("key") or "")
+    if kind == "starting":
+        if key not in TEMPLATES:
+            raise ValueError(f"There is no starting design called {key}.")
+        return template(key)
+    if kind == "saved":
+        try:
+            return load(key)
+        except KeyError:
+            raise ValueError(f"The agent {key} is no longer saved.") from None
+    raise ValueError("Choose a starting design or a saved agent to talk to.")
+
+
+def _conv_path(conv_id: str) -> Path:
+    return _convs_dir() / f"{_slug(conv_id)}.json"
+
+
+def _conv_save(conv: Dict[str, Any]) -> None:
+    _conv_path(conv["id"]).write_text(json.dumps(conv, indent=1))
+
+
+def new_conversation(agent: Dict[str, Any], mode: str = "rehearsal") -> Dict[str, Any]:
+    graph = _agent_graph(agent)
+    if mode not in ("live", "rehearsal"):
+        raise ValueError(f"Unknown mode {mode!r}.")
+    now = time.time()
+    conv = {"id": "c" + uuid.uuid4().hex[:10], "agent": {"kind": agent["kind"], "key": agent["key"],
+            "name": graph.get("name") or agent["key"]}, "mode": mode, "title": "", "created": now,
+            "updated": now, "turns": []}
+    _conv_save(conv)
+    return conv
+
+
+def _turn_from_run(turn: Dict[str, Any]) -> bool:
+    """Bring a turn up to date from its run. True if anything changed."""
+    if turn.get("status") not in (None,) + LIVE_STATUSES + ("interrupted",):
+        return False
+    try:
+        rec = _record(turn["run"])
+    except KeyError:
+        turn.update(status="gone", error="The run was removed: only the newest 200 are kept.")
+        return True
+    status = rec.get("status")
+    if status == turn.get("status"):
+        return False
+    events = rec.get("events") or []
+    declined = {e.get("tool") for e in events if e.get("event") == "approval" and not e.get("approved")}
+    ran = {e.get("tool") for e in events if e.get("event") == "dispatch" and e.get("tool")}
+    turn.update(status=status, answer=rec.get("answer"), error=rec.get("error"), ok=rec.get("ok"),
+                tools=sorted(ran - declined), declined=sorted(declined),
+                steps=sum(1 for e in events if e.get("event") == "model"),
+                seconds=round(events[-1]["t"], 1) if events else None)
+    return True
+
+
+def conversation(conv_id: str) -> Dict[str, Any]:
+    path = _conv_path(conv_id)
+    if not path.exists():
+        raise KeyError(conv_id)
+    conv = json.loads(path.read_text())
+    if any([_turn_from_run(t) for t in conv["turns"]]):
+        _conv_save(conv)
+    return conv
+
+
+def conversations() -> List[Dict[str, Any]]:
+    out = []
+    for path in sorted(_convs_dir().glob("*.json"), key=lambda p: -p.stat().st_mtime)[:100]:
+        try:
+            conv = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        last = conv["turns"][-1] if conv.get("turns") else None
+        out.append({"id": conv["id"], "title": conv.get("title") or "New conversation",
+                    "agent": conv["agent"]["name"], "mode": conv.get("mode"), "updated": conv.get("updated"),
+                    "turns": len(conv.get("turns") or []), "status": (last or {}).get("status")})
+    return out
+
+
+def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optional[Path] = None) -> Dict[str, Any]:
+    """Send a message: start the agent's next turn and return the run to follow."""
+    conv = conversation(conv_id)
+    text = str(text or "").strip()
+    if not text:
+        raise ValueError("Write a message first.")
+    if conv["turns"] and conv["turns"][-1].get("status") in LIVE_STATUSES:
+        raise ValueError("The agent is still working on your last message. Wait for it, or stop it.")
+    conv["mode"] = mode or conv.get("mode") or "rehearsal"
+    graph = _agent_graph(conv["agent"])
+    view = start_run(graph, text, conv["mode"], "ask", memory_dir=memory_dir, thread=conv["id"])
+    conv["turns"].append({"run": view["id"], "task": text, "at": time.time(), "mode": conv["mode"],
+                          "status": "running"})
+    conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
+    conv["updated"] = time.time()
+    _conv_save(conv)
+    return {"conversation": conv, "run": view}
+
+
+def delete_conversation(conv_id: str) -> Dict[str, Any]:
+    conv = conversation(conv_id)
+    if conv["turns"] and conv["turns"][-1].get("status") in LIVE_STATUSES:
+        raise ValueError("Stop the agent before deleting the conversation.")
+    _conv_path(conv_id).unlink(missing_ok=True)
+    (_threads_dir() / f"{_slug(conv_id)}.json").unlink(missing_ok=True)
+    return {"ok": True}

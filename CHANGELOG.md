@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.0.0
+
+**Talk to agents.** A new page on the rail, under Agent lab, where you pick an
+agent and just talk to it.
+
+- **Pick who to talk to:** any agent you saved in the Agent lab, or one of the
+  eight starting designs, Model builder and Math search among them.
+- **Every message is a real run** of that agent, as the next turn of a
+  conversation, so it remembers what was said before. You watch it work: its
+  steps appear as it takes them (thinking, which tool it used and what came
+  back, what the critic said), and a model's words stream in as it writes.
+- **Approvals happen in the conversation.** When the agent wants to run a tool
+  that changes things, a card shows the tool and its arguments with Approve
+  and Deny. The run waits as long as it takes, across a page reload or a
+  server restart; an interrupted turn has a Resume link.
+- **Each answer says what it took:** model calls, the tools it used, the ones
+  you declined, and the time, with a link that opens the agent in the Agent lab
+  and replays that run step by step on its canvas.
+- **Rehearsal or Live per conversation**, switched in its header. Rehearsal is
+  free and shows the flow with placeholder answers; Live uses the model set on
+  the agent's LLM cores.
+- **Conversations are kept** in the workspace (`agentlab/conversations/`),
+  listed newest first, and can be deleted; the runs stay in the lab's history.
+
 ## 3.9.0
 
 **Agents that make models.** The network designer is now something an agent

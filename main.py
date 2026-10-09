@@ -340,6 +340,50 @@ def agentlab_where():
     return agentlab.where()
 
 
+class AgentLabConversation(BaseModel):
+    agent: Dict[str, Any]
+    mode: str = "rehearsal"
+
+
+class AgentLabSay(BaseModel):
+    text: str
+    mode: Optional[str] = None
+
+
+def _conv_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such conversation."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/agentlab/conversations")
+def agentlab_conversations():
+    return {"conversations": agentlab.conversations(), "agents": agentlab.conversation_agents()}
+
+
+@app.post("/api/agentlab/conversations")
+def agentlab_conversation_new(body: AgentLabConversation):
+    return _conv_action(agentlab.new_conversation, body.agent, body.mode)
+
+
+@app.get("/api/agentlab/conversations/{conv_id}")
+def agentlab_conversation(conv_id: str):
+    return _conv_action(agentlab.conversation, conv_id)
+
+
+@app.post("/api/agentlab/conversations/{conv_id}/say")
+def agentlab_conversation_say(conv_id: str, body: AgentLabSay):
+    return _conv_action(agentlab.say, conv_id, body.text, body.mode, auth.sub("agentlab"))
+
+
+@app.delete("/api/agentlab/conversations/{conv_id}")
+def agentlab_conversation_delete(conv_id: str):
+    return _conv_action(agentlab.delete_conversation, conv_id)
+
+
 @app.get("/api/agentlab/designs")
 def agentlab_designs():
     return {"designs": agentlab.listing()}

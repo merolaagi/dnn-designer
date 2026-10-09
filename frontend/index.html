@@ -95,8 +95,8 @@ header > .spacer{flex:1;min-width:8px}
 @media (max-width:1240px){.hd-stats,#whoami b{display:none}}
 @media (max-width:1000px){.hd-brand b{display:none}}
 /* the network's name, versions and actions belong to the network pages, not the agent lab */
-body[data-page="pageAgentLab"] .hd-design{display:none}
-body[data-page="pageAgentLab"] .hd-pagename{display:inline}
+body[data-page="pageAgentLab"] .hd-design,body[data-page="pageTalk"] .hd-design{display:none}
+body[data-page="pageAgentLab"] .hd-pagename,body[data-page="pageTalk"] .hd-pagename{display:inline}
 .spacer{flex:1}
 .stat{display:flex;flex-direction:column;line-height:1.15;padding-right:6px}
 .stat i{font-style:normal;font-family:var(--mono);font-size:13px;color:#2D7DD2}
@@ -260,6 +260,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 #pageAgents, #pagePad, #pageDomains, #pageScouts,
 #pageCodebase, #pageMaths, #pageWorkbench, #pagePhysics,
 #pageAgentLab{background:var(--paper)}
+#pageTalk{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -2372,6 +2373,99 @@ body.sizing{user-select:none}
 .al-toast button{background:#33465C;border:0;color:#fff;font:600 12px var(--ui);border-radius:6px;padding:5px 11px;cursor:pointer}
 .al-toast button:hover{background:#41597A}
 .al-emptyundo{display:block;margin-top:8px;font-size:12px}
+
+/* ---------------- talk to agents ---------------- */
+#pageTalk{background:var(--paper)}
+/* the network assistant's tab would sit on the send button; this page has its own conversation */
+body[data-page="pageTalk"] #dockTab{display:none}
+.tk-side{width:264px;flex:none;display:flex;flex-direction:column;border-right:1px solid var(--paper-3);background:#fff;min-height:0}
+.tk-new{margin:12px;height:36px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:8px;
+  border:1px solid var(--paper-3);background:#fff;font:600 12.5px var(--ui);color:var(--text);cursor:pointer}
+.tk-new:hover{background:var(--paper);border-color:#B7C3D1}
+.tk-list{flex:1;overflow-y:auto;padding:0 8px 16px}
+.tk-list .head{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 8px 4px}
+.tk-item{display:block;width:100%;text-align:left;border:0;background:none;border-radius:8px;padding:8px 10px;cursor:pointer;color:var(--text)}
+.tk-item:hover{background:var(--paper)}
+.tk-item.on{background:#E6F0FB}
+.tk-item b{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-item small{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted);margin-top:2px}
+.tk-item small i{width:6px;height:6px;border-radius:50%;background:#9AA8BA;flex:none}
+.tk-item small i.running{background:#2D7DD2;animation:tkPulse 1.2s infinite}
+.tk-item small i.waiting{background:var(--amber)}
+.tk-item small i.error,.tk-item small i.interrupted{background:var(--bad)}
+@keyframes tkPulse{50%{opacity:.35}}
+.tk-empty-list{font-size:12px;color:var(--muted);padding:8px 10px;line-height:1.45}
+.tk-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.tk-top{display:flex;align-items:center;gap:10px;padding:10px 18px;background:#fff;border-bottom:1px solid var(--paper-3);flex:none;min-height:54px}
+.tk-top .who{display:flex;flex-direction:column;min-width:0}
+.tk-top .who b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-top .who small{font-size:11.5px;color:var(--muted)}
+.tk-seg{display:inline-flex;background:var(--paper);border-radius:8px;padding:3px;gap:2px}
+.tk-seg button{border:0;background:none;border-radius:6px;padding:5px 11px;font:500 12px var(--ui);color:var(--muted);cursor:pointer}
+.tk-seg button.on{background:#fff;color:var(--text);box-shadow:0 1px 2px rgba(22,32,46,.12)}
+.tk-seg button:disabled{opacity:.45;cursor:not-allowed}
+.tk-tb{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:7px;border:1px solid transparent;
+  background:none;color:#3C4B5F;font:500 12.5px var(--ui);cursor:pointer}
+.tk-tb:hover{background:var(--paper)}
+.tk-tb.danger:hover{color:var(--bad);background:#FDECEA}
+.tk-note{font-size:12px;padding:7px 18px;background:#FFF7E6;color:#7A5A12;border-bottom:1px solid #F1E2BD;flex:none}
+.tk-scroll{flex:1;overflow-y:auto;padding:22px 0 12px}
+.tk-thread{max-width:780px;margin:0 auto;padding:0 22px;display:flex;flex-direction:column;gap:16px}
+.tk-msg{display:flex;gap:10px}
+.tk-msg.me{justify-content:flex-end}
+.tk-msg.me .bubble{background:#2D7DD2;color:#fff;border-radius:14px 14px 4px 14px;padding:9px 13px;max-width:78%;
+  font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+.tk-av{width:28px;height:28px;border-radius:8px;flex:none;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(145deg,#3B8BE0,#1F5FAD);margin-top:2px}
+.tk-body{flex:1;min-width:0}
+.tk-answer{background:#fff;border:1px solid var(--paper-3);border-radius:4px 14px 14px 14px;padding:11px 15px;font-size:13.5px;line-height:1.6}
+.tk-answer p{margin:0 0 9px}.tk-answer p:last-child{margin-bottom:0}
+.tk-answer ul,.tk-answer ol{margin:0 0 9px;padding-left:20px}
+.tk-answer h4{margin:10px 0 4px;font-size:13.5px}
+.tk-answer pre{background:#16202E;color:#E4EBF3;border-radius:8px;padding:10px 12px;overflow-x:auto;font:12px/1.5 var(--mono);margin:0 0 9px}
+.tk-answer code{font-family:var(--mono);font-size:12px;background:var(--paper);padding:1px 4px;border-radius:4px}
+.tk-answer pre code{background:none;padding:0}
+.tk-answer.err{border-color:#EBC7C2;background:#FDF3F2;color:#8C2F27}
+.tk-work{margin-bottom:8px;font-size:12px;color:var(--muted)}
+.tk-work summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:3px 0}
+.tk-work summary::-webkit-details-marker{display:none}
+.tk-work summary::before{content:"›";display:inline-block;transition:transform .12s;font-size:14px}
+.tk-work[open] summary::before{transform:rotate(90deg)}
+.tk-steps{list-style:none;margin:4px 0 0;padding:0 0 0 12px;border-left:2px solid var(--paper-3)}
+.tk-steps li{padding:2px 0 2px 8px;font-size:12px;color:#3C4B5F;word-break:break-word}
+.tk-steps li b{font-weight:600;color:var(--text)}
+.tk-live{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:2px 0 8px}
+.tk-dots{display:inline-flex;gap:3px}
+.tk-dots i{width:5px;height:5px;border-radius:50%;background:#2D7DD2;animation:tkPulse 1s infinite}
+.tk-dots i:nth-child(2){animation-delay:.2s}.tk-dots i:nth-child(3){animation-delay:.4s}
+.tk-stream{background:#fff;border:1px dashed var(--paper-3);border-radius:10px;padding:9px 13px;font-size:13px;line-height:1.55;white-space:pre-wrap;color:#3C4B5F;margin-bottom:8px}
+.tk-approve{background:#FFF9EC;border:1px solid #F1D9A0;border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.tk-approve b{font-size:13px}
+.tk-approve pre{background:#fff;border:1px solid #F1E2BD;border-radius:7px;padding:8px 10px;font:11.5px/1.45 var(--mono);max-height:180px;overflow:auto;margin:8px 0}
+.tk-approve .row{display:flex;gap:8px}
+.tk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:6px;font-size:11.5px;color:var(--muted)}
+.tk-meta button{border:0;background:none;color:#2D7DD2;font:500 11.5px var(--ui);cursor:pointer;padding:0}
+.tk-meta button:hover{text-decoration:underline}
+.tk-compose{flex:none;padding:10px 22px 18px;background:linear-gradient(to top,var(--paper) 70%,transparent)}
+.tk-box{max-width:780px;margin:0 auto;display:flex;align-items:flex-end;gap:8px;background:#fff;border:1px solid var(--paper-3);
+  border-radius:14px;padding:8px 8px 8px 14px;box-shadow:0 2px 10px rgba(22,32,46,.06)}
+.tk-box:focus-within{border-color:#2D7DD2;box-shadow:0 0 0 3px rgba(45,125,210,.13)}
+.tk-box textarea{flex:1;border:0;outline:none;resize:none;font:13.5px/1.5 var(--ui);max-height:200px;min-height:22px;padding:5px 0;background:none}
+.tk-send{width:34px;height:34px;border-radius:9px;border:0;background:#2D7DD2;color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+.tk-send:disabled{background:#B9CDE4;cursor:not-allowed}
+.tk-send.stop{background:#16202E}
+.tk-hint{max-width:780px;margin:6px auto 0;font-size:11px;color:var(--muted);text-align:center}
+.tk-pick{max-width:900px;margin:0 auto;padding:34px 24px}
+.tk-pick h2{margin:0 0 4px;font-size:20px}
+.tk-pick > p{margin:0 0 18px;color:var(--muted);font-size:13px}
+.tk-pick h4{margin:18px 0 8px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tk-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.tk-card{text-align:left;border:1px solid var(--paper-3);background:#fff;border-radius:12px;padding:13px 14px;cursor:pointer;color:var(--text)}
+.tk-card:hover{border-color:#2D7DD2;box-shadow:0 4px 14px rgba(45,125,210,.12)}
+.tk-card b{display:block;font-size:13px;margin-bottom:3px}
+.tk-card small{display:block;font-size:12px;color:var(--muted);line-height:1.45}
+.tk-hello{text-align:center;color:var(--muted);font-size:13px;padding:40px 20px}
+.tk-hello b{display:block;color:var(--text);font-size:16px;margin-bottom:6px}
 .al-help{font-family:var(--ui);flex:none;background:#fff;border-bottom:1px solid var(--paper-3);padding:14px 18px 16px;max-height:52vh;overflow-y:auto}
 .al-helphead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .al-helphead b{font-size:14px}
@@ -2781,6 +2875,7 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
     <button data-page="pagePaper"><i>&#128196;</i>Paper &rarr; spec</button>
     <button data-page="pageExtend"><i>&#9881;</i>Blocks &amp; recipes</button>
     <button data-page="pageAgentLab"><i>&#10070;</i>Agent lab</button>
+    <button data-page="pageTalk"><i>&#10078;</i>Talk to agents</button>
 
     <div class="group">Executions</div>
     <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
@@ -2995,6 +3090,15 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 
   <section class="page" id="pageAgentLab">
     <div id="alMain"></div>
+  </section>
+
+  <section class="page" id="pageTalk">
+    <aside class="tk-side">
+      <button class="tk-new" id="tkNew"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
+        stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>New conversation</button>
+      <div class="tk-list" id="tkList"></div>
+    </aside>
+    <div class="tk-main" id="tkMain"></div>
   </section>
 
   <section class="page" id="pageRuns">
@@ -5892,6 +5996,7 @@ const PAGE_SETUP = {
   pageRuns: () => refreshRuns(),
   pageAgents: () => refreshAgents(),
   pageAgentLab: () => renderAgentLab(),
+  pageTalk: () => tkOpenPage(),
   pageChat: () => refreshChatModels(),
   pageExtend: () => refreshBlocks(),
 };
@@ -5901,6 +6006,8 @@ function showPage(pageId){
     p.classList.toggle("on", p.id === pageId));
   state.page = pageId;
   document.body.dataset.page = pageId;
+  const ownName = {pageAgentLab: "Agent lab", pageTalk: "Talk to agents"}[pageId];
+  if (ownName) $("hdPageName").textContent = ownName;
   if (PAGE_SETUP[pageId]) PAGE_SETUP[pageId]();
   if (pageId === "pageDesign"){
     render();
@@ -13550,6 +13657,17 @@ const AL_ICON = {
   close: AL_SVG(`<path d="m4 4 8 8M12 4l-8 8"/>`),
 };
 
+const AL_BLURBS = {
+  react: "Model, router and tools in a loop, with guards and an approval step.",
+  rag: "Recalls notes from long-term memory before answering, and saves new ones.",
+  planexec: "Writes a plan, works through it, and a critic checks the answer.",
+  longrun: "A long loop that summarises its history to stay inside the context limit.",
+  debate: "Two models argue in parallel; a third gives the verdict.",
+  supervisor: "A supervisor hands sub-tasks to specialist sub-agents.",
+  modelbuilder: "Designs a network for your task, checks and reviews it, trains it, and improves it with experiments.",
+  mathsearch: "Generates candidates, proves them with code, remembers the best, and can train a network to guide the search.",
+};
+
 /* Every edit lands here: the draft is kept in this browser, and the change becomes
    one step of undo history. Typing in a field within a second of the last change
    folds into the same step, so undo removes a word, not a letter. */
@@ -13699,16 +13817,7 @@ function alCloseMenus(){
 
 function alFillNewMenu(){
   const cat = agentLabState.cat;
-  const blurbs = {
-    react: "Model, router and tools in a loop, with guards and an approval step.",
-    rag: "Recalls notes from long-term memory before answering, and saves new ones.",
-    planexec: "Writes a plan, works through it, and a critic checks the answer.",
-    longrun: "A long loop that summarises its history to stay inside the context limit.",
-    debate: "Two models argue in parallel; a third gives the verdict.",
-    supervisor: "A supervisor hands sub-tasks to specialist sub-agents.",
-    modelbuilder: "Designs a network for your task, checks and reviews it, trains it, and improves it with experiments.",
-    mathsearch: "Generates candidates, proves them with code, remembers the best, and can train a network to guide the search.",
-  };
+  const blurbs = AL_BLURBS;
   $("alNewMenu").innerHTML =
     `<button role="menuitem" data-new="blank"><b>Blank canvas</b><small>An empty body to build from the palette.</small></button>
      <div class="al-menuhead">Starting designs</div>` +
@@ -15392,6 +15501,320 @@ async function alRefreshDesigns(){
     agentLabState.designs = d.designs || [];
     if (!$("alOpenMenu").hidden) alFillOpenMenu();
   } catch {}
+}
+
+/* ============================ talk to agents ============================ */
+/* Each message starts an ordinary durable run of the chosen agent, as the next turn of a
+   thread named for the conversation; this page follows it, shows its work and asks you
+   for approvals, and keeps the conversation in the workspace. */
+
+const tkState = {list: [], agents: [], conv: null, live: null, following: null, liveAvailable: false};
+const TK_ICON = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><g fill="currentColor">
+  <circle cx="5" cy="7" r="2.1"/><circle cx="5" cy="17" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.4"/></g>
+  <g stroke="currentColor" stroke-width="1.2" opacity=".6"><path d="M5 7l7 5M5 17l7-5M12 12h7"/></g></svg>`;
+
+async function tkOpenPage(){
+  if (!tkState.catalogued){
+    try{
+      const cat = await (await fetch(API + "/api/agentlab/catalog")).json();
+      tkState.liveAvailable = !!cat.live_available;
+      tkState.catalogued = true;
+    } catch {}
+  }
+  await tkRefreshList();
+  let want = null;
+  try{ want = localStorage.getItem("tk-conversation"); } catch {}
+  if (tkState.conv) tkRender();
+  else if (want && tkState.list.some(c => c.id === want)) tkOpen(want);
+  else tkPicker();
+}
+
+async function tkRefreshList(){
+  try{
+    const d = await (await fetch(API + "/api/agentlab/conversations")).json();
+    tkState.list = d.conversations || []; tkState.agents = d.agents || [];
+  } catch {}
+  const host = $("tkList");
+  if (!tkState.list.length){
+    host.innerHTML = `<div class="tk-empty-list">No conversations yet. Start one and it is kept here.</div>`;
+    return;
+  }
+  // a conversation nobody has written in yet is only listed while it is the open one
+  const shown = tkState.list.filter(c => c.turns || (tkState.conv && tkState.conv.id === c.id));
+  if (!shown.length){
+    host.innerHTML = `<div class="tk-empty-list">No conversations yet. Start one and it is kept here.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="head">Conversations</div>` + shown.map(c =>
+    `<button class="tk-item${tkState.conv && tkState.conv.id === c.id ? " on" : ""}" data-conv="${alEsc(c.id)}">
+       <b>${alEsc(c.title)}</b><small><i class="${alEsc(c.status || "")}"></i>${alEsc(c.agent)} · ${tkAgo(c.updated)}</small></button>`).join("");
+  host.querySelectorAll("[data-conv]").forEach(b => b.onclick = () => tkOpen(b.dataset.conv));
+}
+
+function tkAgo(t){
+  if (!t) return "";
+  const s = Date.now() / 1000 - t;
+  return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago`
+    : new Date(t * 1000).toLocaleDateString();
+}
+
+$("tkNew").onclick = () => { tkState.conv = null; try{ localStorage.removeItem("tk-conversation"); } catch {} tkPicker(); tkRefreshList(); };
+
+function tkPicker(){
+  const starting = tkState.agents.filter(a => a.kind === "starting");
+  const saved = tkState.agents.filter(a => a.kind === "saved");
+  const card = a => `<button class="tk-card" data-kind="${a.kind}" data-key="${alEsc(a.key)}"><b>${alEsc(a.name)}</b>
+    <small>${alEsc(a.kind === "starting" ? (AL_BLURBS[a.key] || "A starting design.") : "An agent you designed and saved in the Agent lab.")}</small></button>`;
+  $("tkMain").innerHTML = `<div class="tk-scroll"><div class="tk-pick">
+    <h2>Who do you want to talk to?</h2>
+    <p>Pick an agent. Every message you send is a run of it: you watch it work, approve what it wants to do, and it
+      remembers the conversation. Design your own in the Agent lab and save it to see it here.</p>
+    ${saved.length ? `<h4>Your agents</h4><div class="tk-cards">${saved.map(card).join("")}</div>` : ""}
+    <h4>Starting designs</h4><div class="tk-cards">${starting.map(card).join("")}</div></div></div>`;
+  $("tkMain").querySelectorAll(".tk-card").forEach(b => b.onclick = async () => {
+    const r = await fetch(API + "/api/agentlab/conversations", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({agent: {kind: b.dataset.kind, key: b.dataset.key}, mode: tkState.liveAvailable ? "live" : "rehearsal"})});
+    const d = await r.json();
+    if (!r.ok){ toast((d.detail && d.detail.message) || "Could not start the conversation"); return; }
+    tkState.conv = d; tkKeep(); await tkRefreshList(); tkRender(); $("tkInput").focus();
+  });
+}
+
+function tkKeep(){ try{ localStorage.setItem("tk-conversation", tkState.conv.id); } catch {} }
+
+async function tkOpen(id){
+  try{
+    const r = await fetch(API + "/api/agentlab/conversations/" + encodeURIComponent(id));
+    if (!r.ok) throw 0;
+    tkState.conv = await r.json();
+  } catch { toast("That conversation could not be opened"); return; }
+  tkKeep(); tkRender(); tkRefreshList();
+  const last = tkState.conv.turns[tkState.conv.turns.length - 1];
+  if (last && ["running", "waiting"].includes(last.status)) tkFollow(last);
+}
+
+function tkRender(){
+  const c = tkState.conv;
+  if (!c) return tkPicker();
+  const live = c.mode === "live";
+  $("tkMain").innerHTML = `
+    <div class="tk-top">
+      <span class="tk-av">${TK_ICON}</span>
+      <div class="who"><b>${alEsc(c.agent.name)}</b><small>${c.agent.kind === "saved" ? "Your agent" : "Starting design"} · <span id="tkCount"></span></small></div>
+      <span class="spacer" style="flex:1"></span>
+      <div class="tk-seg" role="group" aria-label="Model">
+        <button data-mode="rehearsal" class="${live ? "" : "on"}" title="A scripted stand-in model: free, to see the flow">Rehearsal</button>
+        <button data-mode="live" class="${live ? "on" : ""}" title="The real model set on the agent's LLM cores">Live</button>
+      </div>
+      <button class="tk-tb" id="tkLab" title="Open this agent in the Agent lab">Open in lab</button>
+      <button class="tk-tb danger" id="tkDel" title="Delete this conversation">Delete</button>
+    </div>
+    ${live ? "" : `<div class="tk-note">Rehearsal: a scripted stand-in plays the model, so answers are placeholders. Switch to Live for real answers.</div>`}
+    <div class="tk-scroll" id="tkScroll"><div class="tk-thread" id="tkThread"></div></div>
+    <div class="tk-compose"><div class="tk-box">
+      <textarea id="tkInput" rows="1" placeholder="Message ${alEsc(c.agent.name)}…"></textarea>
+      <button class="tk-send" id="tkSend" aria-label="Send"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></button>
+    </div><div class="tk-hint">Enter to send · Shift+Enter for a new line · tools that change things wait for your yes</div></div>`;
+  $("tkMain").querySelectorAll("[data-mode]").forEach(b => b.onclick = () => {
+    c.mode = b.dataset.mode; tkRender();
+  });
+  $("tkDel").onclick = async () => {
+    if (!confirm("Delete this conversation? The runs stay in the Agent lab's history.")) return;
+    const r = await fetch(API + "/api/agentlab/conversations/" + encodeURIComponent(c.id), {method: "DELETE"});
+    if (!r.ok){ const d = await r.json(); toast((d.detail && d.detail.message) || "Not deleted"); return; }
+    tkState.conv = null; try{ localStorage.removeItem("tk-conversation"); } catch {} tkPicker(); tkRefreshList();
+  };
+  $("tkLab").onclick = () => tkOpenInLab(null);
+  const box = $("tkInput");
+  box.addEventListener("input", () => { box.style.height = "auto"; box.style.height = Math.min(200, box.scrollHeight) + "px"; });
+  box.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing){ ev.preventDefault(); tkSend(); }
+  });
+  $("tkSend").onclick = () => tkState.following ? tkStop() : tkSend();
+  tkDrawThread();
+}
+
+function tkDrawThread(){
+  const c = tkState.conv, host = $("tkThread");
+  if (!host) return;
+  $("tkCount").textContent = `${c.turns.length} message${c.turns.length === 1 ? "" : "s"}`;
+  if (!c.turns.length){
+    host.innerHTML = `<div class="tk-hello"><b>${alEsc(c.agent.name)}</b>${alEsc(AL_BLURBS[c.agent.key] || "Say what you need.")}</div>`;
+  } else {
+    host.innerHTML = c.turns.map((t, i) => `<div class="tk-msg me"><div class="bubble">${alEsc(t.task)}</div></div>
+      <div class="tk-msg"><span class="tk-av">${TK_ICON}</span><div class="tk-body" id="tkTurn${i}">${tkTurnHtml(t, i)}</div></div>`).join("");
+    host.querySelectorAll("[data-lab]").forEach(b => b.onclick = () => tkOpenInLab(b.dataset.lab));
+    host.querySelectorAll("[data-resume]").forEach(b => b.onclick = () => tkResume(b.dataset.resume));
+  }
+  tkSendButton();
+  const sc = $("tkScroll"); if (sc) sc.scrollTop = sc.scrollHeight;
+}
+
+function tkTurnHtml(t, i){
+  if (["running", "waiting"].includes(t.status)) return `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Working…</div>`;
+  const meta = [t.steps ? `${t.steps} model call${t.steps === 1 ? "" : "s"}` : "", t.tools && t.tools.length ? `used ${t.tools.join(", ")}` : "",
+    t.declined && t.declined.length ? `you declined ${t.declined.join(", ")}` : "",
+    t.seconds != null ? `${t.seconds} s` : "", t.mode === "rehearsal" ? "rehearsal" : ""].filter(Boolean).join(" · ");
+  const body = t.answer ? `<div class="tk-answer">${tkMd(t.answer)}</div>`
+    : `<div class="tk-answer err">${alEsc(t.status === "interrupted" ? "The server stopped while this was running."
+        : t.status === "stopped" ? "Stopped." : t.error || "No answer came back.")}</div>`;
+  return body + `<div class="tk-meta">${alEsc(meta)}
+    ${t.run && t.status !== "gone" ? `<button data-lab="${alEsc(t.run)}">See every step in the lab</button>` : ""}
+    ${["interrupted", "stopped"].includes(t.status) ? `<button data-resume="${alEsc(t.run)}">Resume</button>` : ""}</div>`;
+}
+
+/* A small, safe Markdown: paragraphs, lists, headings, code. Everything is escaped first. */
+function tkMd(text){
+  const blocks = String(text).split(/```/);
+  return blocks.map((part, k) => {
+    if (k % 2){ const body = part.replace(/^[\w+-]*\n/, ""); return `<pre><code>${alEsc(body.replace(/\n$/, ""))}</code></pre>`; }
+    const inline = x => alEsc(x).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    let html = "", list = null;
+    const close = () => { if (list){ html += `</${list}>`; list = null; } };
+    part.split("\n\n").forEach(para => {
+      const lines = para.split("\n").filter(l => l.trim());
+      if (!lines.length) return;
+      if (lines.every(l => /^\s*([-*•]|\d+[.)])\s+/.test(l))){
+        const kind = /^\s*\d/.test(lines[0]) ? "ol" : "ul";
+        close(); html += `<${kind}>` + lines.map(l => `<li>${inline(l.replace(/^\s*([-*•]|\d+[.)])\s+/, ""))}</li>`).join("") + `</${kind}>`;
+        return;
+      }
+      close();
+      if (/^#{1,4}\s/.test(lines[0]) && lines.length === 1){ html += `<h4>${inline(lines[0].replace(/^#+\s*/, ""))}</h4>`; return; }
+      html += `<p>${lines.map(inline).join("<br>")}</p>`;
+    });
+    close();
+    return html;
+  }).join("");
+}
+
+function tkSendButton(){
+  const b = $("tkSend");
+  if (!b) return;
+  const busy = !!tkState.following;
+  b.classList.toggle("stop", busy);
+  b.setAttribute("aria-label", busy ? "Stop" : "Send");
+  b.title = busy ? "Stop the agent" : "Send";
+  b.innerHTML = busy ? `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>`
+    : `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg>`;
+}
+
+async function tkSend(){
+  const c = tkState.conv, box = $("tkInput");
+  const text = box.value.trim();
+  if (!text || tkState.following) return;
+  box.value = ""; box.style.height = "auto";
+  const r = await fetch(API + `/api/agentlab/conversations/${encodeURIComponent(c.id)}/say`, {method: "POST",
+    headers: {"content-type": "application/json"}, body: JSON.stringify({text, mode: c.mode})});
+  const d = await r.json();
+  if (!r.ok){ box.value = text; toast((d.detail && d.detail.message) || "Not sent"); return; }
+  tkState.conv = d.conversation;
+  tkDrawThread(); tkRefreshList();
+  tkFollow(tkState.conv.turns[tkState.conv.turns.length - 1]);
+}
+
+function tkStepText(ev){
+  const tool = ev.tool ? `<b>${alEsc(ev.tool)}</b>` : "";
+  switch (ev.event){
+    case "input": return null;
+    case "plan": return `Planned: ${alEsc(String(ev.preview || "").slice(0, 160))}`;
+    case "recall": return `Recalled ${ev.count} note${ev.count === 1 ? "" : "s"} from memory`;
+    case "model": return ev.wants_tools ? `Thought, and asked for a tool (call ${ev.step})` : `Thought, and wrote an answer (call ${ev.step})`;
+    case "dispatch": return `Using ${tool}`;
+    case "tool_result": return `${tool} → ${alEsc(String(ev.preview || "").slice(0, 180))}`;
+    case "approval": return ev.approved ? `You approved ${tool}` : `You said no to ${tool}`;
+    case "critique": return ev.passed ? "The critic passed the answer" : `The critic sent it back: ${alEsc(String(ev.notes || "").slice(0, 140))}`;
+    case "remember": return "Saved this to long-term memory";
+    case "compact": return "Summarised its earlier work to stay inside the context";
+    case "delegate": return "Handed a sub-task to a sub-agent";
+    case "guard_in": return ev.passed ? null : "Blocked the message as likely prompt injection";
+    case "final": return null;
+    default: return null;
+  }
+}
+
+async function tkFollow(turn){
+  const conv = tkState.conv, idx = conv.turns.indexOf(turn);
+  const me = tkState.following = {run: turn.run, stop: false};
+  tkSendButton();
+  let seen = 0, view = null; const steps = [];
+  while (tkState.following === me){
+    try{ view = await (await fetch(API + `/api/agentlab/runs/${turn.run}/live?since=${seen}`)).json(); }
+    catch { await alSleep(1000); continue; }
+    seen = view.count;
+    (view.events || []).forEach(ev => { const t = tkStepText(ev); if (t) steps.push(t); });
+    const host = $("tkTurn" + idx);
+    if (host && tkState.conv === conv){
+      const stream = (view.streaming || []).map(s => s.text).join("\n\n");
+      const p = view.pending;
+      host.innerHTML = `${steps.length ? `<details class="tk-work" open><summary>${steps.length} step${steps.length === 1 ? "" : "s"} so far</summary>
+          <ul class="tk-steps">${steps.slice(-12).map(s => `<li>${s}</li>`).join("")}</ul></details>` : ""}
+        ${p ? `<div class="tk-approve"><b>It wants to run ${alEsc(p.tool)}. Go ahead?</b>
+            <pre>${alEsc(JSON.stringify(p.args, null, 2).slice(0, 3000))}</pre>
+            <div class="row"><button class="btn go" id="tkYes">Approve</button><button class="btn danger" id="tkNo">Deny</button></div></div>`
+          : stream ? `<div class="tk-stream">${alEsc(stream.slice(-2500))}</div>`
+          : `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Working…</div>`}`;
+      if (p){
+        const answer = async yes => {
+          host.querySelectorAll(".tk-approve button").forEach(b => b.disabled = true);
+          await fetch(API + `/api/agentlab/runs/${turn.run}/answer`, {method: "POST", headers: {"content-type": "application/json"},
+            body: JSON.stringify({approved: yes})});
+        };
+        $("tkYes").onclick = () => answer(true); $("tkNo").onclick = () => answer(false);
+      }
+      const sc = $("tkScroll"); if (sc && sc.scrollHeight - sc.scrollTop - sc.clientHeight < 160) sc.scrollTop = sc.scrollHeight;
+    }
+    if (!["running", "waiting"].includes(view.status)) break;
+    await alSleep(view.status === "waiting" ? 900 : (view.streaming || []).length ? 150 : 400);
+  }
+  if (tkState.following !== me) return;
+  tkState.following = null;
+  try{
+    const fresh = await (await fetch(API + "/api/agentlab/conversations/" + encodeURIComponent(conv.id))).json();
+    if (tkState.conv && tkState.conv.id === conv.id){ tkState.conv = fresh; }
+  } catch {}
+  if (tkState.conv && tkState.conv.id === conv.id) tkDrawThread();
+  tkRefreshList();
+}
+
+async function tkStop(){
+  const f = tkState.following;
+  if (!f) return;
+  await fetch(API + `/api/agentlab/runs/${f.run}/stop`, {method: "POST"});
+}
+
+async function tkResume(runId){
+  const r = await fetch(API + `/api/agentlab/runs/${runId}/resume`, {method: "POST"});
+  if (!r.ok){ const d = await r.json(); toast((d.detail && d.detail.message) || "Could not resume"); return; }
+  const turn = tkState.conv.turns.find(t => t.run === runId);
+  turn.status = "running"; tkDrawThread(); tkFollow(turn);
+}
+
+/* The agent, and if a run is named, that run's every step, on the Agent lab's canvas. */
+async function tkOpenInLab(runId){
+  const c = tkState.conv;
+  let graph = null;
+  try{
+    if (c.agent.kind === "saved"){
+      const r = await fetch(API + "/api/agentlab/designs/" + encodeURIComponent(c.agent.key));
+      if (r.ok) graph = await r.json();
+    } else {
+      if (!agentLabState.cat) agentLabState.cat = await (await fetch(API + "/api/agentlab/catalog")).json();
+      graph = agentLabState.cat.templates[c.agent.key];
+    }
+  } catch {}
+  if (!graph){ toast("That agent is no longer saved"); return; }
+  document.querySelector('#rail button[data-page="pageAgentLab"]').click();
+  for (let i = 0; i < 40 && !$("alCanvas"); i++) await alSleep(50);
+  agentLabState.stack = []; alStackButton();
+  alSetGraph(graph);
+  if (c.agent.kind === "saved") alMarkSaved(agentLabState.graph);
+  if (runId){
+    const turn = c.turns.find(t => t.run === runId);
+    if (turn) agentLabState.task = turn.task;
+    alFollow(runId);
+  }
 }
 
 boot();

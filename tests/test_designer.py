@@ -9401,7 +9401,7 @@ def _():
                    'id="btnImport"', 'id="btnDownload"', 'id="btnOpen"', 'id="statParams"', 'id="whoami"',
                    'id="crumbName"', 'id="ver"'):
         assert needle in head, needle
-    assert 'body[data-page="pageAgentLab"] .hd-design{display:none}' in PAGE
+    assert 'body[data-page="pageAgentLab"] .hd-design,body[data-page="pageTalk"] .hd-design{display:none}' in PAGE
     assert "document.body.dataset.page = pageId;" in PAGE
     assert '$("statParams").textContent' in PAGE
 
@@ -9581,6 +9581,71 @@ def _():
     blob = json.loads((ROOT / "examples" / "ScoreMLP.json").read_text())
     g = G.parse(blob)
     assert assistant.find_node(g, "h2", G.analyze(g)).id == "h2"
+
+
+# --------------------------------------------------------------------------
+# agent lab 4.0: talking to agents
+# --------------------------------------------------------------------------
+
+@check("a conversation is a thread of durable runs: approvals wait, turns remember, answers are kept")
+def _():
+    import tempfile
+    import time as _t
+    home = Path(tempfile.mkdtemp())
+    real = agentlab._dir
+    agentlab._dir = lambda: home
+    try:
+        def finish(run_id, approve):
+            for _ in range(200):
+                v = agentlab.run_view(run_id)
+                if v["status"] == "waiting":
+                    agentlab.answer_run(run_id, approve)
+                if v["status"] not in ("running", "waiting"):
+                    return v
+                _t.sleep(0.05)
+            raise AssertionError("the run never finished")
+
+        conv = agentlab.new_conversation({"kind": "starting", "key": "supervisor"}, "rehearsal")
+        assert agentlab.conversations()[0]["title"] == "New conversation"
+        first = agentlab.say(conv["id"], "Write a brief on card fees.")
+        try:
+            agentlab.say(conv["id"], "Hurry up")
+            busy = None
+        except ValueError as exc:
+            busy = str(exc)
+        assert busy and "still working" in busy
+        finish(first["run"]["id"], True)
+        second = agentlab.say(conv["id"], "Shorter, please.")
+        view = finish(second["run"]["id"], False)
+        assert view["thread"] == {"id": conv["id"], "turn": 2}, "the second message is the second turn"
+        kept = agentlab.conversation(conv["id"])
+        a, b = kept["turns"]
+        assert a["status"] == "done" and a["answer"] and "researcher" in a["tools"]
+        assert b["declined"] == ["researcher"] and "researcher" not in b["tools"]
+        assert agentlab.conversations()[0]["title"] == "Write a brief on card fees."
+        assert agentlab.delete_conversation(conv["id"])["ok"]
+        assert not (home / "threads" / f"{conv['id']}.json").exists()
+        for bad, why in (({"kind": "starting", "key": "nope"}, "no starting design"),
+                         ({"kind": "saved", "key": "nope"}, "no longer saved"), ({}, "Choose")):
+            try:
+                agentlab.new_conversation(bad)
+                raise AssertionError("accepted " + str(bad))
+            except ValueError as exc:
+                assert why.lower() in str(exc).lower(), str(exc)
+    finally:
+        agentlab._dir = real
+
+
+@check("the Talk to agents page follows runs, asks for approvals and opens a run in the lab")
+def _():
+    for needle in ('data-page="pageTalk"', 'id="pageTalk"', "pageTalk: () => tkOpenPage()", "function tkFollow",
+                   "/api/agentlab/conversations", "/answer`", "function tkOpenInLab", "function tkMd",
+                   'body[data-page="pageTalk"] .hd-design'):
+        assert needle in PAGE, needle
+    import main
+    paths = {getattr(r, "path", "") for r in main.app.routes}
+    assert {"/api/agentlab/conversations", "/api/agentlab/conversations/{conv_id}",
+            "/api/agentlab/conversations/{conv_id}/say"} <= paths
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
