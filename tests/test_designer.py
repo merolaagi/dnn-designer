@@ -10110,6 +10110,100 @@ def _():
     assert "link = finish_package(state)" in src and "The critic packaged it" in src
 
 
+ROLE_MD = """---
+name: Pricing Analyst
+description: Sets prices from data.
+emoji: 💲
+vibe: Numbers first.
+---
+
+# Pricing Analyst
+
+You are a **Pricing Analyst**.
+
+## 🧠 Your Identity & Memory
+- **Role**: pricing specialist
+- **Memory**: You remember every price test you ran
+- **Experience**: You've priced 500 products
+
+## 🚨 Critical Rules You Must Follow
+- Never recommend a price without the margin it leaves.
+
+## 🔄 Learning & Memory
+You learn from every engagement.
+
+## 🎯 Your Success Metrics
+- Every recommendation shows price, cost and margin.
+"""
+
+
+@check("a roster of role files imports, and each role becomes an honest, tool-using specialist")
+def _():
+    import tempfile, roster, agentlab
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "finance").mkdir(); (root / "scripts").mkdir(); (root / "finance" / "deep").mkdir()
+        (root / "finance" / "finance-pricing-analyst.md").write_text(ROLE_MD)
+        (root / "finance" / "deep" / "finance-quant.md").write_text(ROLE_MD.replace("Pricing Analyst", "Quant"))
+        (root / "finance" / "notes.md").write_text("# not a role")
+        (root / "scripts" / "helper.md").write_text(ROLE_MD)
+        (root / "divisions.json").write_text('{"divisions": {"finance": {"label": "Money"}}}')
+        old = roster._index_path().read_text() if roster._index_path().exists() else None
+        try:
+            got = roster.import_folder(str(root))
+            assert got["count"] == 2 and got["divisions"] == [{"key": "finance", "label": "Money", "count": 2}], got
+            assert [r["id"] for r in roster.roles("pricing")] == ["finance/finance-pricing-analyst"]
+            r = roster.role("finance/finance-pricing-analyst")
+            prompt = roster.role_prompt(r)
+            assert "You remember every price test" not in prompt and "priced 500" not in prompt
+            assert "learn from every engagement" not in prompt and "pricing specialist" in prompt
+            assert "web_search" in prompt and "run_python" in prompt
+            bar = roster.role_standards(r)
+            assert "margin it leaves" in bar and "price, cost and margin" in bar
+            g = roster.graph(r["id"])
+            assert g["name"] == "💲 Pricing Analyst" and g["about"] == "Sets prices from data."
+            src = agentlab.codegen(g)["source"]
+            compile(src, "agent.py", "exec")
+            assert "def search_web(query):" in src and "margin it leaves" in src
+            assert "Hold it to these standards as well" in src
+            conv = agentlab.new_conversation({"kind": "role", "key": r["id"]}, "rehearsal")
+            assert conv["agent"]["name"] == "💲 Pricing Analyst" and conv["agent"]["about"]
+            agentlab.delete_conversation(conv["id"])
+            assert roster.memory_dir(r["id"]).name == "finance_finance-pricing-analyst"
+        finally:
+            if old is None:
+                roster.remove()
+            else:
+                roster._index_path().write_text(old)
+
+
+@check("web search is real: DuckDuckGo results parse into titles, addresses and snippets")
+def _():
+    import agentlab
+    space = {}
+    exec(compile(agentlab.codegen(agentlab.template("react"))["source"], "agent.py", "exec"), space)
+    page = ('<div class="links_main links_deep result__body"><h2><a rel="nofollow" class="result__a" '
+            'href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FGolomb_ruler&amp;rut=1">'
+            'Golomb <b>ruler</b></a></h2><a class="result__snippet" href="x">Marks &amp; distances</a></div>'
+            '<div class="result__body"><a class="result__a" href="https://duckduckgo.com/y.js?ad=1">Ad</a></div>')
+    space["_web_get"] = lambda url, headers: page
+    assert space["web_results"]("golomb") == [("Golomb ruler", "https://en.wikipedia.org/wiki/Golomb_ruler",
+                                               "Marks & distances")]
+    assert "1. Golomb ruler\nhttps://en.wikipedia.org/wiki/Golomb_ruler" in space["search_web"]("golomb")
+    space["WEB_BACKEND"] = agentlab._rehearsal_search
+    assert "stand-in" in space["search_web"]("x")
+
+
+@check("Talk to agents lists specialists and can import a roster")
+def _():
+    for needle in ("function tkSpecialists", "/api/agentlab/roster?q=", "/api/agentlab/roster/import",
+                   'data-kind="role"', "Import from GitHub", 'c.agent.kind === "role" ? "Specialist"'):
+        assert needle in PAGE, needle
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/agentlab/roster", "/api/agentlab/roster/import", "/api/agentlab/roster/role"} <= paths
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -2539,6 +2539,16 @@ body[data-page="pageTalk"] #dockTab{display:none}
 .tk-card:hover{border-color:#2D7DD2;box-shadow:0 4px 14px rgba(45,125,210,.12)}
 .tk-card b{display:block;font-size:13px;margin-bottom:3px}
 .tk-card small{display:block;font-size:12px;color:var(--muted);line-height:1.45}
+.tk-card small.clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tk-card .div{display:inline-block;margin-top:6px;font-size:10.5px;color:var(--muted);background:var(--paper);border-radius:6px;padding:1px 6px}
+.tk-sp-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.tk-sp-bar input{flex:1;min-width:200px;border:1px solid var(--paper-3);border-radius:9px;padding:8px 11px;font:13px var(--ui);background:#fff}
+.tk-sp-bar select{border:1px solid var(--paper-3);border-radius:9px;padding:7px 9px;font:13px var(--ui);background:#fff}
+.tk-sp-note{font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.5}
+.tk-sp-add{border:1px dashed var(--paper-3);border-radius:12px;padding:14px 16px;background:#fff;font-size:13px;line-height:1.55}
+.tk-sp-add .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.tk-sp-add input{flex:1;min-width:220px;border:1px solid var(--paper-3);border-radius:9px;padding:7px 10px;font:13px var(--ui)}
+.tk-sp-more{font-size:12px;color:var(--muted);margin-top:8px}
 .tk-hello{text-align:center;color:var(--muted);font-size:13px;padding:40px 20px}
 .tk-hello b{display:block;color:var(--text);font-size:16px;margin-bottom:6px}
 .al-help{font-family:var(--ui);flex:none;background:#fff;border-bottom:1px solid var(--paper-3);padding:14px 18px 16px;max-height:52vh;overflow-y:auto}
@@ -13740,6 +13750,7 @@ const AL_ICON = {
 };
 
 const AL_BLURBS = {
+  specialist: "A role prompt with web search, a code sandbox, its own notes, and a critic holding it to stated standards.",
   react: "Model, router and tools in a loop, with guards and an approval step.",
   rag: "Recalls notes from long-term memory before answering, and saves new ones.",
   planexec: "Writes a plan, works through it, and a critic checks the answer.",
@@ -16049,14 +16060,80 @@ function tkPicker(){
     <p>Pick an agent. Every message you send is a run of it: you watch it work, approve what it wants to do, and it
       remembers the conversation. Design your own in the Agent lab and save it to see it here.</p>
     ${saved.length ? `<h4>Your agents</h4><div class="tk-cards">${saved.map(card).join("")}</div>` : ""}
+    <h4>Specialists</h4><div id="tkSpecialists"><div class="tk-sp-note">Loading…</div></div>
     <h4>Starting designs</h4><div class="tk-cards">${starting.map(card).join("")}</div></div></div>`;
-  $("tkMain").querySelectorAll(".tk-card").forEach(b => b.onclick = async () => {
+  tkWireCards($("tkMain"));
+  tkSpecialists();
+}
+
+function tkWireCards(host){
+  host.querySelectorAll(".tk-card:not([data-wired])").forEach(b => { b.dataset.wired = "1"; b.onclick = async () => {
     const r = await fetch(API + "/api/agentlab/conversations", {method: "POST", headers: {"content-type": "application/json"},
       body: JSON.stringify({agent: {kind: b.dataset.kind, key: b.dataset.key}, mode: tkState.liveAvailable && tkState.talkMode !== "rehearsal" ? "live" : "rehearsal"})});
     const d = await r.json();
     if (!r.ok){ toast((d.detail && d.detail.message) || "Could not start the conversation"); return; }
     tkState.conv = d; tkKeep(); await tkRefreshList(); tkRender(); $("tkInput").focus();
-  });
+  }; });
+}
+
+/* Specialists: roles imported from a roster (such as The Agency), each run with web search, a code sandbox,
+   its own notes, and a critic holding it to the role's own success metrics. */
+const TK_SP_SHOWN = 24;
+async function tkSpecialists(){
+  const host = $("tkSpecialists");
+  if (!host) return;
+  const q = tkState.spQuery || "", div = tkState.spDivision || "";
+  let d;
+  try{ d = await (await fetch(API + `/api/agentlab/roster?q=${encodeURIComponent(q)}&division=${encodeURIComponent(div)}`)).json(); }
+  catch { host.innerHTML = `<div class="tk-sp-note">The specialists could not be listed.</div>`; return; }
+  if (!$("tkSpecialists")) return;
+  if (!d.imported){
+    host.innerHTML = `<div class="tk-sp-add"><b>Add a roster of specialists.</b> Import role files, such as the
+      roughly 280 roles of <a class="al-link" href="https://github.com/${alEsc(d.default_repo)}" target="_blank" rel="noopener">The Agency</a>
+      (MIT licence): engineers, marketers, analysts, designers and more. Each one runs here as a working agent:
+      web search, a code sandbox, notes of its own, and a critic that checks every answer against that role's own
+      success metrics before you see it.
+      <div class="row"><input id="tkSpRepo" value="${alEsc(d.default_repo)}" aria-label="GitHub repository">
+        <button class="btn go" id="tkSpGet">Import from GitHub</button></div>
+      <div class="row"><input id="tkSpFolder" placeholder="Or a folder on this computer, such as a git clone" aria-label="Folder">
+        <button class="btn" id="tkSpFolderGo">Import folder</button></div>
+      <div class="tk-sp-note" id="tkSpMsg" style="margin-top:8px"></div></div>`;
+    const go = async body => {
+      $("tkSpMsg").textContent = "Importing…";
+      const r = await fetch(API + "/api/agentlab/roster/import", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+      const out = await r.json();
+      if (!r.ok){ $("tkSpMsg").textContent = (out.detail && out.detail.message) || "The import failed."; return; }
+      toast(`${out.count} specialists imported`);
+      tkSpecialists();
+    };
+    $("tkSpGet").onclick = () => go({repo: $("tkSpRepo").value.trim()});
+    $("tkSpFolderGo").onclick = () => { const f = $("tkSpFolder").value.trim(); if (f) go({folder: f}); };
+    return;
+  }
+  const opts = d.divisions.map(x => `<option value="${alEsc(x.key)}"${x.key === div ? " selected" : ""}>${alEsc(x.label)} (${x.count})</option>`).join("");
+  const label = Object.fromEntries(d.divisions.map(x => [x.key, x.label]));
+  const shown = d.roles.slice(0, TK_SP_SHOWN);
+  const card = r => `<button class="tk-card" data-kind="role" data-key="${alEsc(r.id)}" title="${alEsc(r.vibe || "")}">
+      <b>${alEsc((r.emoji ? r.emoji + " " : "") + r.name)}</b><small class="clip">${alEsc(r.description)}</small>
+      <span class="div">${alEsc(label[r.division] || r.division)}</span></button>`;
+  const keepFocus = document.activeElement && document.activeElement.id === "tkSpQ";
+  host.innerHTML = `<p class="tk-sp-note">${d.count} roles from ${alEsc(d.source)}. Each runs with web search, a code sandbox,
+      notes of its own, and a critic that checks the answer against the role's own success metrics.
+      <button class="al-link" id="tkSpRemove" style="border:0;background:none;padding:0;cursor:pointer">Remove the roster</button></p>
+    <div class="tk-sp-bar"><input id="tkSpQ" placeholder="Search: SEO, pricing, SQL, pitch deck…" value="${alEsc(q)}" aria-label="Search specialists">
+      <select id="tkSpDiv" aria-label="Division"><option value="">All divisions</option>${opts}</select></div>
+    ${shown.length ? `<div class="tk-cards">${shown.map(card).join("")}</div>` : `<div class="tk-sp-note">No specialist matches.</div>`}
+    ${d.roles.length > shown.length ? `<div class="tk-sp-more">Showing ${shown.length} of ${d.roles.length}. Search or pick a division to narrow it.</div>` : ""}`;
+  tkWireCards(host);
+  const qi = $("tkSpQ");
+  if (keepFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
+  let wait;
+  qi.oninput = () => { clearTimeout(wait); wait = setTimeout(() => { tkState.spQuery = qi.value; tkSpecialists(); }, 220); };
+  $("tkSpDiv").onchange = e => { tkState.spDivision = e.target.value; tkSpecialists(); };
+  $("tkSpRemove").onclick = async () => {
+    if (!confirm("Remove the imported roster? Conversations with specialists stay, but cannot continue until you import it again.")) return;
+    await fetch(API + "/api/agentlab/roster", {method: "DELETE"}); tkSpecialists();
+  };
 }
 
 function tkKeep(){ try{ localStorage.setItem("tk-conversation", tkState.conv.id); } catch {} }
@@ -16079,7 +16156,7 @@ function tkRender(){
   $("tkMain").innerHTML = `
     <div class="tk-top">
       <span class="tk-av">${TK_ICON}</span>
-      <div class="who"><b>${alEsc(c.agent.name)}</b><small>${c.agent.kind === "saved" ? "Your agent" : "Starting design"} · <span id="tkCount"></span></small></div>
+      <div class="who"><b>${alEsc(c.agent.name)}</b><small>${c.agent.kind === "saved" ? "Your agent" : c.agent.kind === "role" ? "Specialist" : "Starting design"} · <span id="tkCount"></span></small></div>
       <span class="spacer" style="flex:1"></span>
       <div class="tk-seg" role="group" aria-label="Model">
         <button data-mode="rehearsal" class="${live ? "" : "on"}" title="A scripted stand-in model: free, to see the flow">Rehearsal</button>
@@ -16119,7 +16196,7 @@ function tkDrawThread(){
   if (!host) return;
   $("tkCount").textContent = `${c.turns.length} message${c.turns.length === 1 ? "" : "s"}`;
   if (!c.turns.length){
-    host.innerHTML = `<div class="tk-hello"><b>${alEsc(c.agent.name)}</b>${alEsc(AL_BLURBS[c.agent.key] || "Say what you need.")}</div>`;
+    host.innerHTML = `<div class="tk-hello"><b>${alEsc(c.agent.name)}</b>${alEsc(c.agent.about || AL_BLURBS[c.agent.key] || "Say what you need.")}</div>`;
   } else {
     host.innerHTML = c.turns.map((t, i) => `<div class="tk-msg me"><div class="bubble">${alEsc(t.task)}</div></div>
       <div class="tk-msg"><span class="tk-av">${TK_ICON}</span><div class="tk-body" id="tkTurn${i}">${tkTurnHtml(t, i)}</div></div>`).join("");

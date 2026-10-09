@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.3.0
+
+- **Specialists.** Talk to agents can import a roster of role files, such as
+  the ~280 roles of The Agency (github.com/msitarzewski/agency-agents, MIT), from
+  GitHub or from a folder on this computer, then search them by name or
+  division. Each role runs as a working agent rather than a persona:
+  - its prompt, minus the claims of memory and past projects it doesn't have,
+    with bulky code examples dropped from very long prompts;
+  - web search and a sandboxed Python runner, with instructions to use them for
+    facts and numbers;
+  - a critic that checks each answer against the role's own Success Metrics and
+    Critical Rules before you see it;
+  - long-term notes kept separately for each specialist.
+  The roster lives in your workspace; the app ships none of the files.
+- **Web search is real.** The Web search block used to return a placeholder.
+  It now searches DuckDuckGo (no key needed), or Brave Search when
+  BRAVE_API_KEY is set. Rehearsals still return stand-in results.
+- **Critics can hold work to written standards.** The Critic block has a new
+  optional "Standards" field, added to its review.
+
 ## 4.2.3
 
 - **Answers stay in your language.** Small local models sometimes drift into

@@ -25,6 +25,7 @@ from pydantic import BaseModel
 import agents
 import agentlab
 import packager
+import roster
 import providers
 import advisor
 import assistant
@@ -435,6 +436,49 @@ def agentlab_conversation_say(conv_id: str, body: AgentLabSay):
 @app.delete("/api/agentlab/conversations/{conv_id}")
 def agentlab_conversation_delete(conv_id: str):
     return _conv_action(agentlab.delete_conversation, conv_id)
+
+
+class RosterImport(BaseModel):
+    repo: Optional[str] = None
+    folder: Optional[str] = None
+
+
+def _roster_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That specialist is not in the imported roster."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/agentlab/roster")
+def agentlab_roster(q: str = "", division: str = ""):
+    """The imported specialists, filtered by words and division."""
+    return {**roster.summary(), "roles": roster.roles(q, division)}
+
+
+@app.post("/api/agentlab/roster/import")
+def agentlab_roster_import(body: RosterImport):
+    """Import a roster of role files from a folder on this computer or a GitHub repository."""
+    if body.folder:
+        return _roster_action(roster.import_folder, body.folder)
+    return _roster_action(roster.import_github, body.repo or roster.DEFAULT_REPO)
+
+
+@app.delete("/api/agentlab/roster")
+def agentlab_roster_remove():
+    return roster.remove()
+
+
+@app.get("/api/agentlab/roster/role")
+def agentlab_roster_role(id: str):
+    """One specialist: what it is told, and the standards its critic holds it to."""
+    def view(role_id):
+        r = roster.role(role_id)
+        return {**{k: r[k] for k in ("id", "name", "division", "description", "emoji", "vibe")},
+                "prompt": roster.role_prompt(r), "standards": roster.role_standards(r)}
+    return _roster_action(view, id)
 
 
 @app.get("/api/agentlab/designs")

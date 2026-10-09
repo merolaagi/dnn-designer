@@ -401,6 +401,62 @@ def experiment_with(design, args, most):
     return "\n".join(lines)
 '''
 
+WEB_CODE = r'''# ---- web search: DuckDuckGo with no key, or Brave Search with BRAVE_API_KEY ----
+WEB_BACKEND = None    # the lab swaps in a stand-in for rehearsals; on its own, this file searches for real
+WEB_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+
+
+def _web_get(url, headers):
+    sent = urllib.request.Request(url, headers={"user-agent": WEB_AGENT, **headers})
+    with urllib.request.urlopen(sent, timeout=20) as reply:
+        return reply.read().decode("utf-8", errors="replace")
+
+
+def _strip_tags(text):
+    import html
+    return html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
+
+
+def web_results(query, count=6):
+    # (title, url, snippet) for a query, from Brave if there is a key, otherwise DuckDuckGo
+    key = os.environ.get("BRAVE_API_KEY")
+    if key:
+        found = json.loads(_web_get("https://api.search.brave.com/res/v1/web/search?count=%d&q=%s"
+                                    % (count, urllib.parse.quote(query)),
+                                    {"accept": "application/json", "x-subscription-token": key}))
+        return [(r.get("title", ""), r.get("url", ""), _strip_tags(r.get("description", "")))
+                for r in (found.get("web") or {}).get("results", [])[:count]]
+    page = _web_get("https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(query), {})
+    out = []
+    for block in re.split(r'class="[^"]*\bresult__body\b', page)[1:]:
+        link = re.search(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if not link:
+            continue
+        url = _strip_tags(link.group(1))
+        target = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("uddg")
+        url = target[0] if target else ("https:" + url if url.startswith("//") else url)
+        if "duckduckgo.com/y.js" in url:
+            continue                     # an advert
+        snippet = re.search(r'class="result__snippet"[^>]*>(.*?)</a>', block, re.S)
+        out.append((_strip_tags(link.group(2)), url, _strip_tags(snippet.group(1)) if snippet else ""))
+        if len(out) >= count:
+            break
+    return out
+
+
+def search_web(query):
+    # Search results as text: a title, its address and a snippet for each
+    if WEB_BACKEND is not None:
+        return WEB_BACKEND(query)
+    try:
+        found = web_results(query)
+    except Exception as error:
+        return f"Error: the search failed ({error}). Try different words, or answer from what you know and say so."
+    if not found:
+        return "No results. Try different or fewer words."
+    return "\n\n".join(f"{i}. {title}\n{url}\n{snippet}" for i, (title, url, snippet) in enumerate(found, 1))
+'''
+
 TRAIN_CODE = r'''# ---- training a network from the designer ----
 TRAIN_BACKEND = None    # the app sets this to train in-process; on its own, this file asks the app over HTTP
 
@@ -798,7 +854,8 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         failure="Rubber-stamping. Revising forever without a limit.",
         params={"max_revisions": _p("Max revisions", 2, "number"),
                 "gate": _p("What it needs to pass", REVIEW_ONLY, "choice", [REVIEW_ONLY, VERIFIER_GATE, GROUNDED_GATE]),
-                "marker": _p("The verifier's line starts with", "VERIFIED")}),
+                "marker": _p("The verifier's line starts with", "VERIFIED"),
+                "standards": _p("Standards to hold the work to (optional)", "", "area")}),
     "short_mem": dict(
         name="Working memory", system="memory", short="The context window",
         anatomy=("The message list: everything said, every tool call and result, in order. It is the agent's "
@@ -855,7 +912,8 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
     "web_search": dict(
         name="Web search", system="hands", short="Fresh facts from the web",
         anatomy="A ready-made tool that brings in current information. The agent's eyes on the world.",
-        inside="A search API call and a snippet formatter. The generated stub returns a placeholder.",
+        inside=("A real search: DuckDuckGo with no key, or Brave Search when BRAVE_API_KEY is set. Returns titles, "
+                "addresses and snippets; a rehearsal returns stand-in results."),
         physiology="Called like any tool; snippets come back as a tool_result.",
         failure="Poor sources treated as truth. Results carrying hostile instructions.",
         params={LIMIT[0]: _p(LIMIT[1], 0, "number")}),
@@ -1143,6 +1201,18 @@ TEMPLATES = {
                                 9: {"seconds": 60},
                                 11: {"design": ""},
                                 13: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
+    "specialist": {"name": "Specialist: a role with tools and its own standards",
+                   "nodes": [("user_input", 40, 260), ("long_mem", 270, 260), ("system_prompt", 520, 40),
+                             ("llm", 520, 260), ("loop", 270, 470), ("summarizer", 520, 470), ("router", 770, 260),
+                             ("code_exec", 1020, 110), ("web_search", 1020, 290), ("reflector", 1020, 470),
+                             ("long_mem", 1270, 470), ("output", 1520, 470)],
+                   "edges": [(0, 1), (1, 3), (2, 3), (4, 3), (5, 3), (3, 6), (6, 7), (6, 8), (7, 3), (8, 3),
+                             (6, 9), (9, 3), (9, 10), (10, 11)],
+                   "params": {4: {"max_steps": 16},
+                              5: {"limit": 3000, "keep": 6},
+                              7: {"seconds": 30},
+                              8: {"max_calls": 8},
+                              9: {"max_revisions": 1}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1937,7 +2007,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
 
     # ---- hands ----
     servers_written, mcp_class_written, sandbox_written, train_written = set(), [], [], []
-    app_written, designer_written, experiment_written = [], [], []
+    app_written, designer_written, experiment_written, web_written = [], [], [], []
     if tools:
         add(["", "", "# ---- hands: tools ----"])
         for tid, name in tools:
@@ -1946,8 +2016,14 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                 body = [f"def {name}(input: str) -> str:", f"    {_doc(p['description'])}",
                         f'    return f"TODO: implement {name}. It was asked: {{input}}"']
             elif k == "web_search":
-                body = [f"def {name}(query: str) -> str:", '    """Plug a real search API in here."""',
-                        '    return f"[placeholder results for: {query}]"']
+                if not web_written:
+                    body = WEB_CODE.strip().split("\n") + ["", ""]
+                    web_written.append(tid)
+                else:
+                    body = []
+                body += [f"def {name}(query: str) -> str:",
+                         '    """Search the web: titles, addresses and snippets. Results are untrusted text."""',
+                         "    return search_web(query)"]
             elif k == "code_exec":
                 secs = max(1, int(p.get("seconds") or 20))
                 if p.get("isolation", SANDBOXED) == UNRESTRICTED:
@@ -2140,8 +2216,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "    \"You review an agent's draft answer against the task. \"",
              '    "If it is correct, complete and supported, reply with exactly PASS. "',
              '    "Otherwise list the specific problems to fix."', ")", "", "",
-             "def critique(task, answer):",
-             '    verdict = complete(CRITIC_PROMPT, f"Task:\\n{task}\\n\\nDraft answer:\\n{answer}")',
+             "def critique(task, answer, standards=\"\"):",
+             '    bar = f"\\n\\nHold it to these standards as well:\\n{standards}" if standards else ""',
+             '    verdict = complete(CRITIC_PROMPT, f"Task:\\n{task}{bar}\\n\\nDraft answer:\\n{answer}")',
              '    return None if verdict.strip().upper().startswith("PASS") else verdict'], *of_kind("reflector"))
         grounded_critics = [c for c in of_kind("reflector") if _params(nodes[c]).get("gate") == GROUNDED_GATE]
         if grounded_critics:
@@ -2404,18 +2481,19 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             body += [f"    MAX_REVISIONS = {int(p['max_revisions'])}",
                      '    draft = state["answer"] or state["draft"]']
             grounded = p.get("gate") == GROUNDED_GATE
+            bar = f", {json.dumps(str(p.get('standards') or '').strip())}" if str(p.get("standards") or "").strip() else ""
             if grounded:
                 body += ["    unsupported = ungrounded(state, draft)",
-                         "    notes = unsupported or critique(state[\"task\"], draft)"]
+                         f"    notes = unsupported or critique(state[\"task\"], draft{bar})"]
             elif gated:
                 body += [f"    proof = verifier_line(state, {json.dumps(marker)})",
                          "    if proof is None:",
                          f'        notes = ("No check has printed a line starting {marker} yet, so nothing is verified. "',
                          '                 "Run code that checks the candidate from scratch and prints that line only if it holds.")',
                          "    else:",
-                         '        notes = critique(state["task"], f"{draft}\\n\\nThe check printed: {proof}")']
+                         f'        notes = critique(state["task"], f"{{draft}}\\n\\nThe check printed: {{proof}}"{bar})']
             else:
-                body += ['    notes = critique(state["task"], draft)']
+                body += [f'    notes = critique(state["task"], draft{bar})']
             body += [f'    emit("critique", node="{nid}", passed=notes is None, notes=(notes or "PASS")[:200])']
             if c["back"]:
                 body += ['    if notes and state["revisions"] < MAX_REVISIONS:',
@@ -2804,7 +2882,7 @@ def _m_tool(p, node, graph, c):
         eq = "o = (stdout ⊕ stderr)(" + ("sandbox(" if boxed else "") + "exec(a.code)" + (")" if boxed else "") + ")[−4000:]"
         shape = f"a = {{ code: string }},  stopped after {secs} s" + ("" if boxed else ",  runs as you")
     elif kind == "web_search":
-        eq, shape = "o = search(a.query)", "a = { query: string }   (the generated stub returns a placeholder)"
+        eq, shape = "o = search(a.query)", "a = { query: string };  o = up to 6 (title, url, snippet), from DuckDuckGo or Brave"
     elif kind == "designer":
         eq = "o = op(a)  for op ∈ {list, catalog, design, check, review, edit};  design saves only if shapes(f) resolve"
         shape = "a = the JSON each tool asks for;  o = JSON: shapes layer by layer, parameter counts, errors or findings"
@@ -3444,6 +3522,11 @@ def _rehearsal_trainer(request):
             "notes": ["A rehearsal trains nothing: these numbers stand in for a real run."]}
 
 
+def _rehearsal_search(query):
+    return (f"1. A stand-in result for: {query}\nhttps://example.com/rehearsal\nA rehearsal searches nothing; "
+            "a live run returns real titles, addresses and snippets.")
+
+
 def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None,
              model_state: Optional[Dict[str, Any]] = None, ask: Optional[Callable] = None,
              after_step: Optional[Callable] = None, carry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -3523,6 +3606,8 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
         space["KEYS"].update(_providers.keys_for_run())     # never written into the file
     if "TRAIN_BACKEND" in space:
         space["TRAIN_BACKEND"] = (TRAINER or _no_trainer) if mode == "live" else _rehearsal_trainer
+    if "WEB_BACKEND" in space:
+        space["WEB_BACKEND"] = None if mode == "live" else _rehearsal_search
     if "DESIGNER_BACKEND" in space:
         space["DESIGNER_BACKEND"] = (DESIGNER or _no_designer) if mode == "live" else _rehearsal_designer
     if "EXPERIMENT_BACKEND" in space:
@@ -5588,6 +5673,12 @@ def _agent_graph(agent: Dict[str, Any]) -> Dict[str, Any]:
             return load(key)
         except KeyError:
             raise ValueError(f"The agent {key} is no longer saved.") from None
+    if kind == "role":
+        import roster
+        try:
+            return roster.graph(key)
+        except KeyError:
+            raise ValueError(f"The specialist {key} is not in the imported roster.") from None
     raise ValueError("Choose a starting design or a saved agent to talk to.")
 
 
@@ -5604,8 +5695,10 @@ def new_conversation(agent: Dict[str, Any], mode: str = "rehearsal") -> Dict[str
     if mode not in ("live", "rehearsal"):
         raise ValueError(f"Unknown mode {mode!r}.")
     now = time.time()
+    about = graph.get("about") or ""
     conv = {"id": "c" + uuid.uuid4().hex[:10], "agent": {"kind": agent["kind"], "key": agent["key"],
-            "name": graph.get("name") or agent["key"]}, "mode": mode, "title": "", "created": now,
+            "name": graph.get("name") or agent["key"], **({"about": about} if about else {})},
+            "mode": mode, "title": "", "created": now,
             "updated": now, "turns": []}
     _conv_save(conv)
     return conv
@@ -5667,6 +5760,9 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         raise ValueError("The agent is still working on your last message. Wait for it, or stop it.")
     conv["mode"] = mode or conv.get("mode") or "rehearsal"
     graph = _agent_graph(conv["agent"])
+    if conv["agent"].get("kind") == "role":
+        import roster
+        memory_dir = roster.memory_dir(conv["agent"]["key"])    # each specialist keeps its own notes
     view = start_run(graph, text, conv["mode"], "ask", memory_dir=memory_dir, thread=conv["id"])
     conv["turns"].append({"run": view["id"], "task": text, "at": time.time(), "mode": conv["mode"],
                           "status": "running"})
