@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.1.3
+
+- **Fixed: training on MNIST, Fashion-MNIST, CIFAR-10 or a folder of images
+  failed on a Mac** with "Can't get local object '_wrap_builtin.<locals>.Fanout'".
+  The data loader starts helper processes, and on macOS each one receives the
+  dataset pickled; the wrapper was a class defined inside a function, which
+  cannot be pickled. Linux starts them differently, which is how it went unseen.
+  The wrappers are now ordinary classes. This affected the Train button as well
+  as agents.
+- **Model builder keeps to your limits and keeps going.** Its instructions now
+  say to compare every design with limits you set, such as a parameter budget,
+  before training, and not to end a turn by describing what it will do next.
+
 ## 4.1.2
 
 - **Switching the default provider picks one of its models.** Choosing Ollama

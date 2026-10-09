@@ -423,34 +423,44 @@ def assign_columns(feature_cols: List[str], in_shapes: List[List[int]],
 # datasets
 # --------------------------------------------------------------------------
 
+# Datasets are module-level classes, not ones defined inside a function: DataLoader
+# workers on macOS (and Windows) are started fresh and receive the dataset pickled,
+# and a class defined inside a function cannot be pickled. On Linux workers are
+# forked and never notice, which is how this went unseen.
+
+class _MultiInput:
+    """Several input tensors and one target, indexed together."""
+
+    def __init__(self, xs, y):
+        self.xs, self.y = xs, y
+
+    def __len__(self):
+        return self.y.shape[0]
+
+    def __getitem__(self, i):
+        return [x[i] for x in self.xs], self.y[i]
+
+
+class _Fanout:
+    """Feeds the same sample to every Input, which is what siamese graphs want."""
+
+    def __init__(self, base, n_inputs: int):
+        self.base, self.n_inputs = base, n_inputs
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, i):
+        x, y = self.base[i]
+        return [x] * self.n_inputs, y
+
+
 def _tensor_dataset(xs, y):
-    import torch
-    from torch.utils.data import Dataset
-
-    class MultiInput(Dataset):
-        def __len__(self):
-            return y.shape[0]
-
-        def __getitem__(self, i):
-            return [x[i] for x in xs], y[i]
-
-    return MultiInput()
+    return _MultiInput(xs, y)
 
 
 def _wrap_builtin(base, n_inputs: int):
-    from torch.utils.data import Dataset
-
-    class Fanout(Dataset):
-        """Feeds the same sample to every Input, which is what siamese graphs want."""
-
-        def __len__(self):
-            return len(base)
-
-        def __getitem__(self, i):
-            x, y = base[i]
-            return [x] * n_inputs, y
-
-    return Fanout()
+    return _Fanout(base, n_inputs)
 
 
 def _pendulum_loaders(cfg, in_shapes, task, batch, name, job):

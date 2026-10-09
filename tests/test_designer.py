@@ -9905,6 +9905,24 @@ def _():
     for needle in ('change[el.dataset.def === "provider" ? "model" : "judge_model"]', "which Ollama has installed"):
         assert needle in PAGE, needle
 
+
+@check("training datasets survive being sent to DataLoader workers, as on macOS")
+def _():
+    import pickle
+    import train
+    try:
+        import torch
+    except ImportError:
+        print("        (torch absent, skipped)")
+        return
+    from torch.utils.data import TensorDataset
+    wrapped = train._wrap_builtin(TensorDataset(torch.randn(6, 1, 4, 4), torch.zeros(6)), 2)
+    again = pickle.loads(pickle.dumps(wrapped))
+    assert len(again) == 6 and len(again[0][0]) == 2
+    pickle.dumps(train._tensor_dataset([torch.randn(5, 2)], torch.zeros(5)))
+    prompt = agentlab.MODEL_PROMPT
+    assert "compare every design with them" in prompt and "Do not end your turn by describing" in prompt
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

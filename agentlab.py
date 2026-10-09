@@ -945,6 +945,10 @@ MODEL_PROMPT = (
     "regularisation, repair for the review's fixes.\n"
     "6. Finish with: the design's name and version, what it takes in and puts out, the validation numbers and "
     "what they mean, and how to use it (open it on the network canvas; its Code panel exports PyTorch).\n"
+    "If the user sets limits, such as a parameter budget or a number of epochs, compare every design with them "
+    "before training: check_network reports learnables.\n"
+    "Do not end your turn by describing what you will do next: do it, with the tools. Finish only when there is "
+    "a trained result to report, or a reason you cannot get one.\n"
     "Never report a number no tool returned.")
 
 TEMPLATES = {
