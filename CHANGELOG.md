@@ -1,5 +1,40 @@
 # Changelog
 
+## 4.1.0
+
+**Settings: every model provider in one place.** A Settings page (the gear at
+the top right, or Settings at the bottom of the rail) for which models your
+agents, judges and assistant use.
+
+- **Providers and keys.** Anthropic (Claude), OpenAI, xAI (Grok), Google
+  Gemini, Mistral, DeepSeek, Groq, OpenRouter and Together, plus Ollama and LM
+  Studio on this computer and any other OpenAI-compatible server. Paste a key,
+  and Test connection lists every model it can use; a model from the list is
+  one click from being the default. Each provider's address can be changed, for
+  a proxy or a server elsewhere.
+- **Models on this computer.** Settings finds Ollama, lists its installed
+  models with their size, parameters and quantization, downloads new ones with
+  a progress bar (Llama, Qwen, Mistral and others suggested, all able to call
+  tools), and removes them.
+- **A default model.** Provider, model, temperature, max tokens, a time limit
+  per call and retries after rate limits or outages, with Try the default model
+  to see it answer. Every LLM core now starts as *Default from Settings*, so
+  switching the default moves every starting design, and Talk to agents, with
+  it. A core can still name its own provider and model; its model field offers
+  the models that provider listed.
+- **Judges, the assistant, conversations.** The Study tab's judge can be a
+  different provider and model from the agent's. The network canvas's
+  assistant can use the default model for questions its commands do not cover.
+  Talk to agents starts in Live or Rehearsal as you choose.
+- **Keys stay private.** They are kept in `agentlab/model_settings.json` in
+  your workspace, readable only by your user and inside a folder git ignores;
+  the page only ever sees their first and last characters; generated files read
+  them from environment variables and never contain them. A key in the server's
+  environment still works and takes precedence.
+- **Generated files** call any of these providers with the standard library,
+  name the keys they need in their run line, and retry a model call after a
+  429, a 5xx or a dropped connection, with growing pauses.
+
 ## 4.0.1
 
 - **Talk to agents says when the server is out of date.** If the server is

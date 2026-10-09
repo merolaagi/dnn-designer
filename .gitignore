@@ -28,6 +28,7 @@ problems/
 physics/
 codebases/
 agentlab/
+model_settings.json
 
 # datasets pulled or uploaded at runtime
 data/

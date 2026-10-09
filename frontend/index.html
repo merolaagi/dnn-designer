@@ -95,8 +95,9 @@ header > .spacer{flex:1;min-width:8px}
 @media (max-width:1240px){.hd-stats,#whoami b{display:none}}
 @media (max-width:1000px){.hd-brand b{display:none}}
 /* the network's name, versions and actions belong to the network pages, not the agent lab */
-body[data-page="pageAgentLab"] .hd-design,body[data-page="pageTalk"] .hd-design{display:none}
-body[data-page="pageAgentLab"] .hd-pagename,body[data-page="pageTalk"] .hd-pagename{display:inline}
+body[data-page="pageAgentLab"] .hd-design,body[data-page="pageTalk"] .hd-design,body[data-page="pageSettings"] .hd-design{display:none}
+body[data-page="pageAgentLab"] .hd-pagename,body[data-page="pageTalk"] .hd-pagename,body[data-page="pageSettings"] .hd-pagename{display:inline}
+body[data-page="pageSettings"] #hdSettings{background:#E6F0FB;color:#2D7DD2}
 .spacer{flex:1}
 .stat{display:flex;flex-direction:column;line-height:1.15;padding-right:6px}
 .stat i{font-style:normal;font-family:var(--mono);font-size:13px;color:#2D7DD2}
@@ -261,6 +262,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 #pageCodebase, #pageMaths, #pageWorkbench, #pagePhysics,
 #pageAgentLab{background:var(--paper)}
 #pageTalk{background:var(--paper)}
+#pageSettings{background:var(--paper)}
 
 /* the sheet strip: at the bottom of the canvas, the way a spreadsheet does it */
 #sheetTabs{
@@ -2374,6 +2376,64 @@ body.sizing{user-select:none}
 .al-toast button:hover{background:#41597A}
 .al-emptyundo{display:block;margin-top:8px;font-size:12px}
 
+/* ---------------- settings ---------------- */
+.st-scroll{flex:1;overflow-y:auto;min-width:0}
+.st-wrap{max-width:980px;margin:0 auto;padding:26px 24px 60px}
+.st-wrap > h2{margin:0 0 4px;font-size:20px}
+.st-wrap > p.lead{margin:0 0 20px;color:var(--muted);font-size:13px}
+.st-card{background:#fff;border:1px solid var(--paper-3);border-radius:12px;margin-bottom:18px}
+.st-card > header{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--paper-2);height:auto;box-shadow:none;position:static}
+.st-card > header h3{margin:0;font-size:14px}
+.st-card > header small{color:var(--muted);font-size:12px}
+.st-card > header .spacer{flex:1}
+.st-body{padding:16px 18px}
+.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 16px}
+.st-field label{display:block;font-size:11.5px;font-weight:600;color:#3C4B5F;margin-bottom:4px}
+.st-field input,.st-field select{width:100%;box-sizing:border-box;height:34px;border:1px solid var(--paper-3);border-radius:7px;padding:0 10px;font:13px var(--ui);background:#fff;color:var(--text)}
+.st-field input:focus,.st-field select:focus{outline:none;border-color:#2D7DD2;box-shadow:0 0 0 3px rgba(45,125,210,.13)}
+.st-field .help{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+.st-field.wide{grid-column:1/-1}
+.st-saved{font-size:11.5px;color:var(--good);opacity:0;transition:opacity .2s}
+.st-saved.on{opacity:1}
+.st-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-top:1px solid var(--paper-2);cursor:pointer}
+.st-row:first-child{border-top:0}
+.st-row:hover{background:#FAFBFD}
+.st-badge{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;font:700 12px var(--ui);color:#fff}
+.st-row .nm{flex:1;min-width:0}
+.st-row .nm b{display:block;font-size:13px}
+.st-row .nm small{font-size:11.5px;color:var(--muted)}
+.st-pill{font-size:11px;font-weight:600;border-radius:20px;padding:3px 9px;white-space:nowrap}
+.st-pill.ok{background:#EAF6EE;color:#256B3C}
+.st-pill.need{background:var(--paper);color:var(--muted)}
+.st-pill.off{background:#FDECEA;color:#8C2F27}
+.st-pill.def{background:#E6F0FB;color:#1F5FAD}
+.st-row .chev{color:#A5B1C0;transition:transform .12s}
+.st-row.open .chev{transform:rotate(90deg)}
+.st-detail{padding:4px 18px 18px 60px;border-top:0;display:none}
+.st-detail.open{display:block}
+.st-keyrow{display:flex;gap:8px;align-items:flex-end}
+.st-keyrow .st-field{flex:1}
+.st-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.st-msg{font-size:12px;color:var(--muted)}
+.st-msg.bad{color:var(--bad)}
+.st-msg.good{color:var(--good)}
+.st-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.st-chip{border:1px solid var(--paper-3);background:#fff;border-radius:20px;padding:4px 10px;font:12px var(--mono);cursor:pointer;color:#3C4B5F}
+.st-chip:hover{border-color:#2D7DD2;color:#1F5FAD}
+.st-chip.on{background:#E6F0FB;border-color:#2D7DD2;color:#1F5FAD}
+.st-chip small{font-family:var(--ui);color:var(--muted);margin-left:4px}
+table.st-table{width:100%;border-collapse:collapse;font-size:12.5px}
+table.st-table th{text-align:left;font-size:11px;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--paper-3)}
+table.st-table td{padding:8px;border-bottom:1px solid var(--paper-2)}
+table.st-table td code{font-size:12px}
+.st-bar{height:6px;background:var(--paper);border-radius:4px;overflow:hidden;margin-top:4px}
+.st-bar i{display:block;height:100%;background:#2D7DD2;transition:width .3s}
+.st-try{margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--paper);font-size:12.5px;line-height:1.5}
+.st-note{font-size:12.5px;line-height:1.6;color:#3C4B5F}
+.st-note code{font-family:var(--mono);font-size:11.5px;background:var(--paper);padding:1px 4px;border-radius:3px}
+.st-toggle{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;font-weight:500}
+.st-field .st-toggle input,.st-toggle input{width:16px;height:16px;flex:none;margin:0}
+
 /* ---------------- talk to agents ---------------- */
 #pageTalk{background:var(--paper)}
 /* the network assistant's tab would sit on the send button; this page has its own conversation */
@@ -2855,6 +2915,7 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
   <span class="hd-div hd-design"></span>
   <button class="hb outline hd-design" id="btnSave" title="Save this design"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h5.8L13 4.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 12.5z"/><path d="M5.5 2v3h4V2M5.5 14v-4h5v4"/></svg><span>Save</span></button>
   <button class="hb primary hd-design" id="btnTrain" title="Train this network"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg><span>Train</span></button>
+  <button class="hb icon" id="hdSettings" title="Settings: models, keys and defaults" aria-label="Settings"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6"/></svg></button>
   <span id="whoami" style="display:none"></span>
 </header>
 
@@ -2893,6 +2954,7 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
     <button data-page="pageDesign" data-side="ask"><i>&#10022;</i>Assistant</button>
     <button data-page="pageDesign" data-side="needs"><i>&#9888;</i>Checks
       <span class="count" id="railCount">0</span></button>
+    <button data-page="pageSettings"><i>&#9881;</i>Settings</button>
     <span class="spacer"></span>
   </nav>
 
@@ -3091,6 +3153,8 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
   <section class="page" id="pageAgentLab">
     <div id="alMain"></div>
   </section>
+
+  <section class="page" id="pageSettings"><div class="st-scroll" id="stMain"></div></section>
 
   <section class="page" id="pageTalk">
     <aside class="tk-side">
@@ -5997,6 +6061,7 @@ const PAGE_SETUP = {
   pageAgents: () => refreshAgents(),
   pageAgentLab: () => renderAgentLab(),
   pageTalk: () => tkOpenPage(),
+  pageSettings: () => stOpen(),
   pageChat: () => refreshChatModels(),
   pageExtend: () => refreshBlocks(),
 };
@@ -6006,7 +6071,7 @@ function showPage(pageId){
     p.classList.toggle("on", p.id === pageId));
   state.page = pageId;
   document.body.dataset.page = pageId;
-  const ownName = {pageAgentLab: "Agent lab", pageTalk: "Talk to agents"}[pageId];
+  const ownName = {pageAgentLab: "Agent lab", pageTalk: "Talk to agents", pageSettings: "Settings"}[pageId];
   if (ownName) $("hdPageName").textContent = ownName;
   if (PAGE_SETUP[pageId]) PAGE_SETUP[pageId]();
   if (pageId === "pageDesign"){
@@ -13454,6 +13519,7 @@ async function renderAgentLab(){
     }
   }
   if (!$("alCanvas")) alBuildShell();
+  stLoad().then(() => { if (agentLabState.graph) alRenderPane(); });
   if (!agentLabState.graph){
     let draft = null, hist = null;
     try{
@@ -14152,6 +14218,15 @@ function alRenderAnatomy(){
            <select id="alf_${k}" data-k="${k}"><option value="">Choose a saved agent…</option>${
              (agentLabState.designs || []).map(o => `<option${o === v ? " selected" : ""}>${alEsc(o)}</option>`).join("")}</select>
            <div class="help">Save an agent with the Save button and it appears here.</div></div>`
+      : d.kind === "provider"
+      ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
+           <select id="alf_${k}" data-k="${k}">${(d.options || []).map(o =>
+             `<option value="${alEsc(o)}"${o === v ? " selected" : ""}>${alEsc(alProviderName(o))}</option>`).join("")}</select>
+           <div class="help">${alEsc(alProviderHelp(v))} <a href="#" class="al-link" data-open-settings>Settings</a></div></div>`
+      : d.kind === "model"
+      ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
+           <input id="alf_${k}" data-k="${k}" list="alf_${k}_list" value="${alEsc(v)}" placeholder="${alEsc(alDefaultModel(n.params.provider))}">
+           <datalist id="alf_${k}_list">${alModelsFor(n.params.provider).map(m => `<option value="${alEsc(m)}">`).join("")}</datalist></div>`
       : d.kind === "net_design"
       ? `<div class="field"><label for="alf_${k}">${alEsc(d.label)}</label>
            <select id="alf_${k}" data-k="${k}"><option value="">Choose a network design…</option>${
@@ -14224,9 +14299,9 @@ function alRenderPhysio(){
         <option value="rehearsal"${S.mode === "rehearsal" ? " selected" : ""}>Rehearsal: a scripted stand-in, free</option>
         <option value="live"${S.mode === "live" ? " selected" : ""}${live ? "" : " disabled"}>Live: the real model</option>
       </select>
-      <div class="help">${live ? (alLocalOnly() ? "Live runs call the OpenAI-compatible server set on the LLM cores."
+      <div class="help">${live ? (alLocalOnly() ? "Live runs call the model on this computer: free, and as fast as it is."
           : "Live runs call the model and cost tokens.")
-        : "Live runs need ANTHROPIC_API_KEY in the server's environment, or LLM cores set to an OpenAI-compatible server such as a local Ollama."} Tools run for real either way.</div></div>
+        : "Live runs need the LLM cores' provider set up: add its key, or start Ollama, in <a href='#' class='al-link' data-open-settings>Settings</a>."} Tools run for real either way.</div></div>
     ${hasHuman ? `<div class="field"><label for="alAppr">When a tool needs approval</label>
       <select id="alAppr"><option value="ask"${(S.approvals || "ask") === "ask" ? " selected" : ""}>Ask me, and wait</option>
         <option value="approve"${S.approvals === "approve" ? " selected" : ""}>Approve it</option>
@@ -14623,14 +14698,25 @@ async function alAnimateEvents(events){
 
 /* Live runs are possible with a key for Anthropic, or with every core pointed at an
    OpenAI-compatible server — a local Ollama needs no key at all. */
+/* Where each LLM core's calls go, as Settings resolves it: "default" means the default provider. */
+function alCoreProvider(n){
+  const s = window.modelSettings, p = n.params.provider || "default";
+  if (p === "default") return s ? s.defaults.provider : "anthropic";
+  return p === "openai-compatible" ? "custom" : p;
+}
+const AL_LOCAL = ["ollama", "lmstudio", "custom"];
 function alLiveAvailable(){
-  const cores = agentLabState.graph.nodes.filter(n => n.type === "llm");
-  const local = cores.length && cores.every(n => (n.params.provider || "anthropic") === "openai-compatible");
-  return !!(agentLabState.cat.live_available || local);
+  const cores = agentLabState.graph.nodes.filter(n => n.type === "llm"), s = window.modelSettings;
+  if (!cores.length) return false;
+  if (!s) return !!agentLabState.cat.live_available;
+  return cores.every(n => {
+    const id = alCoreProvider(n), p = s.providers.find(x => x.id === id);
+    return AL_LOCAL.includes(id) || (p && p.ready);
+  });
 }
 function alLocalOnly(){
   const cores = agentLabState.graph.nodes.filter(n => n.type === "llm");
-  return cores.length > 0 && cores.every(n => (n.params.provider || "anthropic") === "openai-compatible");
+  return cores.length > 0 && cores.every(n => AL_LOCAL.includes(alCoreProvider(n)));
 }
 
 /* A conversation is a thread id the server keeps turns under; a new one starts on demand. */
@@ -15503,6 +15589,290 @@ async function alRefreshDesigns(){
   } catch {}
 }
 
+/* ============================ settings ============================ */
+/* Model providers and their keys, models on this computer, and the defaults new agents use.
+   Keys go to the server once and come back only as a masked hint. */
+
+const stState = {data: null, open: {}, ollama: null, pollTimer: null};
+const ST_COLORS = {anthropic: "#C96442", openai: "#10A37F", xai: "#111", gemini: "#4285F4", mistral: "#FA520F",
+  deepseek: "#4D6BFE", groq: "#F55036", openrouter: "#6467F2", together: "#0F6FFF", ollama: "#16202E",
+  lmstudio: "#5A3FD9", custom: "#5C6B7F"};
+
+async function stLoad(){
+  try{ stState.data = await (await fetch(API + "/api/settings/models")).json(); window.modelSettings = stState.data; }
+  catch { stState.data = null; }
+  return stState.data;
+}
+
+/* What the agent lab's LLM core shows about providers. */
+function alProviderName(id){
+  if (id === "default") return "Default from Settings";
+  if (id === "openai-compatible") return "OpenAI-compatible server (address below)";
+  const p = ((window.modelSettings || {}).providers || []).find(x => x.id === id);
+  return p ? p.name + (p.ready ? "" : " — not set up") : (agentLabState.cat && agentLabState.cat.providers[id]) || id;
+}
+function alProviderHelp(id){
+  const s = window.modelSettings;
+  if (!s) return "Providers and keys are set in Settings.";
+  if (id === "default"){
+    const p = s.providers.find(x => x.id === s.defaults.provider);
+    return `Uses ${p ? p.name : s.defaults.provider} · ${s.defaults.model || "no model chosen"}.`;
+  }
+  const p = s.providers.find(x => x.id === id);
+  return p ? (p.ready ? `${p.name} is set up.` : `${p.name} has no key yet, so live runs will stop.`) : "";
+}
+function alModelsFor(id){
+  const s = window.modelSettings;
+  if (!s) return [];
+  const pid = id === "default" || !id ? s.defaults.provider : id === "openai-compatible" ? "custom" : id;
+  const p = s.providers.find(x => x.id === pid);
+  return p ? [...new Set([...(p.models || []), ...(p.suggested || [])])] : [];
+}
+function alDefaultModel(id){
+  const s = window.modelSettings;
+  return s && (id === "default" || !id) ? (s.defaults.model || "") : "";
+}
+
+$("hdSettings").onclick = () => document.querySelector('#rail button[data-page="pageSettings"]').click();
+window.addEventListener("click", ev => {
+  const a = ev.target.closest && ev.target.closest("[data-open-settings]");
+  if (!a) return;
+  ev.preventDefault();
+  document.querySelector('#rail button[data-page="pageSettings"]').click();
+});
+
+async function stOpen(){
+  $("stMain").innerHTML = `<div class="st-wrap"><p class="lead">Loading…</p></div>`;
+  await stLoad();
+  if (!stState.data){ $("stMain").innerHTML = `<div class="st-wrap"><h2>Settings</h2><p class="lead">The server did not answer. Restart it and reload this page.</p></div>`; return; }
+  stRender();
+}
+
+function stRender(){
+  const d = stState.data, def = d.defaults;
+  const ready = d.providers.filter(p => p.ready);
+  const provOpt = (sel, blank) => (blank ? `<option value="">${blank}</option>` : "") + d.providers.map(p =>
+    `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${alEsc(p.name)}${p.ready ? "" : " — not set up"}</option>`).join("");
+  const models = id => { const p = d.providers.find(x => x.id === id); return p ? [...new Set([...(p.models || []), ...(p.suggested || [])])] : []; };
+  $("stMain").innerHTML = `<div class="st-wrap">
+    <h2>Settings</h2>
+    <p class="lead">Which models your agents, judges and assistant use, the keys they need, and models running on this
+      computer. ${ready.length ? `${ready.length} provider${ready.length === 1 ? " is" : "s are"} ready.` : "No provider is set up yet: add a key below, or start Ollama."}</p>
+
+    <section class="st-card">
+      <header><h3>Default model</h3><small>New agents, and every LLM core set to “Default from Settings”</small>
+        <span class="spacer"></span><span class="st-saved" id="stSaved">Saved</span></header>
+      <div class="st-body"><div class="st-grid">
+        <div class="st-field"><label for="stProv">Provider</label><select id="stProv" data-def="provider">${provOpt(def.provider)}</select></div>
+        <div class="st-field"><label for="stModel">Model</label><input id="stModel" data-def="model" list="stModelList" value="${alEsc(def.model)}" placeholder="Type or pick a model">
+          <datalist id="stModelList">${models(def.provider).map(m => `<option value="${alEsc(m)}">`).join("")}</datalist>
+          <div class="help">Test a provider below to list every model your key can use.</div></div>
+        <div class="st-field"><label for="stTemp">Temperature <span id="stTempV">${def.temperature}</span></label>
+          <input id="stTemp" data-def="temperature" type="range" min="0" max="1.5" step="0.05" value="${def.temperature}" style="padding:0"></div>
+        <div class="st-field"><label for="stMax">Max tokens per step</label><input id="stMax" data-def="max_tokens" type="number" min="16" value="${def.max_tokens}"></div>
+        <div class="st-field"><label for="stTimeout">Time limit per call (seconds)</label><input id="stTimeout" data-def="timeout" type="number" min="10" value="${def.timeout}">
+          <div class="help">Local models can be slow to start: give them a few minutes.</div></div>
+        <div class="st-field"><label for="stRetries">Retries after a rate limit or outage</label><input id="stRetries" data-def="retries" type="number" min="0" max="6" value="${def.retries}"></div>
+      </div>
+      <div class="st-actions"><button class="btn" id="stTry">Try the default model</button><span class="st-msg" id="stTryMsg"></span></div>
+      <div id="stTryOut"></div></div>
+    </section>
+
+    <section class="st-card">
+      <header><h3>Providers and keys</h3><small>Click one to add its key or change its address</small></header>
+      <div id="stProviders">${d.providers.map(stProviderRow).join("")}</div>
+    </section>
+
+    <section class="st-card">
+      <header><h3>Models on this computer</h3><small>Ollama runs open models such as Llama, Mistral and Qwen locally</small>
+        <span class="spacer"></span><button class="btn" id="stOllamaRefresh">Refresh</button></header>
+      <div class="st-body" id="stOllama"><p class="st-msg">Checking for Ollama…</p></div>
+    </section>
+
+    <section class="st-card">
+      <header><h3>Judges, the assistant and conversations</h3></header>
+      <div class="st-body"><div class="st-grid">
+        <div class="st-field"><label for="stJudgeP">Judge provider (Study tab)</label><select id="stJudgeP" data-def="judge_provider">${provOpt(def.judge_provider, "Same as the default")}</select></div>
+        <div class="st-field"><label for="stJudgeM">Judge model</label><input id="stJudgeM" data-def="judge_model" list="stJudgeList" value="${alEsc(def.judge_model)}" placeholder="Same as the default">
+          <datalist id="stJudgeList">${models(def.judge_provider || def.provider).map(m => `<option value="${alEsc(m)}">`).join("")}</datalist>
+          <div class="help">A judge from a different family than the agent catches more of its blind spots.</div></div>
+        <div class="st-field"><label for="stTalk">Talk to agents starts in</label><select id="stTalk" data-def="talk_mode">
+          <option value="live"${def.talk_mode === "live" ? " selected" : ""}>Live, when the model is set up</option>
+          <option value="rehearsal"${def.talk_mode === "rehearsal" ? " selected" : ""}>Rehearsal</option></select></div>
+        <div class="st-field wide"><label class="st-toggle"><input type="checkbox" id="stAsst" data-def="assistant_llm"${def.assistant_llm ? " checked" : ""}>
+          Let the network canvas's assistant use the default model for questions its commands do not cover</label></div>
+      </div></div>
+    </section>
+
+    <section class="st-card">
+      <header><h3>How keys are kept</h3></header>
+      <div class="st-body st-note">Keys are saved in your workspace, in <code>agentlab/model_settings.json</code>, readable only by
+        your user account and inside a folder git ignores. The page never receives a key back, only its first and last
+        characters. Keys are never written into the Python an agent downloads: that file reads them from environment
+        variables such as <code>ANTHROPIC_API_KEY</code> or <code>OPENAI_API_KEY</code>. A key set in the server's
+        environment takes precedence over one saved here.</div>
+    </section>
+  </div>`;
+  stWire();
+  stOllama();
+}
+
+function stProviderRow(p){
+  const d = stState.data, isDef = d.defaults.provider === p.id;
+  const pill = p.ready ? `<span class="st-pill ok">${p.local ? "Running" : "Ready"}</span>`
+    : p.enabled === false ? `<span class="st-pill off">Off</span>` : `<span class="st-pill need">${p.local || p.key_optional ? "Not checked" : "Needs a key"}</span>`;
+  const keyLine = p.key_in_env ? "Key from the server's environment" : p.has_key ? `Key saved: ${p.key_hint}` : p.local ? "No key needed" : "No key yet";
+  const open = !!stState.open[p.id];
+  return `<div class="st-row${open ? " open" : ""}" data-prow="${p.id}">
+      <span class="st-badge" style="background:${ST_COLORS[p.id] || "#5C6B7F"}">${alEsc(p.name.slice(0, 2))}</span>
+      <div class="nm"><b>${alEsc(p.name)}</b><small>${alEsc(keyLine)}${p.models && p.models.length ? ` · ${p.models.length} models` : ""}</small></div>
+      ${isDef ? `<span class="st-pill def">Default</span>` : ""}${pill}<span class="chev">›</span></div>
+    <div class="st-detail${open ? " open" : ""}" data-pdetail="${p.id}">
+      ${p.local ? "" : `<div class="st-keyrow"><div class="st-field"><label>API key${p.key_optional ? " (if the server needs one)" : ""}</label>
+          <input type="password" autocomplete="off" data-key="${p.id}" placeholder="${p.has_key ? "Saved: " + alEsc(p.key_hint) + " — paste a new one to replace it" : "Paste your key"}"></div>
+          <button class="btn go" data-savekey="${p.id}">Save key</button>${p.has_key ? `<button class="btn danger" data-rmkey="${p.id}">Remove</button>` : ""}</div>
+        ${p.key_in_env ? `<div class="st-msg">${alEsc(p.key_env)} is set where the server runs, and is used instead of a saved key.</div>` : ""}`}
+      <div class="st-keyrow" style="margin-top:10px"><div class="st-field"><label>Address</label>
+        <input data-url="${p.id}" value="${alEsc(p.base_url)}" placeholder="${alEsc(p.default_base_url)}"></div>
+        <button class="btn" data-saveurl="${p.id}">Save address</button></div>
+      <div class="st-actions">
+        <button class="btn" data-test="${p.id}">Test connection</button>
+        ${p.ready && !isDef ? `<button class="btn" data-mkdef="${p.id}">Make it the default</button>` : ""}
+        ${(p.local || p.key_optional) ? `<label class="st-toggle"><input type="checkbox" data-enable="${p.id}"${p.enabled ? " checked" : ""}> Use it</label>` : ""}
+        ${p.keys_at ? `<a class="al-link" href="${alEsc(p.keys_at)}" target="_blank" rel="noopener">${p.local ? "Download" : "Get a key"} ↗</a>` : ""}
+        <span class="st-msg" data-pmsg="${p.id}"></span></div>
+      ${p.models && p.models.length ? `<div class="st-chips">${p.models.slice(0, 60).map(m =>
+        `<button class="st-chip${isDef && d.defaults.model === m ? " on" : ""}" data-pick="${p.id}|${alEsc(m)}" title="Make this the default model">${alEsc(m)}</button>`).join("")}</div>` : ""}
+    </div>`;
+}
+
+async function stSave(update, quiet){
+  const r = await fetch(API + "/api/settings/models", {method: "PUT", headers: {"content-type": "application/json"}, body: JSON.stringify(update)});
+  const d = await r.json();
+  if (!r.ok){ toast((d.detail && d.detail.message) || "Not saved"); return false; }
+  stState.data = d; window.modelSettings = d;
+  if (!quiet){ const el = $("stSaved"); if (el){ el.classList.add("on"); clearTimeout(el._h); el._h = setTimeout(() => el.classList.remove("on"), 1400); } }
+  return true;
+}
+
+function stWire(){
+  let timer = null;
+  $("stMain").querySelectorAll("[data-def]").forEach(el => {
+    const ev = el.type === "range" || el.tagName === "INPUT" && el.type !== "checkbox" ? "input" : "change";
+    el.addEventListener(ev, () => {
+      if (el.id === "stTemp") $("stTempV").textContent = el.value;
+      const value = el.type === "checkbox" ? el.checked : el.type === "number" || el.type === "range" ? Number(el.value) : el.value;
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        await stSave({defaults: {[el.dataset.def]: value}});
+        if (el.dataset.def === "provider" || el.dataset.def === "judge_provider") stRender();
+      }, el.tagName === "SELECT" || el.type === "checkbox" ? 0 : 500);
+    });
+  });
+  $("stMain").querySelectorAll("[data-prow]").forEach(row => row.onclick = () => {
+    stState.open[row.dataset.prow] = !stState.open[row.dataset.prow];
+    row.classList.toggle("open"); row.nextElementSibling.classList.toggle("open");
+  });
+  const msg = (id, text, cls) => { const el = $("stMain").querySelector(`[data-pmsg="${id}"]`); if (el){ el.textContent = text; el.className = "st-msg " + (cls || ""); } };
+  $("stMain").querySelectorAll("[data-savekey]").forEach(b => b.onclick = async () => {
+    const id = b.dataset.savekey, input = $("stMain").querySelector(`[data-key="${id}"]`);
+    if (!input.value.trim()){ msg(id, "Paste a key first.", "bad"); return; }
+    if (await stSave({providers: {[id]: {api_key: input.value.trim()}}}, true)){ stState.open[id] = true; stRender(); stTest(id); }
+  });
+  $("stMain").querySelectorAll("[data-rmkey]").forEach(b => b.onclick = async () => {
+    if (!confirm("Remove the saved key?")) return;
+    if (await stSave({providers: {[b.dataset.rmkey]: {api_key: ""}}}, true)){ stState.open[b.dataset.rmkey] = true; stRender(); }
+  });
+  $("stMain").querySelectorAll("[data-saveurl]").forEach(b => b.onclick = async () => {
+    const id = b.dataset.saveurl, input = $("stMain").querySelector(`[data-url="${id}"]`);
+    if (await stSave({providers: {[id]: {base_url: input.value.trim()}}}, true)){ stState.open[id] = true; stRender(); msg(id, "Address saved.", "good"); }
+  });
+  $("stMain").querySelectorAll("[data-enable]").forEach(b => b.onchange = async () => {
+    if (await stSave({providers: {[b.dataset.enable]: {enabled: b.checked}}}, true)){ stState.open[b.dataset.enable] = true; stRender(); }
+  });
+  $("stMain").querySelectorAll("[data-test]").forEach(b => b.onclick = () => stTest(b.dataset.test));
+  $("stMain").querySelectorAll("[data-mkdef]").forEach(b => b.onclick = async () => {
+    const id = b.dataset.mkdef, p = stState.data.providers.find(x => x.id === id);
+    const model = (p.models || [])[0] || (p.suggested || [])[0] || "";
+    if (await stSave({defaults: {provider: id, model}})) stRender();
+  });
+  $("stMain").querySelectorAll("[data-pick]").forEach(b => b.onclick = async () => {
+    const [id, model] = b.dataset.pick.split("|");
+    if (await stSave({defaults: {provider: id, model}})){ stState.open[id] = true; stRender(); }
+  });
+  $("stTry").onclick = async () => {
+    const d = stState.data.defaults;
+    $("stTryMsg").textContent = "Asking…"; $("stTryMsg").className = "st-msg"; $("stTryOut").innerHTML = "";
+    const r = await (await fetch(API + `/api/settings/models/${d.provider}/try`, {method: "POST",
+      headers: {"content-type": "application/json"}, body: JSON.stringify({model: d.model})})).json();
+    $("stTryMsg").textContent = r.ok ? `Answered in ${(r.ms / 1000).toFixed(1)} s` : "It did not answer";
+    $("stTryMsg").className = "st-msg " + (r.ok ? "good" : "bad");
+    $("stTryOut").innerHTML = `<div class="st-try">${alEsc(r.ok ? r.text : r.error)}</div>`;
+  };
+  $("stOllamaRefresh").onclick = () => stOllama();
+}
+
+async function stTest(id){
+  const el = $("stMain").querySelector(`[data-pmsg="${id}"]`);
+  if (el){ el.textContent = "Testing…"; el.className = "st-msg"; }
+  let r;
+  try{ r = await (await fetch(API + `/api/settings/models/${id}/test`, {method: "POST"})).json(); }
+  catch { r = {ok: false, error: "the server did not answer"}; }
+  if (r.ok){ await stLoad(); stState.open[id] = true; stRender(); }
+  const after = $("stMain").querySelector(`[data-pmsg="${id}"]`);
+  if (after){ after.textContent = r.ok ? `Connected: ${r.models.length} model${r.models.length === 1 ? "" : "s"} in ${r.ms} ms` : (r.error || (r.detail && r.detail.message) || "Failed");
+    after.className = "st-msg " + (r.ok ? "good" : "bad"); }
+}
+
+async function stOllama(){
+  const host = $("stOllama");
+  if (!host) return;
+  let o;
+  try{ o = await (await fetch(API + "/api/settings/ollama")).json(); } catch { o = {running: false, error: "the server did not answer", models: [], pulls: []}; }
+  stState.ollama = o;
+  const def = stState.data.defaults;
+  const gb = n => n ? (n / 1e9).toFixed(1) + " GB" : "";
+  const pulls = (o.pulls || []).filter(p => p.status !== "done" || !(o.models || []).some(m => m.name === p.name));
+  host.innerHTML = !o.running
+    ? `<div class="st-note"><b>Ollama is not running at ${alEsc(o.url || "")}.</b> Install it from
+        <a class="al-link" href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com</a>, open it, then press
+        Refresh. Models you pull then run on this computer: free, private, and as fast as its chip allows.
+        <div class="st-msg" style="margin-top:6px">${alEsc(o.error || "")}</div></div>`
+    : `<div class="st-msg" style="margin-bottom:10px">Ollama ${alEsc(o.version || "")} is running at ${alEsc(o.url)}.
+         ${(o.models || []).length} model${(o.models || []).length === 1 ? "" : "s"} installed.</div>
+       ${(o.models || []).length ? `<table class="st-table"><thead><tr><th>Model</th><th>Size</th><th>Parameters</th><th>Quantization</th><th></th></tr></thead><tbody>
+         ${o.models.map(m => `<tr><td><code>${alEsc(m.name)}</code>${def.provider === "ollama" && def.model === m.name ? ` <span class="st-pill def">Default</span>` : ""}</td>
+           <td>${gb(m.size)}</td><td>${alEsc(m.parameters || "")}</td><td>${alEsc(m.quantization || "")}</td>
+           <td style="text-align:right;white-space:nowrap">${def.provider === "ollama" && def.model === m.name ? "" : `<button class="btn" data-ouse="${alEsc(m.name)}">Use as default</button>`}
+             <button class="btn danger" data-odel="${alEsc(m.name)}">Remove</button></td></tr>`).join("")}</tbody></table>` : ""}
+       <div class="st-keyrow" style="margin-top:14px"><div class="st-field"><label for="stPull">Download a model</label>
+         <input id="stPull" placeholder="Name from ollama.com/library, such as qwen2.5:7b"></div><button class="btn go" id="stPullGo">Download</button></div>
+       <div class="st-chips">${(stState.data.ollama_suggested || []).map(s => `<button class="st-chip" data-osug="${alEsc(s.name)}" title="${alEsc(s.note)}">${alEsc(s.name)}</button>`).join("")}</div>
+       <div class="help st-msg" style="margin-top:6px">Agents call tools, so pick a model that supports tool calling; the suggestions all do. A 7B model needs about 5 GB of memory.</div>
+       ${pulls.map(p => `<div style="margin-top:12px"><div class="st-msg">${alEsc(p.name)}: ${alEsc(p.status === "error" ? p.error : p.message)}
+          ${p.total ? ` · ${gb(p.done)} of ${gb(p.total)}` : ""}</div>
+          <div class="st-bar"><i style="width:${p.total ? Math.round(100 * p.done / p.total) : p.status === "done" ? 100 : 3}%"></i></div></div>`).join("")}`;
+  host.querySelectorAll("[data-osug]").forEach(b => b.onclick = () => { $("stPull").value = b.dataset.osug; $("stPull").focus(); });
+  if ($("stPullGo")) $("stPullGo").onclick = async () => {
+    const name = $("stPull").value.trim();
+    const r = await fetch(API + "/api/settings/ollama/pull", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({name})});
+    if (!r.ok){ const d = await r.json(); toast((d.detail && d.detail.message) || "Could not start"); return; }
+    stOllama();
+  };
+  host.querySelectorAll("[data-ouse]").forEach(b => b.onclick = async () => {
+    await stSave({providers: {ollama: {enabled: true}}, defaults: {provider: "ollama", model: b.dataset.ouse}}, true);
+    stRender(); stOllama(); toast(`Default model: ${b.dataset.ouse} on Ollama`);
+  });
+  host.querySelectorAll("[data-odel]").forEach(b => b.onclick = async () => {
+    if (!confirm(`Remove ${b.dataset.odel} from this computer? You can download it again later.`)) return;
+    const r = await fetch(API + "/api/settings/ollama/delete", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({name: b.dataset.odel})});
+    if (!r.ok){ const d = await r.json(); toast((d.detail && d.detail.message) || "Not removed"); }
+    stOllama();
+  });
+  clearTimeout(stState.pollTimer);
+  if ((o.pulls || []).some(p => p.status === "pulling") && state.page === "pageSettings") stState.pollTimer = setTimeout(stOllama, 1000);
+}
+
 /* ============================ talk to agents ============================ */
 /* Each message starts an ordinary durable run of the chosen agent, as the next turn of a
    thread named for the conversation; this page follows it, shows its work and asks you
@@ -15514,12 +15884,12 @@ const TK_ICON = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="tr
   <g stroke="currentColor" stroke-width="1.2" opacity=".6"><path d="M5 7l7 5M5 17l7-5M12 12h7"/></g></svg>`;
 
 async function tkOpenPage(){
-  if (!tkState.catalogued){
-    try{
-      const cat = await (await fetch(API + "/api/agentlab/catalog")).json();
-      tkState.liveAvailable = !!cat.live_available;
-      tkState.catalogued = true;
-    } catch {}
+  // asked every time: a key added in Settings a minute ago counts now
+  const s = await stLoad();
+  if (s){
+    const p = s.providers.find(x => x.id === s.defaults.provider);
+    tkState.liveAvailable = !!(p && (p.ready || AL_LOCAL.includes(p.id)) && s.defaults.model);
+    tkState.talkMode = s.defaults.talk_mode;
   }
   await tkRefreshList();
   let want = null;
@@ -15586,7 +15956,7 @@ function tkPicker(){
     <h4>Starting designs</h4><div class="tk-cards">${starting.map(card).join("")}</div></div></div>`;
   $("tkMain").querySelectorAll(".tk-card").forEach(b => b.onclick = async () => {
     const r = await fetch(API + "/api/agentlab/conversations", {method: "POST", headers: {"content-type": "application/json"},
-      body: JSON.stringify({agent: {kind: b.dataset.kind, key: b.dataset.key}, mode: tkState.liveAvailable ? "live" : "rehearsal"})});
+      body: JSON.stringify({agent: {kind: b.dataset.kind, key: b.dataset.key}, mode: tkState.liveAvailable && tkState.talkMode !== "rehearsal" ? "live" : "rehearsal"})});
     const d = await r.json();
     if (!r.ok){ toast((d.detail && d.detail.message) || "Could not start the conversation"); return; }
     tkState.conv = d; tkKeep(); await tkRefreshList(); tkRender(); $("tkInput").focus();

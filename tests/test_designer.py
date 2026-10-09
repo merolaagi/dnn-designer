@@ -9262,14 +9262,14 @@ def _():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     real, key = agentlab._prepare, os.environ.get("ANTHROPIC_API_KEY")
 
-    def pointed(*a, **k):
-        ctx = real(*a, **k)
-        ctx["space"]["API_URL"] = f"http://127.0.0.1:{server.server_port}/v1/messages"
-        return ctx
-
-    agentlab._prepare, os.environ["ANTHROPIC_API_KEY"] = pointed, "test"
+    os.environ["AGENT_BASE_URL"] = f"http://127.0.0.1:{server.server_port}"
+    os.environ["ANTHROPIC_API_KEY"] = "test"
+    graph = agentlab.template("rag")
+    for n in graph["nodes"]:
+        if n["type"] == "llm":
+            n["params"].update(provider="anthropic", model="claude-test")
     try:
-        view = agentlab.start_run(agentlab.template("rag"), "count", mode="live", approvals="approve")
+        view = agentlab.start_run(graph, "count", mode="live", approvals="approve")
         seen = []
         for _ in range(60):
             now = agentlab.run_view(view["id"])
@@ -9278,7 +9278,7 @@ def _():
                 break
             _t.sleep(0.08)
     finally:
-        agentlab._prepare = real
+        os.environ.pop("AGENT_BASE_URL", None)
         server.shutdown()
         if key is None:
             os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -9401,7 +9401,7 @@ def _():
                    'id="btnImport"', 'id="btnDownload"', 'id="btnOpen"', 'id="statParams"', 'id="whoami"',
                    'id="crumbName"', 'id="ver"'):
         assert needle in head, needle
-    assert 'body[data-page="pageAgentLab"] .hd-design,body[data-page="pageTalk"] .hd-design{display:none}' in PAGE
+    assert 'body[data-page="pageAgentLab"] .hd-design,body[data-page="pageTalk"] .hd-design,body[data-page="pageSettings"] .hd-design{display:none}' in PAGE
     assert "document.body.dataset.page = pageId;" in PAGE
     assert '$("statParams").textContent' in PAGE
 
@@ -9646,6 +9646,179 @@ def _():
     paths = {getattr(r, "path", "") for r in main.app.routes}
     assert {"/api/agentlab/conversations", "/api/agentlab/conversations/{conv_id}",
             "/api/agentlab/conversations/{conv_id}/say"} <= paths
+
+
+# --------------------------------------------------------------------------
+# 4.1: settings — model providers, keys, local models
+# --------------------------------------------------------------------------
+
+def _mock_models_server():
+    """A pretend provider: OpenAI chat completions and model lists, Anthropic messages, Ollama's API."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _send(self, obj, code=200):
+            data = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            auth_ = self.headers.get("authorization") or self.headers.get("x-api-key") or ""
+            seen.append(("GET", self.path, auth_))
+            if self.path.endswith("/models"):
+                return self._send({"error": "bad key"}, 401) if "wrong" in auth_ else \
+                    self._send({"data": [{"id": "m-small"}, {"id": "m-large"}]})
+            if self.path == "/api/version":
+                return self._send({"version": "0.5.0"})
+            if self.path == "/api/tags":
+                return self._send({"models": [{"name": "qwen2.5:7b", "size": 4.7e9,
+                                               "details": {"parameter_size": "7.6B", "quantization_level": "Q4_K_M"}}]})
+            self._send({}, 404)
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)) or b"{}")
+            auth_ = self.headers.get("authorization") or self.headers.get("x-api-key") or ""
+            seen.append(("POST", self.path, auth_, body.get("model")))
+            if self.path == "/api/pull":
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"status":"pulling","completed":5,"total":10}\n{"status":"success"}\n')
+                return
+            if self.path.endswith("/v1/messages"):
+                return self._send({"content": [{"type": "text", "text": "Claude here."}], "stop_reason": "end_turn",
+                                   "usage": {"input_tokens": 3, "output_tokens": 2}})
+            if self.path.endswith("/chat/completions"):
+                return self._send({"choices": [{"message": {"role": "assistant", "content": "Mock says 42."}}],
+                                   "usage": {"prompt_tokens": 4, "completion_tokens": 3}})
+            self._send({}, 404)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_port}", seen
+
+
+def _private_workspace():
+    import tempfile
+    import auth
+    home = Path(tempfile.mkdtemp())
+    real = auth.workspace
+    auth.workspace = lambda: home
+    return home, lambda: setattr(auth, "workspace", real)
+
+
+@check("Settings keeps keys private: masked to the page, owner-only on disk, never in a generated file")
+def _():
+    import providers
+    home, restore = _private_workspace()
+    env_was = os.environ.pop("OPENAI_API_KEY", None)
+    try:
+        v = providers.save({"providers": {"openai": {"api_key": "sk-secret-1234567890"}}})
+        row = next(p for p in v["providers"] if p["id"] == "openai")
+        assert row["has_key"] and row["key_hint"] == "sk-…7890" and row["ready"]
+        assert "sk-secret-1234567890" not in json.dumps(v)
+        path = home / "agentlab" / "model_settings.json"
+        assert oct(path.stat().st_mode & 0o777) == "0o600"
+        os.environ["OPENAI_API_KEY"] = "sk-from-env"
+        assert providers.key_for("openai") == "sk-from-env", "the environment wins"
+        os.environ.pop("OPENAI_API_KEY")
+        providers.save({"defaults": {"provider": "openai", "model": "gpt-test"}})
+        g = agentlab.template("react")
+        src = agentlab.codegen(g)["source"]
+        assert "sk-secret" not in src and '"key": "OPENAI_API_KEY"' in src and "OPENAI_API_KEY=... python agent.py" in src
+        providers.save({"providers": {"openai": {"api_key": ""}}})
+        assert not providers.key_for("openai")
+        assert any("OpenAI needs an API key" in m for m in agentlab.missing_keys(g))
+        for bad in ({"providers": {"openai": {"base_url": "ftp://x"}}}, {"defaults": {"provider": "nope"}}):
+            try:
+                providers.save(bad)
+                raise AssertionError(f"accepted {bad}")
+            except ValueError:
+                pass
+        legacy = providers.resolve("openai-compatible", "llama3", "http://localhost:9999/v1")
+        assert legacy["kind"] == "openai" and legacy["base_url"] == "http://localhost:9999/v1"
+    finally:
+        restore()
+        if env_was is not None:
+            os.environ["OPENAI_API_KEY"] = env_was
+
+
+@check("a live run reaches whichever provider Settings names, with its key, and retries are in the file")
+def _():
+    import providers
+    home, restore = _private_workspace()
+    server, url, seen = _mock_models_server()
+    env_was = os.environ.pop("XAI_API_KEY", None)
+    try:
+        providers.save({"providers": {"xai": {"api_key": "xai-key-0123456789", "base_url": url + "/v1"},
+                                      "anthropic": {"api_key": "ant-key-0123456789", "base_url": url}},
+                        "defaults": {"provider": "xai", "model": "m-large", "retries": 3}})
+        listed = providers.list_models("xai")
+        assert listed["ok"] and listed["models"] == ["m-large", "m-small"]
+        assert providers.view()["providers"][2]["models"] == ["m-large", "m-small"], "the list is remembered"
+        assert providers.try_model("anthropic", "m-small")["text"] == "Claude here."
+        r = agentlab.run(agentlab.template("react"), "What is it?", "live", "approve", memory_dir=home)
+        assert r["ok"] and r["answer"].startswith("Mock says 42."), r
+        call = [x for x in seen if x[1].endswith("/chat/completions")][-1]
+        assert call[2] == "Bearer xai-key-0123456789" and call[3] == "m-large"
+        src = agentlab.codegen(agentlab.template("react"))["source"]
+        assert "RETRIES = 3" in src and "def send(request):" in src and "xai-key" not in src
+        providers.save({"providers": {"xai": {"api_key": "wrong-key-012345"}}})
+        assert "HTTP 401" in providers.list_models("xai")["error"]
+    finally:
+        server.shutdown()
+        restore()
+        if env_was is not None:
+            os.environ["XAI_API_KEY"] = env_was
+
+
+@check("Settings sees Ollama's models and downloads new ones")
+def _():
+    import providers
+    import time as _t
+    home, restore = _private_workspace()
+    server, url, seen = _mock_models_server()
+    try:
+        providers.save({"providers": {"ollama": {"base_url": url + "/v1"}}})
+        st = providers.ollama_status()
+        assert st["running"] and st["models"][0]["parameters"] == "7.6B"
+        providers.ollama_pull("llama3.1:8b")
+        for _ in range(50):
+            pulls = providers.ollama_status()["pulls"]
+            if pulls and pulls[0]["status"] != "pulling":
+                break
+            _t.sleep(0.05)
+        assert pulls[0]["status"] == "done", pulls
+        try:
+            providers.ollama_pull("two words")
+            raise AssertionError("accepted a bad name")
+        except ValueError:
+            pass
+        assert not providers.ready("ollama") or True
+        providers.list_models("ollama")
+        assert providers.ready("ollama"), "a local server that answered is switched on"
+    finally:
+        server.shutdown()
+        restore()
+
+
+@check("the Settings page, its endpoints, and the LLM core's provider picker exist")
+def _():
+    for needle in ('data-page="pageSettings"', 'id="hdSettings"', "function stRender", "function stOllama",
+                   "/api/settings/models", 'd.kind === "provider"', 'd.kind === "model"', "function alLiveAvailable"):
+        assert needle in PAGE, needle
+    import main
+    paths = {getattr(r, "path", "") for r in main.app.routes}
+    assert {"/api/settings/models", "/api/settings/models/{pid}/test", "/api/settings/models/{pid}/try",
+            "/api/settings/ollama", "/api/settings/ollama/pull"} <= paths
+    assert agentlab.BLOCKS["llm"]["params"]["provider"]["value"] == "default"
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

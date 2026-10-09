@@ -301,6 +301,11 @@ saved agent or a starting design and chat. Each message is a run you can watch,
 tools that change things ask you first in the conversation, and the agent
 remembers what was said.
 
+**Settings** (the gear at the top right) is where models come from: API keys
+for Anthropic, OpenAI, xAI, Gemini, Mistral, DeepSeek, Groq, OpenRouter and
+Together, local models through Ollama or LM Studio, and the default model every
+agent uses unless one says otherwise.
+
 As with layers, each block has a **Code** tab with the exact lines of the
 generated file it contributes, and a **Maths** tab with its equation and this
 design's numbers worked through.

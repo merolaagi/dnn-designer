@@ -465,17 +465,46 @@ SUGGESTIONS = [
 ]
 
 
+def _settings_model():
+    """(provider, model) when Settings says the assistant may use the default model, else None."""
+    try:
+        import providers
+        d = providers.load()["defaults"]
+        if d.get("assistant_llm") and d.get("model") and providers.ready(d["provider"]):
+            return d["provider"], d["model"]
+    except Exception:  # noqa: BLE001 - no settings means no model, not a crash
+        pass
+    return None
+
+
 def escalate(text: str, g: Graph, report: Dict[str, Any]) -> Dict[str, Any]:
     """Hand an unrecognised question to a real model, if one is configured."""
     key = os.environ.get("ASSISTANT_API_KEY")
     if not key:
+        settled = _settings_model()
+        if settled:
+            nodes = g.by_id()
+            summary = "\n".join(
+                f"{nodes[nid].label or nodes[nid].type} ({nodes[nid].type}) -> "
+                f"{report['nodes'].get(nid, {}).get('out_shape')}"
+                for nid in report.get("order", []) if nid in nodes)
+            try:
+                import providers
+                out = providers.complete(settled[0], settled[1],
+                                         "You help someone design a neural network. Be concrete and brief.",
+                                         f"This is the network being designed:\n{summary}\n\nQuestion: {text}",
+                                         max_tokens=700, temperature=0.3)
+                return {"reply": out["text"] or "(no answer came back)", "source": "model"}
+            except ValueError as exc:
+                return {"reply": f"The model set in Settings could not be reached: {exc}"}
         return {
             "reply": ("I did not recognise that. I match a small set of phrasings "
                       "exactly rather than guessing — say `help` to see them, or "
                       "`review` to have me look the network over.\n\n"
-                      "For open conversation, set ASSISTANT_API_KEY in the "
-                      "environment and I will pass questions to a real model along "
-                      "with a summary of this graph."),
+                      "For open conversation, switch on \"Let the network assistant "
+                      "use the default model\" in Settings (or set ASSISTANT_API_KEY), and "
+                      "I will pass questions to a real model along with a summary of "
+                      "this graph."),
             "suggestions": SUGGESTIONS,
         }
     try:

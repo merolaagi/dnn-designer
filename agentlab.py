@@ -56,9 +56,11 @@ def _p(label, value, kind="text", options=None):
 
 
 READS, CHANGES = "only reads", "changes things"
-# Where a core's calls go. "openai-compatible" covers Ollama, LM Studio, vLLM and any server speaking
-# the chat-completions protocol, including one running on this machine.
-PROVIDERS = {"anthropic": "Anthropic Messages API", "openai-compatible": "OpenAI-compatible server"}
+# Where a core's calls go: the default set in Settings, or a provider named there (providers.py).
+# "openai-compatible" is how earlier versions named any chat-completions server; it still works.
+import providers as _providers  # noqa: E402
+PROVIDERS = {"default": "The default in Settings", **{k: v["name"] for k, v in _providers.CATALOG.items()},
+             "openai-compatible": "OpenAI-compatible server (set its address below)"}
 LIMIT = ("max_calls", "Calls allowed per run (0 for no limit)")
 REVIEW_ONLY = "the critic model's review"
 VERIFIER_GATE = "a verifier's line, then the review"
@@ -642,9 +644,9 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         physiology=("Each step it re-reads everything: system prompt, history, tool results. It returns either "
                     "text or a tool_use block. It remembers nothing between calls; the loop re-feeds it."),
         failure="Invented tool arguments. Losing the thread in a long context. Confidence ahead of evidence.",
-        params={"provider": _p("Provider", "anthropic", "choice", list(PROVIDERS)),
-                "model": _p("Model", DEFAULT_MODEL),
-                "base_url": _p("Server (OpenAI-compatible only)", "http://localhost:11434/v1"),
+        params={"provider": _p("Provider", "default", "provider", list(PROVIDERS)),
+                "model": _p("Model (blank: the default in Settings)", "", "model"),
+                "base_url": _p("Server address (Other / OpenAI-compatible only)", "http://localhost:11434/v1"),
                 "temperature": _p("Temperature", 0.3, "number"),
                 "max_tokens": _p("Max tokens per step", 2048, "number")}),
     "system_prompt": dict(
@@ -908,7 +910,7 @@ def catalog() -> Dict[str, Any]:
     return {"systems": SYSTEMS, "order": SYSTEM_ORDER, "blocks": blocks,
             "templates": {k: template(k) for k in TEMPLATES},
             "template_names": {k: v["name"] for k, v in TEMPLATES.items()},
-            "live_available": bool(os.environ.get("ANTHROPIC_API_KEY")), "providers": PROVIDERS}
+            "live_available": live_available(), "providers": PROVIDERS}
 
 
 # --------------------------------------------------------------------------
@@ -1056,6 +1058,52 @@ def answer_schema(node) -> Optional[Dict[str, Any]]:
     except ValueError:
         return None
     return schema if isinstance(schema, dict) else None
+
+
+def _core_target(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Where one LLM core's calls go, with its model, after the Settings default is applied."""
+    return _providers.resolve(str(p.get("provider") or "default"), str(p.get("model") or ""),
+                              str(p.get("base_url") or ""))
+
+
+def _targets(graph, depth: int = 0) -> List[Dict[str, Any]]:
+    """Every LLM core's destination, here and in saved agents inside."""
+    out = []
+    for n in graph.get("nodes", []):
+        if n.get("type") == "llm":
+            out.append({**_core_target(_params(n)), "node": n["id"]})
+        if n.get("type") == "subgraph" and depth < 4:
+            try:
+                out += _targets(load(_params(n).get("design") or ""), depth + 1)
+            except KeyError:
+                continue
+    return out
+
+
+def missing_keys(graph) -> List[str]:
+    """Why a live run of this graph could not call its models, one line per provider."""
+    seen, out = set(), []
+    for t in _targets(graph):
+        if t["provider"] in seen or not t["needs_key"]:
+            continue
+        seen.add(t["provider"])
+        if not _providers.key_for(t["provider"]):
+            out.append(f"{t['name']} needs an API key for live runs: add it in Settings, or set {t['key_env']} "
+                       "where the server runs.")
+    for t in _targets(graph):
+        if not t["model"]:
+            out.append(f"Choose a model for {t['name']}: on the LLM core, or as the default in Settings.")
+            break
+    return out
+
+
+def live_available() -> bool:
+    """Whether the default provider in Settings could take a live run."""
+    try:
+        d = _providers.load()["defaults"]
+        return _providers.ready(d["provider"] or "anthropic") and bool(d["model"])
+    except Exception:  # noqa: BLE001 - a broken settings file must not break the page
+        return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def uses_provider(graph, provider: str, depth: int = 0) -> bool:
@@ -1502,7 +1550,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     of_kind = lambda t: [nid for nid in nodes if kind[nid] == t]  # noqa: E731
     present = lambda t: any(kind[nid] == t and nid in a["reach"] for nid in nodes)  # noqa: E731
     langgraph = target == "langgraph"
-    openai_used = uses_provider(graph, "openai-compatible")
+    targets = {n["id"]: _core_target(_params(n)) for n in graph.get("nodes", []) if n.get("type") == "llm"}
+    openai_used = any(t["kind"] == "openai" for t in _targets(graph))
+    model_defaults = _providers.load()["defaults"]
 
     L: List[str] = []
     spans: Dict[str, List[List[int]]] = {}
@@ -1540,8 +1590,10 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     end, start, early = a["end"], a["start"], a["exit"]
 
     parts = ", ".join(label(n) for n in graph.get("nodes", []))
-    run_line = ("Run it:  pip install langgraph; ANTHROPIC_API_KEY=... python agent_langgraph.py"
-                if langgraph else "Run it:  ANTHROPIC_API_KEY=... python agent.py")
+    key_envs = sorted({t["key_env"] for t in targets.values() if t["key_env"] and t["needs_key"]})
+    key_line = " ".join(f"{k}=..." for k in key_envs)
+    run_line = ("Run it:  " + ("pip install langgraph; " if langgraph else "") + (key_line + " " if key_line else "")
+                + ("python agent_langgraph.py" if langgraph else "python agent.py"))
     if embedded:
         add([f"# saved agent {embedded['name']}: {parts}".replace('"""', "'''")])
     else:
@@ -1554,7 +1606,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              if langgraph else "A while loop at the bottom runs them."), "",
          run_line, "" if langgraph else "Standard library only.", '"""', ""])
     subgraphs = [t for t, _ in tools if kind[t] == "subgraph"]
-    imports = ["import json", "import os", "import urllib.request"]
+    imports = ["import json", "import os", "import time", "import urllib.error", "import urllib.request"]
     if subgraphs or embedded:
         imports.append("from pathlib import Path")
     if any(kind[t] in ("code_exec", "mcp") for t, _ in tools):
@@ -1572,8 +1624,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         add(["", "from langgraph.checkpoint.memory import MemorySaver",
              "from langgraph.graph import END, START as GRAPH_START, StateGraph",
              "from langgraph.types import Command, interrupt"])
-    add(["", 'API_URL = "https://api.anthropic.com/v1/messages"'])
-    add([f'MODEL = os.environ.get("AGENT_MODEL", {json.dumps(str(first_llm["model"]))})'], llm_ids[0])
+    first_target = targets[llm_ids[0]]
+    add([f'MODEL = os.environ.get("AGENT_MODEL", {json.dumps(first_target["model"])})'], llm_ids[0])
     add([f"MAX_STEPS = {a['max_steps']}  # loop controller: model calls allowed across the whole run",
          f"HISTORY_TURNS = {HISTORY_TURNS}  # earlier turns of a conversation carried into the next",
          "MAX_HOPS = 200  # a safety net on block-to-block moves, so a miswired graph cannot spin forever"],
@@ -1591,12 +1643,12 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     # ---- brain: settings and instructions per LLM core ----
     add(["", "", "# ---- brain ----"])
     for lid in llm_ids:
-        p = _params(nodes[lid])
-        provider = p.get("provider") or "anthropic"
-        where = (f', "provider": "openai", "base_url": os.environ.get("AGENT_BASE_URL", {json.dumps(str(p["base_url"]))})'
-                 if provider == "openai-compatible" else "")
-        add([f'{const(lid)}_SETTINGS = {{"model": os.environ.get("AGENT_MODEL", {json.dumps(str(p["model"]))}), '
-             f'"temperature": {float(p["temperature"])}, "max_tokens": {int(p["max_tokens"])}{where}}}'], lid)
+        p, t = _params(nodes[lid]), targets[lid]
+        add([f"# {t['name']}" + ("" if (p.get("provider") or "default") != "default" else ", the default set in Settings"),
+             f'{const(lid)}_SETTINGS = {{"model": os.environ.get("AGENT_MODEL", {json.dumps(t["model"])}), '
+             f'"temperature": {float(p["temperature"])}, "max_tokens": {int(p["max_tokens"])}, '
+             f'"provider": "{t["kind"]}", "base_url": os.environ.get("AGENT_BASE_URL", {json.dumps(t["base_url"])}), '
+             f'"key": {json.dumps(t["key_env"])}}}'], lid)
     add([f"COMPLETE_SETTINGS = {const(llm_ids[0])}_SETTINGS  # the planner, critic and summarizer use the first core"],
         llm_ids[0])
     for sid in of_kind("system_prompt"):
@@ -1604,15 +1656,35 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         add([f"{const(sid)}_SYSTEM = {_doc(_params(nodes[sid])['text'])}"], sid, *readers)
     add([f"DEFAULT_SYSTEM = {_doc(DEFAULT_PROMPT)}"])
     add(["", ""])
+    if not embedded:
+        add([f"TIMEOUT = {int(model_defaults['timeout'])}  # seconds a model call may take",
+             f"RETRIES = {int(model_defaults['retries'])}  # tries again after a rate limit, an overloaded server or a dropped connection",
+             "KEYS = {}  # the lab fills this from Settings; on its own, the file reads keys from the environment",
+             "", "",
+             "def api_key(name):",
+             '    return (KEYS.get(name) or os.environ.get(name, "")) if name else ""',
+             "", "",
+             "def send(request):",
+             '    """Open a model call, trying again after 429, 5xx and dropped connections, with growing pauses."""',
+             "    for attempt in range(RETRIES + 1):",
+             "        try:",
+             "            return urllib.request.urlopen(request, timeout=TIMEOUT)",
+             "        except urllib.error.HTTPError as exc:",
+             "            if exc.code not in (408, 409, 429, 500, 502, 503, 504, 529) or attempt == RETRIES:",
+             "                raise",
+             "        except urllib.error.URLError:",
+             "            if attempt == RETRIES:",
+             "                raise",
+             "        time.sleep(min(30, 2 ** attempt))", "", ""], *llm_ids)
     add(([] if embedded else [
          "def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048,",
-         '               provider="anthropic", base_url=None, on_text=None):',
+         '               provider="anthropic", base_url=None, key="ANTHROPIC_API_KEY", on_text=None):',
          '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests.',
          "",
          "    With on_text, the reply is streamed: on_text gets each piece of text as it arrives, and the",
          '    response returned is the same one a plain call gives."""']
         + (['    if provider == "openai":',
-            "        return call_openai(base_url, system, messages, tools, model, temperature, max_tokens, on_text)"]
+            "        return call_openai(base_url, system, messages, tools, model, temperature, max_tokens, key, on_text)"]
            if openai_used else []) + [
          '    body = {"model": model, "max_tokens": max_tokens, "temperature": temperature,',
          '            "system": system, "messages": messages}',
@@ -1621,10 +1693,10 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
          "    if on_text:",
          '        body["stream"] = True',
          "    request = urllib.request.Request(",
-         "        API_URL, data=json.dumps(body).encode(),",
-         '        headers={"content-type": "application/json", "x-api-key": os.environ["ANTHROPIC_API_KEY"],',
+         '        (base_url or "https://api.anthropic.com").rstrip("/") + "/v1/messages", data=json.dumps(body).encode(),',
+         '        headers={"content-type": "application/json", "x-api-key": api_key(key),',
          '                 "anthropic-version": "2023-06-01"})',
-         "    with urllib.request.urlopen(request, timeout=120) as reply:",
+         "    with send(request) as reply:",
          "        return read_anthropic_stream(reply, on_text) if streamed(reply, on_text) else json.load(reply)", "", ""]
         + STREAM_CODE.strip().split("\n") + ["", ""]) + [
          "def text_of(response):",
@@ -1632,8 +1704,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         *llm_ids)
     if openai_used and not embedded:
         add(["", ""])
-        add(["def call_openai(base_url, system, messages, tools, model, temperature, max_tokens, on_text=None):",
-             '    """The same call to an OpenAI-compatible server — Ollama, LM Studio, vLLM — translated both ways,',
+        add(["def call_openai(base_url, system, messages, tools, model, temperature, max_tokens, key=\"\", on_text=None):",
+             '    """The same call in the chat-completions format — OpenAI, Grok, Gemini, Mistral, Ollama and the',
+             "    other servers that speak it — translated both ways,",
              '    so the rest of the file only ever sees the Messages API\'s shape."""',
              '    chat = [{"role": "system", "content": system}]',
              "    for m in messages:",
@@ -1658,11 +1731,11 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '        body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],',
              '                                                         "parameters": t["input_schema"]}} for t in tools]',
              '    headers = {"content-type": "application/json"}',
-             '    if os.environ.get("OPENAI_API_KEY"):',
-             '        headers["authorization"] = "Bearer " + os.environ["OPENAI_API_KEY"]',
+             "    if api_key(key):",
+             '        headers["authorization"] = "Bearer " + api_key(key)',
              '    request = urllib.request.Request(base_url.rstrip("/") + "/chat/completions",',
              "                                     data=json.dumps(body).encode(), headers=headers)",
-             "    with urllib.request.urlopen(request, timeout=300) as reply:",
+             "    with send(request) as reply:",
              "        data = read_openai_stream(reply, on_text) if streamed(reply, on_text) else json.load(reply)",
              '    choice = data["choices"][0]',
              '    message = choice.get("message") or {}',
@@ -1678,7 +1751,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '    return {"content": content,',
              '            "stop_reason": "tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn",',
              '            "usage": {"input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens")}}'],
-            *[lid for lid in llm_ids if _params(nodes[lid]).get("provider") == "openai-compatible"])
+            *[lid for lid in llm_ids if targets[lid]["kind"] == "openai"])
     answer_shape = answer_schema(nodes[end]) if end else None
     if answer_shape is not None:
         add(["", "", "# ---- the answer's required shape ----"])
@@ -3210,9 +3283,8 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
              model_state: Optional[Dict[str, Any]] = None, ask: Optional[Callable] = None,
              after_step: Optional[Callable] = None, carry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Load the generated file and wire the lab into it: events, measurement, approvals, the model."""
-    if mode == "live" and uses_provider(graph, "anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ValueError("A live run needs ANTHROPIC_API_KEY in the server's environment, or LLM cores set to "
-                         "an OpenAI-compatible server such as a local Ollama. Rehearsal runs need neither.")
+    if mode == "live" and missing_keys(graph):
+        raise ValueError(missing_keys(graph)[0] + " Rehearsal runs need no key.")
     if mode not in ("live", "rehearsal"):
         raise ValueError(f"Unknown mode {mode!r}.")
     if approvals not in ("approve", "deny", "ask") or (approvals == "ask" and ask is None):
@@ -3282,6 +3354,8 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
     space["emit"] = emit_measured
     if "STREAM" in space:
         space["STREAM"] = on_stream
+    if "KEYS" in space and mode == "live":
+        space["KEYS"].update(_providers.keys_for_run())     # never written into the file
     if "TRAIN_BACKEND" in space:
         space["TRAIN_BACKEND"] = (TRAINER or _no_trainer) if mode == "live" else _rehearsal_trainer
     if "DESIGNER_BACKEND" in space:
@@ -3676,6 +3750,13 @@ def _overlap(a: str, b: str) -> float:
 
 def _ask_judge(system: str, prompt: str) -> Dict[str, Any]:
     import urllib.request
+    d = _providers.load()["defaults"]
+    if d.get("judge_provider"):
+        # the judge chosen in Settings
+        model = d.get("judge_model") or (d["model"] if d["judge_provider"] == d["provider"] else "")
+        if not model:
+            raise ValueError("Choose the judge's model in Settings.")
+        return _providers.complete(d["judge_provider"], model, system, prompt)
     local = os.environ.get("AGENTLAB_JUDGE_BASE_URL")
     if local:
         # a judge on an OpenAI-compatible server, such as the same local model the agents use
@@ -3689,10 +3770,11 @@ def _ask_judge(system: str, prompt: str) -> Dict[str, Any]:
         usage = data.get("usage") or {}
         return {"text": (data["choices"][0].get("message") or {}).get("content") or "",
                 "tokens": (usage.get("prompt_tokens") or 0) + (usage.get("completion_tokens") or 0)}
-    key = os.environ.get("ANTHROPIC_API_KEY")
+    key = _providers.key_for("anthropic")
     if not key:
-        raise ValueError("A live judge needs ANTHROPIC_API_KEY, or AGENTLAB_JUDGE_BASE_URL for an "
-                         "OpenAI-compatible server.")
+        if _providers.ready(d["provider"]) and d["model"]:
+            return _providers.complete(d["provider"], d["model"], system, prompt)    # the default model judges
+        raise ValueError("A live judge needs a model: choose one in Settings, or set ANTHROPIC_API_KEY.")
     body = json.dumps({"model": JUDGE_MODEL, "max_tokens": 200, "temperature": 0, "system": system,
                        "messages": [{"role": "user", "content": prompt}]}).encode()
     request = urllib.request.Request("https://api.anthropic.com/v1/messages", data=body,
@@ -4306,9 +4388,8 @@ def start_study(graph, cases_text: str, mode: str = "rehearsal", repeats: int = 
     parsed = parse_cases(cases_text)
     if parsed["problems"]:
         raise ValueError(parsed["problems"][0])
-    if mode == "live" and uses_provider(graph, "anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ValueError("A live study needs ANTHROPIC_API_KEY in the server's environment, or LLM cores set to "
-                         "an OpenAI-compatible server.")
+    if mode == "live" and missing_keys(graph):
+        raise ValueError(missing_keys(graph)[0] + " Rehearsal runs need no key.")
     if [p for p in validate(graph) if p["level"] == "error"]:
         raise ValueError("Fix the design's errors first; the baseline has to run.")
     repeats = max(1, min(int(repeats), 20))
@@ -4539,7 +4620,7 @@ def _metrics_path() -> Path:
 def _model_of(graph) -> Dict[str, str]:
     """Each LLM core's model; planners, critics and summarizers use the first core's."""
     cores = [n for n in graph.get("nodes", []) if n.get("type") == "llm"]
-    models = {n["id"]: str(_params(n).get("model") or "") for n in cores}
+    models = {n["id"]: _core_target(_params(n))["model"] for n in cores}
     models["*"] = models[cores[0]["id"]] if cores else ""
     return models
 
@@ -4824,8 +4905,7 @@ def to_langsmith(rec: Dict[str, Any], project: str) -> List[Dict[str, Any]]:
     t0 = float(rec.get("started") or time.time())
     t_end = t0 + (events[-1]["t"] if events else 0.0)
     models = _model_of(graph)
-    providers = {n["id"]: ("openai" if _params(n).get("provider") == "openai-compatible" else "anthropic")
-                 for n in nodes.values() if n.get("type") == "llm"}
+    providers = {n["id"]: _core_target(_params(n))["provider"] for n in nodes.values() if n.get("type") == "llm"}
     root_id = uuid7(t0)
     root_dot = _dotted(t0, root_id)
     meta = {"design": graph.get("name"), "mode": rec.get("mode"), "agent_lab_run": rec.get("id"),
@@ -5010,9 +5090,8 @@ def _check_startable(graph, mode, approvals) -> None:
         raise ValueError(f"Unknown mode {mode!r}.")
     if approvals not in ("approve", "deny", "ask"):
         raise ValueError("Approvals are approve, deny or ask.")
-    if mode == "live" and uses_provider(graph, "anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ValueError("A live run needs ANTHROPIC_API_KEY in the server's environment, or LLM cores set to "
-                         "an OpenAI-compatible server.")
+    if mode == "live" and missing_keys(graph):
+        raise ValueError(missing_keys(graph)[0] + " Rehearsal runs need no key.")
 
 
 def _execute(job: Job, memory_dir: Optional[Path], resume_at: Optional[Dict[str, Any]] = None) -> None:

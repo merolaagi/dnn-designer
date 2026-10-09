@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 import agents
 import agentlab
+import providers
 import advisor
 import assistant
 import auth
@@ -338,6 +339,52 @@ def agentlab_run(body: AgentLabRun):
 @app.get("/api/agentlab/where")
 def agentlab_where():
     return agentlab.where()
+
+
+# --------------------------------------------------------------------------
+# settings: model providers, keys, local models, defaults
+# --------------------------------------------------------------------------
+
+def _settings_call(fn, *args):
+    try:
+        return fn(*args)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/settings/models")
+def settings_models():
+    return providers.view()
+
+
+@app.put("/api/settings/models")
+def settings_models_save(body: Dict[str, Any]):
+    return _settings_call(providers.save, body)
+
+
+@app.post("/api/settings/models/{pid}/test")
+def settings_models_test(pid: str):
+    return _settings_call(providers.list_models, pid)
+
+
+@app.post("/api/settings/models/{pid}/try")
+def settings_models_try(pid: str, body: Dict[str, Any]):
+    return _settings_call(providers.try_model, pid, str(body.get("model") or ""))
+
+
+@app.get("/api/settings/ollama")
+def settings_ollama():
+    return providers.ollama_status()
+
+
+@app.post("/api/settings/ollama/pull")
+def settings_ollama_pull(body: Dict[str, Any]):
+    return _settings_call(providers.ollama_pull, str(body.get("name") or ""))
+
+
+@app.post("/api/settings/ollama/delete")
+def settings_ollama_delete(body: Dict[str, Any]):
+    return _settings_call(providers.ollama_delete, str(body.get("name") or ""))
 
 
 class AgentLabConversation(BaseModel):
@@ -773,7 +820,7 @@ def assistant_advise(body: AdvicePayload):
 @app.get("/api/assistant/review")
 def assistant_review(name: str = ""):
     return {"suggestions": assistant.SUGGESTIONS, "help": assistant.HELP,
-            "model": bool(os.environ.get("ASSISTANT_API_KEY"))}
+            "model": bool(os.environ.get("ASSISTANT_API_KEY")) or bool(assistant._settings_model())}
 
 
 class TestLayerPayload(BaseModel):
