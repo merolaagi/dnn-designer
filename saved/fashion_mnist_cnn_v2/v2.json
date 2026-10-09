@@ -1,0 +1,157 @@
+{
+  "name": "fashion_mnist_cnn_v2",
+  "nodes": [
+    {
+      "id": "in",
+      "type": "Input",
+      "label": "input",
+      "params": {
+        "shape": [
+          1,
+          28,
+          28
+        ]
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "l1",
+      "type": "Conv2d",
+      "params": {
+        "filters": 8,
+        "kernel": 3,
+        "padding": "same",
+        "stride": 1
+      },
+      "x": 0,
+      "y": 110
+    },
+    {
+      "id": "l2",
+      "type": "MaxPool2d",
+      "params": {
+        "pool_size": 2,
+        "stride": 2
+      },
+      "x": 0,
+      "y": 220
+    },
+    {
+      "id": "l3",
+      "type": "Conv2d",
+      "params": {
+        "filters": 16,
+        "kernel": 3,
+        "padding": "same",
+        "stride": 1
+      },
+      "x": 0,
+      "y": 330
+    },
+    {
+      "id": "l4",
+      "type": "MaxPool2d",
+      "params": {
+        "pool_size": 2,
+        "stride": 2
+      },
+      "x": 0,
+      "y": 440
+    },
+    {
+      "id": "l5",
+      "type": "Flatten",
+      "params": {},
+      "x": 0,
+      "y": 550
+    },
+    {
+      "id": "l6",
+      "type": "Linear",
+      "params": {
+        "units": 64
+      },
+      "x": 0,
+      "y": 660
+    },
+    {
+      "id": "l7",
+      "type": "Linear",
+      "params": {
+        "activation": "softmax",
+        "units": 10
+      },
+      "x": 0,
+      "y": 770
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "label": "output",
+      "params": {
+        "task": "classification"
+      },
+      "x": 0,
+      "y": 880
+    },
+    {
+      "id": "a1",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "label": "",
+      "x": 0,
+      "y": 670
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "in",
+      "target": "l1"
+    },
+    {
+      "id": "e2",
+      "source": "l1",
+      "target": "l2"
+    },
+    {
+      "id": "e3",
+      "source": "l2",
+      "target": "l3"
+    },
+    {
+      "id": "e4",
+      "source": "l3",
+      "target": "l4"
+    },
+    {
+      "id": "e5",
+      "source": "l4",
+      "target": "l5"
+    },
+    {
+      "id": "e6",
+      "source": "a1",
+      "target": "l6"
+    },
+    {
+      "id": "e7",
+      "source": "l6",
+      "target": "l7"
+    },
+    {
+      "id": "e8",
+      "source": "l7",
+      "target": "out"
+    },
+    {
+      "id": "ae1",
+      "source": "l5",
+      "target": "a1",
+      "port": 0
+    }
+  ]
+}

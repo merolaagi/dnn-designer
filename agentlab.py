@@ -227,6 +227,20 @@ def numbers_in(text):
     return out
 
 
+def latin_share(text, least=1):
+    """The share of the text's letters written in the Latin alphabet; None when it has fewer than least."""
+    letters = [ch for ch in str(text) if ch.isalpha()]
+    if len(letters) < least:
+        return None
+    return sum(1 for ch in letters if ch < "\u0250") / len(letters)
+
+
+def script_drift(asked, answer):
+    """True when the person wrote in Latin letters and the answer came back mostly in another script."""
+    said, got = latin_share(asked), latin_share(answer, least=40)
+    return said is not None and got is not None and said > 0.9 and got < 0.5
+
+
 def tool_texts(state):
     """What the tools returned in this run, and what the person asked: the only sources of numbers."""
     texts = [state["task"]]
@@ -236,7 +250,29 @@ def tool_texts(state):
             texts += [str(b.get("content", "")) for b in content if b.get("type") == "tool_result"]
         elif message["role"] == "user" and not str(content).startswith("A reviewer found problems"):
             texts.append(str(content))
-    return texts
+    return texts + list(state.get("critic_results") or [])
+
+
+def finish_package(state):
+    """The task asked for a package and the model never made one: make it from the design it trained or named.
+
+    Returns the download link, or None when there is nothing to package."""
+    make = globals().get("package_network")
+    if not callable(make) or not re.search(r"\bpackag", state["task"].lower()):
+        return None
+    texts = "\n".join(tool_texts(state)[1:])
+    names = [n for n in re.findall(r"Trained (.+?) v\d+ on ", texts) if n != "None"]
+    if not names and callable(globals().get("list_networks")):
+        saved = re.findall(r'"name":\s*"([^"]+)"', str(list_networks()))
+        names = [n for n in sorted(saved, key=len) if n.lower() in state["task"].lower()]
+    if not names:
+        return None
+    emit("dispatch", node="critic", tool="package_network")
+    output = str(make(name=names[-1]))
+    emit("tool_result", node="critic", tool="package_network", preview=output[:200])
+    state.setdefault("critic_results", []).append(output)
+    link = re.search(r'"download":\s*"([^"]+)"', output)
+    return link.group(1) if link else None
 
 
 def ungrounded(state, answer):
@@ -269,6 +305,9 @@ def ungrounded(state, answer):
     if "package_network" in offered and re.search(r"\bpackag", asked) and '"packaged": true' not in results:
         problems.append("The task asks for a package, and none was made. Call package_network on the trained "
                         "design and give the link it returns.")
+    if script_drift(state["task"], answer):
+        problems.insert(0, "The answer is in a different language and script from the user's message. Answer again, "
+                           "in the user's language.")
     limit = LIMIT.search(state["task"])
     if limit:
         scale = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6}.get((limit.group(2) or "").lower(), 1)
@@ -1034,6 +1073,7 @@ MODEL_PROMPT = (
     "before training: check_network reports learnables.\n"
     "Do not end your turn by describing what you will do next: do it, with the tools. Finish only when there is "
     "a trained result to report, or a reason you cannot get one.\n"
+    "Always answer in the language the user writes in.\n"
     "Never report a number no tool returned.")
 
 TEMPLATES = {
@@ -2384,6 +2424,11 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                          '        state["messages"].append({"role": "user", "content": f"A reviewer found problems:\\n{notes}\\n\\nRevise."})',
                          f"        return {to(c['back'])}{comment(c['back'])}"]
             if grounded:
+                body += ['    if unsupported and "none was made" in unsupported:',
+                         "        link = finish_package(state)",
+                         "        if link:",
+                         '            draft = f"{draft}\\n\\nThe critic packaged it, since the answer had not: {link}"',
+                         "            unsupported = ungrounded(state, draft)"]
                 body += ["    if unsupported:",
                          '        draft = f"{draft}\\n\\n[Did not pass the critic: {\' \'.join(unsupported.splitlines())}]"']
             if gated:

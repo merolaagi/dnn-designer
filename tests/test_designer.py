@@ -10063,6 +10063,53 @@ def _():
         assert needle in PAGE, needle
 
 
+@check("the critic sends back an answer that drifted into another language")
+def _():
+    import agentlab, re as _re
+    space = {"re": _re, "SCHEMAS": {}}
+    exec(agentlab.GROUNDED_CODE, space)
+    asked = {"task": "Package fashion_mnist_cnn_v2 version 2.", "messages": []}
+    thai = "ขั้นตอนในการแพ็คเกจเครือข่ายอาจรวมถึงการสร้างโค้ดที่สามารถเรียกใช้งานเครือข่ายได้โดยตรง"
+    assert "different language" in space["ungrounded"](asked, thai)
+    assert space["ungrounded"]({"task": "แพ็คเกจเครือข่ายนี้ให้หน่อย", "messages": []}, thai) is None
+    assert space["ungrounded"](asked, "Packaged it; the link is below.") is None
+    assert "Always answer in the language the user writes in." in agentlab.MODEL_PROMPT
+
+
+@check("the critic sends back an answer that drifted into another language")
+def _():
+    import agentlab, re as _re
+    space = {"re": _re, "SCHEMAS": {}}
+    exec(agentlab.GROUNDED_CODE, space)
+    asked = {"task": "Package fashion_mnist_cnn_v2 version 2.", "messages": []}
+    thai = "ขั้นตอนในการแพ็คเกจเครือข่ายอาจรวมถึงการสร้างโค้ดที่สามารถเรียกใช้งานเครือข่ายได้โดยตรง"
+    assert "different language" in space["ungrounded"](asked, thai)
+    assert space["ungrounded"]({"task": "แพ็คเกจเครือข่ายนี้ให้หน่อย", "messages": []}, thai) is None
+    assert space["ungrounded"](asked, "Packaged it; the link is below.") is None
+    assert "Always answer in the language the user writes in." in agentlab.MODEL_PROMPT
+
+
+@check("when the model never packages, the critic packages what it trained or what the task named")
+def _():
+    import agentlab, re as _re
+    made = []
+    space = {"re": _re, "SCHEMAS": {"package_network": {}}, "emit": lambda *a, **k: None,
+             "package_network": lambda **a: made.append(a["name"]) or
+                 '{"packaged": true, "download": "/api/package/file/%s.zip"}' % a["name"],
+             "list_networks": lambda **a: '[{"name": "fashion_mnist_cnn"}, {"name": "fashion_mnist_cnn_v2"}]'}
+    exec(agentlab.GROUNDED_CODE, space)
+    trained = {"task": "Train it for 3 epochs and package it.", "messages": [{"role": "user", "content": [
+        {"type": "tool_result", "content": "Trained ShirtNet v3 on fashion_mnist: done, epoch 3 of 3."}]}]}
+    assert "none was made" in space["ungrounded"](trained, "Here is the plan.")
+    assert space["finish_package"](trained) == "/api/package/file/ShirtNet.zip" and made == ["ShirtNet"]
+    assert space["ungrounded"](trained, "Packaged.") is None
+    named = {"task": "Package fashion_mnist_cnn_v2 version 2.", "messages": []}
+    assert space["finish_package"](named) == "/api/package/file/fashion_mnist_cnn_v2.zip"
+    assert space["finish_package"]({"task": "Summarize this run.", "messages": []}) is None
+    src = agentlab.codegen(agentlab.template("modelbuilder"))["source"]
+    assert "link = finish_package(state)" in src and "The critic packaged it" in src
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

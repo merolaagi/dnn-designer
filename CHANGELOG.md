@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.2.3
+
+- **Answers stay in your language.** Small local models sometimes drift into
+  another language partway through (qwen2.5 into Thai, say). The Model builder
+  is told to answer in the language you write in, and its critic sends back an
+  answer written mostly in a different script from your message.
+- **You get the package even when the model won't make it.** If you asked for a
+  package and the model still hasn't called package_network after its
+  revisions, the critic packages the design it trained (or the one your message
+  names) itself and adds the download link to the answer: "The critic packaged
+  it, since the answer had not: …".
+
+## 4.2.3
+
+- **Answers stay in your language.** Small local models sometimes slide into
+  another language partway through a conversation (qwen2.5 into Thai, say). The
+  Model builder is now told to answer in the language you write in, and its
+  critic sends back any answer written mostly in a different script from your
+  message.
+
 ## 4.2.2
 
 - **A failed check can't be missed.** When the critic runs out of revisions,
