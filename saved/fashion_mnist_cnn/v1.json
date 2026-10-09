@@ -1,0 +1,203 @@
+{
+  "name": "fashion_mnist_cnn",
+  "nodes": [
+    {
+      "id": "in",
+      "type": "Input",
+      "label": "input",
+      "params": {
+        "shape": [
+          1,
+          28,
+          28
+        ]
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "l1",
+      "type": "Linear",
+      "params": {
+        "units": 16
+      },
+      "x": 0,
+      "y": 110
+    },
+    {
+      "id": "l2",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 220
+    },
+    {
+      "id": "l3",
+      "type": "Linear",
+      "params": {
+        "units": 16
+      },
+      "x": 0,
+      "y": 330
+    },
+    {
+      "id": "l4",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 440
+    },
+    {
+      "id": "l5",
+      "type": "Linear",
+      "params": {
+        "units": 32
+      },
+      "x": 0,
+      "y": 550
+    },
+    {
+      "id": "l6",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 660
+    },
+    {
+      "id": "l7",
+      "type": "Linear",
+      "params": {
+        "units": 32
+      },
+      "x": 0,
+      "y": 770
+    },
+    {
+      "id": "l8",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 880
+    },
+    {
+      "id": "l9",
+      "type": "Flatten",
+      "params": {},
+      "x": 0,
+      "y": 990
+    },
+    {
+      "id": "l10",
+      "type": "Linear",
+      "params": {
+        "units": 128
+      },
+      "x": 0,
+      "y": 1100
+    },
+    {
+      "id": "l11",
+      "type": "Activation",
+      "params": {
+        "kind": "relu"
+      },
+      "x": 0,
+      "y": 1210
+    },
+    {
+      "id": "l12",
+      "type": "Linear",
+      "params": {
+        "activation": "softmax",
+        "units": 10
+      },
+      "x": 0,
+      "y": 1320
+    },
+    {
+      "id": "out",
+      "type": "Output",
+      "label": "output",
+      "params": {
+        "task": "classification"
+      },
+      "x": 0,
+      "y": 1430
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "in",
+      "target": "l1"
+    },
+    {
+      "id": "e2",
+      "source": "l1",
+      "target": "l2"
+    },
+    {
+      "id": "e3",
+      "source": "l2",
+      "target": "l3"
+    },
+    {
+      "id": "e4",
+      "source": "l3",
+      "target": "l4"
+    },
+    {
+      "id": "e5",
+      "source": "l4",
+      "target": "l5"
+    },
+    {
+      "id": "e6",
+      "source": "l5",
+      "target": "l6"
+    },
+    {
+      "id": "e7",
+      "source": "l6",
+      "target": "l7"
+    },
+    {
+      "id": "e8",
+      "source": "l7",
+      "target": "l8"
+    },
+    {
+      "id": "e9",
+      "source": "l8",
+      "target": "l9"
+    },
+    {
+      "id": "e10",
+      "source": "l9",
+      "target": "l10"
+    },
+    {
+      "id": "e11",
+      "source": "l10",
+      "target": "l11"
+    },
+    {
+      "id": "e12",
+      "source": "l11",
+      "target": "l12"
+    },
+    {
+      "id": "e13",
+      "source": "l12",
+      "target": "out"
+    }
+  ]
+}

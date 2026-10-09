@@ -2308,6 +2308,91 @@ def _save_version(name: str, graph: Dict[str, Any]) -> int:
     return save_graph(name, GraphPayload(graph=graph))["version"]
 
 
+# What a model writing a network from memory tends to call things, mostly from Keras and torch.nn.
+_TYPE_ALIASES = {
+    "conv2d": "Conv2d", "conv2D": "Conv2d", "convolution2d": "Conv2d", "conv": "Conv2d", "convolution": "Conv2d",
+    "conv1d": "Conv1d", "convolution1d": "Conv1d",
+    "maxpool2d": "MaxPool2d", "maxpooling2d": "MaxPool2d", "maxpool": "MaxPool2d", "maxpooling": "MaxPool2d",
+    "avgpool2d": "AvgPool2d", "averagepooling2d": "AvgPool2d", "avgpool": "AvgPool2d",
+    "maxpool1d": "MaxPool1d", "maxpooling1d": "MaxPool1d",
+    "globalaveragepooling2d": "GlobalAvgPool", "globalavgpool2d": "GlobalAvgPool", "globalavgpool": "GlobalAvgPool",
+    "adaptiveavgpool2d": "AdaptiveAvgPool2d",
+    "dense": "Linear", "linear": "Linear", "fullyconnected": "Linear", "fc": "Linear",
+    "dropout": "Dropout", "dropout2d": "Dropout2d", "flatten": "Flatten",
+    "batchnorm": "BatchNorm", "batchnormalization": "BatchNorm", "batchnorm2d": "BatchNorm2d",
+    "batchnorm1d": "BatchNorm1d", "layernorm": "LayerNorm", "layernormalization": "LayerNorm",
+}
+_ACTIVATIONS = {"relu", "leaky_relu", "leakyrelu", "gelu", "silu", "swish", "tanh", "sigmoid", "elu", "softmax"}
+_PARAM_ALIASES = {"kernel_size": "kernel", "pool_size": "kernel", "strides": "stride", "out_channels": "filters",
+                  "channels": "filters", "num_filters": "filters", "out_features": "units", "neurons": "units",
+                  "size": "units", "p": "rate", "dropout": "rate", "activation_function": "activation"}
+
+
+def _normalize_layers(layers_in: List[Any]) -> Dict[str, Any]:
+    """Read a layer list the way it was meant: the designer's own names for Keras and torch.nn ones.
+
+    Returns {"layers": [...], "notes": [...]} where notes say what was read differently, so the
+    model learns the names, or {"error": ...} naming a layer it could not place, with near matches.
+    """
+    import difflib
+    known = {n.lower(): n for n in layers.REGISTRY}
+    out: List[Dict[str, Any]] = []
+    notes: List[str] = []
+    flat = False                          # past a Flatten: normalisation is 1-d from here
+    for i, raw in enumerate(layers_in):
+        if not isinstance(raw, dict):
+            return {"error": f"Layer {i + 1} is not an object like {{\"type\": \"Linear\", \"units\": 64}}."}
+        layer = dict(raw)
+        written = str(layer.pop("type", "") or layer.pop("layer", "") or "")
+        key = written.replace("_", "").replace(" ", "").lower()
+        if written in layers.REGISTRY:
+            kind = written
+        elif key in _ACTIVATIONS:
+            kind, layer = "Activation", {"kind": {"leakyrelu": "leaky_relu", "swish": "silu"}.get(key, key)}
+        elif key in _TYPE_ALIASES:
+            kind = _TYPE_ALIASES[key]
+        elif key in known:
+            kind = known[key]
+        else:
+            names = {**known, **{a: r for a, r in _TYPE_ALIASES.items() if r in layers.REGISTRY}}
+            close = list(dict.fromkeys(names[k] for k in difflib.get_close_matches(key, list(names), n=4, cutoff=0.6)))
+            return {"error": f"Layer {i + 1}: there is no layer type {written!r}."
+                             + (f" Did you mean {', '.join(close)}?" if close else "")
+                             + " layer_catalog lists them all."}
+        if kind == "BatchNorm":
+            kind = "BatchNorm1d" if flat else "BatchNorm2d"
+        if kind != written:
+            notes.append(f"layer {i + 1}: read {written} as {kind}")
+        for alias, real in _PARAM_ALIASES.items():
+            if alias in layer and real not in layer:
+                layer[real] = layer.pop(alias)
+                notes.append(f"layer {i + 1}: read {alias} as {real}")
+        if isinstance(layer.get("kernel"), (list, tuple)):
+            layer["kernel"] = layer["kernel"][0]
+        if isinstance(layer.get("stride"), (list, tuple)):
+            layer["stride"] = layer["stride"][0]
+        activation = str(layer.pop("activation", "") or "").lower()
+        spec = layers.REGISTRY[kind]
+        allowed = {p["name"] for p in spec.params}
+        dropped = sorted(k for k in layer if k not in allowed)
+        for k in dropped:
+            layer.pop(k)
+        if dropped:
+            notes.append(f"layer {i + 1} ({kind}): ignored {', '.join(dropped)}, which it does not have")
+        out.append({"type": kind, **layer})
+        if kind == "Flatten":
+            flat = True
+        last = i == len(layers_in) - 1
+        if activation and activation not in ("linear", "none", "identity"):
+            if last and activation in ("softmax", "sigmoid"):
+                notes.append(f"layer {i + 1}: left out the final {activation}; the loss applies it during training, "
+                             "and predict.py applies it to answers")
+            else:
+                out.append({"type": "Activation", "kind": {"leakyrelu": "leaky_relu", "swish": "silu"}.get(activation, activation)})
+                notes.append(f"layer {i + 1}: its activation {activation} became an Activation layer after it")
+    return {"layers": out, "notes": notes}
+
+
 def _chain(spec: Dict[str, Any]) -> Dict[str, Any]:
     """A straight stack of layers, the way a model most easily describes a network."""
     shape = spec.get("input_shape") or [8]
@@ -2361,13 +2446,23 @@ def _designer_op(op: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if op == "design_network":
         if not name:
             return {"error": "Give the network a name."}
-        graph = args.get("graph") if isinstance(args.get("graph"), dict) else _chain(args)
+        notes: List[str] = []
+        if isinstance(args.get("graph"), dict):
+            graph = args["graph"]
+        else:
+            read = _normalize_layers(list(args.get("layers") or []))
+            if "error" in read:
+                return {"saved": False, "ok": False, "errors": [read["error"]],
+                        "hint": "Nothing was saved. Use the designer's layer names and design it again."}
+            notes = read["notes"]
+            graph = _chain({**args, "layers": read["layers"]})
         graph["name"] = name
         summary = _summary(graph)
+        extra = {"read_as": notes} if notes else {}
         if not summary["ok"]:
-            return {"saved": False, **summary, "hint": "Nothing was saved. Fix the errors and design it again."}
+            return {"saved": False, **summary, **extra, "hint": "Nothing was saved. Fix the errors and design it again."}
         version = _save_version(name, graph)
-        return {"saved": True, "name": _safe(name), "version": version, **summary}
+        return {"saved": True, "name": _safe(name), "version": version, **extra, **summary}
     graph, version = _latest(name)
     if graph is None:
         return {"error": version}

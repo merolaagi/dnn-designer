@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.2.1
+
+- **Agents may call layers what Keras and PyTorch call them.** design_network
+  now reads Conv2D, MaxPooling2D, Dense, ReLU, BatchNormalization and the like
+  as the designer's Conv2d, MaxPool2d, Linear, Activation and BatchNorm1d/2d;
+  kernel_size and pool_size as kernel, strides as stride; an `activation` on a
+  layer becomes an Activation layer after it, and a final softmax is left out
+  because the loss applies it. It says what it read differently, so the model
+  learns the names, and a name it cannot place gets its nearest matches.
+  Before, kernel_size was silently ignored and the default used.
+- **The critic checks the work was done, not only described.** When the task
+  asks for training, a training run has to have finished; when it asks for a
+  package, one has to have been made. An answer that describes the plan instead
+  goes back. A local model ending its turn with "Let's start by designing…" is
+  sent back to do it.
+
 ## 4.2.0
 
 **A critic that checks numbers, and networks you can hand to someone.**

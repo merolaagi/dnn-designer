@@ -260,6 +260,15 @@ def ungrounded(state, answer):
         problems.append("These numbers are not in any tool result: " + ", ".join(missing[:8]) + ". Report only what "
                         "the tools returned, or run the tool that measures it (check_network for parameters, "
                         "train_network for losses and accuracy).")
+    # what the task asked to be done, with the tool that does it here, has to have been done
+    offered = globals().get("SCHEMAS") or {}
+    asked, results = state["task"].lower(), "\n".join(texts[1:])
+    if "train_network" in offered and re.search(r"\btrain", asked) and not re.search(r"Trained .+?: done", results):
+        problems.append("The task asks for a trained network, and no training has finished in this run. Call "
+                        "train_network (fix the design first if it fails), then report what it returned.")
+    if "package_network" in offered and re.search(r"\bpackag", asked) and '"packaged": true' not in results:
+        problems.append("The task asks for a package, and none was made. Call package_network on the trained "
+                        "design and give the link it returns.")
     limit = LIMIT.search(state["task"])
     if limit:
         scale = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6}.get((limit.group(2) or "").lower(), 1)
@@ -2376,7 +2385,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                          f"        return {to(c['back'])}{comment(c['back'])}"]
             if grounded:
                 body += ["    if unsupported:",
-                         '        draft = f"{draft}\\n\\n[Unchecked: {unsupported.splitlines()[0]}]"']
+                         '        draft = f"{draft}\\n\\n[Did not pass the critic: {unsupported.splitlines()[0]}]"']
             if gated:
                 body += ["    if proof is None:",
                          f'        draft = f"{{draft}}\\n\\n[Not verified: no check printed a line starting {marker}.]"']
@@ -2670,7 +2679,7 @@ def _m_critic(p, node, graph, c):
                             "or more; a number matches when it is a tool's value, rounded as written"),
                             ("R", f"the revision limit, {R}")],
                 "arithmetic": [("critic calls", f"≤ R = {R}: none while a number is unsupported"),
-                               ("after R failed revisions", "the answer goes out marked Unchecked, naming the numbers")],
+                               ("after R failed revisions", "the answer goes out marked as failing the check, saying why")],
                 "freedom": ["The check is a string test, not a model: the agent cannot argue its way past it, only "
                             "go and get the number from a tool.",
                             "Small whole numbers are not checked, so a wrong epoch count or version number can "

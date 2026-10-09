@@ -9935,7 +9935,7 @@ def _():
     assert critic["params"]["gate"] == agentlab.GROUNDED_GATE
     src = agentlab.codegen(g)["source"]
     compile(agentlab.codegen(g, "langgraph")["source"], "lg", "exec")
-    assert "def ungrounded(state, answer):" in src and "[Unchecked: " in src
+    assert "def ungrounded(state, answer):" in src and "[Did not pass the critic: " in src
     space = {"__name__": "agent"}
     exec(compile(src, "agent", "exec"), space)  # noqa: S102
     tool = lambda c: {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": c}]}  # noqa: E731
@@ -9949,6 +9949,12 @@ def _():
     assert "105,866 learnable parameters, over the limit of 100,000" in said
     state["messages"].append(tool('{"name": "MiniNetSlim", "version": 3, "learnables": 52138}'))
     assert space["ungrounded"](state, "MiniNetSlim v3 has 52,138 parameters, 98.2% accurate.") is None
+    # asked to train and package: both have to have happened
+    asked = {"task": "Design a net, train it, package it.", "messages": [tool('{"saved": true}')]}
+    said = space["ungrounded"](asked, "Step 1: let's design it.")
+    assert "no training has finished" in said and "none was made" in said
+    asked["messages"] += [tool("Trained N v1 on mnist: done, epoch 1 of 1"), tool('{"packaged": true}')]
+    assert space["ungrounded"](asked, "Done: trained and packaged.") is None
     assert "Accept only numbers a tool reported" == agentlab.explain(g, critic["id"])["title"]
 
 
@@ -10027,6 +10033,25 @@ def _():
     for needle in ('id="btnPackage"', "/api/package/options", "/api/package?design=", "function tkMd"):
         assert needle in PAGE, needle
     assert '/api\\/package\\/file\\/' in PAGE, "package links in answers are clickable"
+
+
+@check("design_network reads Keras and torch.nn layer names, and says what it read")
+def _():
+    import main
+    main.list_graphs()
+    try:
+        r = main.designer_op("design_network", {"name": "zzAlias", "input_shape": [1, 28, 28], "task": "classification",
+                             "layers": [{"type": "Conv2D", "filters": 8, "kernel_size": 3, "activation": "relu"},
+                                        {"type": "MaxPooling2D", "pool_size": 2}, {"type": "Flatten"},
+                                        {"type": "Dense", "units": 10, "activation": "softmax"}]})
+        assert r["saved"], r
+        assert [l["type"] for l in r["layers"]] == ["Input", "Conv2d", "Activation", "MaxPool2d", "Flatten", "Linear", "Output"]
+        assert "layer 1: read kernel_size as kernel" in r["read_as"]
+        assert any("left out the final softmax" in n for n in r["read_as"])
+        bad = main.designer_op("design_network", {"name": "zzAlias", "input_shape": [4], "layers": [{"type": "Densee"}]})
+        assert bad["saved"] is False and "Did you mean Linear?" in bad["errors"][0]
+    finally:
+        main.delete_graph("zzAlias")
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
