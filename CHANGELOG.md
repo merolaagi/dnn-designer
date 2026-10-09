@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.3.1
+
+- **A failed roster import says why.** The message now shows the server's
+  reason, or its status and reply, instead of "The import failed."
+
 ## 4.3.0
 
 - **Specialists.** Talk to agents can import a roster of role files, such as

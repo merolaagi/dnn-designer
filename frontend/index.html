@@ -16100,9 +16100,18 @@ async function tkSpecialists(){
       <div class="tk-sp-note" id="tkSpMsg" style="margin-top:8px"></div></div>`;
     const go = async body => {
       $("tkSpMsg").textContent = "Importing…";
-      const r = await fetch(API + "/api/agentlab/roster/import", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
-      const out = await r.json();
-      if (!r.ok){ $("tkSpMsg").textContent = (out.detail && out.detail.message) || "The import failed."; return; }
+      let r, out = {}, raw = "";
+      try{
+        r = await fetch(API + "/api/agentlab/roster/import", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+        raw = await r.text();
+        try{ out = JSON.parse(raw); } catch {}
+      } catch (exc){ $("tkSpMsg").textContent = "The server did not answer: " + (exc.message || exc); return; }
+      if (!r.ok){
+        const d = out.detail;
+        $("tkSpMsg").textContent = (d && d.message) || (typeof d === "string" ? d : "")
+          || `The import failed: the server answered ${r.status}${raw ? " (" + raw.slice(0, 200) + ")" : ""}.`;
+        return;
+      }
       toast(`${out.count} specialists imported`);
       tkSpecialists();
     };

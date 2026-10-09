@@ -450,6 +450,8 @@ def _roster_action(fn, *args):
         raise HTTPException(404, detail={"message": "That specialist is not in the imported roster."})
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
+    except Exception as exc:  # noqa: BLE001 - an import can fail many ways; say which
+        raise HTTPException(500, detail={"message": f"The import failed: {type(exc).__name__}: {exc}"})
 
 
 @app.get("/api/agentlab/roster")
