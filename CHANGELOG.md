@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.8.1
+
+**The Agent lab's side panel can be resized, and no tab is hidden.**
+
+- **Drag its edge.** The line between the canvas and the Anatomy … Monitor
+  panel is a handle: drag it to make the panel wider or narrower (up to 70% of
+  the window), double-click it to go back to the default, or focus it and use
+  the arrow keys. The width is remembered in this browser. The panel now starts
+  at 420 pixels instead of 370.
+- **All nine tabs show.** When the panel is too narrow for them, the tabs wrap
+  onto a second row. Before, Study and Monitor sat off the right edge, reachable
+  only by a sideways scroll that a Mac hides.
+- **Tests no longer need accounts switched off.** Two tests from 3.8.0 made web
+  requests that a signed-in install refuses; they now call the code directly.
+
 ## 3.8.0
 
 **Math search, a critic that needs proof, and agents that train networks.**

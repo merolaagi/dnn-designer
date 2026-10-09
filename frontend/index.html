@@ -2431,11 +2431,23 @@ body.sizing{user-select:none}
 .al-node .port.in{left:-8px}
 .al-node .port.out{right:-8px}
 .al-node .port.out:hover,.al-node .port.in.target{background:var(--c)}
-.al-insp{width:370px;flex:none;display:flex;flex-direction:column;border-left:1px solid var(--paper-3);
+.al-insp{width:var(--al-insp-w,420px);min-width:300px;flex:none;display:flex;flex-direction:column;
   background:var(--paper);min-height:0}
-.al-tabs{display:flex;border-bottom:1px solid var(--paper-3);background:#fff;flex:none}
-.al-tabs button{flex:1 0 auto;background:none;border:0;border-bottom:2px solid transparent;padding:9px 6px;
-  font-size:12px;color:var(--muted);white-space:nowrap}
+/* the edge between canvas and panel: drag to resize, double-click to reset */
+.al-split{flex:none;width:7px;margin:0 -3px;position:relative;z-index:4;cursor:col-resize;touch-action:none}
+.al-split::before{content:"";position:absolute;top:0;bottom:0;left:3px;width:1px;background:var(--paper-3);transition:background .12s,width .12s,left .12s}
+.al-split::after{content:"";position:absolute;top:50%;left:1px;width:5px;height:34px;margin-top:-17px;border-radius:3px;
+  background:#C3CDD9;opacity:0;transition:opacity .12s}
+.al-split:hover::before,.al-split.drag::before,.al-split:focus-visible::before{left:2px;width:3px;background:#2D7DD2}
+.al-split:hover::after,.al-split.drag::after{opacity:1}
+.al-split:focus-visible{outline:none}
+body.al-resizing{cursor:col-resize;user-select:none}
+body.al-resizing iframe,body.al-resizing .al-stage{pointer-events:none}
+/* tabs wrap onto a second row rather than hiding off the edge */
+.al-tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--paper-3);background:#fff;flex:none;padding:0 4px}
+.al-tabs button{flex:1 0 auto;background:none;border:0;border-bottom:2px solid transparent;padding:9px 8px;
+  font-size:12px;color:var(--muted);white-space:nowrap;cursor:pointer}
+.al-tabs button:hover{color:var(--text)}
 .al-tabs button.on{color:var(--text);border-bottom-color:var(--amber);font-weight:600}
 .al-pane{flex:1;overflow-y:auto;padding:14px 16px 32px;font-size:13px;line-height:1.5}
 .al-pane h3{margin:0 0 2px;font-size:16px}
@@ -2463,7 +2475,6 @@ body.sizing{user-select:none}
   background:var(--paper-3);color:var(--text);line-height:15px}
 .al-badge:empty{display:none}
 .al-badge.bad{background:var(--bad);color:#fff}
-.al-tabs{overflow-x:auto}
 .al-node.risk::after{content:"";position:absolute;top:-5px;right:-5px;width:11px;height:11px;border-radius:50%;
   background:var(--bad);box-shadow:0 0 0 2px #fff}
 .al-node.trail{box-shadow:0 0 0 3px var(--amber)}
@@ -13395,7 +13406,9 @@ function alBuildShell(){
             Drag an organ from the left, or pick a starting design from New above. Connect blocks by dragging
             from a right-hand port to a left-hand port.<span class="al-emptyundo">Cleared it by mistake? Undo with ${AL_MOD}Z.</span></div></div>
       </div>
-      <div class="al-insp">
+      <div class="al-split" id="alSplit" role="separator" aria-orientation="vertical" tabindex="0"
+           aria-label="Resize the panel" title="Drag to resize · double-click to reset"></div>
+      <div class="al-insp" id="alInsp">
         <div class="al-tabs" role="tablist">
           <button data-altab="anatomy" class="on">Anatomy</button>
           <button data-altab="lines">Code</button>
@@ -13470,6 +13483,7 @@ function alBuildShell(){
     alUndoToast(`Removed ${n} block${n === 1 ? "" : "s"}.`);
   });
   $("alHelpBtn").addEventListener("click", alToggleHelp);
+  alWireSplit();
   $("alSave").addEventListener("click", () => alSaveDesign(false));
   $("alBack").addEventListener("click", alDrillOut);
   $("alRunTop").addEventListener("click", () => { alTab("physio"); alRun(); });
@@ -13623,6 +13637,47 @@ function alStatus(){
     else { cls = "dirty"; text = `Unsaved changes · ${blocks}`; tip = "Edited since the last save. The draft is kept in this browser."; }
   }
   el.className = "al-status " + cls; el.textContent = text; el.title = tip;
+}
+
+/* The panel's width: dragged on its edge, kept in this browser, reset by a double-click. */
+const AL_PANEL_DEFAULT = 420;
+function alPanelWidth(w){
+  const max = Math.max(320, Math.round(window.innerWidth * 0.7));
+  const width = Math.round(Math.min(max, Math.max(300, w)));
+  $("alMain").style.setProperty("--al-insp-w", width + "px");
+  $("alSplit").setAttribute("aria-valuenow", width);
+  return width;
+}
+
+function alWireSplit(){
+  const bar = $("alSplit");
+  let saved = AL_PANEL_DEFAULT;
+  try{ saved = Number(localStorage.getItem("agentlab-panel")) || AL_PANEL_DEFAULT; } catch {}
+  alPanelWidth(saved);
+  const keep = w => { try{ localStorage.setItem("agentlab-panel", String(w)); } catch {} };
+  bar.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    bar.setPointerCapture(ev.pointerId);
+    bar.classList.add("drag"); document.body.classList.add("al-resizing");
+    const right = $("alInsp").getBoundingClientRect().right;
+    const move = e => alPanelWidth(right - e.clientX);
+    const up = () => {
+      bar.removeEventListener("pointermove", move);
+      bar.classList.remove("drag"); document.body.classList.remove("al-resizing");
+      keep($("alInsp").getBoundingClientRect().width);
+      alRenderEdges();
+    };
+    bar.addEventListener("pointermove", move);
+    bar.addEventListener("pointerup", up, {once: true});
+    bar.addEventListener("pointercancel", up, {once: true});
+  });
+  bar.addEventListener("dblclick", () => { keep(alPanelWidth(AL_PANEL_DEFAULT)); alRenderEdges(); });
+  bar.addEventListener("keydown", ev => {
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+    ev.preventDefault();
+    const w = $("alInsp").getBoundingClientRect().width + (ev.key === "ArrowLeft" ? 24 : -24);
+    keep(alPanelWidth(w)); alRenderEdges();
+  });
 }
 
 function alToggleMenu(id){

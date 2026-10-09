@@ -9490,6 +9490,13 @@ def _():
     assert report["ok"], report["errors"]
     assert 'd.kind === "net_design"' in PAGE and "/api/graphs" in PAGE
 
+
+@check("the agent lab's side panel can be resized, and its tabs never hide off the edge")
+def _():
+    for needle in ('id="alSplit"', 'role="separator"', "function alWireSplit", "agentlab-panel",
+                   "width:var(--al-insp-w,420px)", ".al-tabs{display:flex;flex-wrap:wrap"):
+        assert needle in PAGE, needle
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
