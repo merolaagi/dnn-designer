@@ -10053,6 +10053,16 @@ def _():
     finally:
         main.delete_graph("zzAlias")
 
+@check("a failed critic names every problem, and the chat shows it as a warning")
+def _():
+    import agentlab
+    src = agentlab.codegen(agentlab.template("modelbuilder"))["source"]
+    assert "' '.join(unsupported.splitlines())" in src
+    compile(src, "agent.py", "exec")
+    for needle in ("tk-warn", "The critic did not pass this answer", "Treat the answer below as unchecked."):
+        assert needle in PAGE, needle
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

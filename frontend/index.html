@@ -2498,6 +2498,8 @@ body[data-page="pageTalk"] #dockTab{display:none}
 .tk-answer pre{background:#16202E;color:#E4EBF3;border-radius:8px;padding:10px 12px;overflow-x:auto;font:12px/1.5 var(--mono);margin:0 0 9px}
 .tk-answer code{font-family:var(--mono);font-size:12px;background:var(--paper);padding:1px 4px;border-radius:4px}
 .tk-answer pre code{background:none;padding:0}
+.tk-warn{background:#FFF6E5;border:1px solid #EFCF8F;color:#6B4A0E;border-radius:10px;padding:9px 13px;margin-bottom:8px;font-size:12.5px;line-height:1.5}
+.tk-warn b{display:block;margin-bottom:2px}.tk-warn span{display:block;margin-top:4px;font-style:italic}
 .tk-answer.err{border-color:#EBC7C2;background:#FDF3F2;color:#8C2F27}
 .tk-work{margin-bottom:8px;font-size:12px;color:var(--muted)}
 .tk-work summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:3px 0}
@@ -16133,7 +16135,11 @@ function tkTurnHtml(t, i){
   const meta = [t.steps ? `${t.steps} model call${t.steps === 1 ? "" : "s"}` : "", t.tools && t.tools.length ? `used ${t.tools.join(", ")}` : "",
     t.declined && t.declined.length ? `you declined ${t.declined.join(", ")}` : "",
     t.seconds != null ? `${t.seconds} s` : "", t.mode === "rehearsal" ? "rehearsal" : ""].filter(Boolean).join(" · ");
-  const body = t.answer ? `<div class="tk-answer">${tkMd(t.answer)}</div>`
+  const flag = /\n*\[(Did not pass the critic|Not verified): ([\s\S]*?)\]\s*$/.exec(t.answer || "");
+  const answer = flag ? t.answer.slice(0, flag.index) : t.answer;
+  const warn = flag ? `<div class="tk-warn"><b>${flag[1] === "Not verified" ? "Not verified" : "The critic did not pass this answer"}</b>
+    ${alEsc(flag[2])}<span>Treat the answer below as unchecked.</span></div>` : "";
+  const body = t.answer ? `${warn}<div class="tk-answer">${tkMd(answer)}</div>`
     : `<div class="tk-answer err">${alEsc(t.status === "interrupted" ? "The server stopped while this was running."
         : t.status === "stopped" ? "Stopped." : t.error || "No answer came back.")}</div>`;
   return body + `<div class="tk-meta">${alEsc(meta)}

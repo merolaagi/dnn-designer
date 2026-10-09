@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.2.2
+
+- **A failed check can't be missed.** When the critic runs out of revisions,
+  its note now lists every problem it found (over the parameter limit, no
+  package, unreported numbers), not just the first. In Talk to agents that note
+  is an amber box above the answer, "The critic did not pass this answer",
+  instead of a line at the bottom.
+
 ## 4.2.1
 
 - **Agents may call layers what Keras and PyTorch call them.** design_network

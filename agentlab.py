@@ -2385,7 +2385,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                          f"        return {to(c['back'])}{comment(c['back'])}"]
             if grounded:
                 body += ["    if unsupported:",
-                         '        draft = f"{draft}\\n\\n[Did not pass the critic: {unsupported.splitlines()[0]}]"']
+                         '        draft = f"{draft}\\n\\n[Did not pass the critic: {\' \'.join(unsupported.splitlines())}]"']
             if gated:
                 body += ["    if proof is None:",
                          f'        draft = f"{{draft}}\\n\\n[Not verified: no check printed a line starting {marker}.]"']
