@@ -15531,9 +15531,13 @@ async function tkOpenPage(){
 
 async function tkRefreshList(){
   try{
-    const d = await (await fetch(API + "/api/agentlab/conversations")).json();
-    tkState.list = d.conversations || []; tkState.agents = d.agents || [];
-  } catch {}
+    const r = await fetch(API + "/api/agentlab/conversations");
+    if (!r.ok) throw new Error(`the server answered ${r.status}`);
+    const d = await r.json();
+    tkState.list = d.conversations || []; tkState.agents = d.agents || []; tkState.problem = null;
+  } catch (exc){
+    tkState.problem = exc.message || "the server did not answer";
+  }
   const host = $("tkList");
   if (!tkState.list.length){
     host.innerHTML = `<div class="tk-empty-list">No conversations yet. Start one and it is kept here.</div>`;
@@ -15558,9 +15562,18 @@ function tkAgo(t){
     : new Date(t * 1000).toLocaleDateString();
 }
 
-$("tkNew").onclick = () => { tkState.conv = null; try{ localStorage.removeItem("tk-conversation"); } catch {} tkPicker(); tkRefreshList(); };
+$("tkNew").onclick = async () => {
+  if (tkState.problem) await tkRefreshList(); tkState.conv = null; try{ localStorage.removeItem("tk-conversation"); } catch {} tkPicker(); tkRefreshList(); };
 
 function tkPicker(){
+  if (tkState.problem && !tkState.agents.length){
+    $("tkMain").innerHTML = `<div class="tk-scroll"><div class="tk-pick"><h2>The agents could not be listed</h2>
+      <p>Asking the server for them failed: ${alEsc(tkState.problem)}. A 404 means the server is still running code from
+        before Talk to agents existed: restart it, then reload this page.</p>
+      <button class="btn" id="tkRetry">Try again</button></div></div>`;
+    $("tkRetry").onclick = async () => { await tkRefreshList(); tkPicker(); };
+    return;
+  }
   const starting = tkState.agents.filter(a => a.kind === "starting");
   const saved = tkState.agents.filter(a => a.kind === "saved");
   const card = a => `<button class="tk-card" data-kind="${a.kind}" data-key="${alEsc(a.key)}"><b>${alEsc(a.name)}</b>

@@ -9640,7 +9640,7 @@ def _():
 def _():
     for needle in ('data-page="pageTalk"', 'id="pageTalk"', "pageTalk: () => tkOpenPage()", "function tkFollow",
                    "/api/agentlab/conversations", "/answer`", "function tkOpenInLab", "function tkMd",
-                   'body[data-page="pageTalk"] .hd-design'):
+                   'body[data-page="pageTalk"] .hd-design', "The agents could not be listed"):
         assert needle in PAGE, needle
     import main
     paths = {getattr(r, "path", "") for r in main.app.routes}

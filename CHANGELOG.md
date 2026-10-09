@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.1
+
+- **Talk to agents says when the server is out of date.** If the server is
+  still running code from before 4.0, asking it for agents fails, and the page
+  used to show an empty list with nothing to click, so New conversation seemed
+  to do nothing. It now says the agents could not be listed, why, and to restart
+  the server, with a Try again button.
+
 ## 4.0.0
 
 **Talk to agents.** A new page on the rail, under Agent lab, where you pick an
