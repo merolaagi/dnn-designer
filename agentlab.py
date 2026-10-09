@@ -64,6 +64,7 @@ PROVIDERS = {"default": "The default in Settings", **{k: v["name"] for k, v in _
 LIMIT = ("max_calls", "Calls allowed per run (0 for no limit)")
 REVIEW_ONLY = "the critic model's review"
 VERIFIER_GATE = "a verifier's line, then the review"
+GROUNDED_GATE = "every number traced to a tool, then the review"
 SANDBOXED, UNRESTRICTED = "sandboxed", "unrestricted (runs as you, no limits)"
 
 # The code sandbox every generated file carries when its code executor is sandboxed, and the
@@ -179,6 +180,11 @@ DESIGNER_TOOLS = [
     {"name": "review_network", "description": "Have the designer's reviewer read a saved design and report what is "
      "wrong or wasteful in it.",
      "schema": {"type": "object", "properties": _NAME, "required": ["name"]}},
+    {"name": "package_network", "description": "Package a saved design as an installable zip: the PyTorch code, its "
+     "newest trained weights, an install script, a predict script, a small server and a README with the real "
+     "numbers. It is loaded and run once before it is offered. Returns the download link to give the user.",
+     "schema": {"type": "object", "properties": {**_NAME, "checkpoint": {"type": "string",
+                "description": "Particular trained weights by file name (default: the newest)"}}, "required": ["name"]}},
     {"name": "edit_network", "description": "Change a saved design with a command, saved as a new version if it still "
      "builds: \"add dropout after l2\", \"set units to 128 on l1\", \"remove l3\", \"add batchnorm after l1\".",
      "schema": {"type": "object", "properties": {**_NAME, "command": {"type": "string"}}, "required": ["name", "command"]}},
@@ -197,6 +203,75 @@ EXPERIMENT_SCHEMA = {"type": "object", "properties": {
     "vary": {"type": "array", "items": {"type": "string"}, "description": "For a sweep: lr, batch_size, optimizer"},
     "trials": {"type": "integer"}, "epochs": {"type": "integer"}},
     "required": ["kind", "dataset"]}
+
+GROUNDED_CODE = r'''# ---- the critic's check: every number in the answer came from a tool ----
+NUMBER = re.compile(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?%?")
+LIMIT = re.compile(r"(?:under|less than|fewer than|below|at most|no more than|max(?:imum)?(?: of)?)\s+"
+                   r"([\d,]+(?:\.\d+)?)\s*(k|thousand|m|million)?\s+(?:learnable\s+)?(?:parameters|params|weights)",
+                   re.IGNORECASE)
+
+
+def numbers_in(text):
+    """(as written, value, decimals, is a percentage) for every number in the text."""
+    out = []
+    for match in NUMBER.finditer(str(text)):
+        raw = match.group(0)
+        body = raw.rstrip("%").replace(",", "")
+        try:
+            value = float(body)
+        except ValueError:
+            continue
+        mantissa = body.lower().split("e")[0]
+        decimals = len(mantissa.split(".")[1]) if "." in mantissa else 0
+        out.append((raw, value, decimals, raw.endswith("%")))
+    return out
+
+
+def tool_texts(state):
+    """What the tools returned in this run, and what the person asked: the only sources of numbers."""
+    texts = [state["task"]]
+    for message in state["messages"]:
+        content = message["content"]
+        if isinstance(content, list):
+            texts += [str(b.get("content", "")) for b in content if b.get("type") == "tool_result"]
+        elif message["role"] == "user" and not str(content).startswith("A reviewer found problems"):
+            texts.append(str(content))
+    return texts
+
+
+def ungrounded(state, answer):
+    """Why the answer cannot pass yet: numbers no tool reported, or a limit the result breaks."""
+    texts = tool_texts(state)
+    known = [v for text in texts for _, v, _, _ in numbers_in(text)]
+
+    def found(value, decimals, percent):
+        targets = known + ([v * 100 for v in known] if percent else [])
+        step = 10 ** -decimals
+        return any(abs(value - round(v, decimals)) <= step / 2 + 1e-9 or value == v for v in targets)
+
+    missing = []
+    for raw, value, decimals, percent in numbers_in(answer):
+        if decimals == 0 and not percent and abs(value) < 1000:
+            continue                     # small whole numbers: epochs, layers, kernel sizes, list items
+        if not found(value, decimals, percent) and raw not in missing:
+            missing.append(raw)
+    problems = []
+    if missing:
+        problems.append("These numbers are not in any tool result: " + ", ".join(missing[:8]) + ". Report only what "
+                        "the tools returned, or run the tool that measures it (check_network for parameters, "
+                        "train_network for losses and accuracy).")
+    limit = LIMIT.search(state["task"])
+    if limit:
+        scale = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6}.get((limit.group(2) or "").lower(), 1)
+        cap = float(limit.group(1).replace(",", "")) * scale
+        counts = re.findall(r'"learnables":\s*(\d+)|(\d[\d,]*) learnable parameters', "\n".join(texts[1:]))
+        if counts:
+            latest = float((counts[-1][0] or counts[-1][1]).replace(",", ""))
+            if latest > cap:
+                problems.append(f"The network the tools last reported has {int(latest):,} learnable parameters, over "
+                                f"the limit of {int(cap):,} in the task. Make it smaller, check it, and train that one.")
+    return "\n".join(problems) or None
+'''
 
 TRAIN_DESCRIPTION = (
     "Train the network design {design} from the network canvas and get back its training and validation "
@@ -674,7 +749,7 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         physiology="Runs after a draft. Notes become a new message to the core, which triggers another lap.",
         failure="Rubber-stamping. Revising forever without a limit.",
         params={"max_revisions": _p("Max revisions", 2, "number"),
-                "gate": _p("What it needs to pass", REVIEW_ONLY, "choice", [REVIEW_ONLY, VERIFIER_GATE]),
+                "gate": _p("What it needs to pass", REVIEW_ONLY, "choice", [REVIEW_ONLY, VERIFIER_GATE, GROUNDED_GATE]),
                 "marker": _p("The verifier's line starts with", "VERIFIED")}),
     "short_mem": dict(
         name="Working memory", system="memory", short="The context window",
@@ -774,8 +849,8 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         anatomy=("The network canvas, as tools. The agent can list the saved designs, read the layer catalog, "
                  "design a network as a stack of layers, check its shapes, have it reviewed, and edit it with the "
                  "same commands the canvas assistant understands."),
-        inside=("Six tools: list_networks, layer_catalog, design_network, check_network, review_network and "
-                "edit_network. They run the designer's own shape checker and reviewer, and save through its "
+        inside=("Seven tools: list_networks, layer_catalog, design_network, check_network, review_network, "
+                "edit_network, and package_network, which makes an installable zip. They run the designer's own shape checker and reviewer, and save through its "
                 "versioned store."),
         physiology=("Each call returns JSON the model reads: shapes layer by layer, parameter counts, errors, or the "
                     "review's findings. A design that does not build is not saved. Saving only ever adds a design "
@@ -943,8 +1018,9 @@ MODEL_PROMPT = (
     "training loss: a large gap means it memorises.\n"
     "5. If it is not good enough, run_experiment: sweep for training settings, search for width and "
     "regularisation, repair for the review's fixes.\n"
-    "6. Finish with: the design's name and version, what it takes in and puts out, the validation numbers and "
-    "what they mean, and how to use it (open it on the network canvas; its Code panel exports PyTorch).\n"
+    "6. When it is trained, package_network it and give the user the download link it returns.\n"
+    "7. Finish with: the design's name and version, what it takes in and puts out, the validation numbers and "
+    "what they mean, and the package's download link.\n"
     "If the user sets limits, such as a parameter budget or a number of epochs, compare every design with them "
     "before training: check_network reports learnables.\n"
     "Do not end your turn by describing what you will do next: do it, with the tools. Finish only when there is "
@@ -1017,7 +1093,7 @@ TEMPLATES = {
                                 6: {"limit": 4000, "keep": 6},
                                 9: {"seconds": 60},
                                 11: {"design": ""},
-                                13: {"max_revisions": 1}}},
+                                13: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1618,7 +1694,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         imports += ["import subprocess", "import sys"]
     if a["parallels"]:
         imports += ["import copy", "from concurrent.futures import ThreadPoolExecutor"]
-    if present("guard_in") or present("guard_out"):
+    if present("guard_in") or present("guard_out") or any(
+            kind[n] == "reflector" and _params(nodes[n]).get("gate") == GROUNDED_GATE for n in nodes):
         imports.append("import re")
     if any(kind[n] == "long_mem" for n in nodes) and "from pathlib import Path" not in imports:
         imports.append("from pathlib import Path")
@@ -2017,6 +2094,10 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "def critique(task, answer):",
              '    verdict = complete(CRITIC_PROMPT, f"Task:\\n{task}\\n\\nDraft answer:\\n{answer}")',
              '    return None if verdict.strip().upper().startswith("PASS") else verdict'], *of_kind("reflector"))
+        grounded_critics = [c for c in of_kind("reflector") if _params(nodes[c]).get("gate") == GROUNDED_GATE]
+        if grounded_critics:
+            add(["", ""])
+            add(GROUNDED_CODE.strip().split("\n"), *grounded_critics)
         gated_critics = [c for c in of_kind("reflector") if _params(nodes[c]).get("gate") == VERIFIER_GATE]
         if gated_critics:
             add(["", ""])
@@ -2273,7 +2354,11 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
             marker = re.sub(r"[^\w=:+.\- ]", "", str(p.get("marker") or "")).strip() or "VERIFIED"
             body += [f"    MAX_REVISIONS = {int(p['max_revisions'])}",
                      '    draft = state["answer"] or state["draft"]']
-            if gated:
+            grounded = p.get("gate") == GROUNDED_GATE
+            if grounded:
+                body += ["    unsupported = ungrounded(state, draft)",
+                         "    notes = unsupported or critique(state[\"task\"], draft)"]
+            elif gated:
                 body += [f"    proof = verifier_line(state, {json.dumps(marker)})",
                          "    if proof is None:",
                          f'        notes = ("No check has printed a line starting {marker} yet, so nothing is verified. "',
@@ -2289,6 +2374,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                          '        state["answer"] = None',
                          '        state["messages"].append({"role": "user", "content": f"A reviewer found problems:\\n{notes}\\n\\nRevise."})',
                          f"        return {to(c['back'])}{comment(c['back'])}"]
+            if grounded:
+                body += ["    if unsupported:",
+                         '        draft = f"{draft}\\n\\n[Unchecked: {unsupported.splitlines()[0]}]"']
             if gated:
                 body += ["    if proof is None:",
                          f'        draft = f"{{draft}}\\n\\n[Not verified: no check printed a line starting {marker}.]"']
@@ -2574,6 +2662,19 @@ def _m_planner(p, node, graph, c):
 
 def _m_critic(p, node, graph, c):
     R, N = int(p["max_revisions"]), c["N"]
+    if p.get("gate") == GROUNDED_GATE:
+        return {"title": "Accept only numbers a tool reported",
+                "equation": "accept(y) ⇔ numbers(y) ⊆ ⋃ numbers(tool results ∪ task)  ∧  limits(task) hold  ∧  "
+                            "π_θ(P_critic, x, y) begins with PASS",
+                "symbols": [("y", "the draft answer"), ("numbers(·)", "decimals, percentages, and whole numbers of 1,000 "
+                            "or more; a number matches when it is a tool's value, rounded as written"),
+                            ("R", f"the revision limit, {R}")],
+                "arithmetic": [("critic calls", f"≤ R = {R}: none while a number is unsupported"),
+                               ("after R failed revisions", "the answer goes out marked Unchecked, naming the numbers")],
+                "freedom": ["The check is a string test, not a model: the agent cannot argue its way past it, only "
+                            "go and get the number from a tool.",
+                            "Small whole numbers are not checked, so a wrong epoch count or version number can "
+                            "still slip through; and a number a tool reported can still be used for the wrong thing."]}
     if p.get("gate") == VERIFIER_GATE:
         marker = p.get("marker") or "VERIFIED"
         return {"title": "Accept only what a check has proved",
@@ -3263,7 +3364,7 @@ def _no_designer(op, args):
 
 def _rehearsal_designer(op, args):
     """Reading is real in a rehearsal; designing and editing are not saved."""
-    if op in ("design_network", "edit_network"):
+    if op in ("design_network", "edit_network", "package_network"):
         return {"rehearsal": True, "saved": False, "note": "A rehearsal saves nothing: in a live run this would "
                 "check the design and save it as a new version."}
     return DESIGNER(op, args) if DESIGNER else {"rehearsal": True, "note": "No designer to read from here."}

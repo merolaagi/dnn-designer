@@ -46,3 +46,4 @@ saved/*.json
 # os
 .DS_Store
 Thumbs.db
+exports/

@@ -1,5 +1,38 @@
 # Changelog
 
+## 4.2.0
+
+**A critic that checks numbers, and networks you can hand to someone.**
+
+- **Every number traced to a tool.** The Critic has a third setting, *every
+  number traced to a tool, then the review*. Before its model reads the answer,
+  it checks every decimal, percentage and whole number of 1,000 or more against
+  what the tools returned in the run (and the task itself); a number no tool
+  reported is sent back by name. It also reads limits in the task, such as
+  "under 100,000 parameters", and sends the answer back when the network the
+  tools last reported breaks them. If the revisions run out, the answer goes out
+  marked *Unchecked*, naming the numbers. Model builder now uses it: the
+  52,508-parameter network it described, that was never built, would have been
+  sent back, and so would its 105,866-parameter one.
+- **Package a network.** The new **Package** button on the canvas header, and
+  Model builder's new `package_network` tool, make a zip anyone can install:
+  - `model.py` (the network in PyTorch) and `weights.pt` (trained weights you
+    choose, best of the newest run by default)
+  - `install.sh` and `install.bat`: a private Python environment, the
+    requirements, and a self-test that loads the weights
+  - `predict.py`: run it on an image file, a row of numbers, or JSON, with
+    class labels and probabilities
+  - `serve.py`: a small HTTP server, `POST /predict`
+  - `README.md` with the real numbers from training, `model_info.json`, and
+    `design.json` to open it on the canvas again
+  Every package is loaded and run once before it downloads.
+- **Trained weights now remember their scaling and labels.** A network trained
+  on a table keeps the mean and spread training used for each column, and the
+  class names, so a packaged network scales new rows the same way and names
+  its answers.
+- **Links in conversations.** Talk to agents shows links in answers, such as a
+  package's download.
+
 ## 4.1.3
 
 - **Fixed: training on MNIST, Fashion-MNIST, CIFAR-10 or a folder of images

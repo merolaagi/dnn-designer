@@ -578,7 +578,7 @@ def _csv_loaders(cfg, in_shapes, in_ids, task, job: Optional[Job]):
         raise DataError("The validation split leaves one side empty. Try 0.1 to 0.4.")
     tr_idx, va_idx = order[:split], order[split:]
 
-    xs_tr, xs_va = [], []
+    xs_tr, xs_va, scalings = [], [], []
     for matrix, shape in zip(blocks, in_shapes):
         train_part = matrix[tr_idx]
         if cfg.get("normalize", True):
@@ -586,6 +586,8 @@ def _csv_loaders(cfg, in_shapes, in_ids, task, job: Optional[Job]):
             std = train_part.std(axis=0, keepdims=True)
             std[std < 1e-8] = 1.0
             matrix = (matrix - mean) / std
+            # kept with the weights, so a packaged network scales new rows the same way
+            scalings.append({"mean": [float(v) for v in mean.ravel()], "sd": [float(v) for v in std.ravel()]})
         tensor = torch.as_tensor(matrix, dtype=torch.float32)
         tensor = tensor.reshape(n, *[int(d) for d in shape])
         xs_tr.append(tensor[tr_idx])
@@ -606,7 +608,8 @@ def _csv_loaders(cfg, in_shapes, in_ids, task, job: Optional[Job]):
     return (
         DataLoader(_tensor_dataset(xs_tr, y[tr_idx]), batch_size=batch, shuffle=True),
         DataLoader(_tensor_dataset(xs_va, y[va_idx]), batch_size=batch),
-        {"classes": classes},
+        {"classes": classes,
+         "input_scaling": scalings[0] if len(scalings) == 1 and len(in_shapes) == 1 and not notes else None},
     )
 
 
@@ -1015,9 +1018,15 @@ def save_checkpoint(job: Job, model, graph, epoch: int, metrics: Dict[str, Any],
 
 
 def _vocab_extra(meta: Dict[str, Any]) -> Dict[str, Any]:
+    """What a checkpoint needs beyond its weights to be used again: vocabulary, labels, input scaling."""
+    out: Dict[str, Any] = {}
     if meta.get("vocab"):
-        return {"vocab": meta["vocab"], "block": meta.get("block")}
-    return {}
+        out.update(vocab=meta["vocab"], block=meta.get("block"))
+    if meta.get("classes"):
+        out["labels"] = [str(c) for c in meta["classes"]]
+    if meta.get("input_scaling"):
+        out["input_scaling"] = meta["input_scaling"]
+    return out
 
 
 def list_checkpoints() -> List[Dict[str, Any]]:

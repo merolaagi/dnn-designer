@@ -9923,6 +9923,111 @@ def _():
     prompt = agentlab.MODEL_PROMPT
     assert "compare every design with them" in prompt and "Do not end your turn by describing" in prompt
 
+
+# --------------------------------------------------------------------------
+# 4.2: a critic that checks numbers, and installable packages
+# --------------------------------------------------------------------------
+
+@check("the grounded critic sends back numbers no tool reported, and limits the result breaks")
+def _():
+    g = agentlab.template("modelbuilder")
+    critic = next(n for n in g["nodes"] if n["type"] == "reflector")
+    assert critic["params"]["gate"] == agentlab.GROUNDED_GATE
+    src = agentlab.codegen(g)["source"]
+    compile(agentlab.codegen(g, "langgraph")["source"], "lg", "exec")
+    assert "def ungrounded(state, answer):" in src and "[Unchecked: " in src
+    space = {"__name__": "agent"}
+    exec(compile(src, "agent", "exec"), space)  # noqa: S102
+    tool = lambda c: {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": c}]}  # noqa: E731
+    task = "Build a digit model. Keep it under 100,000 parameters and train 2 epochs."
+    state = {"task": task, "messages": [
+        tool('{"name": "MiniNetSlim", "version": 2, "learnables": 105866}'),
+        tool("Trained MiniNetSlim v2 on mnist: done (run x).\n  epoch 2: val_loss 0.052628, val_acc 0.98183"),
+        {"role": "user", "content": "A reviewer found problems:\nThese numbers are not in any tool result: 52,508."}]}
+    said = space["ungrounded"](state, "MiniNetSlim v3 has 52,508 parameters and reached 98.18% (loss 0.0526) in 2 epochs.")
+    assert "52,508" in said and "98.18%" not in said and "0.0526" not in said, said
+    assert "105,866 learnable parameters, over the limit of 100,000" in said
+    state["messages"].append(tool('{"name": "MiniNetSlim", "version": 3, "learnables": 52138}'))
+    assert space["ungrounded"](state, "MiniNetSlim v3 has 52,138 parameters, 98.2% accurate.") is None
+    assert "Accept only numbers a tool reported" == agentlab.explain(g, critic["id"])["title"]
+
+
+@check("a trained network packages into a zip that installs, predicts and serves on its own")
+def _():
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        print("        (torch absent, skipped)")
+        return
+    import random
+    import subprocess as _sp
+    import tempfile
+    import zipfile
+    import main
+    import packager
+    import train as T
+    main.list_graphs()
+    made = []
+    try:
+        random.seed(5)
+        rows = ["a,b,y"] + [f"{a:.2f},{b:.2f},{(2 * a - b - 100) / 60:.4f}"
+                            for a, b in ((random.uniform(0, 100), random.uniform(0, 5)) for _ in range(300))]
+        assert main.designer_op("design_network", {"name": "zzPkgTest", "input_shape": [2], "task": "regression",
+                                "layers": [{"type": "Linear", "units": 16}, {"type": "Activation", "kind": "relu"},
+                                           {"type": "Linear", "units": 1}]})["saved"]
+        untrained = main.designer_op("package_network", {"name": "zzPkgTest"})
+        assert untrained["packaged"] and untrained["trained"] is False
+        with zipfile.ZipFile(main.auth.sub("exports") / untrained["file"]) as zf:
+            assert "zzPkgTest-model/weights.pt" not in zf.namelist()
+        trained = main.agent_train({"design": "zzPkgTest", "csv": "\n".join(rows), "epochs": 25, "wait": 300})
+        assert trained["status"] == "done", trained
+        made = [c["file"] for c in packager.checkpoints_for("zzPkgTest")]
+        assert made and "_best" in made[0], "the newest run's best weights come first"
+        pkg = main.designer_op("package_network", {"name": "zzPkgTest"})
+        assert pkg["packaged"] and pkg["trained"] and pkg["self_test"] == "passed", pkg
+        assert pkg["download"] == f"/api/package/file/{pkg['file']}"
+        out = Path(tempfile.mkdtemp())
+        with zipfile.ZipFile(main.auth.sub("exports") / pkg["file"]) as zf:
+            names = set(zf.namelist())
+            zf.extractall(out)
+            assert zf.getinfo("zzPkgTest-model/install.sh").external_attr >> 16 & 0o111, "install.sh is executable"
+        for f in ("model.py", "weights.pt", "model_info.json", "predict.py", "serve.py", "install.sh", "install.bat",
+                  "requirements.txt", "design.json", "README.md"):
+            assert f"zzPkgTest-model/{f}" in names, f
+        folder = out / "zzPkgTest-model"
+        info = json.loads((folder / "model_info.json").read_text())
+        assert info["input_scaling"] and info["trained"] and info["task"] == "regression"
+        run = lambda *a: _sp.run([sys.executable, "predict.py", *a], cwd=folder, capture_output=True, text=True)  # noqa: E731
+        assert "Self-test passed" in run("--selftest").stdout
+        guess = json.loads(run("80", "2").stdout)["prediction"][0]
+        # the same weights run here, with training's scaling applied by hand, give the same answer
+        blob = torch.load(T.CHECKPOINTS / made[0], map_location="cpu", weights_only=False)
+        space = {"__name__": "m"}
+        exec(compile((folder / "model.py").read_text(), "model.py", "exec"), space)  # noqa: S102
+        net = space[info["class_name"]]()
+        net.load_state_dict(blob["state_dict"])
+        net.eval()
+        sc = blob["input_scaling"]
+        x = (torch.tensor([80.0, 2.0]) - torch.tensor(sc["mean"])) / torch.tensor(sc["sd"])
+        with torch.no_grad():
+            expected = float(net(x.view(1, 2))[0, 0])
+        assert abs(guess - expected) < 1e-4, (guess, expected)
+        assert _sp.run(["sh", "-n", str(folder / "install.sh")]).returncode == 0
+        readme = (folder / "README.md").read_text()
+        assert "sh install.sh" in readme and str(info["metrics"]["val_loss"]) in readme
+        try:
+            packager.build("zzPkgTest", checkpoint="nope.pt")
+            raise AssertionError("packaged weights that do not exist")
+        except ValueError as exc:
+            assert "No trained weights" in str(exc)
+    finally:
+        main.delete_graph("zzPkgTest")
+        for f in made:
+            (T.CHECKPOINTS / f).unlink(missing_ok=True)
+    for needle in ('id="btnPackage"', "/api/package/options", "/api/package?design=", "function tkMd"):
+        assert needle in PAGE, needle
+    assert '/api\\/package\\/file\\/' in PAGE, "package links in answers are clickable"
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

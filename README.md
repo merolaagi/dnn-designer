@@ -306,6 +306,10 @@ for Anthropic, OpenAI, xAI, Gemini, Mistral, DeepSeek, Groq, OpenRouter and
 Together, local models through Ollama or LM Studio, and the default model every
 agent uses unless one says otherwise.
 
+**Package** (on the canvas header) turns a trained network into a zip anyone can
+install: the PyTorch code, the weights, `install.sh`, a predict script, a small
+server and a README with the real numbers.
+
 As with layers, each block has a **Code** tab with the exact lines of the
 generated file it contributes, and a **Maths** tab with its equation and this
 design's numbers worked through.

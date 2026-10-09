@@ -2376,6 +2376,19 @@ body.sizing{user-select:none}
 .al-toast button:hover{background:#41597A}
 .al-emptyundo{display:block;margin-top:8px;font-size:12px}
 
+/* ---------------- packaging ---------------- */
+.pkg-back{position:fixed;inset:0;background:rgba(22,32,46,.35);z-index:300;display:grid;place-items:center;padding:16px}
+.pkg-card{background:#fff;border-radius:14px;max-width:560px;width:100%;padding:20px 22px;box-shadow:0 20px 50px rgba(22,32,46,.3)}
+.pkg-card h3{margin:0 0 6px;font-size:16px}
+.pkg-card code{font-family:var(--mono);font-size:11.5px;background:var(--paper);padding:1px 4px;border-radius:3px}
+.pkg-l{display:block;font-size:11.5px;font-weight:600;color:#3C4B5F;margin:14px 0 6px}
+.pkg-list{max-height:240px;overflow-y:auto;border:1px solid var(--paper-3);border-radius:9px}
+.pkg-opt{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-top:1px solid var(--paper-2);cursor:pointer;font-size:12.5px}
+.pkg-opt:first-child{border-top:0}
+.pkg-opt:hover{background:var(--paper)}
+.pkg-opt small{display:block;color:var(--muted);font:11px var(--mono);margin-top:2px}
+.pkg-opt input{margin-top:3px}
+
 /* ---------------- settings ---------------- */
 .st-scroll{flex:1;overflow-y:auto;min-width:0}
 .st-wrap{max-width:980px;margin:0 auto;padding:26px 24px 60px}
@@ -2909,6 +2922,7 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
   <div class="hd-group hd-design">
     <button class="hb" id="btnImport" title="Import a model or file"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v7.5M4.8 6.8 8 10l3.2-3.2"/><path d="M2.5 11v1.5A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/></svg><span>Import</span></button>
     <button class="hb" id="btnDownload" title="Download the generated code"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5h-.5A1.5 1.5 0 0 0 3 5v7.5A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V5a1.5 1.5 0 0 0-1.5-1.5H11"/><path d="m6.3 8.3-1.6 1.7 1.6 1.7M9.7 8.3l1.6 1.7-1.6 1.7"/><path d="M6 2h4v2.5H6z"/></svg><span>Code</span></button>
+    <button class="hb" id="btnPackage" title="Package as an installable zip: code, trained weights, install script"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5 8 2l5.5 3v6L8 14l-5.5-3z"/><path d="M2.5 5 8 8l5.5-3M8 8v6"/></svg><span>Package</span></button>
     <button class="hb" id="btnOpen" title="Open a saved design"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.6 1.8h4.8A1.5 1.5 0 0 1 14 6.3v5.2a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/></svg><span>Open</span></button>
     <button class="hb icon danger" id="btnDelete" title="Delete this design" aria-label="Delete this design"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
   </div>
@@ -15589,6 +15603,52 @@ async function alRefreshDesigns(){
   } catch {}
 }
 
+/* ============================ packaging ============================ */
+/* A network as an installable zip: code, trained weights, install and predict scripts. */
+
+$("btnPackage").onclick = async () => {
+  const name = ($("gname").value || "").trim();
+  if (!name){ toast("Give the design a name and save it first"); return; }
+  let d = {checkpoints: []};
+  try{ d = await (await fetch(API + "/api/package/options?design=" + encodeURIComponent(name))).json(); } catch {}
+  const old = $("pkgDialog"); if (old) old.remove();
+  const box = document.createElement("div");
+  box.id = "pkgDialog"; box.className = "pkg-back";
+  const fmt = c => { const m = c.metrics || {}; return [c.saved_at, c.epoch != null ? `epoch ${c.epoch}` : "",
+    m.val_acc != null ? `val acc ${m.val_acc}` : "", m.val_loss != null ? `val loss ${m.val_loss}` : ""].filter(Boolean).join(" · "); };
+  box.innerHTML = `<div class="pkg-card" role="dialog" aria-label="Package ${alEsc(name)}">
+    <h3>Package ${alEsc(name)}</h3>
+    <p class="st-msg">A zip anyone can install: the PyTorch code, trained weights, <code>install.sh</code> (and a Windows
+      version), a predict script, a small server and a README with the real numbers. It is loaded and run once before
+      it downloads.</p>
+    ${d.checkpoints.length ? `<label class="pkg-l">Which trained weights</label>
+      <div class="pkg-list">${d.checkpoints.map((c, i) => `<label class="pkg-opt"><input type="radio" name="pkgck" value="${alEsc(c.file)}"${i ? "" : " checked"}>
+        <span><b>${alEsc(c.file.includes("_best") ? "Best" : c.file.includes("_last") ? "Last" : "Weights")}</b> ${alEsc(fmt(c))}<small>${alEsc(c.file)}</small></span></label>`).join("")}</div>`
+      : `<p class="st-msg"><b>Not trained yet.</b> The package will hold the design with fresh, untrained weights. Train it first for a working model.</p>`}
+    <div class="st-actions"><button class="btn go" id="pkgGo">Download package</button><button class="btn" id="pkgCancel">Cancel</button>
+      <span class="st-msg" id="pkgMsg"></span></div></div>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  box.onclick = ev => { if (ev.target === box) close(); };
+  $("pkgCancel").onclick = close;
+  $("pkgGo").onclick = async () => {
+    const picked = box.querySelector('input[name="pkgck"]:checked');
+    $("pkgGo").disabled = true; $("pkgMsg").textContent = "Building and testing…"; $("pkgMsg").className = "st-msg";
+    const url = API + "/api/package?design=" + encodeURIComponent(name) + (picked ? "&checkpoint=" + encodeURIComponent(picked.value) : "");
+    const r = await fetch(url);
+    if (!r.ok){
+      const e = await r.json().catch(() => ({}));
+      $("pkgGo").disabled = false; $("pkgMsg").textContent = (e.detail && e.detail.message) || "It could not be packaged"; $("pkgMsg").className = "st-msg bad";
+      return;
+    }
+    const blob = await r.blob();
+    const file = (/filename="([^"]+)"/.exec(r.headers.get("content-disposition") || "") || [])[1] || `${name}-model.zip`;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    close(); toast(`Downloaded ${file}. Unzip it and run install.sh.`);
+  };
+};
+
 /* ============================ settings ============================ */
 /* Model providers and their keys, models on this computer, and the defaults new agents use.
    Keys go to the server once and come back only as a masked hint. */
@@ -16086,7 +16146,10 @@ function tkMd(text){
   const blocks = String(text).split(/```/);
   return blocks.map((part, k) => {
     if (k % 2){ const body = part.replace(/^[\w+-]*\n/, ""); return `<pre><code>${alEsc(body.replace(/\n$/, ""))}</code></pre>`; }
-    const inline = x => alEsc(x).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    // links: [text](url) for web addresses and this app's own downloads, and bare package links
+    const linked = h => h.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/api\/)[^)\s]+)\)/g, '<a class="al-link" href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/(^|[\s(])(\/api\/package\/file\/[\w.\-]+\.zip)/g, '$1<a class="al-link" href="$2">$2</a>');
+    const inline = x => linked(alEsc(x).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>"));
     let html = "", list = null;
     const close = () => { if (list){ html += `</${list}>`; list = null; } };
     part.split("\n\n").forEach(para => {

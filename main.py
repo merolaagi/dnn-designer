@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 import agents
 import agentlab
+import packager
 import providers
 import advisor
 import assistant
@@ -2376,6 +2377,15 @@ def _designer_op(op: str, args: Dict[str, Any]) -> Dict[str, Any]:
         g = G.parse(graph)
         notes = assistant.review(g, G.analyze(g))
         return {"name": name, "version": version, "findings": [n.get("text") for n in notes] or ["Nothing found."]}
+    if op == "package_network":
+        built = _package(name, str(args.get("checkpoint") or ""))
+        folder = auth.sub("exports")
+        (folder / built["filename"]).write_bytes(built["bytes"])
+        info = built["info"]
+        return {"packaged": True, "file": built["filename"], "download": f"/api/package/file/{built['filename']}",
+                "trained": info["trained"], "epochs": info["epochs"], "metrics": info["metrics"],
+                "learnables": info["learnables"], "self_test": info["self_test"],
+                "install": f"unzip {built['filename']} && sh {packager._slug(info['name'])}-model/install.sh"}
     if op == "edit_network":
         command = str(args.get("command") or "").strip()
         reply = assistant.handle(json.loads(json.dumps(graph)), command)
@@ -2433,8 +2443,46 @@ def agent_experiment(request: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": f"{type(exc).__name__}: {exc}"}
 
 
+def _package(design: str, checkpoint: str = "") -> Dict[str, Any]:
+    """Build a package for a saved design: its newest trained weights unless others are named."""
+    from version import __version__
+    graph = None
+    if not checkpoint:
+        found = packager.checkpoints_for(design)
+        checkpoint = found[0]["file"] if found else ""
+    if not checkpoint:
+        graph, version = _latest(design)
+        if graph is None:
+            raise ValueError(version)
+    return packager.build(design, checkpoint, graph=graph, designer_version=__version__)
+
+
 agentlab.DESIGNER = designer_op
 agentlab.EXPERIMENTER = agent_experiment
+
+
+@app.get("/api/package/options")
+def package_options(design: str):
+    return {"checkpoints": packager.checkpoints_for(design)}
+
+
+@app.get("/api/package")
+def package_download(design: str, checkpoint: str = ""):
+    try:
+        built = _package(design, checkpoint)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    from fastapi.responses import Response
+    return Response(built["bytes"], media_type="application/zip",
+                    headers={"content-disposition": f'attachment; filename="{built["filename"]}"'})
+
+
+@app.get("/api/package/file/{name}")
+def package_file(name: str):
+    path = auth.sub("exports") / Path(name).name
+    if not path.exists():
+        raise HTTPException(404, detail={"message": "No package by that name."})
+    return FileResponse(path, media_type="application/zip", filename=path.name)
 
 
 @app.post("/api/agentlab/designer/{op}")
