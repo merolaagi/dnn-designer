@@ -151,12 +151,58 @@ def read_openai_stream(reply, on_text):
     return {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}
 '''
 
+_NAME = {"name": {"type": "string", "description": "The saved network design's name"}}
+DESIGNER_TOOLS = [
+    {"name": "list_networks", "description": "List the network designs saved on the canvas: name, latest version, "
+     "input shape, task, layer and parameter counts, and whether each builds.",
+     "schema": {"type": "object", "properties": {}}},
+    {"name": "layer_catalog", "description": "The layer types the designer has, with their parameters and defaults. "
+     "Use these exact type and parameter names in design_network.",
+     "schema": {"type": "object", "properties": {"category": {"type": "string", "description":
+                "Only this category, such as Dense, Convolution, Activation, Normalization"}}}},
+    {"name": "design_network", "description": "Design a network as a straight stack of layers and save it as a new "
+     "design, or a new version of one. Its shapes are checked first; a design that does not build is not saved, and "
+     "the errors come back. Example layers: [{\"type\": \"Linear\", \"units\": 64}, {\"type\": \"Activation\", "
+     "\"kind\": \"relu\"}, {\"type\": \"Linear\", \"units\": 1}].",
+     "schema": {"type": "object", "properties": {
+         **_NAME, "input_shape": {"type": "array", "items": {"type": "integer"},
+                                  "description": "Shape of one example, without the batch: [8] for 8 numbers, [1, 28, 28] for an image"},
+         "layers": {"type": "array", "items": {"type": "object"}, "description": "Layers in order, each {type, ...parameters}"},
+         "task": {"type": "string", "enum": ["classification", "regression", "binary"],
+                  "description": "What the output is trained for"}},
+         "required": ["name", "input_shape", "layers", "task"]}},
+    {"name": "check_network", "description": "Check a saved design's shapes: each layer's output shape and parameter "
+     "count, and anything that does not build.",
+     "schema": {"type": "object", "properties": _NAME, "required": ["name"]}},
+    {"name": "review_network", "description": "Have the designer's reviewer read a saved design and report what is "
+     "wrong or wasteful in it.",
+     "schema": {"type": "object", "properties": _NAME, "required": ["name"]}},
+    {"name": "edit_network", "description": "Change a saved design with a command, saved as a new version if it still "
+     "builds: \"add dropout after l2\", \"set units to 128 on l1\", \"remove l3\", \"add batchnorm after l1\".",
+     "schema": {"type": "object", "properties": {**_NAME, "command": {"type": "string"}}, "required": ["name", "command"]}},
+]
+EXPERIMENT_DESCRIPTION = (
+    "Run an experiment on a saved network design and get back every trial ranked by validation loss. kind sweep "
+    "tries training settings (vary: lr, batch_size, optimizer); search tries wider, narrower and regularised "
+    "versions; repair tries each of the review's fixes. Pass the data as for train_network. Slow: trials × epochs "
+    "of training. After a search or repair the winner is saved as a new version.")
+EXPERIMENT_SCHEMA = {"type": "object", "properties": {
+    "design": {"type": "string", "description": "Which saved network design, if not the default"},
+    "kind": {"type": "string", "enum": ["sweep", "search", "repair"]},
+    "dataset": {"type": "string", "description": "csv for a table you pass, or a built-in set such as synthetic or mnist"},
+    "csv": {"type": "string", "description": "The table, as CSV text with a header row"},
+    "target_column": {"type": "string"},
+    "vary": {"type": "array", "items": {"type": "string"}, "description": "For a sweep: lr, batch_size, optimizer"},
+    "trials": {"type": "integer"}, "epochs": {"type": "integer"}},
+    "required": ["kind", "dataset"]}
+
 TRAIN_DESCRIPTION = (
     "Train the network design {design} from the network canvas and get back its training and validation "
     "loss (and accuracy, for classes). Pass a table as CSV text in csv, header first; the last column is the "
     "target unless target_column names another, and every other column is a feature. Or name a built-in "
     "dataset instead. Training takes seconds to minutes.")
 TRAIN_SCHEMA = {"type": "object", "properties": {
+    "design": {"type": "string", "description": "Which saved network design to train, if not the default"},
     "dataset": {"type": "string", "description": "csv for a table you pass, or a built-in set: synthetic, mnist, "
                                                  "fashion_mnist, cifar10, pendulum"},
     "csv": {"type": "string", "description": "The table, as CSV text with a header row"},
@@ -164,18 +210,79 @@ TRAIN_SCHEMA = {"type": "object", "properties": {
     "epochs": {"type": "integer", "description": "How many passes over the data"}},
     "required": ["dataset"]}
 
-TRAIN_CODE = r'''# ---- training a network from the designer ----
-TRAIN_BACKEND = None    # the app sets this to train in-process; on its own, this file asks the app over HTTP
+APP_CODE = r'''# ---- the network designer this agent works with ----
 APP_URL = os.environ.get("DNN_DESIGNER_URL", "http://127.0.0.1:8770")
 
 
-def train_with(design, args, most_epochs, wait):
-    """Ask the designer to train a saved network, wait for it, and describe the result.
+def ask_app(path, request, wait):
+    """Ask the running designer to do something; its answer, or {"error": why}.
 
-    Run outside the app, the designer must be running at APP_URL. With accounts switched
-    on, put your session cookie (dnn_session=...) in DNN_DESIGNER_COOKIE.
+    The designer must be running at APP_URL. With accounts switched on, put your
+    session cookie (dnn_session=...) in DNN_DESIGNER_COOKIE.
     """
-    request = {"design": design, "dataset": str(args.get("dataset") or "synthetic"),
+    sent = urllib.request.Request(APP_URL + path, data=json.dumps(request).encode(),
+                                  headers={"content-type": "application/json",
+                                           "cookie": os.environ.get("DNN_DESIGNER_COOKIE", "")})
+    try:
+        with urllib.request.urlopen(sent, timeout=wait + 60) as reply:
+            return json.loads(reply.read())
+    except urllib.request.HTTPError as exc:
+        return {"error": f"The designer refused: {exc.read().decode(errors='replace')[:300]}"}
+    except OSError as exc:
+        return {"error": f"Could not reach the designer at {APP_URL}: {exc}"}
+'''
+
+DESIGNER_CODE = r'''# ---- the network canvas, as tools ----
+DESIGNER_BACKEND = None    # the app sets this to work in-process; on its own, this file asks the app
+
+
+def designer_call(op, args):
+    report = DESIGNER_BACKEND(op, args) if DESIGNER_BACKEND is not None else ask_app("/api/agentlab/designer/" + op, args, 120)
+    return json.dumps(report, indent=1, default=str)[:8000]
+'''
+
+EXPERIMENT_CODE = r'''# ---- experiments: sweeps, searches and repairs ----
+EXPERIMENT_BACKEND = None    # the app sets this to run in-process; on its own, this file asks the app
+
+
+def experiment_with(design, args, most):
+    request = {"design": str(args.get("design") or design), "kind": str(args.get("kind") or "sweep"),
+               "dataset": str(args.get("dataset") or "synthetic"), "csv": str(args.get("csv") or ""),
+               "target_column": str(args.get("target_column") or ""), "vary": args.get("vary") or ["lr"],
+               "trials": max(2, min(int(args.get("trials") or 4), most["trials"])),
+               "epochs": max(1, min(int(args.get("epochs") or 4), most["epochs"])), "wait": most["wait"]}
+    if request["csv"]:
+        request["dataset"] = "csv"
+    if EXPERIMENT_BACKEND is not None:
+        report = EXPERIMENT_BACKEND(request)
+    else:
+        report = ask_app("/api/agentlab/experiment", request, most["wait"])
+    if report.get("error"):
+        return "The experiment did not run: " + str(report["error"])
+    lines = [f"{report.get('kind')} on {report.get('design')} v{report.get('version')}: {report.get('status')} "
+             f"(experiment {report.get('id')}), ranked by {report.get('objective')}, lower is better."]
+    for t in report.get("trials") or []:
+        lines.append(f"  {t.get('label')}: {t.get('status')}, score {t.get('score')}, "
+                     f"{t.get('learnables')} parameters" + (f" ({t['note']})" if t.get("note") else ""))
+    if report.get("leader"):
+        lines.append(f"Best: {report['leader']}")
+    if report.get("target"):
+        t = report["target"]
+        lines.append(f"Target {t['column']}: sd {t['sd']}; always guessing its mean scores about {t['guess_the_mean_loss']}.")
+    if report.get("saved_winner_as_version"):
+        lines.append(f"The winner was saved as version {report['saved_winner_as_version']} of {report.get('design')}.")
+    if report.get("note"):
+        lines.append("Note: " + report["note"])
+    return "\n".join(lines)
+'''
+
+TRAIN_CODE = r'''# ---- training a network from the designer ----
+TRAIN_BACKEND = None    # the app sets this to train in-process; on its own, this file asks the app over HTTP
+
+
+def train_with(design, args, most_epochs, wait):
+    """Ask the designer to train a saved network, wait for it, and describe the result."""
+    request = {"design": str(args.get("design") or design), "dataset": str(args.get("dataset") or "synthetic"),
                "csv": str(args.get("csv") or ""), "target_column": str(args.get("target_column") or ""),
                "epochs": max(1, min(int(args.get("epochs") or 1), most_epochs)), "wait": wait}
     if request["csv"]:
@@ -183,17 +290,17 @@ def train_with(design, args, most_epochs, wait):
     if TRAIN_BACKEND is not None:
         report = TRAIN_BACKEND(request)
     else:
-        sent = urllib.request.Request(APP_URL + "/api/agentlab/train-network", data=json.dumps(request).encode(),
-                                      headers={"content-type": "application/json",
-                                               "cookie": os.environ.get("DNN_DESIGNER_COOKIE", "")})
-        try:
-            with urllib.request.urlopen(sent, timeout=wait + 60) as reply:
-                report = json.loads(reply.read())
-        except urllib.request.HTTPError as exc:
-            report = {"error": f"The designer refused: {exc.read().decode(errors='replace')[:300]}"}
-        except OSError as exc:
-            report = {"error": f"Could not reach the designer at {APP_URL}: {exc}"}
+        report = ask_app("/api/agentlab/train-network", request, wait)
     return describe_training(report)
+
+
+def target_note(target):
+    """What a regression's loss has to beat, so a big number can be read."""
+    if not target:
+        return []
+    return [f"Target {target['column']}: mean {target['mean']}, sd {target['sd']}. For a regression, always guessing "
+            f"the mean scores a loss of about {target['guess_the_mean_loss']}; a model is only learning if it beats "
+            f"that. Targets far from 0 train slowly: scaling the column (subtract the mean, divide by the sd) helps."]
 
 
 def describe_training(report):
@@ -207,6 +314,7 @@ def describe_training(report):
             f"{k} {v}" for k, v in row.items() if k != "epoch" and isinstance(v, (int, float))))
     if report.get("best") is not None:
         lines.append(f"Best validation loss: {report['best']}")
+    lines += target_note(report.get("target"))
     if report.get("problem"):
         lines.append("Problem: " + report["problem"])
     lines += [f"Note: {n}" for n in report.get("notes") or []]
@@ -655,10 +763,41 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         failure=("Slow next to every other tool, so a few calls can take most of a run's time. A small table "
                  "trains a network that memorises it, which a low training loss and a high validation loss give "
                  "away. A design whose Input cannot take the data fails, and the model is told why."),
-        params={"design": _p("Network design", "ScoreMLP", "net_design"),
+        params={"design": _p("Network design (blank: the model names one)", "ScoreMLP", "net_design"),
                 "epochs": _p("Most epochs per call", 20, "number"),
                 "wait": _p("Wait for training (seconds)", 600, "number"),
                 LIMIT[0]: _p(LIMIT[1], 3, "number")}),
+    "designer": dict(
+        name="Network designer", system="hands", short="Designs and checks networks",
+        anatomy=("The network canvas, as tools. The agent can list the saved designs, read the layer catalog, "
+                 "design a network as a stack of layers, check its shapes, have it reviewed, and edit it with the "
+                 "same commands the canvas assistant understands."),
+        inside=("Six tools: list_networks, layer_catalog, design_network, check_network, review_network and "
+                "edit_network. They run the designer's own shape checker and reviewer, and save through its "
+                "versioned store."),
+        physiology=("Each call returns JSON the model reads: shapes layer by layer, parameter counts, errors, or the "
+                    "review's findings. A design that does not build is not saved. Saving only ever adds a design "
+                    "or a new version of one; nothing is overwritten or deleted, so the Safety tab counts it as "
+                    "reading."),
+        failure=("The model can design something that builds and still suits the data badly; only training says "
+                 "so. Every design and edit adds a version, so a long session leaves a long history."),
+        params={LIMIT[0]: _p(LIMIT[1], 0, "number")}),
+    "experiment": dict(
+        name="Experiment", system="hands", short="Sweeps, searches, repairs",
+        anatomy=("The designer's experiment agents, for an agent: a sweep of training settings, a search over "
+                 "wider, narrower and regularised versions, or each of the review's fixes tried on its own."),
+        inside=("A saved design, the data (a built-in set or a table as CSV text), and how many trials and "
+                "epochs. Each trial is an ordinary training run; the leaderboard comes back."),
+        physiology=("The model asks for one experiment; the call waits for every trial up to a time limit, then "
+                    "returns the trials ranked by validation loss. After a search or a repair the winner is saved "
+                    "as a new version of the design. In a rehearsal nothing trains."),
+        failure=("By far the slowest tool: trials × epochs of training. A few epochs per trial can rank designs "
+                 "by how fast they start, not how well they end."),
+        params={"design": _p("Network design (blank: the model names one)", "", "net_design"),
+                "trials": _p("Most trials per call", 6, "number"),
+                "epochs": _p("Most epochs per trial", 10, "number"),
+                "wait": _p("Wait for it (seconds)", 1800, "number"),
+                LIMIT[0]: _p(LIMIT[1], 2, "number")}),
     "sub_agent": dict(
         name="Sub-agent", system="hands", short="A whole agent used as a tool",
         anatomy="A second model with its own instructions, wrapped as a tool the parent can delegate to.",
@@ -754,7 +893,7 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         failure="Approval fatigue: clicking yes without reading."),
 }
 
-ACTIONS = {"tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp", "train_net"}
+ACTIONS = {"tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp", "train_net", "designer", "experiment"}
 
 
 def catalog() -> Dict[str, Any]:
@@ -789,6 +928,22 @@ MATH_PROMPT = (
     "use what it reports to decide whether the heuristic is worth using.\n\n"
     "Finish with: the best verified score, the candidate or the code that regenerates it, the VERIFIED line "
     "word for word, and what to try next.")
+
+MODEL_PROMPT = (
+    "You build working neural networks for the user with the network designer's tools.\n"
+    "1. Pin down the task: what goes in, what comes out, and what data exists. If there is no data, you may "
+    "generate a realistic table with run_python, but say plainly in the answer that it is synthetic.\n"
+    "2. Call list_networks and reuse a design that fits. Otherwise read layer_catalog and design_network a small "
+    "network first: a straight stack of layers, with input_shape excluding the batch.\n"
+    "3. Run check_network and review_network, and fix what they find with edit_network or a new design.\n"
+    "4. train_network on the data, naming the design. For a regression, scale the target column first (subtract "
+    "its mean, divide by its sd) and beat the guess-the-mean loss the tool reports. Compare validation loss with "
+    "training loss: a large gap means it memorises.\n"
+    "5. If it is not good enough, run_experiment: sweep for training settings, search for width and "
+    "regularisation, repair for the review's fixes.\n"
+    "6. Finish with: the design's name and version, what it takes in and puts out, the validation numbers and "
+    "what they mean, and how to use it (open it on the network canvas; its Code panel exports PyTorch).\n"
+    "Never report a number no tool returned.")
 
 TEMPLATES = {
     "react": {"name": "ReAct tool agent",
@@ -841,6 +996,22 @@ TEMPLATES = {
                               6: {"limit": 3000, "keep": 6},
                               8: {"seconds": 60},
                               12: {"gate": VERIFIER_GATE, "max_revisions": 3}}},
+    "modelbuilder": {"name": "Model builder: design, check, train, improve",
+                     "nodes": [("user_input", 40, 280), ("long_mem", 270, 280), ("planner", 500, 280),
+                               ("system_prompt", 740, 40), ("llm", 740, 280), ("loop", 500, 500),
+                               ("summarizer", 740, 500), ("router", 980, 280), ("designer", 1230, 40),
+                               ("code_exec", 1230, 190), ("human", 1230, 340), ("train_net", 1480, 280),
+                               ("experiment", 1480, 420), ("reflector", 1230, 560), ("long_mem", 1480, 580),
+                               ("output", 1730, 580)],
+                     "edges": [(0, 1), (1, 2), (2, 4), (3, 4), (5, 4), (6, 4), (4, 7), (7, 8), (7, 9), (7, 10),
+                               (10, 11), (10, 12), (8, 4), (9, 4), (11, 4), (12, 4), (7, 13), (13, 4), (13, 14),
+                               (14, 15)],
+                     "params": {3: {"text": MODEL_PROMPT},
+                                5: {"max_steps": 40},
+                                6: {"limit": 4000, "keep": 6},
+                                9: {"seconds": 60},
+                                11: {"design": ""},
+                                13: {"max_revisions": 1}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -978,8 +1149,9 @@ def analyze(graph) -> Dict[str, Any]:
     tool_names = {nid: unique(py_id(_params(n)["name"]) if kind[nid] in ("tool", "sub_agent")
                               else py_id((_params(n)["design"] or "saved") + "_agent") if kind[nid] == "subgraph"
                               else "train_network" if kind[nid] == "train_net"
+                              else "run_experiment" if kind[nid] == "experiment"
                               else ("web_search" if kind[nid] == "web_search" else "run_python"))
-                  for nid, n in nodes.items() if kind[nid] in ACTIONS and kind[nid] != "mcp"}
+                  for nid, n in nodes.items() if kind[nid] in ACTIONS and kind[nid] not in ("mcp", "designer")}
     # an MCP server offers several tools, each a route of its own to the same block
     mcp_tools: Dict[str, List[Dict[str, Any]]] = {}
     for nid, n in nodes.items():
@@ -989,6 +1161,10 @@ def analyze(graph) -> Dict[str, Any]:
                                "schema": t.get("inputSchema") or {"type": "object", "properties": {}}}
                               for t in (_params(n).get("tools") or []) if t.get("name")]
             tool_names[nid] = mcp_tools[nid][0]["name"] if mcp_tools[nid] else unique("mcp")
+        elif kind[nid] == "designer":
+            mcp_tools[nid] = [{"name": unique(t["name"]), "remote": t["name"], "description": t["description"],
+                               "schema": t["schema"]} for t in DESIGNER_TOOLS]
+            tool_names[nid] = mcp_tools[nid][0]["name"]
 
     def llm_before(router):
         return next((nid for nid in nodes if kind[nid] == "llm" and router in control[nid]), None)
@@ -1211,8 +1387,8 @@ def validate(graph, _stack: tuple = ()) -> List[Dict[str, Any]]:
                 say("error", "Give the MCP server's command or URL.", n["id"])
             elif not _params(n).get("tools"):
                 say("error", "Discover the MCP server's tools first; the model is offered what it lists.", n["id"])
-        if t == "train_net" and not str(_params(n).get("design") or "").strip():
-            say("error", "Choose which saved network design it trains.", n["id"])
+        if t in ("train_net", "experiment") and not str(_params(n).get("design") or "").strip():
+            say("info", "No network design chosen, so the model names one in each call.", n["id"])
         if t == "reflector" and _params(n).get("gate") == VERIFIER_GATE and not str(_params(n).get("marker") or "").strip():
             say("error", "Give the line a check prints when it passes, such as VERIFIED.", n["id"])
         if t == "output" and str(_params(n).get("schema") or "").strip() and answer_schema(n) is None:
@@ -1238,6 +1414,8 @@ def label(node) -> str:
         return f"Agent: {p.get('design')}" if p.get("design") else "Saved agent"
     if node.get("type") == "train_net":
         return f"Train {p.get('design')}" if p.get("design") else "Train network"
+    if node.get("type") == "experiment":
+        return f"Experiment on {p.get('design')}" if p.get("design") else "Experiment"
     if node.get("type") == "mcp":
         tools = p.get("tools") or []
         return f"MCP: {len(tools)} tool{'s' if len(tools) != 1 else ''}" if tools else "MCP server"
@@ -1550,6 +1728,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
 
     # ---- hands ----
     servers_written, mcp_class_written, sandbox_written, train_written = set(), [], [], []
+    app_written, designer_written, experiment_written = [], [], []
     if tools:
         add(["", "", "# ---- hands: tools ----"])
         for tid, name in tools:
@@ -1581,16 +1760,43 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                              f"    return run_sandboxed(code, seconds={secs})"]
             elif k == "train_net":
                 body = []
+                if not app_written:
+                    app_written.append(True)
+                    body += APP_CODE.strip().split("\n") + ["", ""]
                 if not train_written:
                     train_written.append(True)
                     body += TRAIN_CODE.strip().split("\n") + ["", ""]
                 epochs, wait = max(1, int(p.get("epochs") or 20)), max(10, int(p.get("wait") or 600))
-                body += [f"def {name}(dataset=\"synthetic\", csv=\"\", target_column=\"\", epochs=5):",
-                         f'    """Train the saved network design {p.get("design") or "(none chosen)"} and report how it learned."""',
-                         f"    return train_with({json.dumps(p.get('design') or '')}, dict(dataset=dataset, csv=csv,",
+                body += [f"def {name}(dataset=\"synthetic\", csv=\"\", target_column=\"\", epochs=5, design=\"\"):",
+                         f'    """Train a saved network design (default {p.get("design") or "none: name one"}) and report how it learned."""',
+                         f"    return train_with({json.dumps(p.get('design') or '')}, dict(dataset=dataset, csv=csv, design=design,",
                          f"                      target_column=target_column, epochs=epochs), most_epochs={epochs}, wait={wait})"]
             elif k == "subgraph":
                 body = subgraph_code(tid, name, p, _stack)
+            elif k == "designer":
+                t = mcp_by_name[name]
+                body = []
+                if not app_written:
+                    app_written.append(True)
+                    body += APP_CODE.strip().split("\n") + ["", ""]
+                if not designer_written:
+                    designer_written.append(True)
+                    body += DESIGNER_CODE.strip().split("\n") + ["", ""]
+                body += [f"def {name}(**args) -> str:", f"    {_doc(t['description'])}",
+                         f"    return designer_call({json.dumps(t['remote'])}, args)"]
+            elif k == "experiment":
+                body = []
+                if not app_written:
+                    app_written.append(True)
+                    body += APP_CODE.strip().split("\n") + ["", ""]
+                if not experiment_written:
+                    experiment_written.append(True)
+                    body += EXPERIMENT_CODE.strip().split("\n") + ["", ""]
+                most = {"trials": max(2, int(p.get("trials") or 6)), "epochs": max(1, int(p.get("epochs") or 10)),
+                        "wait": max(10, int(p.get("wait") or 1800))}
+                body += [f"def {name}(**args) -> str:",
+                         f'    """Run a sweep, search or repair on a saved network design, and wait for the trials."""',
+                         f"    return experiment_with({json.dumps(p.get('design') or '')}, args, {json.dumps(most)})"]
             elif k == "mcp":
                 t = mcp_by_name[name]
                 body = []
@@ -1616,11 +1822,15 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
 
         def schema(tid, name):
             if kind[tid] == "train_net":
-                design = _params(nodes[tid]).get("design") or "the chosen design"
+                design = _params(nodes[tid]).get("design") or "you name in design"
                 return ["    {", f'        "name": {json.dumps(name)},',
                         f'        "description": {json.dumps(TRAIN_DESCRIPTION.format(design=design))},',
                         f'        "input_schema": {json.dumps(TRAIN_SCHEMA)},', "    },"]
-            if kind[tid] == "mcp":
+            if kind[tid] == "experiment":
+                return ["    {", f'        "name": {json.dumps(name)},',
+                        f'        "description": {json.dumps(EXPERIMENT_DESCRIPTION)},',
+                        f'        "input_schema": {json.dumps(EXPERIMENT_SCHEMA)},', "    },"]
+            if kind[tid] in ("mcp", "designer"):
                 t = mcp_by_name[name]
                 return ["    {", f'        "name": {json.dumps(name)},',
                         f'        "description": {json.dumps(t["description"] or t["remote"])},',
@@ -2357,6 +2567,13 @@ def _m_tool(p, node, graph, c):
         shape = f"a = {{ code: string }},  stopped after {secs} s" + ("" if boxed else ",  runs as you")
     elif kind == "web_search":
         eq, shape = "o = search(a.query)", "a = { query: string }   (the generated stub returns a placeholder)"
+    elif kind == "designer":
+        eq = "o = op(a)  for op ∈ {list, catalog, design, check, review, edit};  design saves only if shapes(f) resolve"
+        shape = "a = the JSON each tool asks for;  o = JSON: shapes layer by layer, parameter counts, errors or findings"
+    elif kind == "experiment":
+        eq = "o = sort_k  min_e L_val(f^{(k)}, e),   k = 1 … K trials"
+        shape = (f"a = {{ kind ∈ sweep | search | repair, dataset, csv?, trials ≤ {int(p.get('trials') or 6)}, "
+                 f"epochs ≤ {int(p.get('epochs') or 10)} }};  waits ≤ {int(p.get('wait') or 1800)} s")
     elif kind == "train_net":
         eq = "θ* ≈ argmin_θ  Σ_{(x,y) ∈ D} L(f_θ(x), y),   o = report(L_train, L_val)"
         shape = (f"a = {{ dataset, csv?, target_column?, epochs ≤ {int(p.get('epochs') or 20)} }},  "
@@ -2579,6 +2796,7 @@ MATH: Dict[str, Callable] = {
     "user_input": _m_input, "output": _m_output, "llm": _m_llm, "system_prompt": _m_prompt,
     "planner": _m_planner, "reflector": _m_critic, "short_mem": _m_work, "long_mem": _m_long,
     "retriever": _m_rag, "tool": _m_tool, "web_search": _m_tool, "code_exec": _m_tool, "train_net": _m_tool,
+    "designer": _m_tool, "experiment": _m_tool,
     "sub_agent": _m_sub, "router": _m_router, "loop": _m_loop, "guard_in": _m_gin,
     "guard_out": _m_gout, "human": _m_human,
 }
@@ -2640,8 +2858,8 @@ def effects(node) -> str:
         return CHANGES if any(effects(a["nodes"][t]) == CHANGES and t not in a["gated"] for t in a["given"]) else READS
     if kind in ("tool", "mcp"):
         return _params(node).get("effects", CHANGES)
-    if kind == "train_net":
-        return CHANGES        # it starts a training run that writes to your workspace
+    if kind in ("train_net", "experiment"):
+        return CHANGES        # it starts training runs that write to your workspace
     return READS
 
 
@@ -2952,6 +3170,30 @@ class Rehearsal:
 TRAINER: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None
 
 
+DESIGNER: Optional[Callable[[str, Dict[str, Any]], Dict[str, Any]]] = None      # main.py: designer_op
+EXPERIMENTER: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None       # main.py: agent_experiment
+
+
+def _no_designer(op, args):
+    return _no_trainer(args)
+
+
+def _rehearsal_designer(op, args):
+    """Reading is real in a rehearsal; designing and editing are not saved."""
+    if op in ("design_network", "edit_network"):
+        return {"rehearsal": True, "saved": False, "note": "A rehearsal saves nothing: in a live run this would "
+                "check the design and save it as a new version."}
+    return DESIGNER(op, args) if DESIGNER else {"rehearsal": True, "note": "No designer to read from here."}
+
+
+def _rehearsal_experiment(request):
+    return {"design": request.get("design"), "version": "?", "kind": request.get("kind"), "status": "rehearsal",
+            "id": "none", "objective": "val_loss",
+            "trials": [{"label": "as drawn", "status": "rehearsal", "score": 0.47, "learnables": None},
+                       {"label": "a stand-in variant", "status": "rehearsal", "score": 0.44, "learnables": None}],
+            "leader": "a stand-in variant", "note": "A rehearsal trains nothing: these numbers stand in for a real run."}
+
+
 def _no_trainer(request):
     return {"error": "This copy of the lab is not running inside the designer, so there is nothing to train with."}
 
@@ -3042,6 +3284,10 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
         space["STREAM"] = on_stream
     if "TRAIN_BACKEND" in space:
         space["TRAIN_BACKEND"] = (TRAINER or _no_trainer) if mode == "live" else _rehearsal_trainer
+    if "DESIGNER_BACKEND" in space:
+        space["DESIGNER_BACKEND"] = (DESIGNER or _no_designer) if mode == "live" else _rehearsal_designer
+    if "EXPERIMENT_BACKEND" in space:
+        space["EXPERIMENT_BACKEND"] = (EXPERIMENTER or _no_trainer) if mode == "live" else _rehearsal_experiment
     if "PARALLEL" in space:
         # a rehearsal runs branches in order, so its stand-in model answers the same way every
         # time and a fork from a checkpoint repeats the original; live runs keep them concurrent
@@ -3867,7 +4113,8 @@ def _without(graph, nid) -> Dict[str, Any]:
 
 
 REMOVABLE = {"guard_in", "guard_out", "planner", "reflector", "retriever", "long_mem", "human", "summarizer",
-             "system_prompt", "tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp", "train_net"}
+             "system_prompt", "tool", "web_search", "code_exec", "sub_agent", "subgraph", "mcp", "train_net",
+             "designer", "experiment"}
 
 
 def variants(graph, prompts: Optional[Dict[str, Any]] = None, removals: bool = True) -> List[Dict[str, Any]]:

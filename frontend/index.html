@@ -13325,6 +13325,7 @@ function alLabel(n){
   if (n.type === "sub_agent") return "Sub-agent " + (p.name || "");
   if (n.type === "subgraph") return p.design ? "Agent: " + p.design : "Saved agent";
   if (n.type === "train_net") return p.design ? "Train " + p.design : "Train network";
+  if (n.type === "experiment") return p.design ? "Experiment on " + p.design : "Experiment";
   const b = alBlock(n.type);
   return b ? b.name : n.type;
 }
@@ -13705,6 +13706,7 @@ function alFillNewMenu(){
     longrun: "A long loop that summarises its history to stay inside the context limit.",
     debate: "Two models argue in parallel; a third gives the verdict.",
     supervisor: "A supervisor hands sub-tasks to specialist sub-agents.",
+    modelbuilder: "Designs a network for your task, checks and reviews it, trains it, and improves it with experiments.",
     mathsearch: "Generates candidates, proves them with code, remembers the best, and can train a network to guide the search.",
   };
   $("alNewMenu").innerHTML =

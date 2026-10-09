@@ -39,6 +39,7 @@ import projectloader
 import recipeloader
 import recipes_sdk
 import graph as G
+import layers
 import workbook
 import quantize as quant
 import scouts
@@ -2070,30 +2071,32 @@ def post_train(body: TrainPayload):
 # training on an agent's behalf
 # --------------------------------------------------------------------------
 
-def agent_train(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Train a saved network design for the Agent lab's Train network block, and wait.
+def _target_stats(csv_text: str, target: str) -> Optional[Dict[str, Any]]:
+    """For a numeric target, the loss of always guessing its mean: what a regression has to beat."""
+    try:
+        import io
+        import pandas as pd
+        column = pd.to_numeric(pd.read_csv(io.StringIO(csv_text))[target], errors="coerce").dropna()
+        if len(column) < 10 or column.nunique() <= 10:
+            return None
+        sig = lambda v: float(f"{v:.4g}")  # noqa: E731
+        return {"column": target, "mean": sig(column.mean()), "sd": sig(column.std(ddof=0)),
+                "guess_the_mean_loss": sig(column.var(ddof=0))}
+    except Exception:  # noqa: BLE001 - a missing hint is not worth failing the call
+        return None
 
-    The agent names the data; the design is whatever was saved on the canvas, with its
-    Input resized to a table's feature columns. Problems come back as an error to show the
-    model, never as an exception, so a bad request costs the agent one tool call.
+
+def _agent_data(graph: Dict[str, Any], request: Dict[str, Any]) -> Dict[str, Any]:
+    """The training config's data part for an agent's request, or {"error": ...}.
+
+    A table arrives as CSV text: it is written to uploads under a name made from its
+    content, and a design with one Input has that Input resized to the feature columns.
     """
     import hashlib
 
-    name = str(request.get("design") or "").strip()
-    versions = _versions(name) if name else []
-    if not versions:
-        have = ", ".join(p.stem for p in sorted(saved_dir().glob("*.json"))[:12])
-        return {"error": f"No network design called {name or '(none)'} is saved. Saved ones: {have or 'none'}."}
-    graph = json.loads(versions[-1]["path"].read_text())
-    graph.pop("_version", None)
-    version = versions[-1]["version"]
     dataset = str(request.get("dataset") or "synthetic").strip().lower()
     csv_text = str(request.get("csv") or "")
-    epochs = max(1, min(int(request.get("epochs") or 5), 200))
-    wait = max(5, min(float(request.get("wait") or 600), 3600))
-    cfg: Dict[str, Any] = {"dataset": dataset, "epochs": epochs, "design_name": name, "design_version": version}
     if csv_text:
-        dataset = cfg["dataset"] = "csv"
         if len(csv_text) > 2_000_000:
             return {"error": "The table is over 2 MB of text. Send fewer rows."}
         rows = [line for line in csv_text.strip().splitlines() if line.strip()]
@@ -2105,15 +2108,41 @@ def agent_train(request: Dict[str, Any]) -> Dict[str, Any]:
             return {"error": f"The table has no column {target}. Its columns: {', '.join(header)}."}
         file = f"agent_{hashlib.sha1(csv_text.encode()).hexdigest()[:12]}.csv"
         (T.UPLOADS / file).write_text(csv_text)
-        cfg.update(csv_file=file, target_column=target)
         inputs = [n for n in graph.get("nodes", []) if n.get("type") == "Input"]
         if len(inputs) == 1:
             inputs[0].setdefault("params", {})["shape"] = [len(header) - 1]
-    elif dataset == "csv":
+        return {"dataset": "csv", "csv_file": file, "target_column": target, "_target": _target_stats(csv_text, target)}
+    if dataset == "csv":
         return {"error": "Pass the table itself as CSV text in csv."}
-    elif dataset not in T.BUILTIN_DATASETS or dataset in ("folder", "text"):
+    if dataset not in T.BUILTIN_DATASETS or dataset in ("folder", "text"):
         usable = [k for k in T.BUILTIN_DATASETS if k not in ("folder", "text")]
         return {"error": f"Unknown dataset {dataset}. Use csv with a table, or one of: {', '.join(usable)}."}
+    return {"dataset": dataset}
+
+
+def agent_train(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Train a saved network design for the Agent lab's Train network block, and wait.
+
+    The agent names the data; the design is whatever was saved on the canvas, with its
+    Input resized to a table's feature columns. Problems come back as an error to show the
+    model, never as an exception, so a bad request costs the agent one tool call.
+    """
+    name = str(request.get("design") or "").strip()
+    versions = _versions(name) if name else []
+    if not versions:
+        have = ", ".join(p.stem for p in sorted(saved_dir().glob("*.json"))[:12])
+        return {"error": f"No network design called {name or '(none)'} is saved. Saved ones: {have or 'none'}."}
+    graph = json.loads(versions[-1]["path"].read_text())
+    graph.pop("_version", None)
+    version = versions[-1]["version"]
+    epochs = max(1, min(int(request.get("epochs") or 5), 200))
+    wait = max(5, min(float(request.get("wait") or 600), 3600))
+    data = _agent_data(graph, request)
+    if "error" in data:
+        return data
+    dataset = data["dataset"]
+    target = data.pop("_target", None)
+    cfg: Dict[str, Any] = {**data, "epochs": epochs, "design_name": name, "design_version": version}
     try:
         started = post_train(TrainPayload(graph=graph, config=cfg))
     except HTTPException as exc:
@@ -2130,13 +2159,196 @@ def agent_train(request: Dict[str, Any]) -> Dict[str, Any]:
     out = {"design": name, "version": version, "dataset": dataset, "status": snap["status"],
            "epoch": snap["epoch"], "epochs": snap["epochs"], "learnables": snap.get("learnables"),
            "id": snap["id"], "history": history[-3:], "best": min(losses) if losses else None,
-           "notes": [str(n) for n in (snap.get("notes") or [])][-3:], "problem": snap.get("error")}
+           "notes": [str(n) for n in (snap.get("notes") or [])][-3:], "problem": snap.get("error"),
+           "target": target}
     if snap["status"] in ("starting", "running"):
         out["notes"].append(f"Still training after {int(wait)} seconds; it carries on in Run history.")
     return out
 
 
 agentlab.TRAINER = agent_train
+
+
+# ---- the designer, as tools an agent can call ----
+
+def _latest(name: str):
+    """(graph, version) of a saved design, or (None, why)."""
+    try:
+        versions = _versions(name) if name else []
+    except HTTPException:
+        versions = []
+    if not versions:
+        have = ", ".join(sorted({p.stem for p in saved_dir().glob("*.json")} |
+                                {p.name for p in saved_dir().iterdir() if p.is_dir()})[:15])
+        return None, f"No network design called {name or '(none)'} is saved. Saved ones: {have or 'none'}."
+    graph = json.loads(versions[-1]["path"].read_text())
+    graph.pop("_version", None)
+    return graph, versions[-1]["version"]
+
+
+def _summary(graph: Dict[str, Any]) -> Dict[str, Any]:
+    """What the shape checker says about a design, compactly enough for a model to read."""
+    try:
+        g = G.parse(graph)
+        report = G.analyze(g)
+    except Exception as exc:  # noqa: BLE001 - a malformed design is an answer, not a crash
+        return {"ok": False, "errors": [f"{type(exc).__name__}: {exc}"]}
+    nodes = g.by_id()
+    layers_ = []
+    for nid in report.get("order") or []:
+        info = report["nodes"].get(nid, {})
+        n = nodes[nid]
+        layers_.append({"id": nid, "type": n.type, "params": dict(n.params or {}),
+                        "out_shape": info.get("out_shape"), "learnables": info.get("learnables", 0),
+                        **({"error": info["error"]} if info.get("error") else {})})
+    errors = list(report.get("errors") or []) + [f"{l['id']} ({l['type']}): {l['error']}" for l in layers_ if l.get("error")]
+    return {"ok": bool(report.get("ok")), "errors": errors[:8], "learnables": report.get("total_learnables", 0),
+            "layers": layers_}
+
+
+def _save_version(name: str, graph: Dict[str, Any]) -> int:
+    graph = dict(graph, name=_safe(name))
+    return save_graph(name, GraphPayload(graph=graph))["version"]
+
+
+def _chain(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """A straight stack of layers, the way a model most easily describes a network."""
+    shape = spec.get("input_shape") or [8]
+    shape = [int(x) for x in (shape if isinstance(shape, list) else str(shape).split(","))]
+    nodes = [{"id": "in", "type": "Input", "label": "input", "params": {"shape": shape}, "x": 0, "y": 0}]
+    for i, layer in enumerate(spec.get("layers") or []):
+        layer = dict(layer)
+        kind = str(layer.pop("type", "") or "")
+        nodes.append({"id": f"l{i + 1}", "type": kind, "params": layer, "x": 0, "y": 110 * (i + 1)})
+    nodes.append({"id": "out", "type": "Output", "label": "output",
+                  "params": {"task": spec.get("task") or "classification"}, "x": 0, "y": 110 * (len(nodes))})
+    edges = [{"id": f"e{i + 1}", "source": a["id"], "target": b["id"]} for i, (a, b) in enumerate(zip(nodes, nodes[1:]))]
+    return {"name": spec.get("name") or "AgentNet", "nodes": nodes, "edges": edges}
+
+
+def designer_op(op: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """One operation of the network designer, for an agent. Never raises."""
+    try:
+        return _designer_op(op, args or {})
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+        return {"error": detail.get("message", "Refused.")}
+    except Exception as exc:  # noqa: BLE001 - the model is told, the run carries on
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def _designer_op(op: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    auth.seed(auth.workspace())
+    if op == "list_networks":
+        out = []
+        for item in list_graphs()["graphs"][:40]:
+            graph, _ = _latest(item["name"])
+            summary = _summary(graph) if graph else {"ok": False, "learnables": 0, "layers": []}
+            ins = [l["out_shape"] for l in summary.get("layers", []) if l["type"] == "Input"]
+            tasks = [l["params"].get("task") for l in summary.get("layers", []) if l["type"] == "Output"]
+            out.append({"name": item["name"], "version": item["latest"], "layers": len(summary.get("layers", [])),
+                        "learnables": summary.get("learnables"), "inputs": ins, "task": tasks[:1],
+                        "builds": summary.get("ok")})
+        return {"networks": out}
+    if op == "layer_catalog":
+        want = str(args.get("category") or "").strip().lower()
+        out = []
+        for name, spec in layers.REGISTRY.items():
+            if want and spec.category.lower() != want:
+                continue
+            out.append({"type": name, "category": spec.category,
+                        "params": {p["name"]: p.get("options") or p["default"] for p in spec.params},
+                        "doc": (spec.doc or "").split(". ")[0][:140]})
+        return {"layers": out, "note": "Use the type and param names exactly. Shapes exclude the batch."}
+    name = str(args.get("name") or "").strip()
+    if op == "design_network":
+        if not name:
+            return {"error": "Give the network a name."}
+        graph = args.get("graph") if isinstance(args.get("graph"), dict) else _chain(args)
+        graph["name"] = name
+        summary = _summary(graph)
+        if not summary["ok"]:
+            return {"saved": False, **summary, "hint": "Nothing was saved. Fix the errors and design it again."}
+        version = _save_version(name, graph)
+        return {"saved": True, "name": _safe(name), "version": version, **summary}
+    graph, version = _latest(name)
+    if graph is None:
+        return {"error": version}
+    if op == "check_network":
+        return {"name": name, "version": version, **_summary(graph)}
+    if op == "review_network":
+        g = G.parse(graph)
+        notes = assistant.review(g, G.analyze(g))
+        return {"name": name, "version": version, "findings": [n.get("text") for n in notes] or ["Nothing found."]}
+    if op == "edit_network":
+        command = str(args.get("command") or "").strip()
+        reply = assistant.handle(json.loads(json.dumps(graph)), command)
+        if not reply.get("graph") or not reply.get("changed", True):
+            return {"changed": False, "reply": reply.get("reply"),
+                    "hint": "Commands look like: add dropout after linear, set units to 64 on l1, remove l3."}
+        summary = _summary(reply["graph"])
+        if not summary["ok"]:
+            return {"changed": False, "reply": reply.get("reply"), **summary,
+                    "hint": "The edit broke the network, so it was not saved."}
+        new = _save_version(name, reply["graph"])
+        return {"changed": True, "reply": reply.get("reply"), "version": new, **summary}
+    return {"error": f"Unknown operation {op}."}
+
+
+def agent_experiment(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Run a sweep, an architecture search or the review's repairs on a saved design, and wait."""
+    try:
+        name = str(request.get("design") or "").strip()
+        graph, version = _latest(name)
+        if graph is None:
+            return {"error": version}
+        kind = str(request.get("kind") or "sweep").strip().lower()
+        if kind not in ("sweep", "search", "repair"):
+            return {"error": "kind is sweep (training settings), search (wider, narrower, regularized) or repair (the review's fixes)."}
+        data = _agent_data(graph, request)
+        if "error" in data:
+            return data
+        target = data.pop("_target", None)
+        if not _summary(graph)["ok"]:
+            return {"error": "The design does not build with this data; check_network says why."}
+        cfg = {**data, "trials": max(2, min(int(request.get("trials") or 4), 12)),
+               "epochs": max(1, min(int(request.get("epochs") or 4), 50))}
+        if kind == "sweep":
+            cfg["vary"] = [v for v in (request.get("vary") or ["lr"]) if v in agents.SWEEP_SPACE] or ["lr"]
+        study = agents.start(kind, graph, cfg)
+        wait = max(5, min(float(request.get("wait") or 1200), 3600))
+        deadline = time.time() + wait
+        while study.status in ("planning", "running") and time.time() < deadline:
+            time.sleep(0.5)
+        snap = study.snapshot()
+        trials = [{"label": t.get("label"), "status": t.get("status"), "score": t.get("score"),
+                   "learnables": t.get("learnables"), **({"note": t["note"]} if t.get("note") else {})}
+                  for t in snap["trials"]]
+        out = {"design": name, "version": version, "kind": kind, "status": snap["status"], "id": snap["id"],
+               "objective": snap["objective"], "trials": trials,
+               "leader": (snap.get("leader") or {}).get("label"), "error": snap.get("error"), "target": target}
+        leader = snap.get("leader")
+        if leader and kind in ("search", "repair") and request.get("keep_winner", True) and leader.get("graph"):
+            out["saved_winner_as_version"] = _save_version(name, leader["graph"])
+        if snap["status"] in ("planning", "running"):
+            out["note"] = f"Still running after {int(wait)} seconds; it carries on in the Agents page."
+        return out
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+agentlab.DESIGNER = designer_op
+agentlab.EXPERIMENTER = agent_experiment
+
+
+@app.post("/api/agentlab/designer/{op}")
+def agentlab_designer(op: str, body: Dict[str, Any]):
+    return designer_op(op, body)
+
+
+@app.post("/api/agentlab/experiment")
+def agentlab_experiment(body: Dict[str, Any]):
+    return agent_experiment(body)
 
 
 @app.post("/api/agentlab/train-network")

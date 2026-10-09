@@ -291,6 +291,11 @@ critic refuses any answer no check has proved. Its **Train network** block lets
 the agent train a network saved on the network canvas (such as the shipped
 ScoreMLP) on a table it generates, to learn a heuristic that guides the search.
 
+**Model builder** puts the two halves together: its **Network designer** block
+gives the agent the canvas as tools (list, catalog, design, check, review,
+edit), and with **Train network** and **Experiment** it trains what it designed
+and improves it with sweeps and searches. Ask it for a model in plain words.
+
 As with layers, each block has a **Code** tab with the exact lines of the
 generated file it contributes, and a **Maths** tab with its equation and this
 design's numbers worked through.

@@ -9497,6 +9497,91 @@ def _():
                    "width:var(--al-insp-w,420px)", ".al-tabs{display:flex;flex-wrap:wrap"):
         assert needle in PAGE, needle
 
+
+# --------------------------------------------------------------------------
+# agent lab 3.9: the network designer as tools, and the model builder
+# --------------------------------------------------------------------------
+
+@check("the model builder design is safe as drawn and rehearses without saving anything")
+def _():
+    import tempfile
+    g = agentlab.template("modelbuilder")
+    assert [p for p in agentlab.validate(g) if p["level"] in ("error", "warning")] == []
+    for target in ("python", "langgraph"):
+        compile(agentlab.codegen(g, target)["source"], target, "exec")
+    props = {p["name"]: p["status"] for p in agentlab.safety(g)["properties"]}
+    assert set(props.values()) == {"holds"}, props
+    a = agentlab.analyze(g)
+    offered = set(a["routers"][next(iter(a["routers"]))]["routes"])
+    assert {"list_networks", "layer_catalog", "design_network", "check_network", "review_network", "edit_network",
+            "run_python", "train_network", "run_experiment"} <= offered
+    r = agentlab.run(g, "Make me a model that predicts fuel sales.", "rehearsal", "approve",
+                     memory_dir=Path(tempfile.mkdtemp()))
+    assert r["events"][-1]["event"] == "final"
+    assert "saves nothing" in agentlab._rehearsal_designer("design_network", {})["note"]
+
+
+@check("the network designer's tools design, check, review and edit through the versioned store")
+def _():
+    import main
+    op = main.designer_op
+    try:
+        assert "ScoreMLP" in [n["name"] for n in op("list_networks", {})["networks"]]
+        assert "Linear" in [l["type"] for l in op("layer_catalog", {"category": "Dense"})["layers"]]
+        bad = op("design_network", {"name": "zz_agent_net", "input_shape": [3], "task": "regression",
+                                    "layers": [{"type": "Linaer", "units": 4}]})
+        assert bad["saved"] is False and any("Linaer" in e for e in bad["errors"])
+        assert "error" in op("check_network", {"name": "zz_agent_net"}), "a failed design is not saved"
+        good = op("design_network", {"name": "zz_agent_net", "input_shape": [3], "task": "regression",
+                                     "layers": [{"type": "Linear", "units": 8}, {"type": "Linear", "units": 1}]})
+        assert good["saved"] and good["version"] == 1
+        assert [l["out_shape"] for l in good["layers"]] == [[3], [8], [1], [1]]
+        assert any("Linear feeds straight into Linear" in f for f in op("review_network", {"name": "zz_agent_net"})["findings"])
+        edited = op("edit_network", {"name": "zz_agent_net", "command": "add activation after l1"})
+        assert edited["changed"] and edited["version"] == 2 and edited["ok"]
+        assert op("check_network", {"name": "zz_agent_net"})["version"] == 2
+        assert op("frobnicate", {"name": "zz_agent_net"})["error"].startswith("Unknown operation")
+        said = main.agent_experiment({"design": "zz_agent_net", "kind": "bake"})
+        assert said["error"].startswith("kind is sweep")
+        assert "No network design called nope" in main.agent_experiment({"design": "nope"})["error"]
+    finally:
+        main.delete_graph("zz_agent_net")
+
+
+@check("a table's target comes with the loss of guessing its mean, so a big number can be read")
+def _():
+    import main
+    rows = "a,b,y\n" + "\n".join(f"{i},{i % 7},{1000 + 10 * i}" for i in range(40))
+    stats = main._target_stats(rows, "y")
+    assert stats["mean"] == 1195.0 and stats["guess_the_mean_loss"] > 10000
+    assert main._target_stats("a,b,y\n" + "\n".join(f"{i},1,{i % 2}" for i in range(40)), "y") is None
+    space = {"__name__": "agent"}
+    exec(compile(agentlab.codegen(agentlab.template("modelbuilder"))["source"], "agent", "exec"), space)  # noqa: S102
+    text = space["describe_training"]({"design": "x", "status": "done", "history": [], "target": stats})
+    assert "always guessing the mean scores a loss of about" in text
+
+
+@check("architecture search never widens the layer that sets the answer's size")
+def _():
+    import agents
+    import copy
+    blob = json.loads((ROOT / "examples" / "ScoreMLP.json").read_text())
+    for node in blob["nodes"]:
+        node.pop("label", None)                  # found from the wiring, not from a name
+    wider = copy.deepcopy(blob)
+    assert agents._scale_width(wider, 1.5)
+    units = {n["id"]: n["params"].get("units") for n in wider["nodes"]}
+    assert units["head"] == 1 and units["h1"] == 96
+
+
+@check("the assistant finds a layer by its id")
+def _():
+    import assistant
+    import graph as G
+    blob = json.loads((ROOT / "examples" / "ScoreMLP.json").read_text())
+    g = G.parse(blob)
+    assert assistant.find_node(g, "h2", G.analyze(g)).id == "h2"
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

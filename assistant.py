@@ -61,6 +61,11 @@ def find_node(g: Graph, phrase: str, report: Dict[str, Any]) -> Optional[Any]:
 
     phrase = re.sub(r"^(the|my|a|an)\s+", "", phrase)
 
+    # a layer's id, as the shape checker and the generated code name it
+    by_id = {nid.lower(): n for nid, n in nodes.items()}
+    if phrase in by_id:
+        return by_id[phrase]
+
     exact = [n for _, n in _candidates(g) if (n.label or "").lower() == phrase]
     if exact:
         return exact[0]

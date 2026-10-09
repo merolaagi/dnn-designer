@@ -1,5 +1,38 @@
 # Changelog
 
+## 3.9.0
+
+**Agents that make models.** The network designer is now something an agent
+can use, so "make me a model that predicts tomorrow's fuel sales" is a request
+an agent can carry out end to end.
+
+- **A Network designer block** (Hands) gives an agent six tools:
+  `list_networks`, `layer_catalog`, `design_network` (a stack of layers, shape
+  checked before anything is saved), `check_network` (shapes and parameters
+  layer by layer), `review_network` (the canvas reviewer's findings) and
+  `edit_network` (the assistant's commands, such as "add dropout after l2").
+  Saving only ever adds a design or a new version, never overwrites or deletes,
+  so the Safety tab counts these as reading.
+- **An Experiment block** runs the designer's experiment agents for an agent: a
+  sweep of training settings, an architecture search, or the review's fixes
+  tried one at a time. It waits for the trials and returns the leaderboard; after
+  a search or repair the winner is saved as a new version. It trains, so it sits
+  behind a Human approval.
+- **An eighth starting design: Model builder.** New → *Model builder: design,
+  check, train, improve*. It pins down the task, reuses or designs a network,
+  checks and reviews it, trains it, improves it with experiments, and reports
+  the design, its numbers and how to use it.
+- **Train network takes a design by name**, so an agent can train what it just
+  designed; leave the block's design blank and the model names one each call.
+- **Regression numbers come with a yardstick.** Given a table, training and
+  experiments report the loss of always guessing the target's mean, so a loss of
+  18 million can be read as "learned nothing" and 0.016 as "learned a lot".
+- **Fixed: architecture search changed a network's output size.** Making a
+  network wider also widened the last layer when it was not labelled *head*, so
+  a one-number regression came out predicting two. The layer that sets an
+  Output's size is now found from the wiring and left alone.
+- **The assistant finds a layer by its id**, such as l2, as well as by its name.
+
 ## 3.8.1
 
 **The Agent lab's side panel can be resized, and no tab is hidden.**

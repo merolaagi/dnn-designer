@@ -76,14 +76,41 @@ def sweep_trials(graph: Dict[str, Any], cfg: Dict[str, Any]) -> List[Dict[str, A
             for point in grid]
 
 
+def _heads(graph: Dict[str, Any]) -> set:
+    """The layers that set an Output's size: the last one with a width on each path into it.
+
+    Found from the wiring rather than a label, so a head named anything, or nothing,
+    still keeps the answer's size when the rest of the network is made wider.
+    """
+    feeds: Dict[str, List[str]] = {}
+    for e in graph.get("edges", []):
+        feeds.setdefault(e["target"], []).append(e["source"])
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    heads, seen = set(), set()
+    stack = [n["id"] for n in graph.get("nodes", []) if n.get("type") == "Output"]
+    while stack:
+        nid = stack.pop()
+        for src in feeds.get(nid, []):
+            if src in seen:
+                continue
+            seen.add(src)
+            params = (nodes.get(src) or {}).get("params") or {}
+            if any(isinstance(params.get(k), int) for k in ("filters", "units")):
+                heads.add(src)
+            else:
+                stack.append(src)
+    return heads
+
+
 def _scale_width(graph: Dict[str, Any], factor: float) -> Optional[str]:
     """Multiply every layer's width. Returns a description, or None if nothing moved."""
     touched = []
+    heads = _heads(graph)
     for node in graph["nodes"]:
         for key in ("filters", "units"):
             if key in node["params"] and isinstance(node["params"][key], int):
                 # the final head sets the answer's size, so it must not move
-                if node.get("label") in ("head", "lm_head"):
+                if node.get("label") in ("head", "lm_head") or node["id"] in heads:
                     continue
                 before = node["params"][key]
                 after = max(1, int(round(before * factor)))
