@@ -9892,6 +9892,19 @@ def _():
         server.shutdown()
         restore()
 
+
+@check("switching the default provider picks one of its models, and a missing model is named as such")
+def _():
+    import io
+    import urllib.error
+    import providers
+    err = urllib.error.HTTPError("http://x", 404, "nf", {}, io.BytesIO(b'{"error":{"message":"model \'claude-sonnet-5-5\' not found"}}'))
+    said = providers._why(err)
+    assert "that model is not available here" in said and "nothing answers" not in said
+    assert providers.try_model("ollama", "")["error"] == "Choose a model first."
+    for needle in ('change[el.dataset.def === "provider" ? "model" : "judge_model"]', "which Ollama has installed"):
+        assert needle in PAGE, needle
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -245,6 +245,8 @@ def _why(exc: Exception) -> str:
             detail = ""
         hint = {401: "the key was refused", 403: "the key is not allowed to do this",
                 404: "nothing answers at that address", 429: "rate limited"}.get(exc.code, "")
+        if "model" in detail.lower() and ("not found" in detail.lower() or "does not exist" in detail.lower()):
+            hint = "that model is not available here: pick one this provider lists"
         return f"HTTP {exc.code}{': ' + hint if hint else ''}. {detail}".strip()
     if isinstance(exc, urllib.error.URLError):
         return f"could not connect ({exc.reason})"
@@ -312,6 +314,8 @@ def complete(pid: str, model: str, system: str, prompt: str, max_tokens: int = 2
 
 
 def try_model(pid: str, model: str) -> Dict[str, Any]:
+    if not str(model or "").strip():
+        return {"ok": False, "error": "Choose a model first."}
     started = time.time()
     try:
         out = complete(pid, model, "You are being tested. Reply in one short sentence.",
@@ -411,8 +415,10 @@ def ollama_status() -> Dict[str, Any]:
     with _LOCK:
         data = load()
         mine = data["providers"].setdefault("ollama", {})
-        if mine.get("enabled") is None:
-            mine["enabled"] = True          # it answered, so agents may use it
+        names = sorted(m["name"] for m in models if m.get("name"))
+        if mine.get("enabled") is None or mine.get("models") != names:
+            mine.setdefault("enabled", True)    # it answered, so agents may use it
+            mine["models"] = names               # what the model fields offer
             _write(data)
     return {"running": True, "url": root, "version": version, "models": models, "pulls": _pull_view(),
             **ollama_installed()}

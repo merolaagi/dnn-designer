@@ -15764,7 +15764,14 @@ function stWire(){
       const value = el.type === "checkbox" ? el.checked : el.type === "number" || el.type === "range" ? Number(el.value) : el.value;
       clearTimeout(timer);
       timer = setTimeout(async () => {
-        await stSave({defaults: {[el.dataset.def]: value}});
+        const change = {[el.dataset.def]: value};
+        // a model belongs to its provider: switching provider picks one of the new provider's models
+        if (el.dataset.def === "provider" || el.dataset.def === "judge_provider"){
+          const p = stState.data.providers.find(x => x.id === (value || stState.data.defaults.provider));
+          const offered = p ? [...(p.models || []), ...(p.suggested || [])] : [];
+          change[el.dataset.def === "provider" ? "model" : "judge_model"] = el.dataset.def === "judge_provider" && !value ? "" : (offered[0] || "");
+        }
+        await stSave({defaults: change});
         if (el.dataset.def === "provider" || el.dataset.def === "judge_provider") stRender();
       }, el.tagName === "SELECT" || el.type === "checkbox" ? 0 : 500);
     });
@@ -15830,6 +15837,19 @@ async function stOllama(){
   let o;
   try{ o = await (await fetch(API + "/api/settings/ollama")).json(); } catch { o = {running: false, error: "the server did not answer", models: [], pulls: []}; }
   stState.ollama = o;
+  if (o.running){
+    const names = (o.models || []).map(m => m.name);
+    const p = stState.data.providers.find(x => x.id === "ollama");
+    if (p){ p.models = names; p.ready = true; }
+    const d0 = stState.data.defaults;
+    if (d0.provider === "ollama" && names.length && !names.includes(d0.model)){
+      // the default named a model Ollama does not have: use one it does
+      await stSave({defaults: {model: names[0]}}, true);
+      toast(`Default model set to ${names[0]}, which Ollama has installed`);
+      return stRender();
+    }
+    if (d0.provider === "ollama" && $("stModelList")) $("stModelList").innerHTML = names.map(m => `<option value="${alEsc(m)}">`).join("");
+  }
   const def = stState.data.defaults;
   const gb = n => n ? (n / 1e9).toFixed(1) + " GB" : "";
   const pulls = (o.pulls || []).filter(p => p.status !== "done" || !(o.models || []).some(m => m.name === p.name));

@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.1.2
+
+- **Switching the default provider picks one of its models.** Choosing Ollama
+  kept the previous default model, claude-sonnet-5-5, which Ollama does not
+  have, so every call failed. Now the model changes to one the new provider
+  lists, and opening Settings with a default Ollama does not have switches it to
+  one Ollama has installed, and says so.
+- **Installed Ollama models fill the model fields** (in Settings and on the LLM
+  core) without pressing Test first.
+- **"Model not found" says so.** A 404 about a model reads "that model is not
+  available here: pick one this provider lists", not "nothing answers at that
+  address"; Try with no model asks you to choose one.
+
 ## 4.1.1
 
 **Settings finds Ollama more reliably, and can start it.**
