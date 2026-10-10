@@ -1,5 +1,24 @@
 # Changelog
 
+## 4.3.3
+
+- **Local models no longer trip Ollama's checks.** When a thinking model spent
+  its whole budget reasoning and replied with nothing, the next call sent an
+  empty assistant turn, which Ollama refuses (400, in under a millisecond).
+  Empty turns are now sent as empty text, tool arguments that aren't an object
+  are wrapped, and a reply cut off before any answer says so: "Raise Max tokens
+  per step in Settings".
+- **Settings' "Max tokens per step" and temperature reach the agents.** A core
+  that uses the default model and leaves these at the block's defaults now
+  takes them from Settings; before, every core used 2048 whatever Settings said.
+
+## 4.3.2
+
+- **A refused model call says why.** "HTTP Error 400: Bad Request" now carries
+  the server's own message, and when the cause is the context window running
+  out, it says so and how to raise it (Ollama's Context length setting or
+  OLLAMA_CONTEXT_LENGTH).
+
 ## 4.3.1
 
 - **A failed roster import says why.** The message now shows the server's

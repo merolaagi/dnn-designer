@@ -10204,6 +10204,61 @@ def _():
     assert {"/api/agentlab/roster", "/api/agentlab/roster/import", "/api/agentlab/roster/role"} <= paths
 
 
+@check("a refused model call says what the server said, and names the context window when that is the cause")
+def _():
+    import agentlab, io, urllib.error
+    space = {}
+    exec(compile(agentlab.codegen(agentlab.template("mathsearch"))["source"], "agent.py", "exec"), space)
+    body = io.BytesIO(b'{"error": {"message": "the input length exceeds the context length"}}')
+    said = str(space["explained"](urllib.error.HTTPError("http://x", 400, "Bad Request", {}, body)))
+    assert "exceeds the context length" in said and "OLLAMA_CONTEXT_LENGTH" in said, said
+    said = str(space["explained"](urllib.error.HTTPError("http://x", 400, "Bad Request", {}, io.BytesIO(b"bad tool"))))
+    assert said.endswith("Bad Request: bad tool") and "context" not in said
+
+
+@check("the chat-completions bridge never sends a turn Ollama refuses, and says when thinking ate the token budget")
+def _():
+    import agentlab, io, providers
+    old = providers.load()
+    providers.save({"defaults": {"provider": "ollama", "model": "qwen3.6:27b"}})
+    try:
+        src = agentlab.codegen(agentlab.template("mathsearch"))["source"]
+    finally:
+        providers._write(old)
+    space = {}
+    exec(compile(src, "agent.py", "exec"), space)
+    sent, replies = [], [
+        {"choices": [{"message": {"content": "", "tool_calls": [{"id": "a", "function": {"name": "run_python",
+                      "arguments": '"print(1)"'}}]}, "finish_reason": "tool_calls"}]},
+        {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}]
+
+    class Reply:
+        headers = {}
+
+        def __init__(self, data):
+            self.data = data
+
+        def __enter__(self):
+            return io.BytesIO(json.dumps(self.data).encode())
+
+        def __exit__(self, *exc):
+            return False
+
+    space["send"] = lambda request: (sent.append(json.loads(request.data)), Reply(replies[len(sent) - 1]))[1]
+    first = space["call_openai"]("http://x/v1", "sys", [{"role": "user", "content": "go"}], None, "m", 0.3, 2048)
+    assert first["content"][0]["input"] == {"input": "print(1)"}
+    history = [{"role": "user", "content": "go"}, {"role": "assistant", "content": first["content"]},
+               {"role": "assistant", "content": []}]
+    try:
+        space["call_openai"]("http://x/v1", "sys", history, None, "m", 0.3, 2048)
+        raise AssertionError("an empty, cut-off reply should say why")
+    except RuntimeError as exc:
+        assert "Max tokens per step" in str(exc)
+    turns = sent[1]["messages"]
+    assert turns[2]["tool_calls"][0]["function"]["arguments"] == '{"input": "print(1)"}'
+    assert turns[3] == {"role": "assistant", "content": ""}
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -1265,6 +1265,20 @@ def _core_target(p: Dict[str, Any]) -> Dict[str, Any]:
                               str(p.get("base_url") or ""))
 
 
+def _core_sampling(p: Dict[str, Any]) -> tuple:
+    """A core's temperature and max tokens. Left at the block's defaults on a core that uses the default
+    model, they come from Settings, so "Max tokens per step" there reaches every such core."""
+    block = BLOCKS["llm"]["params"]
+    temperature, max_tokens = float(p["temperature"]), int(p["max_tokens"])
+    if (p.get("provider") or "default") == "default":
+        chosen = _providers.load()["defaults"]
+        if temperature == block["temperature"]["value"] and chosen.get("temperature") is not None:
+            temperature = float(chosen["temperature"])
+        if max_tokens == block["max_tokens"]["value"] and chosen.get("max_tokens"):
+            max_tokens = int(chosen["max_tokens"])
+    return temperature, max_tokens
+
+
 def _targets(graph, depth: int = 0) -> List[Dict[str, Any]]:
     """Every LLM core's destination, here and in saved agents inside."""
     out = []
@@ -1845,9 +1859,10 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     add(["", "", "# ---- brain ----"])
     for lid in llm_ids:
         p, t = _params(nodes[lid]), targets[lid]
+        temperature, max_tokens = _core_sampling(p)
         add([f"# {t['name']}" + ("" if (p.get("provider") or "default") != "default" else ", the default set in Settings"),
              f'{const(lid)}_SETTINGS = {{"model": os.environ.get("AGENT_MODEL", {json.dumps(t["model"])}), '
-             f'"temperature": {float(p["temperature"])}, "max_tokens": {int(p["max_tokens"])}, '
+             f'"temperature": {temperature}, "max_tokens": {max_tokens}, '
              f'"provider": "{t["kind"]}", "base_url": os.environ.get("AGENT_BASE_URL", {json.dumps(t["base_url"])}), '
              f'"key": {json.dumps(t["key_env"])}}}'], lid)
     add([f"COMPLETE_SETTINGS = {const(llm_ids[0])}_SETTINGS  # the planner, critic and summarizer use the first core"],
@@ -1865,6 +1880,26 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "def api_key(name):",
              '    return (KEYS.get(name) or os.environ.get(name, "")) if name else ""',
              "", "",
+             "def explained(exc):",
+             '    """The same HTTP error, carrying what the server said about it, not just its status."""',
+             "    try:",
+             '        said = exc.read().decode("utf-8", errors="replace")',
+             "    except Exception:",
+             '        said = ""',
+             "    try:",
+             "        found = json.loads(said)",
+             '        error = found.get("error", found) if isinstance(found, dict) else found',
+             '        said = (error.get("message") if isinstance(error, dict) else str(error)) or said',
+             "    except ValueError:",
+             "        pass",
+             "    said = said.strip()[:500]",
+             '    if any(word in said.lower() for word in ("context", "too long", "exceed", "num_ctx")):',
+             '        said += (" The conversation outgrew the model\'s context window: raise the context length "',
+             '                 "(for Ollama, its Context length setting or OLLAMA_CONTEXT_LENGTH) or lower the summarizer\'s limit.")',
+             "    return urllib.error.HTTPError(exc.url, exc.code, f\"{exc.reason}: {said}\" if said else exc.reason,",
+             "                                  exc.headers, None)",
+             "",
+             "",
              "def send(request):",
              '    """Open a model call, trying again after 429, 5xx and dropped connections, with growing pauses.',
              "",
@@ -1877,7 +1912,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "            return opener.open(request, timeout=TIMEOUT)",
              "        except urllib.error.HTTPError as exc:",
              "            if exc.code not in (408, 409, 429, 500, 502, 503, 504, 529) or attempt == RETRIES:",
-             "                raise",
+             "                raise explained(exc) from None",
              "        except urllib.error.URLError:",
              "            if attempt == RETRIES:",
              "                raise",
@@ -1914,6 +1949,9 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '    """The same call in the chat-completions format — OpenAI, Grok, Gemini, Mistral, Ollama and the',
              "    other servers that speak it — translated both ways,",
              '    so the rest of the file only ever sees the Messages API\'s shape."""',
+             '    def as_args(value):',
+             '        return value if isinstance(value, dict) else ({} if value is None else {"input": value})',
+             "",
              '    chat = [{"role": "system", "content": system}]',
              "    for m in messages:",
              '        if isinstance(m["content"], str):',
@@ -1921,9 +1959,10 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '        elif m["role"] == "assistant":',
              '            text = "".join(b.get("text", "") for b in m["content"] if b.get("type") == "text")',
              '            calls = [{"id": b["id"], "type": "function",',
-             '                      "function": {"name": b["name"], "arguments": json.dumps(b.get("input") or {})}}',
+             '                      "function": {"name": b["name"], "arguments": json.dumps(as_args(b.get("input")))}}',
              '                     for b in m["content"] if b.get("type") == "tool_use"]',
-             '            chat.append({"role": "assistant", "content": text or None, **({"tool_calls": calls} if calls else {})})',
+             '            # servers such as Ollama refuse an assistant turn whose content is null and has no tool calls',
+             '            chat.append({"role": "assistant", "content": text or ("" if not calls else None), **({"tool_calls": calls} if calls else {})})',
              "        else:",
              '            for b in m["content"]:',
              '                if b.get("type") == "tool_result":',
@@ -1948,11 +1987,14 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '    content = [{"type": "text", "text": message["content"]}] if message.get("content") else []',
              '    for call in message.get("tool_calls") or []:',
              "        try:",
-             '            args = json.loads(call["function"].get("arguments") or "{}")',
+             '            args = as_args(json.loads(call["function"].get("arguments") or "{}"))',
              "        except ValueError:",
              '            args = {"input": call["function"].get("arguments")}',
              '        content.append({"type": "tool_use", "id": call.get("id") or call["function"]["name"],',
              '                        "name": call["function"]["name"], "input": args})',
+             '    if not content and choice.get("finish_reason") == "length":',
+             '        raise RuntimeError(f"The model used all {max_tokens} of its output tokens before answering (thinking "',
+             '                           "models spend many on reasoning). Raise Max tokens per step in Settings to 8192 or more.")',
              '    usage = data.get("usage") or {}',
              '    return {"content": content,',
              '            "stop_reason": "tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn",',
@@ -3885,7 +3927,7 @@ def costs(graph, task, events, calls, space, mode) -> Dict[str, Any]:
                 "at_budget_unbounded": round(N * x1 + rho * N * (N - 1) / 2),
                 "fit_calls": len(fit),
             })
-        caps = [int(_params(nodes[e["node"]])["max_tokens"]) for e in core_events]
+        caps = [_core_sampling(_params(nodes[e["node"]]))[1] for e in core_events]
         report["output_within_cap"] = all(e["tokens"]["output"] <= cap for e, cap in zip(core_events, caps))
     if counted:
         pairs = [(c["input"], c["estimate"]) for c in calls if c["counted"] and c["estimate"]]
