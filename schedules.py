@@ -169,12 +169,20 @@ def run_now(sid: str) -> Dict[str, Any]:
 # the inbox
 # --------------------------------------------------------------------------
 
-def notify(kind: str, title: str, text: str = "", schedule: Optional[str] = None, conv: Optional[str] = None) -> None:
+def notify(kind: str, title: str, text: str = "", schedule: Optional[str] = None, conv: Optional[str] = None,
+           attachment: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Write to the inbox, and push it to your phone if you chose that kind (see push.py)."""
     row = {"id": "in" + uuid.uuid4().hex[:8], "t": time.time(), "kind": kind, "title": title[:200],
            "text": AL._one_line(text, 600), "schedule": schedule, "conv": conv, "read": False}
     with _LOCK:
         with open(_inbox_path(), "a") as f:
             f.write(json.dumps(row) + "\n")
+    try:
+        import push
+        push.send({**row, "text": text if kind == "done" else row["text"]}, attachment)
+    except Exception:  # noqa: BLE001 - the inbox is what matters; a push is extra
+        pass
+    return row
 
 
 def inbox(limit: int = 50) -> Dict[str, Any]:

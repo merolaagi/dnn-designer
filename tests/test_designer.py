@@ -15,6 +15,8 @@ import sys
 import uuid
 from pathlib import Path
 
+os.environ["AGENTLAB_NO_PUSH"] = "1"          # the tests must never notify a real phone
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -10973,6 +10975,78 @@ def _():
     paths = {r.path for r in main.app.routes}
     assert "/api/benchmark/station/preview" in paths
     assert "data-bmsuite" in PAGE and "function alBenchPreviewHtml" in PAGE and "<code>number:</code>" in PAGE
+
+
+@check("phone alerts: inbox rows of the chosen kinds go to ntfy, titles only unless details are on")
+def _():
+    import push as PU, schedules as SC
+    saved = PU._path().read_text() if PU._path().exists() else None
+    sent, real_post = [], PU._post
+    PU._post = lambda c, url, data, headers, method="POST": sent.append((url, data, headers, method))
+    try:
+        for bad in ({"topic": "short"}, {"topic": "has space in it"}, {"server": "ftp://x"}):
+            try:
+                PU.save(bad)
+                raise AssertionError(bad)
+            except ValueError:
+                pass
+        topic = PU.new_topic()
+        assert len(topic) >= 20 and PU.save({"topic": topic, "public_url": "http://mini:8770", "details": False})["on"]
+        row = {"kind": "alert", "title": "University Chevron: no new POS data for 36+ hours", "text": "secret numbers",
+               "conv": None}
+        msg = PU.message_for(row)
+        assert msg["topic"] == topic and msg["priority"] == 5 and "secret" not in msg["message"]
+        assert msg["click"] == "http://mini:8770/m#inbox"
+        PU.save({"details": True})
+        assert PU.message_for({**row, "conv": "c1"})["message"] == "secret numbers"
+        assert PU.message_for({**row, "conv": "c1"})["click"] == "http://mini:8770/m#conv=c1"
+        PU.deliver({"kind": "done", "title": "Morning brief: done", "text": "Fuel up 4%"},
+                   {"name": "brief.pdf", "data": b"%PDF-1.4"})
+        url, data, headers, method = sent[-1]
+        assert method == "PUT" and url.endswith("/" + topic) and data == b"%PDF-1.4" and headers["Filename"] == "brief.pdf"
+        PU.deliver({"kind": "done", "title": "Brief ✓ café", "text": "x"})
+        assert json.loads(sent[-1][1])["title"] == "Brief ✓ café"            # JSON keeps UTF-8 titles whole
+        assert not PU.send({"kind": "skipped", "title": "x"})                  # not a chosen kind
+        os.environ.pop("AGENTLAB_NO_PUSH")
+        try:
+            before = len(sent)
+            assert PU.send({"kind": "alert", "title": "x"})
+            time.sleep(0.3)
+            assert len(sent) == before + 1
+        finally:
+            os.environ["AGENTLAB_NO_PUSH"] = "1"
+        assert not PU.send({"kind": "alert", "title": "x"})                    # the tests never push
+        assert "push.send" in inspect.getsource(SC.notify)
+    finally:
+        PU._post = real_post
+        if saved is None:
+            PU._path().unlink(missing_ok=True)
+        else:
+            PU._path().write_text(saved)
+
+
+@check("phone page: /m serves Muse with sign-in, approvals, speaking and the inbox; Settings sets up alerts")
+def _():
+    import main
+    from fastapi.testclient import TestClient
+    client = TestClient(main.app)
+    page = client.get("/m")
+    assert page.status_code == 200 and "viewport-fit=cover" in page.text
+    m = page.text
+    for needle in ("/api/auth/login", "/api/agentlab/conversations", '{kind: "muse", key: "muse"}', "/answer",
+                   "webkitSpeechRecognition", "/api/inbox", "function md(", "/stop"):
+        assert needle in m, needle
+    assert client.get("/m/manifest.json").json()["start_url"] == "/m"
+    assert client.get("/m/icon.svg").headers["content-type"].startswith("image/svg")
+    assert {"/api/push", "/api/push/test"} <= {r.path for r in main.app.routes}
+    assert "function stPush" in PAGE and "Tailscale" in PAGE
+    import shutil, subprocess, tempfile
+    if shutil.which("node"):
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+            f.write(m.split("<script>")[1].split("</script>")[0])
+        done = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
+        os.unlink(f.name)
+        assert done.returncode == 0, done.stderr[-400:]
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

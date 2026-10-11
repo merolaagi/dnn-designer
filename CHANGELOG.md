@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.11.0
+
+- **Muse on your phone** at `/m`. It signs in with the same name and password
+  as the full app. On it you can start a new Muse conversation or carry on an
+  old one, follow each step as it runs, approve or decline a step that waits
+  for you, stop a run, speak instead of typing (where the phone's browser
+  allows), and read the inbox. Add it to the home screen and it opens like an
+  app. Reach it from the phone over Tailscale. Anyone who can open the app's
+  address can create an account, and an account can run code on the Mac, so a
+  public address is not safe.
+- **Alerts on your phone, through ntfy.** Anything that reaches the inbox can
+  also become a push notification: store alerts, POS data arriving again, a
+  run waiting for your approval, the morning brief finishing, a failed check.
+  Settings → "Muse on your phone" has the topic (Generate makes a long random
+  one), the server, which kinds to send, and Send a test. Tapping a
+  notification opens that conversation on the phone page. By default a
+  notification carries only its title. With details on, it carries the text
+  too.
+- The tests never send a real notification (`AGENTLAB_NO_PUSH`).
+
 ## 4.10.2
 
 - Station benchmark: the top-merchandise question leaves out fuel. NAXML

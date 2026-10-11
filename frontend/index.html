@@ -16200,6 +16200,12 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Muse on your phone</h3><small>Ask Muse, approve its steps and read the inbox from your phone, and get
+        store alerts and the morning brief as notifications</small></header>
+      <div class="st-body" id="stPush"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Models on this computer</h3><small>Ollama runs open models such as Llama, Mistral and Qwen locally</small>
         <span class="spacer"></span><button class="btn" id="stOllamaRefresh">Refresh</button></header>
       <div class="st-body" id="stOllama"><p class="st-msg">Checking for Ollama…</p></div>
@@ -16232,6 +16238,7 @@ function stRender(){
   stWire();
   stOllama();
   stStation();
+  stPush();
 }
 
 async function stStation(){
@@ -16274,6 +16281,50 @@ async function stStation(){
   };
   $("ssWatch").onclick = () => preset("watchdog");
   $("ssBrief").onclick = () => preset("brief");
+}
+
+async function stPush(){
+  const host = $("stPush");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/push")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  const phone = (d.public_url || location.origin) + "/m";
+  host.innerHTML = `<div class="st-msg" style="line-height:1.55;margin-bottom:10px">
+      <b>The phone page</b> is <a class="al-link" href="/m" target="_blank" rel="noopener">${alEsc(phone)}</a>. Open it on your phone and
+      add it to the home screen. Reach this computer from the phone over Tailscale rather than a public address: anyone
+      who can open this app's address can create an account here, and an account can run code on this computer.</div>
+    <div class="st-grid">
+      <div class="st-field"><label for="puServer">ntfy server</label><input id="puServer" value="${alEsc(d.server)}"></div>
+      <div class="st-field"><label for="puTopic">Topic (your secret)</label><input id="puTopic" value="${alEsc(d.topic)}" placeholder="Generate one"></div>
+      <div class="st-field"><label for="puUrl">This app's address, as the phone reaches it</label><input id="puUrl" value="${alEsc(d.public_url)}" placeholder="http://your-mac:8770"></div>
+      <div class="st-field"><label for="puTok">Access token (only for a private ntfy server)</label><input id="puTok" type="password" placeholder="${d.has_token ? "saved: leave blank to keep it" : "none"}"></div>
+    </div>
+    <div class="st-field" style="margin-top:8px"><label>Notify me about</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 16px">${Object.entries(d.kinds_all).map(([k, v]) =>
+        `<label class="st-toggle"><input type="checkbox" data-pukind="${alEsc(k)}"${d.kinds.includes(k) ? " checked" : ""}> ${alEsc(v)}</label>`).join("")}</div></div>
+    <label class="st-toggle" style="margin-top:8px"><input type="checkbox" id="puDetails"${d.details ? " checked" : ""}> Include the details
+      (the brief's text and its PDF). They pass through the ntfy server; without this, a notification only gives its title.</label>
+    <div class="st-actions"><button class="btn" id="puGen">Generate a topic</button><button class="btn go" id="puSave">Save</button>
+      <button class="btn" id="puTest"${d.topic ? "" : " disabled"}>Send a test</button><span class="st-msg" id="puMsg">${d.last_error ? "Last push failed: " + alEsc(d.last_error) : ""}</span></div>
+    <div class="st-msg" style="margin-top:8px;line-height:1.5">Install the ntfy app on your phone, tap +, and subscribe to
+      ${d.topic ? `<code>${alEsc(d.topic)}</code>${d.server !== "https://ntfy.sh" ? ` on ${alEsc(d.server)}` : ""}` : "your topic"}.
+      Anyone who knows the topic can read what is sent to it, so keep it long and private.</div>`;
+  $("puGen").onclick = () => { $("puTopic").value = d.suggested_topic; };
+  $("puSave").onclick = async () => {
+    const body = {server: $("puServer").value.trim(), topic: $("puTopic").value.trim(), public_url: $("puUrl").value.trim(),
+      details: $("puDetails").checked, kinds: [...host.querySelectorAll("[data-pukind]")].filter(x => x.checked).map(x => x.dataset.pukind)};
+    if ($("puTok").value) body.token = $("puTok").value;
+    const r = await fetch(API + "/api/push", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+    const x = await r.json();
+    if (!r.ok){ $("puMsg").className = "st-msg bad"; $("puMsg").textContent = (x.detail && x.detail.message) || "Not saved."; return; }
+    toast("Saved"); stPush();
+  };
+  $("puTest").onclick = async () => {
+    $("puMsg").className = "st-msg"; $("puMsg").textContent = "Sending…";
+    const r = await fetch(API + "/api/push/test", {method: "POST"}), x = await r.json();
+    $("puMsg").className = "st-msg " + (r.ok ? "good" : "bad");
+    $("puMsg").textContent = r.ok ? "Sent. It should be on your phone in a few seconds." : ((x.detail && x.detail.message) || "Not sent.");
+  };
 }
 
 function stProviderRow(p){

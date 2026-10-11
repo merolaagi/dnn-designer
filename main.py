@@ -31,6 +31,7 @@ import benchmark
 import muse
 import schedules
 import station
+import push
 import providers
 import advisor
 import assistant
@@ -870,6 +871,37 @@ class StationConfig(BaseModel):
 class StationPreset(BaseModel):
     which: str
     at: str = "06:00"
+
+
+class PushIn(BaseModel):
+    server: Optional[str] = None
+    topic: Optional[str] = None
+    kinds: Optional[List[str]] = None
+    details: Optional[bool] = None
+    public_url: Optional[str] = None
+    token: Optional[str] = None
+    clear_token: Optional[bool] = None
+
+
+@app.get("/api/push")
+def push_view():
+    return {**push.view(), "subscribe": push.subscribe_url(), "suggested_topic": push.new_topic()}
+
+
+@app.post("/api/push")
+def push_save(body: PushIn):
+    try:
+        return {**push.save(body.model_dump()), "subscribe": push.subscribe_url()}
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/push/test")
+def push_test():
+    try:
+        return push.test()
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 @app.get("/api/station")
@@ -3944,6 +3976,30 @@ def put_prefs(body: Dict[str, Any]):
     follows the project rather than the machine that opened it."""
     prefs_file().write_text(json.dumps(body, indent=1))
     return {"ok": True}
+
+
+MOBILE_FILE = FRONTEND_FILE.parent / "mobile.html"
+
+
+@app.get("/m", response_class=HTMLResponse)
+def mobile():
+    """Muse on a phone: ask, approve, read the inbox. Sign-in is the same as the full app's."""
+    return FileResponse(MOBILE_FILE, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/m/manifest.json")
+def mobile_manifest():
+    return JSONResponse({"name": "Muse", "short_name": "Muse", "start_url": "/m", "display": "standalone",
+                         "background_color": "#f6f5f1", "theme_color": "#1f3a5f",
+                         "icons": [{"src": "/m/icon.svg", "sizes": "any", "type": "image/svg+xml"}]})
+
+
+@app.get("/m/icon.svg")
+def mobile_icon():
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" '
+           'fill="#1f3a5f"/><path d="M16 46V18l16 16 16-16v28" fill="none" stroke="#f6f5f1" stroke-width="6" '
+           'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+    return Response(svg, media_type="image/svg+xml")
 
 
 @app.get("/", response_class=HTMLResponse)
