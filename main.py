@@ -34,6 +34,7 @@ import station
 import push
 import muse_profile
 import documents
+import report
 import providers
 import advisor
 import assistant
@@ -939,6 +940,47 @@ def documents_ask(doc_id: str):
     conv["title"] = f"Check {x.get('vendor') or 'a document'} {x.get('number') or x.get('bol_number') or ''}".strip()
     agentlab._conv_save(conv)
     return _conv_action(agentlab.say, conv["id"], documents.analyst_task(d), mode, auth.sub("agentlab"))
+
+
+def _report(brief: bool):
+    try:
+        snap = report.snapshot()
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    return snap, (report.latest_brief() if brief else None)
+
+
+@app.get("/api/report/store")
+def report_store():
+    """The latest business day's figures, straight from the store's database."""
+    return _report(False)[0]
+
+
+@app.get("/api/report/store.html", response_class=HTMLResponse)
+def report_store_html(brief: bool = True):
+    snap, b = _report(brief)
+    return HTMLResponse(report.html(snap, b))
+
+
+@app.get("/api/report/store.pdf")
+def report_store_pdf(brief: bool = True):
+    snap, b = _report(brief)
+    return Response(report.pdf(snap, b), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="store-{snap["day"]}.pdf"'})
+
+
+@app.get("/api/agentlab/conversations/{conv_id}/turns/{n}/pdf")
+def conversation_turn_pdf(conv_id: str, n: int):
+    """One answer, saved as a PDF."""
+    conv = _conv_action(agentlab.conversation, conv_id)
+    if not 0 <= n < len(conv["turns"]) or not conv["turns"][n].get("answer"):
+        raise HTTPException(404, detail={"message": "That message has no answer to save."})
+    t = conv["turns"][n]
+    when = time.strftime("%b %d, %Y %I:%M %p", time.localtime(t.get("at") or time.time()))
+    data = report.answer_pdf(conv.get("title") or conv["agent"]["name"], t["task"], t["answer"],
+                             f"{conv['agent']['name']} · {when}")
+    return Response(data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="answer-{conv_id}-{n + 1}.pdf"'})
 
 
 class ProfileFact(BaseModel):

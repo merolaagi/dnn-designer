@@ -11150,6 +11150,54 @@ def _():
     assert "function stDocs" in PAGE
 
 
+@check("store report: figures straight from SQL, as a page with charts and as a valid PDF; answers save as PDF")
+def _():
+    import report as RP, station as ST, minipdf, schedules as SC
+    real = ST.query
+    days = [[f"2026-10-{d:02d}", str(1900 + d * 10), str(7000 + d), str(3000 + d * 5), str(10000 + d * 9), "-4.25"]
+            for d in range(1, 11)]
+    ST.query = _fake_station([
+        ("ORDER BY 3 DESC, 2 LIMIT 1", [["s1", "University Chevron #90877", "2026-10-10"]]),
+        ("business_date < current_date", [["2026-10-10"]]),
+        ("cash_over_short FROM day_reports", days),
+        ("WITH last AS", [["1", "REGULAR", "5711", "12000", "4000"], ["2", "PREMIUM", "900", "10000", "600"]]),
+        ("FROM naxml_mcm_daily", [["CIGARETTES", "1201.00", "10"]]),
+        ("FROM fuel_deliveries", [["2026-10-07", "Regular", "8500", "Chevron", "B1"]]),
+        ("FROM xml_files", [["2026-10-10 09:00:00+00"]]),
+    ])
+    try:
+        snap = RP.snapshot()
+    finally:
+        ST.query = real
+    assert snap["day"] == "2026-10-10" and snap["week_before"] == "2026-10-03"
+    assert snap["today"]["gallons"] == 2000 and snap["last_week"]["gallons"] == 1930
+    tank = {t["tank"]: t for t in snap["tanks"]}
+    assert abs(tank["1"]["days"] - 5711 / 4000) < 1e-9 and abs(tank["1"]["full"] - 5711 / 12000) < 1e-9
+    tiles = {t["label"]: t for t in RP.tiles(snap)}
+    assert tiles["Fuel gallons"]["value"] == "2,000" and abs(tiles["Fuel gallons"]["delta"] - (70 / 1930 * 100)) < 1e-6
+    assert tiles["Cash over/short"]["value"] == "$4.25" and tiles["Cash over/short"]["status"] == "short"
+    brief = {"answer": "## Yesterday\n- Sales **up**\n\n| Tank | Days |\n|---|---|\n| 1 | 1.4 |", "at": time.time()}
+    page = RP.html(snap, brief)
+    assert "<svg" in page and "<title>Saturday, October 10, 2026: 2,000</title>" in page and "● low" in page
+    assert "prefers-color-scheme: dark" in page and "Written by the Station analyst (a model)" in page and "<table>" in page
+    assert "<script" not in page.lower()
+    data = RP.pdf(snap, brief)
+    assert data.startswith(b"%PDF-1.4") and data.rstrip().endswith(b"%%EOF") and b"/Count" in data
+    xref = int(data.rsplit(b"startxref", 1)[1].split()[0])
+    assert data[xref:xref + 4] == b"xref"                                   # the cross-reference is where it says
+    assert minipdf.latin("Café — ✓") == "Café - ok" and minipdf.width("ab", 10) > 0
+    one = RP.answer_pdf("Muse", "How did fuel do?", "- up 4%\n\n| a | b |\n|---|---|\n| 1 | 2 |")
+    assert one.startswith(b"%PDF") and b"/Count 1" in one
+    assert "_brief_pdf(s, turn)" in inspect.getsource(SC._watch)
+    assert SC._brief_pdf({"name": "Ingest watchdog"}, {}) is None
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/report/store", "/api/report/store.html", "/api/report/store.pdf",
+            "/api/agentlab/conversations/{conv_id}/turns/{n}/pdf"} <= paths
+    m = (ROOT / "frontend" / "mobile.html").read_text()
+    assert "function showStore" in m and "/turns/${i}/pdf" in m and "Open the store report" in PAGE and "Save as PDF" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -16209,8 +16209,7 @@ function stRender(){
     </section>
 
     <section class="st-card">
-      <header><h3>What Muse knows about you</h3><small>Every Muse request and every conversation with an agent starts
-        with these lines. Nothing is added unless you write it here or tell Muse “remember: …”</small></header>
+      <header><h3>What Muse knows about you</h3><small>Every request starts with these lines; you add them, or tell Muse “remember: …”</small></header>
       <div class="st-body" id="stProfile"><p class="st-msg">Loading…</p></div>
     </section>
 
@@ -16292,7 +16291,7 @@ async function stProfile(){
   let d;
   try{ d = await (await fetch(API + "/api/profile")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
   host.innerHTML = `${d.facts.length ? `<div class="pf-list">${d.facts.map(f => `<div class="pf-row">
-        <input data-pf="${alEsc(f.id)}" value="${alEsc(f.text)}" aria-label="Fact">
+        <div class="st-field" style="margin:0"><input data-pf="${alEsc(f.id)}" value="${alEsc(f.text)}" aria-label="Fact"></div>
         <button class="btn" data-pfsave="${alEsc(f.id)}">Save</button><button class="btn danger" data-pfdel="${alEsc(f.id)}" aria-label="Remove">Remove</button>
         <small>${f.by === "muse" ? "you told Muse" : "you wrote"} · ${new Date(f.t * 1000).toLocaleDateString()}</small></div>`).join("")}</div>`
       : `<p class="st-msg">Nothing yet. For example: “My store is University Chevron #90877 in Berkeley, open 24/7.” “Answer in short bullet points with the numbers first.”</p>`}
@@ -16327,7 +16326,9 @@ async function stStation(){
     </div>
     <div class="st-actions"><button class="btn go" id="ssSave">Save and test</button><span class="st-msg" id="ssMsg">${d.psql ? "" : "psql was not found on this computer."}</span></div>
     <div class="st-actions"><button class="btn" id="ssWatch"${watch.length ? " disabled" : ""}>${watch.length ? "Ingest watchdog is on (hourly)" : "Add the ingest watchdog (hourly)"}</button>
-      <button class="btn" id="ssBrief">Add the morning brief (daily, 06:00)</button></div>
+      <button class="btn" id="ssBrief">Add the morning brief (daily, 06:00)</button>
+      <a class="btn" href="/api/report/store.html" target="_blank" rel="noopener">Open the store report</a>
+      <a class="btn" href="/api/report/store.pdf">PDF</a></div>
     <div class="st-msg" style="margin-top:8px;line-height:1.5">The watchdog writes to the inbox when a site's POS files stop arriving for that many hours, and once more
       when they come back. The morning brief is a daily run of the Station analyst; you can read and change it in Talk to agents.
       Create the read-only login first with <code>station_reader.sql</code>.</div>`;
@@ -16924,9 +16925,11 @@ function tkTurnHtml(t, i){
     : `<div class="tk-answer err">${alEsc(t.status === "interrupted" ? "The server stopped while this was running."
         : t.status === "stopped" ? "Stopped." : t.error || "No answer came back.")}</div>`;
   if (t.muse) return tkMusePlan(t) + body + `<div class="tk-meta">${alEsc([t.seconds != null ? `${t.seconds} s` : "",
-    t.mode === "rehearsal" ? "rehearsal" : ""].filter(Boolean).join(" · "))}</div>`;
+    t.mode === "rehearsal" ? "rehearsal" : ""].filter(Boolean).join(" · "))}
+    ${t.answer && tkState.conv ? `<a class="al-link" href="/api/agentlab/conversations/${alEsc(tkState.conv.id)}/turns/${i}/pdf">Save as PDF</a>` : ""}</div>`;
   return body + `<div class="tk-meta">${alEsc(meta)}
     ${t.run && t.status !== "gone" ? `<button data-lab="${alEsc(t.run)}">See every step in the lab</button>` : ""}
+    ${t.answer && tkState.conv ? `<a class="al-link" href="/api/agentlab/conversations/${alEsc(tkState.conv.id)}/turns/${i}/pdf">Save as PDF</a>` : ""}
     ${["interrupted", "stopped", "error"].includes(t.status) ? `<button data-resume="${alEsc(t.run)}" title="Carry on from the last step that finished">Resume</button>` : ""}</div>`;
 }
 

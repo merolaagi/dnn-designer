@@ -281,10 +281,23 @@ def _watch(s: Dict[str, Any]) -> None:
         return
     s["last_status"], s["watching"] = status, None
     if status == "done":
-        notify("done", f"{s['name']}: done", turn.get("answer") or "", s["id"], s["conv"])
+        notify("done", f"{s['name']}: done", turn.get("answer") or "", s["id"], s["conv"], _brief_pdf(s, turn))
     else:
         notify("error" if status == "error" else "stopped", f"{s['name']}: {status}",
                turn.get("error") or "", s["id"], s["conv"])
+
+
+def _brief_pdf(s: Dict[str, Any], turn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """For the morning brief: the store report with the brief's text, as a PDF to go with the notification."""
+    if not str(s.get("name", "")).lower().startswith("morning brief"):
+        return None
+    try:
+        import report
+        snap = report.snapshot()
+        return {"name": f"brief-{snap['day']}.pdf",
+                "data": report.pdf(snap, {"answer": turn.get("answer"), "at": turn.get("at")})}
+    except Exception:  # noqa: BLE001 - no PDF is better than no notification
+        return None
 
 
 def tick(now: Optional[float] = None) -> int:

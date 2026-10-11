@@ -110,6 +110,7 @@ label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 </div>
 <nav id="nav" class="hidden">
   <button data-tab="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Ask</button>
+  <button data-tab="store"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Store</button>
   <button data-tab="scan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>Scan</button>
   <button data-tab="inbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.3 20a2 2 0 0 0 3.4 0"/></svg>Inbox<span class="badge hidden" id="badge"></span></button>
   <button data-tab="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Me</button>
@@ -202,7 +203,7 @@ function showLogin(msg){
 }
 
 /* ---------- routing ---------- */
-const TABS = ["inbox", "me", "scan"];
+const TABS = ["inbox", "me", "scan", "store"];
 function route(){
   clearInterval(S.timer);
   const h = location.hash.slice(1), m = h.match(/^conv=(\w+)/), dm = h.match(/^doc=(\w+)/);
@@ -212,6 +213,7 @@ function route(){
   if (S.tab === "inbox") return showInbox();
   if (S.tab === "me") return showMe();
   if (S.tab === "scan") return showScan();
+  if (S.tab === "store") return showStore();
   if (window.MUSE_VIEWS && window.MUSE_VIEWS[S.tab]) return window.MUSE_VIEWS[S.tab]();
   return showConvs();
 }
@@ -247,7 +249,7 @@ function turnHtml(t, i, last){
   let body;
   if (live) body = `${plan}<div class="phase"><span class="dots"><i></i><i></i><i></i></span>${esc(t.phase || "Working")}</div>
       ${steps ? `<ul class="steps">${steps}</ul>` : ""}${ask}<div class="rowbtns"><button class="btn bad" data-stop="${esc(t.run || "")}"${t.run ? "" : " disabled"}>Stop</button></div>`;
-  else if (t.status === "done") body = `${md(t.answer)}${(t.muse_steps || []).length > 1 ? `<ul class="steps">${steps}</ul>` : ""}${window.MUSE_TURN_EXTRA ? window.MUSE_TURN_EXTRA(t, i) : ""}`;
+  else if (t.status === "done") body = `${md(t.answer)}${(t.muse_steps || []).length > 1 ? `<ul class="steps">${steps}</ul>` : ""}<div class="rowbtns" style="margin-top:6px"><a class="icon-btn" style="padding:4px 0" href="/api/agentlab/conversations/${esc(S.conv)}/turns/${i}/pdf">Save as PDF</a></div>`;
   else body = `<div class="err">${esc(t.error || ("It " + (t.status || "stopped") + "."))}</div>`;
   const long = (t.task || "").length > 360;
   const mine = long ? `<div class="bubble me"><span>${esc(t.task.slice(0, 280))}…</span><button class="icon-btn" data-more="${i}"
@@ -438,6 +440,24 @@ async function openDoc(id){
   };
   clearInterval(S.timer);
   if (await draw() === "reading") S.timer = setInterval(draw, 3000);
+}
+
+/* ---------- the store report ---------- */
+async function showStore(){
+  chrome("Store");
+  $("view").innerHTML = `<div class="rowbtns" style="margin:0 0 10px"><a class="btn" href="/api/report/store.pdf" style="text-decoration:none;color:var(--ink)">PDF</a>
+      <a class="btn" href="/api/report/store.html" target="_blank" style="text-decoration:none;color:var(--ink)">Open full screen</a></div>
+    <div id="rep" class="muted">Reading the store's data…</div>`;
+  try{
+    const r = await fetch("/api/report/store.html", {credentials: "same-origin"});
+    if (r.status === 401) return showLogin();
+    if (!r.ok){ const e = await r.json().catch(() => ({})); $("rep").innerHTML = `<div class="card">${esc((e.detail && e.detail.message) || "The report could not be made.")}</div>`; return; }
+    const f = document.createElement("iframe");
+    f.title = "Store report"; f.style.cssText = "width:100%;border:0;border-radius:12px;min-height:70vh;background:transparent";
+    f.srcdoc = await r.text();
+    f.onload = () => { try{ f.style.height = f.contentDocument.documentElement.scrollHeight + "px"; } catch {} };
+    $("rep").replaceWith(f);
+  } catch { $("rep").textContent = "The server did not answer."; }
 }
 
 /* ---------- what Muse knows about you ---------- */

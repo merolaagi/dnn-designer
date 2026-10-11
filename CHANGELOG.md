@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.14.0
+
+- **The store report.** The latest business day at a glance: total, inside
+  and fuel sales and gallons against the same weekday a week earlier, cash
+  over/short, 14 days of gallons and inside sales as charts, each tank's level
+  and days of supply (low tanks are flagged), the top merchandise without
+  fuel, and recent deliveries. Every figure comes from SQL against the store's
+  database, read-only; none comes from a model. The latest morning brief goes
+  underneath, labelled as written by the Station analyst.
+- It's a page (`/api/report/store.html`, light and dark, prints cleanly) and
+  a PDF (`/api/report/store.pdf`), made with a small built-in PDF writer, so
+  nothing new needs installing. It's under **Store** on the phone page, and in
+  Settings → Your store's data.
+- **The morning brief arrives as a PDF.** When it finishes, the notification
+  carries the store report with the brief's text, if details are on in the
+  phone settings.
+- **Save as PDF** on any answer, in Talk to agents and on the phone page.
+
 ## 4.13.0
 
 - **Invoices and BOLs from a photo.** Under **Scan** on the phone page you
