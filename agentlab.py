@@ -6077,6 +6077,16 @@ def conversations() -> List[Dict[str, Any]]:
     return out
 
 
+def _keep_of(text: str) -> Dict[str, Any]:
+    """Facts in the message that look worth keeping in the profile (shown as "Keep" chips; nothing is saved)."""
+    try:
+        import muse_profile
+        found = muse_profile.suggestions(text)
+    except Exception:  # noqa: BLE001
+        found = []
+    return {"keep": found} if found else {}
+
+
 def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optional[Path] = None) -> Dict[str, Any]:
     """Send a message: start the agent's next turn and return the run to follow."""
     conv = conversation(conv_id)
@@ -6097,11 +6107,14 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         conv["updated"] = time.time()
         _conv_save(conv)
         return {"conversation": conv, "run": None}
-    reply = profile.command(text)
+    reply, which = profile.command(text), "profile"
+    if reply is None:
+        import goals
+        reply, which = goals.command(text), "goal"
     if reply is not None:
-        # "remember: …" and "forget: …" change the profile; no agent runs
+        # "remember: …" and "forget: …" change the profile, "add a goal: …" adds a goal; no agent runs
         conv["turns"].append({"task": text, "at": time.time(), "mode": conv["mode"], "status": "done", "ok": True,
-                              "answer": reply, "profile": True})
+                              "answer": reply, which: True})
         conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
         conv["updated"] = time.time()
         _conv_save(conv)
@@ -6112,7 +6125,7 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
             raise ValueError("Live needs a model: choose one in Settings.")
         started = muse.start_turn(text, conv["mode"], muse.context_of(conv))
         conv["turns"].append({"muse": started["id"], "task": text, "at": time.time(), "mode": conv["mode"],
-                              "status": "running"})
+                              "status": "running", **_keep_of(text)})
         conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
         conv["updated"] = time.time()
         _conv_save(conv)
@@ -6134,7 +6147,7 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         memory_dir = roster.memory_dir(conv["agent"]["key"])    # each specialist keeps its own notes
     view = start_run(graph, profile.with_profile(text), conv["mode"], "ask", memory_dir=memory_dir, thread=conv["id"])
     conv["turns"].append({"run": view["id"], "task": text, "at": time.time(), "mode": conv["mode"],
-                          "status": "running"})
+                          "status": "running", **_keep_of(text)})
     conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
     conv["updated"] = time.time()
     _conv_save(conv)

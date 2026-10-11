@@ -36,6 +36,10 @@ import muse_profile
 import documents
 import report
 import mail
+import ideas
+import goals
+import feed
+import files
 import providers
 import advisor
 import assistant
@@ -984,8 +988,146 @@ def conversation_turn_pdf(conv_id: str, n: int):
     when = time.strftime("%b %d, %Y %I:%M %p", time.localtime(t.get("at") or time.time()))
     data = report.answer_pdf(conv.get("title") or conv["agent"]["name"], t["task"], t["answer"],
                              f"{conv['agent']['name']} · {when}")
+    try:
+        files.record("answer", AL_title(t["task"]), url=f"/api/agentlab/conversations/{conv_id}/turns/{n}/pdf",
+                     conv=conv_id, detail=conv.get("title") or "", key=f"answer-{conv_id}-{n}")
+    except Exception:  # noqa: BLE001
+        pass
     return Response(data, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="answer-{conv_id}-{n + 1}.pdf"'})
+
+
+def AL_title(text: str) -> str:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    return "Answer: " + (text[:70] + ("…" if len(text) > 70 else ""))
+
+
+# ---- ideas, goals, feed, files (what the Saathi app's tabs show) ----
+
+class GoalIn(BaseModel):
+    title: Optional[str] = None
+    detail: Optional[str] = None
+    status: Optional[str] = None
+    note: Optional[str] = None
+
+
+class GoalFollow(BaseModel):
+    at: str = "08:00"
+
+
+class FeedTopics(BaseModel):
+    topics: List[str]
+
+
+def _goal_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That goal is not on your list."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+def _mode():
+    return "live" if agentlab.live_available() else "rehearsal"
+
+
+@app.get("/api/ideas")
+def ideas_list(fresh: bool = False):
+    """Things Saathi could do for you now, from rules over your own data."""
+    return {"ideas": ideas.listing(fresh)}
+
+
+@app.post("/api/ideas/{idea_id}/dismiss")
+def ideas_dismiss(idea_id: str):
+    return ideas.dismiss(idea_id)
+
+
+@app.get("/api/goals")
+def goals_list():
+    return {"goals": goals.listing(), "statuses": list(goals.STATUSES)}
+
+
+@app.post("/api/goals")
+def goals_add(body: GoalIn):
+    ideas.forget_cache()
+    return _goal_action(goals.add, body.title or "", body.detail or "")
+
+
+@app.patch("/api/goals/{gid}")
+def goals_update(gid: str, body: GoalIn):
+    return _goal_action(goals.update, gid, body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True))
+
+
+@app.delete("/api/goals/{gid}")
+def goals_remove(gid: str):
+    ideas.forget_cache()
+    return _goal_action(goals.remove, gid)
+
+
+@app.post("/api/goals/{gid}/check")
+def goals_check(gid: str):
+    """Have Muse look at where the goal stands now, in the goal's own conversation."""
+    return _goal_action(goals.check, gid, _mode())
+
+
+@app.post("/api/goals/{gid}/follow")
+def goals_follow(gid: str, body: GoalFollow):
+    """Check on the goal every day at a time you choose."""
+    return _goal_action(goals.follow, gid, body.at, _mode())
+
+
+@app.get("/api/feed")
+def feed_view():
+    f = feed.view()
+    if not f["items"] and not f["building"] and not f.get("built"):
+        f = feed.build_soon()                         # the first look builds it
+    return f
+
+
+@app.post("/api/feed/refresh")
+def feed_refresh():
+    return feed.build_soon()
+
+
+@app.put("/api/feed/topics")
+def feed_topics(body: FeedTopics):
+    try:
+        return feed.set_topics(body.topics)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/feed/daily")
+def feed_daily(body: GoalFollow):
+    """Build the feed every morning, as a check on the schedule."""
+    for x in schedules.listing():
+        if x["agent"] == {"kind": "check", "key": "feed"}:
+            return x
+    return _sched_action(schedules.create, "Morning feed", {"kind": "check", "key": "feed"},
+                         "Search the web for the topics you follow.", "day", body.at or "05:30")
+
+
+@app.get("/api/files")
+def files_list():
+    return {"files": files.listing()}
+
+
+@app.get("/api/files/{fid}")
+def files_get(fid: str):
+    try:
+        path = files.path_of(fid)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That file is gone."})
+    return FileResponse(path, media_type="application/pdf" if path.suffix == ".pdf" else None, filename=path.name)
+
+
+@app.delete("/api/files/{fid}")
+def files_remove(fid: str):
+    try:
+        return files.remove(fid)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That file is gone."})
 
 
 class MailConfig(BaseModel):

@@ -224,7 +224,12 @@ def _ingest_watchdog(s: Dict[str, Any]) -> None:
                                  for x in result["sites"])
 
 
-CHECKS = {"ingest_watchdog": _ingest_watchdog}
+def _feed(s: Dict[str, Any]) -> None:
+    import feed
+    feed.check(s)
+
+
+CHECKS = {"ingest_watchdog": _ingest_watchdog, "feed": _feed}
 
 
 def _fire(s: Dict[str, Any], now: Optional[float] = None) -> None:
@@ -298,10 +303,17 @@ def _brief_pdf(s: Dict[str, Any], turn: Dict[str, Any]) -> Optional[Dict[str, An
     try:
         import report
         snap = report.snapshot()
-        return {"name": f"brief-{snap['day']}.pdf",
+        made = {"name": f"brief-{snap['day']}.pdf",
                 "data": report.pdf(snap, {"answer": turn.get("answer"), "at": turn.get("at")})}
     except Exception:  # noqa: BLE001 - no PDF is better than no notification
         return None
+    try:
+        import files
+        files.record("brief", f"Morning brief for {snap['day']}", data=made["data"], conv=s.get("conv"),
+                     key=f"brief-{snap['day']}")
+    except Exception:  # noqa: BLE001
+        pass
+    return made
 
 
 def tick(now: Optional[float] = None) -> int:

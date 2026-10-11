@@ -11406,6 +11406,150 @@ def _():
         agentlab.delete_conversation(conv["id"])
 
 
+
+@check("goals: add from a chat, check in its own conversation, STATUS line updates it, daily follow-up is a schedule")
+def _():
+    import goals as GL, schedules as SC, tempfile
+    real = agentlab._dir
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    try:
+        assert GL.command("How do I add a goal?") is None and GL.command("What were sales yesterday?") is None
+        reply = GL.command("add a goal: get the Core-Mark credit for the short delivery")
+        assert "Core-Mark credit" in reply
+        g = GL.listing()[0]
+        assert g["status"] == "tracking" and g["title"].startswith("Get the Core-Mark")
+        try:
+            GL.add("x")
+            raise AssertionError("a one-letter goal was taken")
+        except ValueError:
+            pass
+        conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+        conv["turns"].append({"task": "check", "at": time.time() + 5, "status": "done",
+                              "answer": "They have not answered.\nSTATUS: waiting - Core-Mark has not replied"})
+        agentlab._conv_save(conv)
+        GL.update(g["id"], {"note": ""})
+        items = GL._load()
+        items[0]["conv"] = conv["id"]
+        GL._store(items)
+        g = GL.listing()[0]
+        assert g["status"] == "waiting" and g["note"] == "Core-Mark has not replied"
+        assert "STATUS:" in GL.check_task(g)
+        f = GL.follow(g["id"], "08:15", "rehearsal")
+        s = next(x for x in SC.listing() if x["id"] == f["schedule"])
+        assert s["conv"] == conv["id"] and s["at"] == "08:15" and s["agent"]["kind"] == "muse"
+        GL.remove(g["id"])
+        assert GL.listing() == [] and not any(x["id"] == f["schedule"] for x in SC.listing())
+        out = agentlab.say(conv["id"], "track: renew the tobacco license", "rehearsal")
+        assert out["run"] is None and out["conversation"]["turns"][-1]["goal"] and GL.listing()[0]["title"] == "Renew the tobacco license"
+    finally:
+        agentlab._dir = real
+
+
+@check("ideas: rules over your data, each with an action; one failing source hides nothing; dismissed stay away")
+def _():
+    import ideas as ID, tempfile
+    real, real_sources = agentlab._dir, ID.SOURCES
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    try:
+        def broken():
+            raise RuntimeError("no database")
+        ID.SOURCES = (broken, ID._routine_ideas, ID._profile_ideas, ID._goal_ideas)
+        found = ID.listing(fresh=True)
+        keys = {i["title"] for i in found}
+        assert "A morning brief every day" in keys and "Tell me about yourself" in keys
+        brief = next(i for i in found if i["title"] == "A morning brief every day")
+        assert brief["action"] == {"type": "preset", "which": "brief"} and brief["icon"].endswith("-outline")
+        ID.dismiss(brief["id"])
+        assert brief["id"] not in {i["id"] for i in ID.listing()}
+        import goals as GL
+        g = GL.add("Fix the car wash sign")
+        items = GL._load()
+        items[0]["updated"] = time.time() - 5 * 86400
+        GL._store(items)
+        stale = [i for i in ID.listing(fresh=True) if i["action"].get("type") == "goal"]
+        assert stale and stale[0]["action"]["goal"] == g["id"] and "5 days" in stale[0]["text"]
+    finally:
+        agentlab._dir, ID.SOURCES = real, real_sources
+        ID.forget_cache()
+
+
+@check("feed: searches each topic, the model picks and summarises, plain results without one; a daily check")
+def _():
+    import feed as FD, schedules as SC, evolve, tempfile
+    real, real_search, real_ask = agentlab._dir, FD._search, evolve.ask
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    try:
+        FD._search = lambda q, n: [("Gas hits $5", "https://www.sfchronicle.com/a", "Prices rose."),
+                                   ("Ad", "https://shop.example/x", "Buy now"),
+                                   ("Refinery outage", "https://reuters.com/b", "Martinez refinery.")]
+        assert FD.view()["topics"] == FD.DEFAULT_TOPICS
+        FD.set_topics(["California gas prices", "california gas prices", " Chevron "])
+        assert FD.view()["topics"] == ["California gas prices", "Chevron"]
+        f = FD.build(live=False)
+        assert len(f["items"]) == 3 and f["items"][0]["source"] == "sfchronicle.com"   # deduplicated by link
+        evolve.ask = lambda system, prompt, n: {"text": '{"items": [{"n": 3, "title": "Martinez refinery down", '
+                                                        '"summary": "Supply is tight. Wholesale may jump."}]}', "tokens": 9}
+        f = FD.build(live=True)
+        assert [i["title"] for i in f["items"]] == ["Martinez refinery down"] and f["items"][0]["url"] == "https://reuters.com/b"
+        try:
+            FD.set_topics([])
+            raise AssertionError("an empty topic list was taken")
+        except ValueError:
+            pass
+        assert "feed" in SC.CHECKS
+        s = {"id": "x"}
+        SC.CHECKS["feed"](s)
+        assert s["last_status"] == "ok"
+    finally:
+        agentlab._dir, FD._search, evolve.ask = real, real_search, real_ask
+
+
+@check("files: briefs kept as PDFs, answers and drafts recorded, scans and the store report listed; keep chips from chats")
+def _():
+    import files as FL, muse_profile as MP, tempfile
+    real = agentlab._dir
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    try:
+        b = FL.record("brief", "Morning brief for 2026-10-10", data=b"%PDF-1.4 x", key="brief-2026-10-10")
+        FL.record("brief", "Morning brief for 2026-10-10", data=b"%PDF-1.4 y", key="brief-2026-10-10")
+        FL.record("draft", "Draft: Re: invoice", detail="To a@b.com")
+        rows = FL.listing()
+        assert rows[0]["id"] == "store-report" and sum(1 for r in rows if r["kind"] == "brief") == 1
+        newest = next(r for r in rows if r["kind"] == "brief")
+        assert FL.path_of(newest["id"]).read_bytes().endswith(b"y") and newest["url"] == f"/api/files/{newest['id']}"
+        try:
+            FL.path_of(b["id"])
+            raise AssertionError("the replaced brief is still there")
+        except KeyError:
+            pass
+        FL.remove(newest["id"])
+        assert not any(r["kind"] == "brief" for r in FL.listing())
+        import mail as ML, schedules as SC
+        assert "files.record" in inspect.getsource(ML.draft)
+        assert "files.record" in inspect.getsource(SC._brief_pdf)
+        assert MP.suggestions("our fuel supplier is Core-Mark and I want the price") == ["My fuel supplier is Core-Mark."]
+        assert MP.suggestions("What did I sell yesterday?") == [] and MP.suggestions("remember: my bank is Chase") == []
+        MP.add("My fuel supplier is Core-Mark")
+        assert MP.suggestions("my fuel supplier is Core-Mark") == []
+        conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+        turn = agentlab.say(conv["id"], "I am the owner of University Chevron. What were sales?", "rehearsal")["conversation"]["turns"][-1]
+        assert turn["keep"] == ["I am the owner of University Chevron."]
+    finally:
+        agentlab._dir = real
+
+
+@check("Saathi's tabs have their API: ideas, goals, feed, files")
+def _():
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/ideas", "/api/ideas/{idea_id}/dismiss", "/api/goals", "/api/goals/{gid}", "/api/goals/{gid}/check",
+            "/api/goals/{gid}/follow", "/api/feed", "/api/feed/refresh", "/api/feed/topics", "/api/feed/daily",
+            "/api/files", "/api/files/{fid}"} <= paths
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

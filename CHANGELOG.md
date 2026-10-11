@@ -1,5 +1,42 @@
 # Changelog
 
+## 4.19.0
+
+What the Saathi app's new tabs read. Everything is worked out on the Mac.
+
+- **Ideas** (`/api/ideas`). Things Saathi could do for you now, from rules
+  over your own data, not a model's guess:
+  - a tank under two days of supply;
+  - non-fuel sales or gallons 15% or more below the same day last week;
+  - no POS data for yesterday;
+  - a scan whose lines don't add up;
+  - unread email since yesterday;
+  - a goal with no news for three days;
+  - no morning brief or inbox routine set up yet.
+
+  Each idea has one action: ask, set it up, open, or check on it. Dismissed
+  ideas stay away for a week.
+- **Goals** (`/api/goals`). Your goal, in your words, with a status:
+  tracking, waiting, stuck or done.
+  - "Check on it" asks Muse in the goal's own conversation. The answer ends
+    with a STATUS line, which updates the goal.
+  - "Every morning" makes that check a daily scheduled task.
+  - In any chat, "add a goal: …" or "track: …" adds one.
+- **Feed** (`/api/feed`). A web search for each topic you follow. The model
+  keeps the few items that matter to a station owner and writes two lines on
+  each; with no model, you get the plain results. Pull to refresh, or have it
+  built every morning (the new `feed` check).
+- **Files** (`/api/files`). One list of:
+  - the morning brief PDFs (now kept on disk);
+  - answers you saved as PDFs;
+  - drafts put in your Drafts folder;
+  - your scans;
+  - the latest store report.
+- **Keep from chats.** A message that states a lasting fact ("our fuel
+  supplier is Core-Mark", "I prefer answers short", "call me Manish") comes
+  back with a `keep` suggestion. Saathi shows it as a Keep chip under your
+  message. Nothing is saved unless you tap it.
+
 ## 4.18.0
 
 - **Scheduled tasks from a chat.** Say "every day at 7am check my email and

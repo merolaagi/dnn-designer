@@ -300,6 +300,11 @@ def draft(to: str, subject: str, body: str, reply_to_id: Optional[str] = None,
             box.logout()
         except Exception:  # noqa: BLE001
             pass
+    try:
+        import files
+        files.record("draft", f"Draft: {msg['Subject'] or '(no subject)'}", detail=f"To {to}. In your Drafts folder; nothing was sent.")
+    except Exception:  # noqa: BLE001
+        pass
     return {"saved": True, "folder": folder, "to": to, "subject": msg["Subject"],
             "note": "Saved in Drafts. Nothing was sent: open it in Gmail to check it and press Send."}
 

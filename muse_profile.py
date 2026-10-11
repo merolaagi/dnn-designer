@@ -134,3 +134,44 @@ def as_text() -> str:
 def with_profile(task: str) -> str:
     about = as_text()
     return f"{task}\n\n{about}" if about else task
+
+
+# --------------------------------------------------------------------------
+# facts worth keeping, noticed in what you write
+# --------------------------------------------------------------------------
+
+_KEEP_PATTERNS = [
+    (re.compile(r"\bmy (?:name is|name's) ([A-Z][\w'-]+(?: [A-Z][\w'-]+)?)"), "My name is {0}"),
+    (re.compile(r"\bcall me ([A-Z][\w'-]+)"), "Call me {0}"),
+    (re.compile(r"\b(?:my|our) ((?:fuel |gas |main |grocery |beer |tobacco |snack )?(?:supplier|vendor|distributor|jobber|bank|"
+                r"accountant|bookkeeper|manager|landlord|internet provider|isp|pos|pos system|insurance(?: company)?)) "
+                r"(?:is|are) ([^.,;!?\n]{2,60})", re.I), "My {0} is {1}"),
+    (re.compile(r"\b(?:my|our) store (?:is|is called|is named) ([^.,;!?\n]{2,60})", re.I), "My store is {0}"),
+    (re.compile(r"\bwe (?:are|'re) open ([^.;!?\n]{3,60})", re.I), "The store is open {0}"),
+    (re.compile(r"\bi (?:prefer|like) (?:my )?(answers?|replies|reports?|numbers|summaries) ([^.;!?\n]{3,80})", re.I),
+     "I prefer {0} {1}"),
+    (re.compile(r"\b(?:always|please always) (give|show|use|include|round|put) ([^.;!?\n]{3,80})", re.I), "Always {0} {1}"),
+    (re.compile(r"\bnever (give|show|use|include|send) ([^.;!?\n]{3,80})", re.I), "Never {0} {1}"),
+    (re.compile(r"\bi(?: am|'m) (?:the )?(owner|operator|manager|franchisee) of ([^.,;!?\n]{2,60})", re.I), "I am the {0} of {1}"),
+]
+
+
+def suggestions(text: str, limit: int = 2) -> List[str]:
+    """Lines from a message that look like lasting facts about you, not yet in the profile. Nothing is saved:
+    the app shows them as "Keep" chips under the message."""
+    text = str(text or "")
+    if _REMEMBER.match(text) or _FORGET.match(text) or len(text) > 2000:
+        return []
+    have = " ".join(f["text"].lower() for f in listing())
+    out: List[str] = []
+    for pattern, shape in _KEEP_PATTERNS:
+        for m in pattern.finditer(text):
+            parts = [re.split(r"\s+(?:and|but|so|because|since|who|which|if|when)\s+", re.sub(r"\s+", " ", g).strip(), 1)[0]
+                     .rstrip(" .") for g in m.groups()]
+            if any(len(p) < 2 for p in parts) or any(re.search(r"\b(it|this|that|what|which|who)\b$", p, re.I) for p in parts):
+                continue
+            line = shape.format(*parts)
+            line = line[0].upper() + line[1:] + "."
+            if line.lower().rstrip(".") not in have and line not in out and len(line) <= MAX_CHARS:
+                out.append(line)
+    return out[:limit]
