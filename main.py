@@ -30,6 +30,7 @@ import evolve
 import benchmark
 import muse
 import schedules
+import station
 import providers
 import advisor
 import assistant
@@ -854,6 +855,61 @@ def inbox_list():
 @app.post("/api/inbox/read")
 def inbox_read(body: InboxRead):
     return schedules.mark_read(body.ids)
+
+
+class StationConfig(BaseModel):
+    host: Optional[str] = None
+    port: Optional[int] = None
+    database: Optional[str] = None
+    user: Optional[str] = None
+    password: Optional[str] = None
+    stale_hours: Optional[int] = None
+
+
+class StationPreset(BaseModel):
+    which: str
+    at: str = "06:00"
+
+
+@app.get("/api/station")
+def station_view():
+    """How the agents reach your store's database (the password only as whether one is saved)."""
+    return {**station.view(), "watch": [s for s in schedules.listing() if s["agent"]["kind"] == "check"]}
+
+
+@app.post("/api/station")
+def station_save(body: StationConfig):
+    try:
+        return station.save(body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/station/test")
+def station_test():
+    return station.test()
+
+
+@app.post("/api/station/preset")
+def station_preset(body: StationPreset):
+    """Add one of the ready-made station schedules: the ingest watchdog, or the morning brief."""
+    if body.which == "watchdog":
+        made = _sched_action(schedules.create, "Ingest watchdog", {"kind": "check", "key": "ingest_watchdog"},
+                             "Check that every site's POS data is still arriving.", "hour", "00:05")
+        return _sched_action(schedules.run_now, made["id"])      # a first look now, so its state starts from today
+    if body.which == "brief":
+        return _sched_action(schedules.create, "Morning brief", {"kind": "starting", "key": "station"}, BRIEF_TASK,
+                             "day", body.at or "06:00", 0, "live" if agentlab.live_available() else "rehearsal")
+    raise HTTPException(400, detail={"message": "Choose watchdog or brief."})
+
+
+BRIEF_TASK = (
+    "Write my morning brief for yesterday's business day. For each site: total, inside and fuel net sales and fuel "
+    "gallons from day_reports, each compared with the same weekday one week earlier (amount and percent); cash "
+    "over/short; each tank's latest close volume, how full it is against capacity, and its days of supply at the "
+    "last 7 days' average sales; any fuel price changes and deliveries; the five merchandise codes whose sales rose "
+    "or fell the most against the week before (naxml_mcm_daily). Then list anything that needs my attention today. "
+    "Use only numbers the queries return, keep it short, and say if yesterday's day report is missing.")
 
 
 class RouteCheck(BaseModel):

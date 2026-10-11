@@ -13813,6 +13813,7 @@ const AL_ICON = {
 };
 
 const AL_BLURBS = {
+  station: "Answers questions about your store from its own database: sales, fuel, tanks, shifts, cash, items. Read-only.",
   reverse: "Explains how a feature of an app on this computer works, from its shipped files, with REA's reverse-engineering tools.",
   specialist: "A role prompt with web search, a code sandbox, its own notes, and a critic holding it to stated standards.",
   react: "Model, router and tools in a loop, with guards and an approval step.",
@@ -16156,6 +16157,12 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Your store's data</h3><small>The Station analyst and the scheduled station checks read your c-store
+        platform's database, as a login that can only read</small></header>
+      <div class="st-body" id="stStation"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Models on this computer</h3><small>Ollama runs open models such as Llama, Mistral and Qwen locally</small>
         <span class="spacer"></span><button class="btn" id="stOllamaRefresh">Refresh</button></header>
       <div class="st-body" id="stOllama"><p class="st-msg">Checking for Ollama…</p></div>
@@ -16187,6 +16194,48 @@ function stRender(){
   </div>`;
   stWire();
   stOllama();
+  stStation();
+}
+
+async function stStation(){
+  const host = $("stStation");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/station")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  const watch = d.watch || [];
+  host.innerHTML = `<div class="st-grid">
+      <div class="st-field"><label for="ssHost">Host</label><input id="ssHost" value="${alEsc(d.host)}"></div>
+      <div class="st-field"><label for="ssPort">Port</label><input id="ssPort" type="number" value="${d.port}"></div>
+      <div class="st-field"><label for="ssDb">Database</label><input id="ssDb" value="${alEsc(d.database)}"></div>
+      <div class="st-field"><label for="ssUser">Login</label><input id="ssUser" value="${alEsc(d.user)}"></div>
+      <div class="st-field"><label for="ssPw">Password</label><input id="ssPw" type="password" placeholder="${d.has_password ? "saved: leave blank to keep it" : "the one you gave agent_reader"}"></div>
+      <div class="st-field"><label for="ssStale">Alert after this many hours without POS data</label><input id="ssStale" type="number" min="1" value="${d.stale_hours}"></div>
+    </div>
+    <div class="st-actions"><button class="btn go" id="ssSave">Save and test</button><span class="st-msg" id="ssMsg">${d.psql ? "" : "psql was not found on this computer."}</span></div>
+    <div class="st-actions"><button class="btn" id="ssWatch"${watch.length ? " disabled" : ""}>${watch.length ? "Ingest watchdog is on (hourly)" : "Add the ingest watchdog (hourly)"}</button>
+      <button class="btn" id="ssBrief">Add the morning brief (daily, 06:00)</button></div>
+    <div class="st-msg" style="margin-top:8px;line-height:1.5">The watchdog writes to the inbox when a site's POS files stop arriving for that many hours, and once more
+      when they come back. The morning brief is a daily run of the Station analyst; you can read and change it in Talk to agents.
+      Create the read-only login first with <code>station_reader.sql</code>.</div>`;
+  $("ssSave").onclick = async () => {
+    $("ssMsg").textContent = "Testing…";
+    const body = {host: $("ssHost").value.trim(), port: +$("ssPort").value, database: $("ssDb").value.trim(),
+                  user: $("ssUser").value.trim(), stale_hours: +$("ssStale").value};
+    if ($("ssPw").value) body.password = $("ssPw").value;
+    const r = await fetch(API + "/api/station", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+    if (!r.ok){ const e = await r.json(); $("ssMsg").textContent = (e.detail && e.detail.message) || "Not saved."; return; }
+    const t = await (await fetch(API + "/api/station/test", {method: "POST"})).json();
+    $("ssMsg").className = "st-msg " + (t.ok ? "good" : "bad");
+    $("ssMsg").textContent = t.ok ? `Connected: ${t.tables} readable tables${t.sites.length ? `; sites: ${t.sites.join(", ")}` : ""} (${t.ms} ms)` : t.error;
+  };
+  const preset = async which => {
+    const r = await fetch(API + "/api/station/preset", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({which})});
+    const x = await r.json();
+    toast(r.ok ? `Scheduled: ${x.name}, ${x.when}` : ((x.detail && x.detail.message) || "Not scheduled"));
+    stStation();
+  };
+  $("ssWatch").onclick = () => preset("watchdog");
+  $("ssBrief").onclick = () => preset("brief");
 }
 
 function stProviderRow(p){

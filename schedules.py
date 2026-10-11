@@ -113,7 +113,9 @@ def create(name: str, agent: Dict[str, Any], task: str, every: str, at: str = "0
         raise ValueError("Choose live or rehearsal.")
     if not (agent or {}).get("kind"):
         raise ValueError("Choose which agent runs it.")
-    if agent["kind"] != "muse":
+    if agent["kind"] == "check" and agent.get("key") not in CHECKS:
+        raise ValueError(f"There is no built-in check called {agent.get('key')}.")
+    if agent["kind"] not in ("muse", "check"):
         AL._agent_graph(agent)                        # raises when the agent does not exist
     s = {"id": "sc" + uuid.uuid4().hex[:8], "name": name or task[:50], "agent": {"kind": agent["kind"], "key": agent.get("key") or "muse"},
          "task": task, "every": every, "at": at, "weekday": max(0, min(6, int(weekday or 0))), "mode": mode,
@@ -201,9 +203,33 @@ def mark_read(ids: Optional[List[str]] = None) -> Dict[str, Any]:
 # the scheduler
 # --------------------------------------------------------------------------
 
+def _ingest_watchdog(s: Dict[str, Any]) -> None:
+    """The built-in check: is each site's POS data still arriving? One alert per incident, one note on recovery."""
+    import station
+    result = station.watchdog()
+    news, s["state"] = station.watchdog_news(result, s.get("state") or {})
+    for kind, title, text in news:
+        notify(kind, title, text, s["id"])
+    s["last_status"] = "alert" if any(x["stale"] for x in result["sites"]) else "ok"
+    s["last_detail"] = "; ".join(f"{x['name']}: {x['hours']:.0f} h" if x["hours"] is not None else f"{x['name']}: no files"
+                                 for x in result["sites"])
+
+
+CHECKS = {"ingest_watchdog": _ingest_watchdog}
+
+
 def _fire(s: Dict[str, Any], now: Optional[float] = None) -> None:
     """Start the schedule's agent on its task, as the next turn of its own conversation."""
     now = max(now or 0, time.time())
+    if s["agent"]["kind"] == "check":
+        try:
+            CHECKS[s["agent"]["key"]](s)
+        except Exception as exc:  # noqa: BLE001
+            if s.get("last_status") != "error":
+                notify("error", f"{s['name']}: the check could not run", f"{type(exc).__name__}: {exc}", s["id"])
+            s["last_status"] = "error"
+        s["last_run"], s["next_run"] = now, next_run(s, now)
+        return
     try:
         conv = None
         if s.get("conv"):

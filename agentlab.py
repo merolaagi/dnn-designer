@@ -1250,6 +1250,17 @@ REA_PROMPT = (
     "the app's code wholesale.\n"
     "Use run_python for any decoding or arithmetic you need to check.\n"
     "Always answer in the language the user writes in.")
+def _station_command() -> str:
+    import shlex
+    import sys
+    return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'station_mcp.py'))}"
+
+
+def _station_tools() -> List[Dict[str, Any]]:
+    import station_mcp
+    return [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]} for t in station_mcp.TOOLS]
+
+
 REA_STANDARDS = ("Every claim about how the target works points to evidence a tool returned: a file and line, a "
                  "function, an address or a module. Observations, inferences and unknowns are kept apart. Nothing "
                  "says the code was seen running unless a runtime tool observed it.")
@@ -1369,6 +1380,18 @@ TEMPLATES = {
                                "tools": _mcp_presets.REA_TOOLS, "effects": READS},
                            8: {"seconds": 30},
                            9: {"max_revisions": 1, "standards": REA_STANDARDS}}},
+    "station": {"name": "Station analyst: your store's own data",
+                "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
+                          ("summarizer", 290, 470), ("router", 540, 260), ("mcp", 790, 110), ("code_exec", 790, 290),
+                          ("reflector", 790, 470), ("output", 1040, 470)],
+                "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (6, 2), (7, 2), (5, 8), (8, 2), (8, 9)],
+                "params": {1: {"text": "@station_guide"},
+                           3: {"max_steps": 16},
+                           4: {"limit": 4000, "keep": 6},
+                           6: {"transport": "stdio", "target": "@station_command", "tools": "@station_tools",
+                               "effects": READS},
+                           7: {"seconds": 20},
+                           8: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1387,12 +1410,17 @@ def defaults(kind: str) -> Dict[str, Any]:
     return {k: v["value"] for k, v in BLOCKS[kind].get("params", {}).items()}
 
 
+_LATE = {"@station_guide": lambda: __import__("station").GUIDE, "@station_command": lambda: _station_command(),
+         "@station_tools": lambda: _station_tools()}
+
+
 def template(key: str) -> Dict[str, Any]:
     t = TEMPLATES[key]
     nodes = []
     for i, (kind, x, y) in enumerate(t["nodes"]):
         params = defaults(kind)
-        params.update(t.get("params", {}).get(i, {}))
+        params.update({k: (_LATE[v]() if isinstance(v, str) and v in _LATE else v)
+                       for k, v in t.get("params", {}).get(i, {}).items()})
         nodes.append({"id": f"n{i + 1}", "type": kind, "x": x, "y": y, "params": params})
     edges = [{"id": f"e{k + 1}", "source": nodes[a]["id"], "target": nodes[b]["id"]}
              for k, (a, b) in enumerate(t["edges"])]

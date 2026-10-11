@@ -35,6 +35,10 @@ AGENTS = {
     "specialist": "A professional in one field from the roster (marketing, sales, finance, legal, product, design, "
                   "engineering, support, project management, research and more): advice, plans, writing, "
                   "analysis and calculations, with web search and code. Name the role.",
+    "station": "Answers questions about the user's own gas station and store from its database: sales, fuel "
+               "gallons and margins, tank levels and days of supply, deliveries, prices, shifts, cash over/short, "
+               "departments and items, lottery, and whether POS data is arriving. Use it whenever the request is "
+               "about their own numbers.",
     "react": "General questions and small tasks that need a quick web search or lookup and no specialist.",
 }
 MAX_STEPS = 3
@@ -99,7 +103,10 @@ def _catalog_text(request: str):
 def rehearsal_plan(request: str) -> Dict[str, Any]:
     """The rehearsal's decoder: keywords, so Muse can be tried with no model at all."""
     t = request.lower()
-    if re.search(r"\b(train|network|neural|classifier|dataset|mnist|cifar|package|parameters?)\b", t):
+    if re.search(r"\b(my|our)\b.*\b(sales|gallons|margin|margins|tanks?|shifts?|lottery|deliver(y|ies)|store|"
+                 r"station|cash|inventory)\b", t) or re.search(r"\b(yesterday|last week)\b.*\b(sales|gallons|margin)", t):
+        agent = "station"
+    elif re.search(r"\b(train|network|neural|classifier|dataset|mnist|cifar|package|parameters?)\b", t):
         agent = "modelbuilder"
     elif re.search(r"\b(app|asar|electron|binary|reverse|decompile|\.app|apk|plist)\b", t):
         agent = "reverse"
@@ -308,6 +315,9 @@ ROUTING = [
     ("Draft a simple privacy policy for a small SaaS web app.", "specialist", "legal"),
     ("Review my landing page copy and suggest a clearer headline.", "specialist", None),
     ("Work out the monthly payment on a $40,000 loan at 7% over 6 years.", "specialist", "finance"),
+    ("How did my fuel margin do last week compared with the week before?", "station", None),
+    ("Which of my tanks will run out first, and when should I order?", "station", None),
+    ("Was my cash short on any shift yesterday?", "station", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "

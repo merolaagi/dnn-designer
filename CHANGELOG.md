@@ -1,5 +1,34 @@
 # Changelog
 
+## 4.9.0
+
+- **Your store's data, read-only.** Agents can now read the c-store platform's
+  PostgreSQL database through a login that can only read the operational
+  tables. `station_reader.sql` creates that login (`agent_reader`): every
+  session is read-only, gives up on a query after 10 seconds, and sees only
+  your tenant through the tables' row-level security. It gets no users,
+  tokens, bank, billing or POS-connector settings, no site API keys and no raw
+  XML. The tool also allows only a single SELECT (or WITH … SELECT) and returns
+  at most 200 rows, as CSV.
+- **Station data as an MCP server** (`station_mcp.py`): list_tables,
+  describe_table and query, through `psql`, so nothing new needs installing.
+  Any MCP client can use it.
+- **Station analyst**, a new starting design: it knows where things live
+  (day_reports, fuel_grade_sales, fuel_inventory_daily, deliveries, price
+  changes, merchandise sales, shifts, lottery, ingestion) and how to work out
+  days of supply, and its critic requires every number to come from a query.
+  Muse routes questions about your own numbers to it.
+- **Ingest watchdog.** A built-in hourly check, with no model involved: for
+  each active site, how long since its newest POS file. It writes one inbox
+  alert per incident once that passes the limit (36 hours by default) and one
+  note when files arrive again.
+- **Morning brief.** One click schedules the Station analyst daily at 06:00:
+  yesterday against the same weekday last week, cash over/short, tank levels
+  and days of supply, price changes, deliveries and the biggest merchandise
+  movers.
+- Settings has a "Your store's data" card for the connection, with Save and
+  test, and buttons for the watchdog and the morning brief.
+
 ## 4.8.0
 
 - **Scheduled agents.** In any conversation in Talk to agents, Schedule… runs

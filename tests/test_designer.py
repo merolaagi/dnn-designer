@@ -10751,6 +10751,106 @@ def _():
         assert needle in PAGE, needle
 
 
+@check("station data: only one read-only SELECT gets through, and results come back as compact CSV")
+def _():
+    import re
+    import station as ST
+    assert ST.check_sql("  select 1 ; ") == "select 1"
+    assert ST.check_sql("WITH d AS (SELECT 1 AS x) SELECT x FROM d").startswith("WITH")
+    assert ST.check_sql("SELECT 'a; b' AS t -- note; here") == "SELECT 'a; b' AS t"
+    assert ST.check_sql("SELECT updated_at, created_at FROM fuel_tanks")
+    for bad, why in (("DELETE FROM day_reports", "Only SELECT"), ("SELECT 1; DROP TABLE x", "One statement"),
+                     ("WITH d AS (DELETE FROM day_reports RETURNING *) SELECT * FROM d", "not allowed"),
+                     ("SELECT * FROM t FOR UPDATE", "not allowed"), ("", "Write a SELECT")):
+        try:
+            ST.check_sql(bad)
+            raise AssertionError(f"{bad!r} should be refused")
+        except ValueError as exc:
+            assert why in str(exc), (bad, str(exc))
+    text = ST.as_text({"columns": ["site", "sales"], "rows": [["s1", "12.50"]], "more": False})
+    assert text == "site,sales\ns1,12.50\n[1 row]"
+    for bad in ("x; drop", "../etc", "a b"):
+        try:
+            ST.save({"host": bad})
+            raise AssertionError("a bad host is refused")
+        except ValueError:
+            pass
+    sql = (ROOT / "station_reader.sql").read_text()
+    assert "default_transaction_read_only = on" in sql and "app.current_tenant_id" in sql
+    for secret in ("users", "plaid_items", "bank_accounts", "pos_connector_configs", "email_verification_tokens"):
+        assert not re.search(rf"\b{secret}\b,|\b{secret}\s*$|,\s*{secret}\b", sql.split("GRANT SELECT ON", 1)[1]), secret
+    assert "api_key" not in sql.split("ON sites")[0].split("GRANT SELECT (")[1] and "raw_xml" not in sql.split("ON xml_files")[0].rsplit("GRANT SELECT (", 1)[1]
+
+
+@check("station data: the watchdog alerts once per incident and once on recovery, and runs as a schedule")
+def _():
+    import station as ST, schedules as SC
+    site = lambda h: {"limit": 36.0, "sites": [{"id": "s1", "name": "Store", "last_file": "x", "hours": h, "last_day": "d",
+                                                "stale": h is None or h >= 36}], "stale": []}
+    news, state = ST.watchdog_news(site(2.0), {})
+    assert news == [] and state["s1"]["stale"] is False
+    news, state = ST.watchdog_news(site(40.0), state)
+    assert [n[0] for n in news] == ["alert"] and "36+ hours" in news[0][1]
+    news, state = ST.watchdog_news(site(41.0), state)
+    assert news == []                                                  # still stale: no second alert
+    news, state = ST.watchdog_news(site(1.0), state)
+    assert [n[0] for n in news] == ["recovered"]
+    saved = SC._path().read_text() if SC._path().exists() else None
+    inbox = SC._inbox_path().read_text() if SC._inbox_path().exists() else None
+    real = ST.watchdog
+    hours = [40.0]
+    ST.watchdog = lambda cfg=None: site(hours[0])
+    try:
+        s = SC.create("Ingest watchdog", {"kind": "check", "key": "ingest_watchdog"}, "Check the POS data", "hour", "00:05")
+        SC.tick(now=s["next_run"] + 1)
+        row = next(x for x in SC.listing() if x["id"] == s["id"])
+        assert row["last_status"] == "alert" and SC.inbox()["items"][0]["kind"] == "alert"
+        hours[0] = 1.0
+        SC.tick(now=row["next_run"] + 1)
+        assert SC.inbox()["items"][0]["kind"] == "recovered"
+        try:
+            SC.create("x", {"kind": "check", "key": "nope"}, "t", "hour")
+            raise AssertionError("an unknown check is refused")
+        except ValueError:
+            pass
+    finally:
+        ST.watchdog = real
+        if saved is None:
+            SC._path().unlink(missing_ok=True)
+        else:
+            SC._path().write_text(saved)
+        if inbox is None:
+            SC._inbox_path().unlink(missing_ok=True)
+        else:
+            SC._inbox_path().write_text(inbox)
+
+
+@check("station data: the MCP server speaks JSON-RPC, and the Station analyst is wired to it and grounded")
+def _():
+    import station_mcp
+    init = station_mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    assert init["result"]["serverInfo"]["name"] == "station-data"
+    assert station_mcp.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+    names = [t["name"] for t in station_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]]
+    assert names == ["list_tables", "describe_table", "query"]
+    refused = station_mcp.handle({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                                  "params": {"name": "query", "arguments": {"sql": "DROP TABLE sites"}}})["result"]
+    assert refused["isError"] and "Only SELECT" in refused["content"][0]["text"]
+    g = agentlab.template("station")
+    assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
+    mcp = next(n for n in g["nodes"] if n["type"] == "mcp")["params"]
+    assert mcp["target"].endswith("station_mcp.py") and [t["name"] for t in mcp["tools"]] == names
+    assert next(n for n in g["nodes"] if n["type"] == "reflector")["params"]["gate"] == agentlab.GROUNDED_GATE
+    assert "day_reports" in next(n for n in g["nodes"] if n["type"] == "system_prompt")["params"]["text"]
+    compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+    import muse
+    assert "station" in muse.AGENTS and muse.rehearsal_plan("How did my fuel margin do last week?")["steps"][0]["agent"] == "station"
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/station", "/api/station/test", "/api/station/preset"} <= paths
+    assert "function stStation" in PAGE and "Add the ingest watchdog" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
