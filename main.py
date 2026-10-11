@@ -36,6 +36,7 @@ import muse_profile
 import documents
 import report
 import mail
+import travel
 import ideas
 import goals
 import feed
@@ -1154,6 +1155,31 @@ def mail_save(body: MailConfig):
 @app.post("/api/mail/test")
 def mail_test():
     return mail.test()
+
+
+class TravelConfig(BaseModel):
+    serpapi_key: Optional[str] = None
+    home: Optional[str] = None
+    currency: Optional[str] = None
+    forget: Optional[bool] = None
+
+
+@app.get("/api/travel")
+def travel_view():
+    return travel.view()
+
+
+@app.post("/api/travel")
+def travel_save(body: TravelConfig):
+    try:
+        return travel.save(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/travel/test")
+def travel_test():
+    return travel.test()
 
 
 class ProfileFact(BaseModel):

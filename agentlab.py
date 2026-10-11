@@ -1262,6 +1262,17 @@ def _mail_command() -> str:
     return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'mail_mcp.py'))}"
 
 
+def _travel_command() -> str:
+    import shlex
+    import sys
+    return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'travel_mcp.py'))}"
+
+
+def _travel_tools() -> List[Dict[str, Any]]:
+    import travel_mcp
+    return [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]} for t in travel_mcp.TOOLS]
+
+
 def _mail_tools(names: List[str]) -> List[Dict[str, Any]]:
     import mail_mcp
     return [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
@@ -1418,6 +1429,17 @@ TEMPLATES = {
                         7: {"transport": "stdio", "target": "@mail_command", "tools": "@mail_write_tools",
                             "effects": CHANGES},
                         8: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
+    "travel": {"name": "Travel: live flight prices from Google Flights",
+               # live fares from the flights tool, the web for everything else; the critic sends back any fare
+               # the tool did not return
+               "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
+                         ("router", 540, 260), ("mcp", 790, 110), ("web_search", 790, 290), ("reflector", 790, 470),
+                         ("output", 1040, 470)],
+               "edges": [(0, 2), (1, 2), (3, 2), (2, 4), (4, 5), (4, 6), (5, 2), (6, 2), (4, 7), (7, 2), (7, 8)],
+               "params": {1: {"text": "@travel_guide"},
+                          3: {"max_steps": 12},
+                          5: {"transport": "stdio", "target": "@travel_command", "tools": "@travel_tools", "effects": READS},
+                          7: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1440,7 +1462,9 @@ _LATE = {"@station_guide": lambda: __import__("station").GUIDE, "@station_comman
          "@station_tools": lambda: _station_tools(),
          "@mail_guide": lambda: __import__("mail").GUIDE, "@mail_command": lambda: _mail_command(),
          "@mail_read_tools": lambda: _mail_tools(["search_mail", "read_mail"]),
-         "@mail_write_tools": lambda: _mail_tools(["draft_reply"])}
+         "@mail_write_tools": lambda: _mail_tools(["draft_reply"]),
+         "@travel_guide": lambda: __import__("travel").GUIDE, "@travel_command": lambda: _travel_command(),
+         "@travel_tools": lambda: _travel_tools()}
 
 
 def template(key: str) -> Dict[str, Any]:

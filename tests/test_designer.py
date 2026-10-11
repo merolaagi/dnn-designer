@@ -11080,7 +11080,7 @@ def _():
     saved = PF._path().read_text() if PF._path().exists() else None
     PF._store([])
     try:
-        assert PF.as_text() == "" and PF.with_profile("task") == "task"
+        assert PF.as_text() == "" and PF.with_profile("task") == "task\n\n" + PF.today()
         f = PF.add("my store is University Chevron #90877, open 24/7")
         assert f["text"] == "My store is University Chevron #90877, open 24/7." and PF.add(f["text"])["id"] == f["id"]
         reply = PF.command("Remember: our fuel supplier is Chevron Products")
@@ -11089,7 +11089,8 @@ def _():
         assert PF.command("How did fuel do?") is None
         assert "supplier" in PF.command("forget the fuel supplier") and "supplier" not in PF.as_text()
         assert PF.command("forget my dentist").startswith("I found nothing")
-        assert PF.with_profile("Sales yesterday?").startswith("Sales yesterday?\n\nAbout the person")
+        assert PF.with_profile("Sales yesterday?").startswith("Sales yesterday?\n\nToday is")
+        assert "\n\nAbout the person" in PF.with_profile("Sales yesterday?")
         for bad in ("", "x" * 400):
             try:
                 PF.add(bad)
@@ -11549,6 +11550,75 @@ def _():
     assert {"/api/ideas", "/api/ideas/{idea_id}/dismiss", "/api/goals", "/api/goals/{gid}", "/api/goals/{gid}/check",
             "/api/goals/{gid}/follow", "/api/feed", "/api/feed/refresh", "/api/feed/topics", "/api/feed/daily",
             "/api/files", "/api/files/{fid}"} <= paths
+
+
+@check("travel: live Google Flights fares through SerpApi, cheapest first, with Google's judgement; never from memory")
+def _():
+    import travel as TR, travel_mcp, muse, muse_profile as MP
+    real_path, real_get = TR._path, TR._get
+    import tempfile
+    tmp = Path(tempfile.mkdtemp()) / "travel.json"
+    TR._path = lambda: tmp
+    sent = []
+    sample = {"search_metadata": {"google_flights_url": "https://www.google.com/travel/flights?x"},
+              "best_flights": [{"price": 1390, "total_duration": 1330, "flights": [
+                  {"departure_airport": {"id": "SFO", "time": "2026-11-12 23:55"}, "arrival_airport": {"id": "DOH", "time": "2026-11-13 22:10"},
+                   "airline": "Qatar Airways", "flight_number": "QR 738", "duration": 975},
+                  {"departure_airport": {"id": "DOH", "time": "2026-11-14 01:05"}, "arrival_airport": {"id": "KTM", "time": "2026-11-14 08:15"},
+                   "airline": "Qatar Airways", "flight_number": "QR 652", "duration": 280}],
+                  "layovers": [{"id": "DOH", "duration": 175, "overnight": True}]}],
+              "other_flights": [{"price": 1184, "total_duration": 1710, "flights": [
+                  {"departure_airport": {"id": "SFO", "time": "2026-11-12 11:00"}, "arrival_airport": {"id": "KTM", "time": "2026-11-14 01:30"},
+                   "airline": "Air India", "flight_number": "AI 180", "duration": 1710}]}, {"price": None, "flights": []}],
+              "price_insights": {"lowest_price": 1184, "price_level": "typical", "typical_price_range": [1100, 1600]}}
+    TR._get = lambda params: (sent.append(params), sample)[1]
+    try:
+        assert not TR.view()["configured"] and muse.not_connected("travel")
+        try:
+            TR.search_flights("SFO", "KTM", "2099-11-12")
+            raise AssertionError("searched with no key")
+        except TR.TravelError:
+            pass
+        for bad in ({"serpapi_key": "short"}, {"home": "San Francisco"}):
+            try:
+                TR.save(bad)
+                raise AssertionError(f"took {bad}")
+            except ValueError:
+                pass
+        TR.save({"serpapi_key": "a" * 64, "home": "sfo, oak"})
+        assert TR.view() == {"home": "SFO,OAK", "currency": "USD", "has_key": True, "configured": True}
+        assert muse.not_connected("travel") is None
+        r = TR.search_flights("", "ktm", "2099-11-12", "2099-12-12")
+        assert sent[-1]["departure_id"] == "SFO,OAK" and sent[-1]["arrival_id"] == "KTM" and sent[-1]["type"] == 1
+        assert [o["price"] for o in r["options"]] == [1184, 1390] and r["options"][1]["stops"] == 1
+        text = TR.as_text(r)
+        assert "USD 1,184" in text and "via DOH 2h 55m overnight" in text and "prices are typical" in text
+        assert "google.com/travel/flights" in text and "round trip" in text
+        for args in (("SFO", "KTM", "2020-01-01"), ("SFO", "KTM", "11/12/2099"), ("SFO", "KTM", "2099-12-12", "2099-11-12")):
+            try:
+                TR.search_flights(*args)
+                raise AssertionError(f"searched {args}")
+            except ValueError:
+                pass
+        one = TR.search_flights("SFO", "JFK", "2099-11-12")
+        assert sent[-1]["type"] == 2 and one["return"] is None
+        assert travel_mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"][0]["name"] == "search_flights"
+        out = travel_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                                 "params": {"name": "search_flights", "arguments": {"destination": "KTM", "depart": "2001-01-01"}}})
+        assert out["result"]["isError"] and "past" in out["result"]["content"][0]["text"]
+        g = agentlab.template("travel")
+        mcp = next(n for n in g["nodes"] if n["type"] == "mcp")
+        assert "travel_mcp.py" in mcp["params"]["target"] and mcp["params"]["tools"][0]["name"] == "search_flights"
+        assert any(n["type"] == "reflector" for n in g["nodes"]) and "from memory" in TR.GUIDE
+        compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+        assert muse.rehearsal_plan("Can you find a cheaper flight to kathmandu for November 12")["steps"][0]["agent"] == "travel"
+        assert muse.DOING["travel"] == "Searching Google Flights" and "travel" in muse.AGENTS
+        assert time.strftime("%B") in MP.with_profile("x") and "Today is" in MP.today()
+        assert MP.suggestions("my home airport is SFO") == ["My home airport is SFO."]
+        import main
+        assert {"/api/travel", "/api/travel/test"} <= {r.path for r in main.app.routes} and "function stTravel" in PAGE
+    finally:
+        TR._path, TR._get = real_path, real_get
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

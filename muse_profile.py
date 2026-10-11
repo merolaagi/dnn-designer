@@ -131,9 +131,15 @@ def as_text() -> str:
             "otherwise):\n" + "\n".join(f"- {f['text']}" for f in facts))
 
 
+def today() -> str:
+    """Today's date and time where the Mac is. Without it a model answers as if it were the year it was trained."""
+    return time.strftime("Today is %A, %B %-d, %Y; the time is %-I:%M %p (%Z). Anything current (prices, news, "
+                         "schedules) must come from a tool, not from memory.")
+
+
 def with_profile(task: str) -> str:
     about = as_text()
-    return f"{task}\n\n{about}" if about else task
+    return f"{task}\n\n{today()}" + (f"\n\n{about}" if about else "")
 
 
 # --------------------------------------------------------------------------
@@ -146,6 +152,7 @@ _KEEP_PATTERNS = [
     (re.compile(r"\b(?:my|our) ((?:fuel |gas |main |grocery |beer |tobacco |snack )?(?:supplier|vendor|distributor|jobber|bank|"
                 r"accountant|bookkeeper|manager|landlord|internet provider|isp|pos|pos system|insurance(?: company)?)) "
                 r"(?:is|are) ([^.,;!?\n]{2,60})", re.I), "My {0} is {1}"),
+    (re.compile(r"\bmy (?:home |nearest |usual )?airport is ([A-Z]{3}|[A-Z][\w .'-]{2,40})"), "My home airport is {0}"),
     (re.compile(r"\b(?:my|our) store (?:is|is called|is named) ([^.,;!?\n]{2,60})", re.I), "My store is {0}"),
     (re.compile(r"\bwe (?:are|'re) open ([^.;!?\n]{3,60})", re.I), "The store is open {0}"),
     (re.compile(r"\bi (?:prefer|like) (?:my )?(answers?|replies|reports?|numbers|summaries) ([^.;!?\n]{3,80})", re.I),

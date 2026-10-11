@@ -16209,6 +16209,11 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Flights</h3><small>The Travel agent searches Google Flights for live prices, through SerpApi; it never books</small></header>
+      <div class="st-body" id="stTravel"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Reading invoices and BOLs</h3><small>Photograph a vendor invoice or a fuel BOL on the phone page; a vision
         model in Ollama reads it here, then it is checked and matched against your store's records</small></header>
       <div class="st-body" id="stDocs"><p class="st-msg">Loading…</p></div>
@@ -16268,6 +16273,7 @@ function stRender(){
   stDocs();
   stApp();
   stMail();
+  stTravel();
 }
 
 async function stMail(){
@@ -16301,6 +16307,38 @@ async function stMail(){
   if ($("mlForget")) $("mlForget").onclick = async () => {
     await fetch(API + "/api/mail", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({forget: true})});
     stMail();
+  };
+}
+
+async function stTravel(){
+  const host = $("stTravel");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/travel")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  host.innerHTML = `<div class="st-grid">
+      <div class="st-field"><label for="trKey">SerpApi key</label><input id="trKey" type="password" autocomplete="off"
+        placeholder="${d.has_key ? "saved: leave blank to keep it" : "from serpapi.com, Your account"}"></div>
+      <div class="st-field"><label for="trHome">Home airport</label><input id="trHome" value="${alEsc(d.home)}" placeholder="SFO,OAK,SJC"></div>
+    </div>
+    <div class="st-actions"><button class="btn go" id="trSave">Save and test</button>
+      ${d.has_key ? `<button class="btn danger" id="trForget">Forget the key</button>` : ""}<span class="st-msg" id="trMsg"></span></div>
+    <div class="st-msg" style="margin-top:8px;line-height:1.55">Google has no public flights API, and a web search only finds articles
+      about fares. <a class="al-link" href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener">SerpApi</a> runs the real Google
+      Flights search; its free plan gives 250 searches a month. Make an account, copy the key from Your account, and paste it here.
+      Trips start from your home airport when you don't say where from.</div>`;
+  $("trSave").onclick = async () => {
+    $("trMsg").className = "st-msg"; $("trMsg").textContent = "Testing…";
+    const body = {home: $("trHome").value.trim()};
+    if ($("trKey").value) body.serpapi_key = $("trKey").value.trim();
+    const r = await fetch(API + "/api/travel", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+    if (!r.ok){ const e = await r.json(); $("trMsg").className = "st-msg bad"; $("trMsg").textContent = (e.detail && e.detail.message) || "Not saved."; return; }
+    const t = await (await fetch(API + "/api/travel/test", {method: "POST"})).json();
+    $("trMsg").className = "st-msg " + (t.ok ? "good" : "bad");
+    $("trMsg").textContent = t.ok ? `Connected${t.left != null ? `: ${t.left} searches left this month` : ""}` : t.error;
+  };
+  if ($("trForget")) $("trForget").onclick = async () => {
+    await fetch(API + "/api/travel", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({forget: true})});
+    stTravel();
   };
 }
 

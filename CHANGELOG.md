@@ -1,5 +1,30 @@
 # Changelog
 
+## 4.20.0
+
+- **Today's date in every request.** Muse's planner and every agent now get
+  the date and time from the Mac. Before this, a local model answered as if
+  it were still the year it was trained ("book now, you're in a good window"
+  in 2024 terms).
+- **Travel agent: live flight prices.** Google has no public flights API,
+  and a web search only finds articles about fares. That's why flight
+  answers were old averages. The new Travel agent searches Google Flights
+  through SerpApi (free plan: 250 searches a month). It returns, cheapest
+  first:
+  - each itinerary's price, airlines, stops and layovers, and times;
+  - Google's "prices are low, typical or high" judgement;
+  - the Google Flights link to book.
+
+  It only searches; it never books. A critic sends back any fare that the
+  tool did not return.
+- Set up the key and your home airport under Settings → Flights, or from the
+  chat in Saathi. Until it is connected, a flight question says so (with
+  `connect: "travel"`) instead of answering from memory.
+- Muse sends flight, fare and airline-ticket questions to Travel.
+- Muse turns carry a plain `doing` line ("Searching Google Flights", "Looking
+  at your store's data"). Saathi shows it instead of the agent's name.
+- "My home airport is SFO" in a chat comes back as a Keep suggestion.
+
 ## 4.19.0
 
 What the Saathi app's new tabs read. Everything is worked out on the Mac.

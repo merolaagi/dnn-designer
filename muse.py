@@ -42,8 +42,14 @@ AGENTS = {
     "mail": "Reads, searches and sorts the user's own email (Gmail), summarizes what came in, finds a message or "
             "bill, and drafts replies (saved in Drafts, never sent). Use it whenever the request is about their "
             "email or inbox.",
+    "travel": "Finds flights with live prices from Google Flights: cheapest dates and airports, round trips and one "
+              "way, stops and times. Use it for any flight, fare or airline ticket question.",
     "react": "General questions and small tasks that need a quick web search or lookup and no specialist.",
 }
+# what Saathi shows while an agent works, instead of the agent's name
+DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Working it out and checking it",
+         "reverse": "Reading the app's files", "specialist": "Working on it", "station": "Looking at your store's data",
+         "mail": "Reading your email", "travel": "Searching Google Flights", "react": "Searching the web"}
 MAX_STEPS = 3
 
 DECODER = """You are Muse, the front desk of an agent lab. Read the person's request and decide which agents
@@ -112,6 +118,8 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     elif re.search(r"\b(my|our)\s+(e-?mails?|inbox|mail|gmail)\b|\b(check|read|search|sort)\b.{0,20}\b(e-?mails?|inbox|mail)\b|"
                    r"\bdraft (a )?repl(y|ies)\b", t):
         agent = "mail"
+    elif re.search(r"\b(flights?|fly|flying|airfares?|airline|plane tickets?|round[- ]trip|one[- ]way)\b", t):
+        agent = "travel"
     elif re.search(r"\b(train|network|neural|classifier|dataset|mnist|cifar|package|parameters?)\b", t):
         agent = "modelbuilder"
     elif re.search(r"\b(app|asar|electron|binary|reverse|decompile|\.app|apk|plist)\b", t):
@@ -156,7 +164,7 @@ def decode(request: str, mode: str = "live", context: str = "") -> Dict[str, Any
     system = DECODER.format(agents=agents, roles=roles_text)
     import muse_profile as profile
     about = profile.as_text()
-    prompt = ((about + "\n\n") if about else "") + \
+    prompt = profile.today() + "\n\n" + ((about + "\n\n") if about else "") + \
         (f"Earlier in this conversation:\n{context}\n\n" if context else "") + f"The request:\n{request}"
     tokens, plan, problems = 0, None, []
     for attempt in range(2):
@@ -249,6 +257,12 @@ def not_connected(agent: str) -> Optional[str]:
             return ("Your email is not connected yet, so I have not looked at any mail. Connect Gmail with an app "
                     "password: Google makes one for a single app, and you can take it back at any time. (On the Mac it "
                     "is under Settings → Your email.)")
+    if agent == "travel":
+        import travel
+        if not travel.view()["configured"]:
+            return ("Live flight prices are not connected yet, so I have not searched any fares (a web search only finds "
+                    "old articles about prices). Connect Google Flights with a free SerpApi key: it gives 250 searches "
+                    "a month. (On the Mac it is under Settings → Flights.)")
     if agent == "station":
         import station
         v = station.view()
@@ -285,7 +299,8 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
             row = {"agent": step["agent"], "role": step.get("role"), "name": agent_name(step), "task": step["task"],
                    "run": view["id"], "status": "running", "answer": None}
             s["steps"].append(row)
-            s.update(run=view["id"], phase=f"step {i + 1} of {len(plan['steps'])}: {row['name']}")
+            s.update(run=view["id"], phase=f"step {i + 1} of {len(plan['steps'])}: {row['name']}",
+                     doing=DOING.get(step["agent"], "Working on it"))
             _save(s)
             done = _wait(view["id"])
             row.update(status=done.get("status"), answer=done.get("answer"), error=done.get("error"))
@@ -314,7 +329,8 @@ def overlay(turn: Dict[str, Any]) -> bool:
     if not s:
         return False
     keep = {"status": s["status"], "run": s.get("run"), "answer": s.get("answer"), "error": s.get("error"),
-            "plan": s.get("plan"), "muse_steps": s.get("steps"), "phase": s.get("phase"), "connect": s.get("connect")}
+            "plan": s.get("plan"), "muse_steps": s.get("steps"), "phase": s.get("phase"), "connect": s.get("connect"),
+            "doing": s.get("doing")}
     if s.get("finished") and s.get("started"):
         keep["seconds"] = round(s["finished"] - s["started"], 1)
     changed = any(turn.get(k) != v for k, v in keep.items())
@@ -352,6 +368,8 @@ ROUTING = [
     ("Was my cash short on any shift yesterday?", "station", None),
     ("Anything important in my inbox since yesterday?", "mail", None),
     ("Find the Chevron invoice email from last week and draft a reply asking for the BOL.", "mail", None),
+    ("Find me a cheap flight from SFO to Kathmandu on November 12, back December 12.", "travel", None),
+    ("What do one-way flights to New York cost next Friday?", "travel", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "
