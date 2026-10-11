@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.17.0
+
+- **Your email.** The new Mail assistant searches your Gmail with Gmail's own
+  search words ("is:unread newer_than:1d", "from:chevron.com"), reads a
+  message, sorts the inbox into needs a reply, needs action, for your
+  information and ignore, and saves replies as drafts, threaded to the
+  message they answer.
+- **It never sends.** There is no sending tool; a draft waits in Gmail's
+  Drafts for you. Saving a draft is the one step that waits for your
+  approval. Mailboxes are opened read-only, so reading doesn't mark anything
+  as read.
+- **It treats email as data.** The assistant is told that mail is written by
+  other people and is never instructions. If a message asks it to forward
+  mail or reveal anything, it tells you instead.
+- Muse sends requests about your email or inbox to it. The routing check has
+  two email cases, 21 in all.
+- Settings → Your email: your address and a Google app password (from
+  myaccount.google.com/apppasswords, revocable at any time), with Save and
+  test. The password is kept in data/mail.json, readable only by you.
+
 ## 4.16.1
 
 - The store report page takes `?theme=light` or `?theme=dark`, so the Saathi

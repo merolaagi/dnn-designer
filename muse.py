@@ -39,6 +39,9 @@ AGENTS = {
                "gallons and margins, tank levels and days of supply, deliveries, prices, shifts, cash over/short, "
                "departments and items, lottery, and whether POS data is arriving. Use it whenever the request is "
                "about their own numbers.",
+    "mail": "Reads, searches and sorts the user's own email (Gmail), summarizes what came in, finds a message or "
+            "bill, and drafts replies (saved in Drafts, never sent). Use it whenever the request is about their "
+            "email or inbox.",
     "react": "General questions and small tasks that need a quick web search or lookup and no specialist.",
 }
 MAX_STEPS = 3
@@ -106,6 +109,9 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     if re.search(r"\b(my|our)\b.*\b(sales|gallons|margin|margins|tanks?|shifts?|lottery|deliver(y|ies)|store|"
                  r"station|cash|inventory)\b", t) or re.search(r"\b(yesterday|last week)\b.*\b(sales|gallons|margin)", t):
         agent = "station"
+    elif re.search(r"\b(my|our)\s+(e-?mails?|inbox|mail|gmail)\b|\b(check|read|search|sort)\b.{0,20}\b(e-?mails?|inbox|mail)\b|"
+                   r"\bdraft (a )?repl(y|ies)\b", t):
+        agent = "mail"
     elif re.search(r"\b(train|network|neural|classifier|dataset|mnist|cifar|package|parameters?)\b", t):
         agent = "modelbuilder"
     elif re.search(r"\b(app|asar|electron|binary|reverse|decompile|\.app|apk|plist)\b", t):
@@ -322,6 +328,8 @@ ROUTING = [
     ("How did my fuel margin do last week compared with the week before?", "station", None),
     ("Which of my tanks will run out first, and when should I order?", "station", None),
     ("Was my cash short on any shift yesterday?", "station", None),
+    ("Anything important in my inbox since yesterday?", "mail", None),
+    ("Find the Chevron invoice email from last week and draft a reply asking for the BOL.", "mail", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "

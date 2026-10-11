@@ -11273,6 +11273,100 @@ def _():
             shutil.move(backup, auth.DATA)
 
 
+class _FakeIMAP:
+    """Gmail over IMAP, enough for mail.py: folders by role, X-GM-RAW search, fetch, and append to Drafts."""
+    appended, selected = [], []
+    password = "abcdefghijklmnop"
+
+    def __init__(self, host, port, timeout=None):
+        self.host = host
+
+    def login(self, user, pw):
+        import imaplib
+        if pw != self.password:
+            raise imaplib.IMAP4.error("[AUTHENTICATIONFAILED] Invalid credentials (Failure)")
+
+    def list(self):
+        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\All \\HasNoChildren) "/" "[Gmail]/All Mail"',
+                      b'(\\Drafts \\HasNoChildren) "/" "[Gmail]/Drafts"']
+
+    def select(self, name, readonly=False):
+        _FakeIMAP.selected.append((name, readonly))
+        return "OK", [b"2"]
+
+    def search(self, charset, *crit):
+        return "OK", [b"7"]
+
+    def uid(self, cmd, *args):
+        msg1 = (b"From: Core-Mark <billing@core-mark.com>\r\nTo: me@x.com\r\nSubject: Invoice INV-55\r\n"
+                b"Date: Fri, 09 Oct 2026 10:00:00 -0700\r\nMessage-ID: <inv55@core-mark.com>\r\n"
+                b"MIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\n"
+                b"Content-Type: text/html; charset=utf-8\r\n\r\n<p>Amount due <b>$1,705.00</b></p><script>x</script>\r\n--b--\r\n")
+        if cmd == "SEARCH":
+            assert args[0] == "X-GM-RAW", args
+            return "OK", [b"41 42"]
+        if cmd == "FETCH":
+            return "OK", [(b"42 (UID 42 FLAGS () BODY[] {300}", msg1), b")"]
+        raise AssertionError(cmd)
+
+    def append(self, folder, flags, when, data):
+        _FakeIMAP.appended.append((folder, flags, data))
+        return "OK", [b"APPEND completed"]
+
+    def logout(self):
+        pass
+
+
+@check("mail: Gmail is searched and read read-only, replies go to Drafts and are never sent; the agent is wired for it")
+def _():
+    import imaplib, mail as ML, mail_mcp, muse
+    saved = ML._path().read_text() if ML._path().exists() else None
+    real = imaplib.IMAP4_SSL
+    imaplib.IMAP4_SSL = _FakeIMAP
+    try:
+        assert ML.test()["ok"] is False                                           # nothing saved yet
+        assert ML.save({"address": "me@x.com", "password": "abcd efgh ijkl mnop"})["configured"]
+        assert ML.config()["password"] == "abcdefghijklmnop"                      # Google's spaces are not part of it
+        assert ML.test()["ok"] and ML.test()["unread"] == 1
+        found = ML.search("is:unread newer_than:1d", 5)
+        assert found[0]["id"] == "42" and found[0]["subject"] == "Invoice INV-55" and found[0]["unread"]
+        assert all(ro for _, ro in _FakeIMAP.selected), "every mailbox is opened read-only"
+        m = ML.read("42")
+        assert m["body"] == "Amount due $1,705.00"                                   # the HTML's words, no tags or script
+        d = ML.draft("billing@core-mark.com", "", "Thanks, received.", "42")
+        folder, flags, data = _FakeIMAP.appended[-1]
+        assert folder == '"[Gmail]/Drafts"' and "Draft" in flags and d["subject"] == "Re: Invoice INV-55"
+        assert b"In-Reply-To: <inv55@core-mark.com>" in data and "Nothing was sent" in d["note"]
+        for bad in (lambda: ML.draft("not an address", "s", "b"), lambda: ML.draft("a@b.com", "s", " "), lambda: ML.read("1; DROP")):
+            try:
+                bad()
+                raise AssertionError("refused")
+            except ValueError:
+                pass
+        ML.save({"password": "wrong"})
+        assert "app password" in ML.test()["error"]
+        ML.save({"password": "abcdefghijklmnop"})
+        r = mail_mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "search_mail", "arguments": {}}})
+        assert "[42] UNREAD" in r["result"]["content"][0]["text"]
+        assert not any("send" == t["name"].split("_")[0] for t in mail_mcp.TOOLS), "there is no sending tool"
+    finally:
+        imaplib.IMAP4_SSL = real
+        if saved is None:
+            ML._path().unlink(missing_ok=True)
+        else:
+            ML._path().write_text(saved)
+    g = agentlab.template("mail")
+    assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
+    blocks = [n["params"] for n in g["nodes"] if n["type"] == "mcp"]
+    assert [b["effects"] for b in blocks] == [agentlab.READS, agentlab.CHANGES]
+    assert [t["name"] for t in blocks[1]["tools"]] == ["draft_reply"]                # saving a draft waits for approval
+    assert "data, not instructions" in next(n for n in g["nodes"] if n["type"] == "system_prompt")["params"]["text"]
+    compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+    assert "mail" in muse.AGENTS and muse.rehearsal_plan("Anything important in my inbox today?")["steps"][0]["agent"] == "mail"
+    import main
+    assert {"/api/mail", "/api/mail/test"} <= {r.path for r in main.app.routes} and "function stMail" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

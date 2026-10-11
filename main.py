@@ -35,6 +35,7 @@ import push
 import muse_profile
 import documents
 import report
+import mail
 import providers
 import advisor
 import assistant
@@ -985,6 +986,32 @@ def conversation_turn_pdf(conv_id: str, n: int):
                              f"{conv['agent']['name']} · {when}")
     return Response(data, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="answer-{conv_id}-{n + 1}.pdf"'})
+
+
+class MailConfig(BaseModel):
+    address: Optional[str] = None
+    password: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    forget: Optional[bool] = None
+
+
+@app.get("/api/mail")
+def mail_view():
+    return mail.view()
+
+
+@app.post("/api/mail")
+def mail_save(body: MailConfig):
+    try:
+        return mail.save(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/mail/test")
+def mail_test():
+    return mail.test()
 
 
 class ProfileFact(BaseModel):

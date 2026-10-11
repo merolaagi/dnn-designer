@@ -15006,7 +15006,7 @@ async function alRenderBench(){
     </div>
     <div id="bmOut">${bm.current && (bm.current.suite || "system") === bm.suite ? alBenchHtml(bm.current) : ""}</div>
     ${onStation ? "" : `<h3 style="margin-top:22px">Routing: does Muse send requests to the right agent?</h3>
-    <p class="al-muted">Sixteen requests in everyday words go through Muse's decoder only, with no agent run: one model
+    <p class="al-muted">Twenty-one requests in everyday words go through Muse's decoder only, with no agent run: one model
     call each, so it takes minutes, not hours. Each is right when it reaches the agent a person would pick. Rehearsal
     uses plain keyword matching: the score to beat.</p>
     <div class="row"><button class="btn go" id="rcLive">Check routing with the default model</button>
@@ -15031,7 +15031,7 @@ async function alRenderBench(){
   $("bmGo").onclick = alBenchStart;
   if ($("bmStop")) $("bmStop").onclick = () => fetch(API + `/api/benchmark/${bm.current.id}/stop`, {method: "POST"});
   const routeGo = async mode => {
-    $("rcOut").innerHTML = `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Decoding sixteen requests…</div>`;
+    $("rcOut").innerHTML = `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Decoding twenty-one requests…</div>`;
     const r = await fetch(API + "/api/muse/route-check", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({mode})});
     let d = await r.json();
     if (!r.ok){ $("rcOut").innerHTML = `<div class="runfail">${alEsc((d.detail && d.detail.message) || "Not started")}</div>`; return; }
@@ -16203,6 +16203,12 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Your email</h3><small>The Mail assistant searches and reads your Gmail and saves replies as drafts;
+        it never sends anything</small></header>
+      <div class="st-body" id="stMail"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Reading invoices and BOLs</h3><small>Photograph a vendor invoice or a fuel BOL on the phone page; a vision
         model in Ollama reads it here, then it is checked and matched against your store's records</small></header>
       <div class="st-body" id="stDocs"><p class="st-msg">Loading…</p></div>
@@ -16261,6 +16267,41 @@ function stRender(){
   stProfile();
   stDocs();
   stApp();
+  stMail();
+}
+
+async function stMail(){
+  const host = $("stMail");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/mail")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  host.innerHTML = `<div class="st-grid">
+      <div class="st-field"><label for="mlAddr">Email address</label><input id="mlAddr" value="${alEsc(d.address)}" placeholder="you@gmail.com" autocomplete="off"></div>
+      <div class="st-field"><label for="mlPw">App password</label><input id="mlPw" type="password" autocomplete="off"
+        placeholder="${d.has_password ? "saved: leave blank to keep it" : "16 letters from Google"}"></div>
+      <div class="st-field"><label for="mlHost">Mail server</label><input id="mlHost" value="${alEsc(d.host)}"></div>
+    </div>
+    <div class="st-actions"><button class="btn go" id="mlSave">Save and test</button>
+      ${d.has_password ? `<button class="btn danger" id="mlForget">Forget the password</button>` : ""}<span class="st-msg" id="mlMsg"></span></div>
+    <div class="st-msg" style="margin-top:8px;line-height:1.55">Use an <b>app password</b>, not your Google password: turn on
+      two-step verification, then make one at <a class="al-link" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>
+      (name it Saathi). You can take it back there at any time. Mail is opened read-only, so reading does not mark anything as
+      read, and a draft waits for your approval before it is saved. Then ask Saathi or Muse things like “anything important in my
+      inbox today?” or “find the Core-Mark invoice email and draft a reply”.</div>`;
+  $("mlSave").onclick = async () => {
+    $("mlMsg").className = "st-msg"; $("mlMsg").textContent = "Testing…";
+    const body = {address: $("mlAddr").value.trim(), host: $("mlHost").value.trim()};
+    if ($("mlPw").value) body.password = $("mlPw").value;
+    const r = await fetch(API + "/api/mail", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+    if (!r.ok){ const e = await r.json(); $("mlMsg").className = "st-msg bad"; $("mlMsg").textContent = (e.detail && e.detail.message) || "Not saved."; return; }
+    const t = await (await fetch(API + "/api/mail/test", {method: "POST"})).json();
+    $("mlMsg").className = "st-msg " + (t.ok ? "good" : "bad");
+    $("mlMsg").textContent = t.ok ? `Connected: ${t.unread} unread in the inbox (${t.ms} ms)` : t.error;
+  };
+  if ($("mlForget")) $("mlForget").onclick = async () => {
+    await fetch(API + "/api/mail", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({forget: true})});
+    stMail();
+  };
 }
 
 async function stApp(){

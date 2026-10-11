@@ -1256,6 +1256,18 @@ def _station_command() -> str:
     return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'station_mcp.py'))}"
 
 
+def _mail_command() -> str:
+    import shlex
+    import sys
+    return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'mail_mcp.py'))}"
+
+
+def _mail_tools(names: List[str]) -> List[Dict[str, Any]]:
+    import mail_mcp
+    return [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
+            for t in mail_mcp.TOOLS if t["name"] in names]
+
+
 def _station_tools() -> List[Dict[str, Any]]:
     import station_mcp
     return [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]} for t in station_mcp.TOOLS]
@@ -1392,6 +1404,18 @@ TEMPLATES = {
                                "effects": READS},
                            7: {"seconds": 20},
                            8: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
+    "mail": {"name": "Mail assistant: your inbox, sorted and answered in drafts",
+             # two MCP blocks on the same server: searching and reading run freely, saving a draft waits for you
+             "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
+                       ("summarizer", 290, 470), ("router", 540, 260), ("mcp", 790, 110), ("mcp", 790, 290),
+                       ("output", 1040, 470)],
+             "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (6, 2), (7, 2), (5, 8)],
+             "params": {1: {"text": "@mail_guide"},
+                        3: {"max_steps": 16},
+                        4: {"limit": 4000, "keep": 6},
+                        6: {"transport": "stdio", "target": "@mail_command", "tools": "@mail_read_tools", "effects": READS},
+                        7: {"transport": "stdio", "target": "@mail_command", "tools": "@mail_write_tools",
+                            "effects": CHANGES}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1411,7 +1435,10 @@ def defaults(kind: str) -> Dict[str, Any]:
 
 
 _LATE = {"@station_guide": lambda: __import__("station").GUIDE, "@station_command": lambda: _station_command(),
-         "@station_tools": lambda: _station_tools()}
+         "@station_tools": lambda: _station_tools(),
+         "@mail_guide": lambda: __import__("mail").GUIDE, "@mail_command": lambda: _mail_command(),
+         "@mail_read_tools": lambda: _mail_tools(["search_mail", "read_mail"]),
+         "@mail_write_tools": lambda: _mail_tools(["draft_reply"])}
 
 
 def template(key: str) -> Dict[str, Any]:
