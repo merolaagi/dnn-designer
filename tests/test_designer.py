@@ -11080,7 +11080,7 @@ def _():
     saved = PF._path().read_text() if PF._path().exists() else None
     PF._store([])
     try:
-        assert PF.as_text() == "" and PF.with_profile("task") == "task\n\n" + PF.today()
+        assert PF.as_text() == "" and PF.with_profile("task") == "task\n\n" + PF.today() + "\n" + PF.VOICE
         f = PF.add("my store is University Chevron #90877, open 24/7")
         assert f["text"] == "My store is University Chevron #90877, open 24/7." and PF.add(f["text"])["id"] == f["id"]
         reply = PF.command("Remember: our fuel supplier is Chevron Products")
@@ -11719,6 +11719,16 @@ def _():
     import mail
     if not mail.view()["configured"]:
         assert "email is not connected" in muse.not_connected("bills")
+
+
+@check("Saathi talks to you: 'you' and your name, never 'the user'")
+def _():
+    import muse, muse_profile as MP
+    assert muse.as_you("The user is asking to book a flight for the user's trip.") == "You are asking to book a flight for your trip."
+    assert muse.as_you("Check the user's inbox; the user wants a summary.") == "Check your inbox; you want a summary."
+    assert "Never call them \"the user\"" in muse.DECODER and "never call them \"the user\"" in MP.VOICE.lower()
+    assert MP.VOICE in MP.with_profile("x") and "as_you(" in inspect.getsource(muse.decode)
+    assert "You are talking with" in inspect.getsource(muse.decode)
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

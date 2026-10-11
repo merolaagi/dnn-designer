@@ -74,8 +74,12 @@ Rules:
 - If something essential is missing and cannot reasonably be assumed (which app, which dataset, which file),
   ask one short question instead of planning.
 
+- "understood" and "question" are said to the person, so speak to them: "you", and their name when you know it
+  ("Manish, you'd like a round trip from SFO to Kathmandu on Nov 12, back Dec 12. I'll look for the cheapest.").
+  Never call them "the user".
+
 Reply with strict JSON only:
-{{"understood": "<the request in one sentence>",
+{{"understood": "<one or two warm sentences to the person: what they asked, and what you will do>",
   "steps": [{{"agent": "<agent id>", "role": "<role id, for a specialist>", "task": "<the instruction>",
              "why": "<why this agent>"}}],
   "question": null}}"""
@@ -161,6 +165,37 @@ def _check(plan: Dict[str, Any], roles: List[Dict[str, Any]]) -> List[str]:
     return problems
 
 
+_YOU = [(r"\bthe user is\b", "you are"), (r"\bthe user was\b", "you were"), (r"\bthe user has\b", "you have"),
+        (r"\bthe user's\b", "your"), (r"\bthe users'\b", "your"), (r"\bthe user wants\b", "you want"),
+        (r"\bthe user needs\b", "you need"), (r"\bthe user asks\b", "you ask"), (r"\bthe user asked\b", "you asked"),
+        (r"\bthe user would like\b", "you would like"), (r"\bthe user\b", "you"), (r"\bthe person is\b", "you are"),
+        (r"\bthe person's\b", "your"), (r"\bthe person\b", "you")]
+
+
+def as_you(text: str) -> str:
+    """What Saathi says to you, in the second person, even when a model wrote about "the user"."""
+    out = str(text or "")
+    for pat, rep in _YOU:
+        out = re.sub(pat, lambda m, rep=rep: rep.capitalize() if m.group(0)[0].isupper() else rep, out, flags=re.I)
+    out = re.sub(r"\byou wants\b", "you want", out, flags=re.I)
+    return out
+
+
+def person_name() -> str:
+    """The name to call you by: "My name is …" or "Call me …" in the profile, else the account name."""
+    import muse_profile as profile
+    for f in profile.listing():
+        m = re.match(r"(?:My name is|Call me)\s+([A-Z][\w'-]+)", f["text"])
+        if m:
+            return m.group(1)
+    try:
+        import auth
+        name = auth.current() or ""
+    except Exception:  # noqa: BLE001
+        name = ""
+    return name[:1].upper() + name[1:] if name and name.isalpha() else ""
+
+
 def decode(request: str, mode: str = "live", context: str = "") -> Dict[str, Any]:
     """The plan for a request: {understood, steps[{agent, role, task, why}], question, seconds, tokens}."""
     started = time.time()
@@ -173,7 +208,9 @@ def decode(request: str, mode: str = "live", context: str = "") -> Dict[str, Any
     system = DECODER.format(agents=agents, roles=roles_text)
     import muse_profile as profile
     about = profile.as_text()
-    prompt = profile.today() + "\n\n" + ((about + "\n\n") if about else "") + \
+    name = person_name()
+    prompt = profile.today() + "\n\n" + (f"You are talking with {name}.\n\n" if name else "") + \
+        ((about + "\n\n") if about else "") + \
         (f"Earlier in this conversation:\n{context}\n\n" if context else "") + f"The request:\n{request}"
     tokens, plan, problems = 0, None, []
     for attempt in range(2):
@@ -193,7 +230,8 @@ def decode(request: str, mode: str = "live", context: str = "") -> Dict[str, Any
     plan["steps"] = [{"agent": s["agent"], "role": str(s.get("role") or ""), "task": str(s["task"]).strip(),
                       "why": str(s.get("why") or "")[:300]} for s in (plan.get("steps") or [])[:MAX_STEPS]]
     plan.update(seconds=round(time.time() - started, 1), tokens=tokens,
-                understood=str(plan.get("understood") or "")[:400], question=plan.get("question") or None)
+                understood=as_you(str(plan.get("understood") or ""))[:400],
+                question=as_you(plan.get("question")) if plan.get("question") else None)
     return plan
 
 

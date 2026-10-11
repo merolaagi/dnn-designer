@@ -137,9 +137,13 @@ def today() -> str:
                          "schedules) must come from a tool, not from memory.")
 
 
+VOICE = ("Write your answer to the person directly, as \"you\" (by their first name now and then if you know it), "
+         "warmly and plainly, like a capable assistant who knows them. Never call them \"the user\".")
+
+
 def with_profile(task: str) -> str:
     about = as_text()
-    return f"{task}\n\n{today()}" + (f"\n\n{about}" if about else "")
+    return f"{task}\n\n{today()}\n{VOICE}" + (f"\n\n{about}" if about else "")
 
 
 # --------------------------------------------------------------------------

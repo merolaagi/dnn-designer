@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.21.1
+
+- **Saathi talks to you.** Muse's one-line "what you asked" and its follow-up
+  questions now speak to you as "you", by your first name ("Manish, you'd
+  like a round trip from SFO to Kathmandu…"). Before, they said "The user is
+  asking to book…".
+  - The planner is told your name: "My name is …" or "Call me …" in your
+    profile, else your account name.
+  - Anything that still says "the user" is rewritten to "you" before you
+    see it.
+- Every agent's request now asks for an answer written to you directly,
+  warmly and plainly.
+
 ## 4.21.0
 
 - **Hotels.** The Travel agent searches Google Hotels with the same SerpApi
