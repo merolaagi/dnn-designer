@@ -10881,6 +10881,13 @@ def _():
         assert ST.check_sql("SELECT 'fuel_deliveries' AS t")                            # only named in a string
     finally:
         ST.unprotected = real
+    run = ST._run
+    ST._run = lambda sql, cfg=None: "max\n\n"                       # psql's CSV for one NULL is an empty line
+    ST.unprotected = lambda cfg=None: []
+    try:
+        assert ST.query("SELECT max(business_date) FROM day_reports")["rows"] == [[""]]
+    finally:
+        ST._run, ST.unprotected = run, real
 
 
 def _fake_station(rows_for):

@@ -154,9 +154,10 @@ def station_cases(ids: Optional[List[str]] = None, cfg=None) -> Dict[str, Any]:
     site, name, last = pick[0][0], pick[0][1], pick[0][2]
     site_q = site.replace("'", "''")
     mine = f"site_id = '{site_q}' AND {ST.MINE}"
-    # the latest finalized day if there is one: an open day's figures are still changing
-    fin = rows("SELECT max(business_date) FROM day_reports WHERE {mine} AND is_finalized")
-    d = dt.date.fromisoformat((fin[0][0] if fin and fin[0][0] else last)[:10])
+    # the latest finalized day if there is one, else the latest before today: an open day's figures still change
+    fin = first("SELECT max(business_date) FROM day_reports WHERE {mine} AND is_finalized", 1)[0] or \
+        first("SELECT max(business_date) FROM day_reports WHERE {mine} AND business_date < current_date", 1)[0]
+    d = dt.date.fromisoformat((fin or last)[:10])
     D, W = d.isoformat(), (d - dt.timedelta(days=7)).isoformat()
     day = f"{d.strftime('%A')}, {_MONTHS[d.month - 1]} {d.day}, {d.year}"
     at = f"at {name}"

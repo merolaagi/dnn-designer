@@ -166,6 +166,8 @@ def query(sql: str, limit: int = MAX_ROWS, cfg: Optional[Dict[str, Any]] = None)
     out = _run(f"SELECT * FROM ({text}) AS q LIMIT {limit + 1}", cfg)
     rows = list(csv.reader(io.StringIO(out)))
     header, body = (rows[0], rows[1:]) if rows else ([], [])
+    # psql writes a row of one NULL as an empty line, which csv reads as no fields: give every row its columns
+    body = [r + [""] * (len(header) - len(r)) for r in body]
     more = len(body) > limit
     return {"columns": header, "rows": body[:limit], "more": more}
 

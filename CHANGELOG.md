@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.10.1
+
+- Station benchmark: a store whose day reports are never marked finalized
+  crashed "Show the questions and the right answers" and Run. When a query
+  returned a single NULL (no finalized day), psql printed an empty line, and
+  that came back as a row with no columns. Rows now always have every column.
+  When no day is finalized, the questions use the latest business day before
+  today, since today's figures are still coming in.
+
 ## 4.10.0
 
 - **Station benchmark.** The Benchmark tab has a second suite, "Your store's
