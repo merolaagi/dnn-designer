@@ -1162,6 +1162,9 @@ class TravelConfig(BaseModel):
     home: Optional[str] = None
     currency: Optional[str] = None
     forget: Optional[bool] = None
+    duffel_token: Optional[str] = None
+    forget_duffel: Optional[bool] = None
+    traveler: Optional[Dict[str, Any]] = None
 
 
 @app.get("/api/travel")
@@ -1180,6 +1183,12 @@ def travel_save(body: TravelConfig):
 @app.post("/api/travel/test")
 def travel_test():
     return travel.test()
+
+
+@app.post("/api/travel/test-booking")
+def travel_test_booking():
+    """Check the Duffel token (it reads one airline; nothing is searched or bought)."""
+    return travel.test_duffel()
 
 
 class ProfileFact(BaseModel):

@@ -16209,7 +16209,7 @@ function stRender(){
     </section>
 
     <section class="st-card">
-      <header><h3>Flights</h3><small>The Travel agent searches Google Flights for live prices, through SerpApi; it never books</small></header>
+      <header><h3>Flights and hotels</h3><small>The Travel agent searches Google Flights and Google Hotels for live prices, and books a flight through Duffel only after you approve it</small></header>
       <div class="st-body" id="stTravel"><p class="st-msg">Loading…</p></div>
     </section>
 
@@ -16315,31 +16315,61 @@ async function stTravel(){
   if (!host) return;
   let d;
   try{ d = await (await fetch(API + "/api/travel")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  const tv = d.traveler || {};
   host.innerHTML = `<div class="st-grid">
-      <div class="st-field"><label for="trKey">SerpApi key</label><input id="trKey" type="password" autocomplete="off"
-        placeholder="${d.has_key ? "saved: leave blank to keep it" : "from serpapi.com, Your account"}"></div>
-      <div class="st-field"><label for="trHome">Home airport</label><input id="trHome" value="${alEsc(d.home)}" placeholder="SFO,OAK,SJC"></div>
+      <div class="st-field"><label for="trKey">SerpApi key (live prices)</label><input id="trKey" type="password" value="" placeholder="${d.has_key ? "saved: leave blank to keep it" : "from serpapi.com, Your account"}" autocomplete="off"></div>
+      <div class="st-field"><label for="trHome">Home airport</label><input id="trHome" value="${alEsc(d.home || "")}" placeholder="SFO,OAK,SJC" autocomplete="off"></div>
     </div>
     <div class="st-actions"><button class="btn go" id="trSave">Save and test</button>
       ${d.has_key ? `<button class="btn danger" id="trForget">Forget the key</button>` : ""}<span class="st-msg" id="trMsg"></span></div>
     <div class="st-msg" style="margin-top:8px;line-height:1.55">Google has no public flights API, and a web search only finds articles
       about fares. <a class="al-link" href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener">SerpApi</a> runs the real Google
-      Flights search; its free plan gives 250 searches a month. Make an account, copy the key from Your account, and paste it here.
-      Trips start from your home airport when you don't say where from.</div>`;
+      Flights and Google Hotels searches; its free plan gives 250 searches a month. Make an account, copy the key from Your account,
+      and paste it here.</div>
+    <h4 style="margin:18px 0 6px">Booking (optional)</h4>
+    <div class="st-grid">
+      <div class="st-field"><label for="trDuffel">Duffel access token</label><input id="trDuffel" type="password" value="" placeholder="${d.has_duffel ? `saved (${d.booking} mode): leave blank to keep it` : "duffel_test_… or duffel_live_…"}" autocomplete="off"></div>
+      <div class="st-field"><label for="tvTitle">Title</label><input id="tvTitle" value="${alEsc(tv.title || "")}" placeholder="mr, ms, mrs, miss, dr" autocomplete="off"></div>
+      <div class="st-field"><label for="tvGiven">Given names (as on passport)</label><input id="tvGiven" value="${alEsc(tv.given_name || "")}" placeholder="Manish" autocomplete="off"></div>
+      <div class="st-field"><label for="tvFamily">Family name (as on passport)</label><input id="tvFamily" value="${alEsc(tv.family_name || "")}" placeholder="" autocomplete="off"></div>
+      <div class="st-field"><label for="tvBorn">Date of birth</label><input id="tvBorn" value="${alEsc(tv.born_on || "")}" placeholder="YYYY-MM-DD" autocomplete="off"></div>
+      <div class="st-field"><label for="tvGender">Gender (as on passport)</label><input id="tvGender" value="${alEsc(tv.gender || "")}" placeholder="m or f" autocomplete="off"></div>
+      <div class="st-field"><label for="tvEmail">Email for the ticket</label><input id="tvEmail" value="${alEsc(tv.email || "")}" placeholder="you@gmail.com" autocomplete="off"></div>
+      <div class="st-field"><label for="tvPhone">Phone</label><input id="tvPhone" value="${alEsc(tv.phone_number || "")}" placeholder="+15105551234" autocomplete="off"></div>
+    </div>
+    <div class="st-actions"><button class="btn go" id="trBookSave">Save booking details</button>
+      ${d.has_duffel ? `<button class="btn danger" id="trForgetDuffel">Forget the token</button>` : ""}<span class="st-msg" id="trBookMsg"></span></div>
+    <div class="st-msg" style="margin-top:8px;line-height:1.55"><a class="al-link" href="https://app.duffel.com/join" target="_blank" rel="noopener">Duffel</a>
+      sells real airline tickets through an API. Tickets are paid from your Duffel balance (top it up in Duffel), so no card number
+      passes through this Mac. A <b>test</b> token books Duffel's pretend airline, to try it out; a <b>live</b> token buys real tickets.
+      Either way, Saathi shows you the exact flight and price and nothing is bought until you tap Approve.</div>`;
+  const msg = (id, ok, text) => { $(id).className = "st-msg " + (ok ? "good" : "bad"); $(id).textContent = text; };
+  const save = async (body) => {
+    const r = await fetch(API + "/api/travel", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+    if (!r.ok){ const e = await r.json(); throw new Error((e.detail && e.detail.message) || "Not saved."); }
+    return r.json();
+  };
   $("trSave").onclick = async () => {
     $("trMsg").className = "st-msg"; $("trMsg").textContent = "Testing…";
     const body = {home: $("trHome").value.trim()};
     if ($("trKey").value) body.serpapi_key = $("trKey").value.trim();
-    const r = await fetch(API + "/api/travel", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
-    if (!r.ok){ const e = await r.json(); $("trMsg").className = "st-msg bad"; $("trMsg").textContent = (e.detail && e.detail.message) || "Not saved."; return; }
+    try { await save(body); } catch (e) { msg("trMsg", false, e.message); return; }
     const t = await (await fetch(API + "/api/travel/test", {method: "POST"})).json();
-    $("trMsg").className = "st-msg " + (t.ok ? "good" : "bad");
-    $("trMsg").textContent = t.ok ? `Connected${t.left != null ? `: ${t.left} searches left this month` : ""}` : t.error;
+    msg("trMsg", t.ok, t.ok ? `Connected${t.left != null ? `: ${t.left} searches left this month` : ""}` : t.error);
   };
-  if ($("trForget")) $("trForget").onclick = async () => {
-    await fetch(API + "/api/travel", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({forget: true})});
-    stTravel();
+  $("trBookSave").onclick = async () => {
+    $("trBookMsg").className = "st-msg"; $("trBookMsg").textContent = "Saving…";
+    const body = {traveler: {title: $("tvTitle").value, given_name: $("tvGiven").value, family_name: $("tvFamily").value,
+      born_on: $("tvBorn").value, gender: $("tvGender").value, email: $("tvEmail").value, phone_number: $("tvPhone").value}};
+    if ($("trDuffel").value) body.duffel_token = $("trDuffel").value.trim();
+    let v;
+    try { v = await save(body); } catch (e) { msg("trBookMsg", false, e.message); return; }
+    if (!v.has_duffel) { msg("trBookMsg", true, "Saved. Add a Duffel token to book."); return; }
+    const t = await (await fetch(API + "/api/travel/test-booking", {method: "POST"})).json();
+    msg("trBookMsg", t.ok, t.ok ? `Booking connected (${t.mode} mode)${v.traveler_ready ? "" : "; the traveller's details are not complete yet"}` : t.error);
   };
+  if ($("trForget")) $("trForget").onclick = async () => { await save({forget: true}); stTravel(); };
+  if ($("trForgetDuffel")) $("trForgetDuffel").onclick = async () => { await save({forget_duffel: true}); stTravel(); };
 }
 
 async function stApp(){

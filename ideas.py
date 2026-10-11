@@ -98,13 +98,18 @@ def _mail_ideas() -> List[Dict[str, Any]]:
         return [_idea("connect-mail", "mail-outline", "Connect your email",
                       "I can sort your inbox each morning, find bills and invoices, and draft replies for you to send.",
                       {"type": "ask", "task": "Can you check my emails?"}, "Email")]
+    bills = _idea(f"bills-{time.strftime('%Y-%m')}", "cash-outline", "Am I overpaying on a bill?",
+                  "I can read your internet, phone and power bills in your email, show where the price went up, compare "
+                  "today's prices, and write how to get it down.",
+                  {"type": "ask", "task": "Look through my bills in my email (internet, phone, power, insurance, "
+                                          "subscriptions). Where am I overpaying, and how do I get it down?"}, "Bills")
     try:
         found = mail.search("in:inbox is:unread newer_than:1d", 25)
     except Exception:  # noqa: BLE001
-        return []
+        return [bills]
     if not found:
-        return []
-    return [_idea(f"unread-{time.strftime('%Y-%m-%d')}-{len(found) // 5}", "mail-unread-outline",
+        return [bills]
+    return [bills, _idea(f"unread-{time.strftime('%Y-%m-%d')}-{len(found) // 5}", "mail-unread-outline",
                   f"{len(found)}{'+' if len(found) >= 25 else ''} unread emails since yesterday",
                   "I can sort them into needs a reply, needs action, for your information and ignore.",
                   {"type": "ask", "task": "Sort my unread email since yesterday into needs a reply, needs action, for "

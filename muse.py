@@ -42,14 +42,19 @@ AGENTS = {
     "mail": "Reads, searches and sorts the user's own email (Gmail), summarizes what came in, finds a message or "
             "bill, and drafts replies (saved in Drafts, never sent). Use it whenever the request is about their "
             "email or inbox.",
-    "travel": "Finds flights with live prices from Google Flights: cheapest dates and airports, round trips and one "
-              "way, stops and times. Use it for any flight, fare or airline ticket question.",
+    "travel": "Finds flights and hotels with live prices from Google Flights and Google Hotels (cheapest dates and "
+              "airports, round trips and one way, stops and times), and books a flight when asked, after the user "
+              "approves. Use it for any flight, fare, airline ticket, hotel or trip question, and for booking.",
+    "bills": "Finds where the user overpays on a bill (internet, phone, power, insurance, subscriptions) from the "
+             "bills in their email, compares current market prices, and writes how to negotiate it down (call "
+             "script, and a draft email). Use it for any question about their bills or a provider overcharging.",
     "react": "General questions and small tasks that need a quick web search or lookup and no specialist.",
 }
 # what Saathi shows while an agent works, instead of the agent's name
 DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Working it out and checking it",
          "reverse": "Reading the app's files", "specialist": "Working on it", "station": "Looking at your store's data",
-         "mail": "Reading your email", "travel": "Searching Google Flights", "react": "Searching the web"}
+         "mail": "Reading your email", "travel": "Searching flights and hotels",
+         "bills": "Reading your bills", "react": "Searching the web"}
 MAX_STEPS = 3
 
 DECODER = """You are Muse, the front desk of an agent lab. Read the person's request and decide which agents
@@ -118,7 +123,11 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     elif re.search(r"\b(my|our)\s+(e-?mails?|inbox|mail|gmail)\b|\b(check|read|search|sort)\b.{0,20}\b(e-?mails?|inbox|mail)\b|"
                    r"\bdraft (a )?repl(y|ies)\b", t):
         agent = "mail"
-    elif re.search(r"\b(flights?|fly|flying|airfares?|airline|plane tickets?|round[- ]trip|one[- ]way)\b", t):
+    elif re.search(r"\b(bills?|overcharg\w*|negotiat\w*|xfinity|comcast|at&t|internet provider|isp|pg&e|"
+                   r"phone plan|subscriptions?)\b", t) and not re.search(r"\bbills? of lading\b", t):
+        agent = "bills"
+    elif re.search(r"\b(flights?|fly|flying|airfares?|airline|plane tickets?|round[- ]trip|one[- ]way|hotels?|"
+                   r"vacation|trip to)\b", t):
         agent = "travel"
     elif re.search(r"\b(train|network|neural|classifier|dataset|mnist|cifar|package|parameters?)\b", t):
         agent = "modelbuilder"
@@ -257,6 +266,11 @@ def not_connected(agent: str) -> Optional[str]:
             return ("Your email is not connected yet, so I have not looked at any mail. Connect Gmail with an app "
                     "password: Google makes one for a single app, and you can take it back at any time. (On the Mac it "
                     "is under Settings → Your email.)")
+    if agent == "bills":
+        import mail
+        if not mail.view()["configured"]:
+            return ("Your email is not connected yet, so I have not looked at any bills: I find them in your email. Connect "
+                    "Gmail with an app password, and ask me again.")
     if agent == "travel":
         import travel
         if not travel.view()["configured"]:
@@ -370,6 +384,7 @@ ROUTING = [
     ("Find the Chevron invoice email from last week and draft a reply asking for the BOL.", "mail", None),
     ("Find me a cheap flight from SFO to Kathmandu on November 12, back December 12.", "travel", None),
     ("What do one-way flights to New York cost next Friday?", "travel", None),
+    ("Is Comcast overcharging me for internet? Help me get the bill down.", "bills", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "

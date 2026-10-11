@@ -11586,7 +11586,8 @@ def _():
             except ValueError:
                 pass
         TR.save({"serpapi_key": "a" * 64, "home": "sfo, oak"})
-        assert TR.view() == {"home": "SFO,OAK", "currency": "USD", "has_key": True, "configured": True}
+        v = TR.view()
+        assert (v["home"], v["has_key"], v["configured"], v["has_duffel"]) == ("SFO,OAK", True, True, False)
         assert muse.not_connected("travel") is None
         r = TR.search_flights("", "ktm", "2099-11-12", "2099-12-12")
         assert sent[-1]["departure_id"] == "SFO,OAK" and sent[-1]["arrival_id"] == "KTM" and sent[-1]["type"] == 1
@@ -11612,13 +11613,112 @@ def _():
         assert any(n["type"] == "reflector" for n in g["nodes"]) and "from memory" in TR.GUIDE
         compile(agentlab.codegen(g)["source"], "agent.py", "exec")
         assert muse.rehearsal_plan("Can you find a cheaper flight to kathmandu for November 12")["steps"][0]["agent"] == "travel"
-        assert muse.DOING["travel"] == "Searching Google Flights" and "travel" in muse.AGENTS
+        assert muse.DOING["travel"] == "Searching flights and hotels" and "travel" in muse.AGENTS
         assert time.strftime("%B") in MP.with_profile("x") and "Today is" in MP.today()
         assert MP.suggestions("my home airport is SFO") == ["My home airport is SFO."]
         import main
         assert {"/api/travel", "/api/travel/test"} <= {r.path for r in main.app.routes} and "function stTravel" in PAGE
     finally:
         TR._path, TR._get = real_path, real_get
+
+
+@check("travel booking and hotels: Duffel offers, a booking only behind approval, traveller checked; Google Hotels")
+def _():
+    import travel as TR, travel_mcp, tempfile, files as FL
+    real_path, real_get, real_duffel, real_dir = TR._path, TR._get, TR._duffel, agentlab._dir
+    tmp = Path(tempfile.mkdtemp())
+    TR._path = lambda: tmp / "travel.json"
+    agentlab._dir = lambda: tmp
+    calls = []
+    offer = {"id": "off_0000AbCdEf", "total_amount": "1243.50", "total_currency": "USD", "owner": {"name": "Qatar Airways"},
+             "expires_at": "2099-01-01T00:30:00Z", "passengers": [{"id": "pas_1"}],
+             "conditions": {"refund_before_departure": {"allowed": False}, "change_before_departure": {"allowed": True}},
+             "slices": [{"origin": {"iata_code": "SFO"}, "destination": {"iata_code": "KTM"}, "duration": "PT26H",
+                         "segments": [{"departing_at": "2099-11-12T23:55", "arriving_at": "2099-11-13T22:10",
+                                       "origin": {"iata_code": "SFO"}, "destination": {"iata_code": "DOH"},
+                                       "marketing_carrier": {"iata_code": "QR"}, "marketing_carrier_flight_number": "738"},
+                                      {"departing_at": "2099-11-14T01:05", "arriving_at": "2099-11-14T08:15",
+                                       "origin": {"iata_code": "DOH"}, "destination": {"iata_code": "KTM"},
+                                       "marketing_carrier": {"iata_code": "QR"}, "marketing_carrier_flight_number": "652"}]}]}
+
+    def fake_duffel(method, path, body=None, c=None):
+        calls.append((method, path, body))
+        if path.startswith("/air/offer_requests"):
+            return {"offers": [offer, {**offer, "id": "off_0000Zz", "total_amount": "1999.00"}]}
+        if path.startswith("/air/offers/"):
+            return offer
+        if path == "/air/orders":
+            return {"id": "ord_123", "booking_reference": "QX7P2A", "total_amount": "1243.50", "total_currency": "USD",
+                    "owner": {"name": "Qatar Airways"}}
+        return {}
+    TR._duffel = fake_duffel
+    TR._get = lambda params: {"properties": [
+        {"name": "Hotel Yak & Yeti", "rate_per_night": {"extracted_lowest": 140}, "total_rate": {"extracted_lowest": 420},
+         "overall_rating": 4.4, "reviews": 3100, "extracted_hotel_class": 5, "amenities": ["Pool", "Free Wi-Fi"]},
+        {"name": "No price inn"}], "search_metadata": {"google_hotels_url": "https://www.google.com/travel/hotels/x"}}
+    try:
+        for bad in ({"duffel_token": "sk_live_x"}, {"traveler": {"gender": "x"}}, {"traveler": {"born_on": "12/1/90"}},
+                    {"traveler": {"title": "sir"}}):
+            try:
+                TR.save(bad)
+                raise AssertionError(f"took {bad}")
+            except ValueError:
+                pass
+        TR.save({"serpapi_key": "b" * 64, "home": "SFO", "duffel_token": "duffel_test_abcdefghijkl"})
+        v = TR.view()
+        assert v["booking"] == "test" and not v["traveler_ready"]
+        r = TR.bookable_flights("", "KTM", "2099-11-12", "2099-12-12")
+        body = calls[-1][2]
+        assert [x["origin"] for x in body["slices"]] == ["SFO", "KTM"] and body["passengers"] == [{"type": "adult"}]
+        assert [o["price"] for o in r["offers"]] == ["1243.50", "1999.00"]
+        text = TR.bookable_text(r)
+        assert "TEST mode" in text and "off_0000AbCdEf" in text and "via DOH" in text and "not refundable" in text
+        try:
+            TR.book_flight("off_0000AbCdEf")
+            raise AssertionError("booked without a traveller")
+        except ValueError as exc:
+            assert "given_name" in str(exc)
+        TR.save({"traveler": {"title": "Mr.", "given_name": "Manish", "family_name": "Bhattarai", "born_on": "1985-01-01",
+                              "gender": "Male", "email": "m@example.com", "phone_number": "(510) 555-1234"}})
+        t = TR.config()["traveler"]
+        assert t["title"] == "mr" and t["gender"] == "m" and t["phone_number"] == "+15105551234" and TR.view()["traveler_ready"]
+        done = TR.book_flight("off_0000AbCdEf")
+        order = calls[-1][2]
+        assert calls[-2][0] == "GET" and order["payments"] == [{"type": "balance", "currency": "USD", "amount": "1243.50"}]
+        assert order["passengers"][0]["id"] == "pas_1" and order["passengers"][0]["family_name"] == "Bhattarai"
+        assert done["booking_reference"] == "QX7P2A" and done["mode"] == "test"
+        assert any(f["kind"] == "booking" and "QX7P2A" in f["title"] for f in FL.listing())
+        h = TR.search_hotels("Thamel, Kathmandu", "2099-11-13", "2099-11-16")
+        assert [x["name"] for x in h["hotels"]] == ["Hotel Yak & Yeti"]
+        assert "USD 140/night (USD 420 total)" in TR.hotels_text(h) and "google.com/travel/hotels" in TR.hotels_text(h)
+        out = travel_mcp.call("book_flight", {"offer_id": "off_0000AbCdEf", "summary": "x"})
+        assert "TEST mode" in out and "QX7P2A" in out
+        g = agentlab.template("travel")
+        blocks = [n for n in g["nodes"] if n["type"] == "mcp"]
+        names = {n["params"]["effects"]: [x["name"] for x in n["params"]["tools"]] for n in blocks}
+        assert names[agentlab.CHANGES] == ["book_flight"] and "book_flight" not in names[agentlab.READS]
+        assert "search_hotels" in names[agentlab.READS]
+        assert {"/api/travel/test-booking"} <= {r.path for r in __import__("main").app.routes}
+    finally:
+        TR._path, TR._get, TR._duffel, agentlab._dir = real_path, real_get, real_duffel, real_dir
+
+
+@check("bills: finds overcharges in your emailed bills, checks prices on the web, drafts behind approval")
+def _():
+    import muse, bills
+    g = agentlab.template("bills")
+    mcp = [n for n in g["nodes"] if n["type"] == "mcp"]
+    effects = {n["params"]["effects"]: [x["name"] for x in n["params"]["tools"]] for n in mcp}
+    assert effects[agentlab.READS] == ["search_mail", "read_mail"] and effects[agentlab.CHANGES] == ["draft_reply"]
+    assert any(n["type"] == "web_search" for n in g["nodes"]) and any(n["type"] == "reflector" for n in g["nodes"])
+    assert "never invent an address" in bills.GUIDE and "newer_than:12m" in bills.GUIDE
+    compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+    assert muse.rehearsal_plan("Is Comcast overcharging me for internet?")["steps"][0]["agent"] == "bills"
+    assert muse.rehearsal_plan("Read this bill of lading for me")["steps"][0]["agent"] != "bills"
+    assert "bills" in muse.AGENTS and muse.DOING["bills"] == "Reading your bills"
+    import mail
+    if not mail.view()["configured"]:
+        assert "email is not connected" in muse.not_connected("bills")
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

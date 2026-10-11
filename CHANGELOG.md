@@ -1,5 +1,37 @@
 # Changelog
 
+## 4.21.0
+
+- **Hotels.** The Travel agent searches Google Hotels with the same SerpApi
+  key (`search_hotels`). Each hotel comes with its price per night and in
+  total, its stars, rating and reviews, amenities, and a link.
+- **Booking flights, only with your approval.** The Travel agent books
+  through Duffel:
+  - `bookable_flights` lists offers that can actually be bought.
+  - `book_flight` buys one for the saved traveller, paid from your Duffel
+    balance, so no card number passes through the Mac.
+  - `book_flight` is a CHANGES tool in its own block. The run stops, Saathi
+    shows "Book this flight?" with the flight and the price, and nothing is
+    bought until you tap Approve and book.
+  - The price is checked again just before buying.
+  - A `duffel_test_` token books Duffel's pretend airline, for trying it; a
+    `duffel_live_` token buys real tickets.
+  - The booking lands in Files.
+- **Traveller details** (title, names as on the passport, date of birth,
+  gender, email, phone) are kept in `data/travel.json`, readable only by you.
+  They are checked when saved, and a booking refuses to run until they are
+  complete.
+- **Bills agent.** It finds your bills in your email (12 months), lays out
+  the amounts month by month, and shows what changed: a promotion ending, a
+  new fee, equipment rental. It checks today's prices from the provider and
+  its competitors on the web, with links, and says how much you overpay.
+  Then it writes a retention-call script and, if you want, a firm email
+  saved in Drafts after you approve it. It never sends or calls. Muse sends
+  bill, overcharge and provider questions to it, and Ideas suggests a check
+  once a month.
+- Settings → Flights and hotels takes the SerpApi key, the home airport, the
+  Duffel token and the traveller, and tests each one.
+
 ## 4.20.1
 
 - `./serve.sh` restarts the server in the background on port 8770. It stops
