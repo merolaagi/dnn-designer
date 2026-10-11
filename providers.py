@@ -15,6 +15,7 @@ so an install configured the old way keeps working.
 from __future__ import annotations
 
 import json
+import re
 import os
 import threading
 import time
@@ -70,7 +71,8 @@ OLLAMA_SUGGESTED = [
 
 DEFAULTS = {"provider": "anthropic", "model": "claude-sonnet-5-5", "temperature": 0.3, "max_tokens": 2048,
             "timeout": 120, "retries": 2, "judge_provider": "", "judge_model": "",
-            "talk_mode": "live", "assistant_llm": False}
+            "talk_mode": "live", "assistant_llm": False,
+            "local_thinking": False, "local_context": 32768}
 
 # What the lab's LLM cores have always been able to say, mapped onto the catalog.
 LEGACY = {"openai-compatible": "custom"}
@@ -199,8 +201,10 @@ def save(update: Dict[str, Any]) -> Dict[str, Any]:
                     raise ValueError(f"Unknown provider {v}.")
             elif k == "talk_mode":
                 v = "live" if v == "live" else "rehearsal"
-            elif k == "assistant_llm":
-                v = bool(v)
+            elif k in ("assistant_llm", "local_thinking"):
+                v = v is True or str(v).strip().lower() in ("1", "true", "on", "yes")
+            elif k == "local_context":
+                v = max(2048, min(int(v), 262144))
             else:
                 v = str(v or "").strip()
             data["defaults"][k] = v
@@ -293,6 +297,16 @@ def complete(pid: str, model: str, system: str, prompt: str, max_tokens: int = 2
     base = base_url_for(pid, data).rstrip("/")
     timeout = timeout or float(data["defaults"]["timeout"])
     try:
+        if pid == "ollama":
+            # Ollama's own API: thinking can be switched off, and the context set per call
+            d = data["defaults"]
+            reply = _request(re.sub(r"/v1/?$", "", base) + "/api/chat",
+                             {"model": model, "stream": False, "think": bool(d.get("local_thinking")),
+                              "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                              "options": {"temperature": temperature, "num_predict": max_tokens,
+                                          "num_ctx": int(d.get("local_context") or 32768)}}, {}, timeout)
+            return {"text": ((reply.get("message") or {}).get("content") or "").strip(),
+                    "tokens": (reply.get("prompt_eval_count") or 0) + (reply.get("eval_count") or 0)}
         if info["kind"] == ANTHROPIC:
             reply = _request(base + "/v1/messages", {"model": model, "max_tokens": max_tokens, "temperature": temperature,
                              "system": system, "messages": [{"role": "user", "content": prompt}]},

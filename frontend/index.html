@@ -2721,6 +2721,29 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-ds input{border:1px solid var(--paper-3);border-radius:6px;padding:5px 8px;font-size:12px;width:130px}
 .al-ds select{border:1px solid var(--paper-3);border-radius:6px;padding:5px 8px;font-size:12px}
 .al-check{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;margin:6px 0}
+.al-mcpdrop{border:0;background:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 4px}
+.al-mcpdrop:hover{color:#B3261E}
+.ev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ev-grid .field{margin:0}
+.ev-status{margin:10px 0 6px;font-size:12.5px;line-height:1.5}
+.ev-bar{height:6px;border-radius:4px;background:var(--paper-3);overflow:hidden;margin:4px 0 10px}
+.ev-bar i{display:block;height:100%;background:var(--amber)}
+.ev-chart{width:100%;height:150px;display:block;margin:4px 0 8px}
+.ev-chart .band{fill:rgba(45,125,210,.10)}
+.ev-chart .line{fill:none;stroke:#2D7DD2;stroke-width:2}
+.ev-chart .best{fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.ev-chart text{font-size:10px;fill:var(--muted)}
+.ev-chart circle{fill:#2D7DD2}
+.ev-round{border:1px solid var(--paper-3);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:12px;background:#fff}
+.ev-round h5{margin:0 0 4px;font-size:12px}
+.ev-round .meta{color:var(--muted);font-size:11px}
+.ev-cand{border-top:1px solid var(--paper-3);padding:6px 0 2px;margin-top:6px}
+.ev-cand b.o{font-size:10.5px;letter-spacing:.04em;padding:1px 6px;border-radius:6px;background:var(--paper)}
+.ev-cand b.o.ACCEPTED{background:#E3F4E8;color:#1E6B35}
+.ev-cand b.o.REJECTED,.ev-cand b.o.critic_reject,.ev-cand b.o.smoke_fail{background:#FDF0EE;color:#8C2F27}
+.ev-cand ul{margin:4px 0 2px;padding-left:18px}
+.ev-cand .why{color:var(--muted);font-size:11px}
+.ev-held{display:flex;gap:16px;font-size:12.5px;margin:6px 0}
 .al-check input{margin-top:3px;accent-color:var(--amber)}
 .al-pref{margin-top:4px;color:var(--muted)}
 .al-why{margin-top:5px;font-size:11.5px}
@@ -13618,6 +13641,7 @@ function alBuildShell(){
           <button data-altab="safety">Safety<span class="al-badge" id="alSafetyBadge"></span></button>
           <button data-altab="timeline">Timeline</button>
           <button data-altab="study">Study</button>
+          <button data-altab="evolve">Evolve</button>
           <button data-altab="monitor">Monitor<span class="al-badge bad" id="alMonBadge"></span></button>
         </div>
         <div class="al-pane" id="alPane"></div>
@@ -13750,6 +13774,7 @@ const AL_ICON = {
 };
 
 const AL_BLURBS = {
+  reverse: "Explains how a feature of an app on this computer works, from its shipped files, with REA's reverse-engineering tools.",
   specialist: "A role prompt with web search, a code sandbox, its own notes, and a critic holding it to stated standards.",
   react: "Model, router and tools in a loop, with guards and an approval step.",
   rag: "Recalls notes from long-term memory before answering, and saves new ones.",
@@ -14190,6 +14215,7 @@ function alRenderPane(){
   if (agentLabState.tab === "maths") return alRenderMaths();
   if (agentLabState.tab === "safety") return alRenderSafety();
   if (agentLabState.tab === "study") return alRenderStudy();
+  if (agentLabState.tab === "evolve") return alRenderEvolve();
   if (agentLabState.tab === "timeline") return alRenderTimeline();
   if (agentLabState.tab === "monitor") return alRenderMonitor();
   alRenderAnatomy();
@@ -14237,7 +14263,10 @@ function alRenderAnatomy(){
     const v = n.params[k] == null ? d.value : n.params[k];
     fields += d.kind === "mcp_tools"
       ? `<div class="field"><label>${alEsc(d.label)}</label>
-           ${(v || []).length ? `<ul class="al-mcp">${v.map(t => `<li><b>${alEsc(t.name)}</b> ${alEsc((t.description || "").slice(0, 90))}</li>`).join("")}</ul>`
+           ${(v || []).length ? `<ul class="al-mcp">${v.map((t, i) => `<li><b>${alEsc(t.name)}</b> ${alEsc((t.description || "").slice(0, 90))}
+               <button class="al-mcpdrop" data-mcpdrop="${i}" title="Leave this tool out" aria-label="Leave out ${alEsc(t.name)}">×</button></li>`).join("")}</ul>
+             ${(() => { const kb = Math.round(JSON.stringify(v).length / 4 / 1000); return kb >= 6
+               ? `<div class="help bad">${v.length} tools: their descriptions add about ${kb}K tokens to every model call. Leave out the ones this agent does not need, especially for a model on this computer.</div>` : ""; })()}`
              : `<div class="help">None yet. Set the command or URL above, then discover.</div>`}
            <button class="btn" id="alMcpFind">Discover tools</button> <span class="al-muted" id="alMcpMsg"></span></div>`
       : d.kind === "design"
@@ -14291,6 +14320,10 @@ function alRenderAnatomy(){
     <button class="btn danger" id="alDel">Delete block</button>`;
   if ($("alDrill")) $("alDrill").onclick = () => alDrillInto(n.params.design);
   if (n.type === "system_prompt") alPromptVersions(n);
+  pane.querySelectorAll("[data-mcpdrop]").forEach(btn => btn.onclick = () => {
+    n.params.tools = (n.params.tools || []).filter((_, i) => i !== +btn.dataset.mcpdrop);
+    alDraft(); alScheduleCheck(); alRenderNodes(); alRenderPane();
+  });
   if ($("alMcpFind")) $("alMcpFind").onclick = async () => {
     $("alMcpMsg").textContent = "connecting…";
     let r, d;
@@ -14865,6 +14898,175 @@ function alCostsHtml(c){
 
 /* One version of the design per block removed, every case run on each, and a
    verdict that only calls a difference real when it is bigger than its noise. */
+/* ---------- evolve: the design improves itself, under regularisers ----------
+   After RRSI (Regularized Recursive Self-Improvement of agent harnesses, Google Research, 2026).
+   A model proposes edits to this design; each candidate is screened for edits that copy the cases, run on
+   the cases, and kept only if it beats the incumbent by more than the measured noise, at a fair token cost. */
+async function alRenderEvolve(){
+  const S = agentLabState;
+  S.evolve = S.evolve || {cases: null, heldout: "", mode: "rehearsal", approvals: "approve", cfg: {T: 6, k: 2, m: 2},
+                          current: null, past: [], plan: null};
+  const ev = S.evolve;
+  if (ev.cases === null){
+    try{ ev.cases = localStorage.getItem("agentlab-evolve-cases") || localStorage.getItem("agentlab-cases") || ""; } catch { ev.cases = ""; }
+    try{ ev.heldout = localStorage.getItem("agentlab-evolve-heldout") || ""; } catch {}
+    try{ ev.past = (await (await fetch(API + "/api/agentlab/evolve")).json()).evolutions || []; } catch {}
+  }
+  if (S.tab !== "evolve") return;
+  const live = alLiveAvailable(), running = ev.current && ["running", "stopping"].includes(ev.current.status);
+  const num = (id, label, key, min, max, help) => `<div class="field"><label for="${id}">${label}</label>
+    <input type="number" id="${id}" min="${min}" max="${max}" value="${ev.cfg[key]}" data-evkey="${key}">
+    ${help ? `<div class="help">${help}</div>` : ""}</div>`;
+  $("alPane").innerHTML = `<h3>Let the design improve itself</h3>
+    <p class="al-muted">A model proposes edits to this design: its prompts, settings and blocks. Each candidate is
+    screened for edits that copy the cases, run on the cases, and kept only if it beats the current version by more
+    than the noise measured on the starting design, at a token cost in proportion to its gain. Early rounds may bundle
+    a few edits; later rounds make one at a time, so each gain can be traced to its cause. After RRSI (Google Research).</p>
+    <div class="field"><label for="evCases">Cases to evolve on</label>
+      <textarea id="evCases" class="al-cases" spellcheck="false" placeholder="Same format as the Study tab">${alEsc(ev.cases)}</textarea></div>
+    <div class="field"><label for="evHeld">Held-out cases (optional)</label>
+      <textarea id="evHeld" class="al-cases" style="min-height:70px" spellcheck="false"
+        placeholder="Never seen by the search; the start and the end are measured on them">${alEsc(ev.heldout)}</textarea>
+      <div class="help">If the evolved design only does better on the cases it evolved on, these show it.</div></div>
+    <div class="ev-grid">
+      ${num("evT", "Rounds", "T", 1, 30)}
+      ${num("evK", "Trials per case", "k", 1, 10, "2+ measures the noise")}
+      ${num("evM", "Candidates per round", "m", 1, 4)}
+    </div>
+    <div class="al-row2" style="margin-top:8px">
+      <div class="field"><label for="evMode">Model</label><select id="evMode">
+        <option value="rehearsal"${ev.mode === "rehearsal" ? " selected" : ""}>Rehearsal, free (scripted proposer)</option>
+        <option value="live"${ev.mode === "live" ? " selected" : ""}${live ? "" : " disabled"}>Live</option></select></div>
+    </div>
+    <div id="evPlan" class="al-muted"></div>
+    <div class="row" style="margin:8px 0 4px">
+      <button class="btn go" id="evGo"${running ? " disabled" : ""}>${running ? "Evolving…" : "Evolve this design"}</button>
+      ${running ? `<button class="btn stop" id="evStop">Stop</button>` : ""}
+      ${(ev.past || []).length ? `<select id="evPast"><option value="">Earlier evolutions…</option>${ev.past.map(p =>
+        `<option value="${alEsc(p.id)}">${alEsc(p.design)} · ${alEsc(p.status)} · ${p.S0 != null ? p.S0.toFixed(2) : "?"} → ${p.S != null ? p.S.toFixed(2) : "?"} · ${new Date((p.started || 0) * 1000).toLocaleString()}</option>`).join("")}</select>` : ""}
+    </div>
+    <div id="evOut">${ev.current ? alEvolveHtml(ev.current) : ""}</div>`;
+  const replan = () => { clearTimeout(ev.planTimer); ev.planTimer = setTimeout(alEvolvePlan, 300); };
+  $("evCases").addEventListener("input", e => { ev.cases = e.target.value; try{ localStorage.setItem("agentlab-evolve-cases", ev.cases); } catch {} replan(); });
+  $("evHeld").addEventListener("input", e => { ev.heldout = e.target.value; try{ localStorage.setItem("agentlab-evolve-heldout", ev.heldout); } catch {} replan(); });
+  $("alPane").querySelectorAll("[data-evkey]").forEach(i => i.addEventListener("input", e => {
+    ev.cfg[e.target.dataset.evkey] = Math.max(+e.target.min, Math.min(+e.target.max, +e.target.value || +e.target.min)); replan(); }));
+  $("evMode").addEventListener("change", e => { ev.mode = e.target.value; replan(); });
+  $("evGo").addEventListener("click", alEvolveStart);
+  if ($("evStop")) $("evStop").addEventListener("click", () => fetch(API + `/api/agentlab/evolve/${ev.current.id}/stop`, {method: "POST"}));
+  if ($("evPast")) $("evPast").addEventListener("change", async e => {
+    if (!e.target.value) return;
+    ev.current = await (await fetch(API + "/api/agentlab/evolve/" + e.target.value)).json();
+    $("evOut").innerHTML = alEvolveHtml(ev.current); alEvolveWire();
+    if (["running", "stopping"].includes(ev.current.status)) alEvolveFollow(ev.current.id);
+  });
+  alEvolveWire();
+  alEvolvePlan();
+}
+
+async function alEvolvePlan(){
+  const ev = agentLabState.evolve, host = $("evPlan");
+  if (!host) return;
+  if (!ev.cases.trim()){ host.textContent = "Write a few cases first: the search is only as good as what it is scored on."; return; }
+  let d;
+  try{
+    d = await (await fetch(API + "/api/agentlab/evolve/plan", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({graph: agentLabState.graph, cases: ev.cases, heldout: ev.heldout, cfg: ev.cfg})})).json();
+  } catch { return; }
+  if (!$("evPlan")) return;
+  host.innerHTML = d.problems && d.problems.length ? `<span class="bad">${alEsc(d.problems[0])}</span>`
+    : `${d.cases} case${d.cases === 1 ? "" : "s"}${d.heldout ? ` + ${d.heldout} held out` : ""} · at most
+       <b>${d.runs_at_most}</b> agent runs${ev.mode === "live" ? ", each a live run: on a model on this computer that can take hours" : ""}
+       · edits allowed per candidate, round by round: ${d.budgets.join(", ")}`;
+}
+
+async function alEvolveStart(){
+  const S = agentLabState, ev = S.evolve;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/agentlab/evolve", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({graph: S.graph, cases: ev.cases, heldout: ev.heldout, mode: ev.mode, approvals: ev.approvals, cfg: ev.cfg})});
+    d = await r.json();
+  } catch { $("evOut").innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
+  if (!r.ok){ $("evOut").innerHTML = `<div class="runfail">${alEsc((d.detail && d.detail.message) || "The evolution did not start.")}</div>`; return; }
+  ev.current = d;
+  alRenderEvolve();
+  alEvolveFollow(d.id);
+}
+
+function alEvolveFollow(id){
+  const ev = agentLabState.evolve;
+  clearInterval(ev.timer);
+  ev.timer = setInterval(async () => {
+    let d;
+    try{ d = await (await fetch(API + "/api/agentlab/evolve/" + id)).json(); } catch { return; }
+    ev.current = d;
+    const done = !["running", "stopping"].includes(d.status);
+    if (done){
+      clearInterval(ev.timer);
+      try{ ev.past = (await (await fetch(API + "/api/agentlab/evolve")).json()).evolutions || []; } catch {}
+      if (agentLabState.tab === "evolve") alRenderEvolve();
+      return;
+    }
+    if ($("evOut")){ $("evOut").innerHTML = alEvolveHtml(d); alEvolveWire(); }
+  }, 2500);
+}
+
+function alEvolveWire(){
+  const b = $("evOpen");
+  if (b) b.onclick = async () => {
+    const r = await fetch(API + "/api/agentlab/designs/" + encodeURIComponent(b.dataset.name));
+    if (!r.ok){ toast("The evolved design could not be opened"); return; }
+    agentLabState.stack = []; alStackButton();
+    alSetGraph(await r.json());
+    alMarkSaved(agentLabState.graph);
+    alUndoToast(`Opened ${agentLabState.graph.name}.`);
+  };
+}
+
+function alEvolveChart(e){
+  const pts = e.trajectory || [];
+  if (!pts.length) return "";
+  const W = 560, H = 150, padL = 34, padR = 10, padT = 10, padB = 22, T = (e.cfg && e.cfg.T) || 1;
+  const ys = pts.map(p => p.S), lo = Math.max(0, Math.min(...ys) - 0.1), hi = Math.min(1, Math.max(...ys) + 0.1);
+  const X = t => padL + (W - padL - padR) * (t / Math.max(1, T)), Y = v => padT + (H - padT - padB) * (1 - (v - lo) / Math.max(1e-9, hi - lo));
+  const d = e.delta || 0, s0 = pts[0].S;
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.S).toFixed(1)}`).join(" ");
+  return `<svg class="ev-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Score by round">
+    <rect class="band" x="${padL}" width="${W - padL - padR}" y="${Y(Math.min(hi, s0 + d))}" height="${Math.max(0, Y(Math.max(lo, s0 - d)) - Y(Math.min(hi, s0 + d)))}"/>
+    <path class="line" d="${line}"/>${pts.map(p => `<circle cx="${X(p.t)}" cy="${Y(p.S)}" r="3"><title>round ${p.t}: S ${p.S.toFixed(3)}</title></circle>`).join("")}
+    <text x="${padL - 4}" y="${Y(hi) + 4}" text-anchor="end">${hi.toFixed(2)}</text>
+    <text x="${padL - 4}" y="${Y(lo)}" text-anchor="end">${lo.toFixed(2)}</text>
+    <text x="${padL}" y="${H - 6}">start</text><text x="${W - padR}" y="${H - 6}" text-anchor="end">round ${T}</text>
+  </svg>`;
+}
+
+function alEvolveHtml(e){
+  const f = v => v == null ? "–" : (+v).toFixed(3), pct = v => v == null ? "–" : `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
+  const inc = e.incumbent || {}, S = inc.eval ? inc.eval.S : null;
+  const prog = e.trials_planned ? Math.min(100, Math.round(100 * (e.trials_done || 0) / e.trials_planned)) : 0;
+  const head = ["running", "stopping"].includes(e.status)
+    ? `<div class="ev-status"><b>${alEsc(e.phase || "working")}</b> · ${e.trials_done || 0} of at most ${e.trials_planned} runs</div><div class="ev-bar"><i style="width:${prog}%"></i></div>`
+    : e.status === "error" ? `<div class="runfail">${alEsc(e.error || "The evolution failed.")}</div>`
+    : `<div class="ev-status"><b>${e.status === "done" ? "Finished" : alEsc(e.status)}.</b> ${e.base ? `Started at ${f(e.base.S)}` : ""}${S != null ? `, ended at ${f(S)}` : ""}
+        ${inc.t ? `with the version from round ${inc.t}.` : "No candidate beat the starting design by more than the noise."}</div>`;
+  const held = e.heldout_eval ? `<div class="ev-held"><span>Held-out cases: <b>${f(e.heldout_eval.base.S)}</b> → <b>${f(e.heldout_eval.final.S)}</b></span>
+      <span class="al-muted">${e.heldout_eval.final.S + 1e-9 < e.heldout_eval.base.S ? "worse out of sample: the gains may be memorised" : "the gain holds, or nothing was lost, on cases the search never saw"}</span></div>` : "";
+  const saved = e.saved_as ? `<div class="row" style="margin:6px 0"><button class="btn go" id="evOpen" data-name="${alEsc(e.saved_as)}">Open the evolved design</button>
+      <span class="al-muted">saved as ${alEsc(e.saved_as)}; the original is unchanged</span></div>` : "";
+  const noise = e.delta != null ? `<p class="al-muted">Noise band δ = ${f(e.delta)}${e.calibration ? ` (${alEsc(e.calibration.method)})` : ""}: the shaded strip. A candidate has to beat the best score so far minus δ, and a gain smaller than δ only counts for a token saving or new machinery.</p>` : "";
+  const rounds = (e.rounds || []).slice().reverse().map(r => `<div class="ev-round">
+      <h5>Round ${r.t + 1}${r.winner ? ` · kept ${r.winner}` : " · nothing kept"}</h5>
+      <div class="meta">up to ${r.b_t} edit${r.b_t === 1 ? "" : "s"} per candidate${r.sigma ? ` · stalled: exploring ${alEsc((r.untried || []).join(", "))}` : ""}${(r.prune || []).length ? ` · prune candidates: ${alEsc(r.prune.join(", "))}` : ""}</div>
+      ${(r.candidates || []).map(c => { const d = c.decision || {}; return `<div class="ev-cand">
+        <b>${c.variant}</b> <b class="o ${alEsc(c.outcome || c.gate || "")}">${alEsc((c.outcome || c.gate || "running").replace("_", " "))}</b>
+        ${d.S != null ? ` S ${f(d.S)} (${d.delta_S >= 0 ? "+" : ""}${(+d.delta_S).toFixed(3)}) · tokens ${pct(d.delta_C)}` : ""}
+        <ul>${(c.edits || []).map(x => `<li><i>${alEsc(x.component || "?")}</i>: ${alEsc(x.hypothesis || "")}</li>`).join("")}</ul>
+        <div class="why">${alEsc((d.S != null ? d.reason : c.detail || d.reason) || "")}</div></div>`; }).join("")}
+    </div>`).join("");
+  return head + alEvolveChart(e) + noise + held + saved + rounds;
+}
+
 async function alRenderStudy(){
   const S = agentLabState;
   S.study = S.study || {cases: null, mode: "rehearsal", repeats: 1, approvals: "approve", plan: null, current: null,
@@ -15746,6 +15948,11 @@ function stRender(){
         <div class="st-field"><label for="stTimeout">Time limit per call (seconds)</label><input id="stTimeout" data-def="timeout" type="number" min="10" value="${def.timeout}">
           <div class="help">Local models can be slow to start: give them a few minutes.</div></div>
         <div class="st-field"><label for="stRetries">Retries after a rate limit or outage</label><input id="stRetries" data-def="retries" type="number" min="0" max="6" value="${def.retries}"></div>
+        <div class="st-field"><label class="al-check" style="margin:22px 0 0"><input type="checkbox" id="stThink" data-def="local_thinking"${def.local_thinking ? " checked" : ""}>
+          Let models in Ollama think before answering</label>
+          <div class="help">Off is much faster, and keeps a step's tokens for the answer. On can help hard reasoning, but needs a high Max tokens per step.</div></div>
+        <div class="st-field"><label for="stCtx">Context length for models in Ollama (tokens)</label><input id="stCtx" data-def="local_context" type="number" min="2048" max="262144" step="1024" value="${def.local_context || 32768}">
+          <div class="help">How much of the conversation the model holds at once. 32768 suits 64 GB of memory; more needs more.</div></div>
       </div>
       <div class="st-actions"><button class="btn" id="stTry">Try the default model</button><span class="st-msg" id="stTryMsg"></span></div>
       <div id="stTryOut"></div></div>
@@ -16230,7 +16437,7 @@ function tkTurnHtml(t, i){
         : t.status === "stopped" ? "Stopped." : t.error || "No answer came back.")}</div>`;
   return body + `<div class="tk-meta">${alEsc(meta)}
     ${t.run && t.status !== "gone" ? `<button data-lab="${alEsc(t.run)}">See every step in the lab</button>` : ""}
-    ${["interrupted", "stopped"].includes(t.status) ? `<button data-resume="${alEsc(t.run)}">Resume</button>` : ""}</div>`;
+    ${["interrupted", "stopped", "error"].includes(t.status) ? `<button data-resume="${alEsc(t.run)}" title="Carry on from the last step that finished">Resume</button>` : ""}</div>`;
 }
 
 /* A small, safe Markdown: paragraphs, lists, headings, code. Everything is escaped first. */

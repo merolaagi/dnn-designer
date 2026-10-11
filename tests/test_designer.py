@@ -8102,6 +8102,14 @@ def _():
         "a saved agent's output reaches the core that can run the coder unapproved: that path crosses agents"
 
 
+@check("a saved agent inside another uses its host's rehearsal stand-ins, so nothing inside goes online")
+def _():
+    g = _team()
+    result = agentlab.run(g, "Estimate the cafes Lisbon can support")
+    searches = [e for e in result["events"] if e["event"] == "tool_result" and e.get("tool") == "web_search"]
+    assert searches and all("stand-in" in str(e.get("preview")) for e in searches), searches
+
+
 @check("a study can take out a saved agent, and a fork replays one faithfully")
 def _():
     g = _team()
@@ -10257,6 +10265,244 @@ def _():
     turns = sent[1]["messages"]
     assert turns[2]["tool_calls"][0]["function"]["arguments"] == '{"input": "print(1)"}'
     assert turns[3] == {"role": "assistant", "content": ""}
+
+
+@check("a run that failed part-way, such as on a slow model, resumes from its last finished step")
+def _():
+    g = agentlab.template("planexec")
+    whole = agentlab.start_run(g, "Estimate the cafes Lisbon can support", approvals="approve", background=False)
+    finished = agentlab.load_run(whole["id"])
+    cp = finished["checkpoints"][2]
+    failed = json.loads(json.dumps(finished))
+    failed["id"] = "fail" + uuid.uuid4().hex[:7]
+    failed["checkpoints"] = failed["checkpoints"][:cp["i"] + 1]
+    failed["events"] = failed["events"][:cp["events"]]
+    failed.update(status="error", error="TimeoutError: timed out", answer=None, ok=False, costs=None)
+    agentlab.write_record(failed)
+    try:
+        agentlab.resume_run(failed["id"], background=False)
+        out = agentlab.load_run(failed["id"])
+        assert out["status"] == "done" and out["answer"] == finished["answer"]
+    finally:
+        (agentlab._runs_dir() / f"{failed['id']}.json").unlink(missing_ok=True)
+    turn = {"run": whole["id"], "status": "error"}
+    assert agentlab._turn_from_run(turn) and turn["status"] == "done", "a resumed turn catches up"
+    assert '["interrupted", "stopped", "error"].includes(t.status)' in PAGE
+
+
+@check("Math search's web search runs, and a model on this computer gets a long time limit")
+def _():
+    import providers
+    old = providers.load()
+    providers.save({"defaults": {"provider": "ollama", "model": "qwen3.6:27b",
+                                 "timeout": providers.DEFAULTS["timeout"]}})     # whatever this computer's Settings say
+    try:
+        src = agentlab.codegen(agentlab.template("mathsearch"))["source"]
+    finally:
+        providers._write(old)
+    assert "TIMEOUT = 900" in src
+    space = {}
+    exec(compile(src, "agent.py", "exec"), space)
+    space["_web_get"] = lambda url, headers: ('<div class="result__body"><a class="result__a" href="https://a.org/x">'
+                                              'Golomb</a><a class="result__snippet">rulers</a></div>')
+    assert space["search_web"]("golomb").startswith("1. Golomb\nhttps://a.org/x")
+    try:
+        with space["too_slow"]():
+            raise TimeoutError("timed out")
+    except TimeoutError as exc:
+        assert "Time limit per call" in str(exc)
+
+
+@check("evolve: RRSI's edit budget, noise band and admission rules")
+def _():
+    import evolve as EV
+    assert [EV.edit_budget(t, 20, 1, 4) for t in (0, 10, 19, 20)] == [4, 3, 2, 1]
+    cfg = EV._cfg({})
+    inc = {"S": 0.60, "C": 1000}
+    take = EV.judge({"S": 0.70, "C": 1100}, inc, 0.60, 0.03, cfg, ["prompt"], {})
+    assert take["admissible"], take
+    dear = EV.judge({"S": 0.62, "C": 2200}, inc, 0.60, 0.01, cfg, ["prompt"], {})
+    assert not dear["admissible"] and "cost rule" in dear["reason"]          # +2 points buy +90% tokens, not +120%
+    saving = EV.judge({"S": 0.60, "C": 800}, inc, 0.60, 0.03, cfg, ["config"], {})
+    assert saving["admissible"], saving                                    # same score, fewer tokens
+    luck = EV.judge({"S": 0.61, "C": 1000}, inc, 0.60, 0.03, cfg, ["prompt"], {})
+    assert luck["admissible"] is True and "inside the noise band" in luck["reason"]
+    low = EV.judge({"S": 0.55, "C": 500}, inc, 0.62, 0.03, cfg, ["config"], {})
+    assert not low["admissible"] and "below the floor" in low["reason"]
+    tool = EV.judge({"S": 0.60, "C": 1020}, inc, 0.60, 0.03, cfg, ["client_tool"], {})
+    assert tool["admissible"] and tool["novelty"] == 1                      # new machinery breaks a tie
+    band = EV.noise_band({"k": 2, "per_case": [{"rewards": [1, 0]}, {"rewards": [1, 1]}, {"rewards": [0, 1]}]}, 2.0)
+    assert band["delta"] > 0 and "within each case" in band["method"]
+    assert EV.stall_flag([0.5, 0.5, 0.51], 2, 2, 0.02) == 1 and EV.stall_flag([0.5, 0.6, 0.7], 2, 2, 0.02) == 0
+    hist = [{"t": 0, "component": "prompt", "delta_S": -0.02, "accepted": False},
+            {"t": 1, "component": "config", "delta_S": 0.05, "accepted": True}]
+    assert [p["component"] for p in EV.prune_set(hist, 2, 4)] == ["prompt"]
+    assert "memory" in EV.exploration(1, EV.tried(hist), 1)["untried"]
+
+
+@check("evolve: edits apply to the design as set, add and remove, and copies of the cases are refused")
+def _():
+    import evolve as EV
+    g = agentlab.template("react")
+    core = next(n["id"] for n in g["nodes"] if n["type"] == "llm")
+    router = next(n["id"] for n in g["nodes"] if n["type"] == "router")
+    prompt = next(n["id"] for n in g["nodes"] if n["type"] == "system_prompt")
+    out = next(n["id"] for n in g["nodes"] if n["type"] == "output")
+    into = next(e["source"] for e in g["edges"] if e["target"] == out)
+    new, problems, comps = EV.apply_ops(g, [
+        {"op": "set", "block": prompt, "param": "text", "value": "Be careful."},
+        {"op": "add", "type": "summarizer", "attach_to": core},
+        {"op": "add", "type": "code_exec", "attach_to": router},
+        {"op": "add", "type": "reflector", "between": [into, out]}])
+    assert not problems, problems
+    assert comps == ["prompt", "context_mgmt", "client_tool", "control_flow"]
+    kinds = [n["type"] for n in new["nodes"]]
+    assert kinds.count("summarizer") == 1 and "code_exec" in kinds and "reflector" in kinds
+    compile(agentlab.codegen(new)["source"], "agent.py", "exec")
+    _, bad, _ = EV.apply_ops(g, [{"op": "set", "block": core, "param": "colour", "value": 1}])
+    assert bad and "has no setting colour" in bad[0]
+    _, bad, _ = EV.apply_ops(g, [{"op": "add", "type": "llm", "attach_to": core}])
+    assert bad and "cannot be added" in bad[0]
+    cases = agentlab.parse_cases("How many marks does an optimal Golomb ruler of length 55 have\ncontains: 10\n")["cases"]
+    copy = [{"ops": [{"op": "set", "block": prompt, "param": "text",
+                      "value": "Remember: how many marks does an optimal Golomb ruler of length 55 have"}]}]
+    assert any("quotes the wording" in h for h in EV.precheck(copy, cases))
+    answer = [{"ops": [{"op": "set", "block": prompt, "param": "text", "value": "The answer is usually 10."}]}]
+    assert any("expected answer" in h for h in EV.precheck(answer, cases))
+    fair = [{"ops": [{"op": "set", "block": prompt, "param": "text", "value": "Check every count with code."}]}]
+    assert EV.precheck(fair, cases) == []
+
+
+@check("evolve: a whole run keeps the edit that helps, saves the evolved design, and checks it held out")
+def _():
+    import evolve as EV
+    real = EV.evaluate
+
+    def fake(graph, cases, k, mode, approvals, stop=None, on_trial=None):
+        good = any(EV.GENERAL_CHECK in str(n.get("params", {}).get("text", "")) for n in graph["nodes"])
+        rows = [{"case": i, "rewards": [0.9 if good else 0.5] * k, "tokens": [1000] * k, "errors": [None] * k,
+                 "answers": ["x"] * k, "failed": [[]] * k} for i in range(len(cases))]
+        return {"S": 0.9 if good else 0.5, "C": 1000.0, "k": k, "per_case": rows}
+    EV.evaluate = fake
+    try:
+        g = agentlab.template("react")
+        g["name"] = "zzEvolveTest"
+        e = EV.start(g, "Task one\ncontains: a\n\nTask two\ncontains: b\n", "Held task\ncontains: c\n",
+                     "rehearsal", cfg={"T": 2, "k": 2, "m": 2, "delta": 0.05}, background=False)
+    finally:
+        EV.evaluate = real
+    try:
+        assert e["status"] == "done", e.get("error")
+        assert [x["S"] for x in e["trajectory"]] == [0.5, 0.9, 0.9]
+        kept = [h for h in e["history"] if h["outcome"] == "ACCEPTED"]
+        assert kept and kept[0]["component"] == "prompt" and kept[0]["delta_S"] == 0.4
+        assert e["heldout_eval"] == {"base": {"S": 0.5, "C": 1000.0}, "final": {"S": 0.9, "C": 1000.0}}
+        saved = agentlab.load(e["saved_as"])
+        assert saved["evolved_from"]["S"] == 0.9 and saved["name"] == "zzEvolveTest evolved"
+        assert EV.load(e["id"])["status"] == "done" and any(x["id"] == e["id"] for x in EV.listing())
+    finally:
+        if e.get("saved_as"):
+            (agentlab._dir() / f"{e['saved_as']}.json").unlink(missing_ok=True)
+        (EV._evo_dir() / f"{e['id']}.json").unlink(missing_ok=True)
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/agentlab/evolve", "/api/agentlab/evolve/plan", "/api/agentlab/evolve/{evo_id}"} <= paths
+    for needle in ('data-altab="evolve"', "function alRenderEvolve", "/api/agentlab/evolve/plan", "Open the evolved design"):
+        assert needle in PAGE, needle
+
+
+@check("REA: the reverse-engineering design is wired to its MCP server with a focused set of tools")
+def _():
+    import mcp_presets
+    g = agentlab.template("reverse")
+    assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
+    mcp = next(n for n in g["nodes"] if n["type"] == "mcp")
+    assert mcp["params"]["target"] == "npx -y rea-agents@latest mcp" and mcp["params"]["effects"] == agentlab.READS
+    names = [t["name"] for t in mcp["params"]["tools"]]
+    assert {"open_binary", "analyze_javascript_application", "procedure_pseudo_code"} <= set(names)
+    assert len(json.dumps(mcp_presets.REA_TOOLS)) < 30000, "a local model reads these on every call"
+    src = agentlab.codegen(g)["source"]
+    compile(src, "agent.py", "exec")                      # schemas with true/false/null are Python literals
+    assert src.count("def open_binary(") == 1, "each MCP tool is written once"
+    assert "Observations, inferences and unknowns are kept apart" in src
+
+
+@check("an MCP tool's huge JSON result reaches the model as a digest, summary first")
+def _():
+    space = {"json": json}
+    exec(agentlab.MCP_CLIENT, space)
+    big = {"evidence_id": "ev_" + "a" * 60, "normalized_result": {
+        "graph": {"nodes": [{"node_id": f"n{i}", "sha256": "f" * 64, "label": f"module{i}.js",
+                             "limitations": ["x" * 200] * 5} for i in range(3000)]},
+        "summary": {"ipc_handlers": 2, "windows": 1}, "limitations": ["Static only."]}}
+    text = json.dumps(big)
+    out = space["mcp_digest"](text)
+    assert len(out) < 13000 < len(text)
+    assert out.startswith("[A digest of a") and '"summary":{"ipc_handlers":2' in out
+    assert "sha256" not in out and "evidence_id" not in out and "... 2" in out
+    assert space["mcp_digest"]("short") == "short"
+    assert "more characters cut" in space["mcp_digest"]("y" * 20000)
+
+
+@check("a model in Ollama is called through its own API, with thinking off and the context set, unless Settings say otherwise")
+def _():
+    import io, providers
+    old = providers.load()
+    providers.save({"defaults": {"provider": "ollama", "model": "qwen3.6:27b", "max_tokens": 8192,
+                                 "local_thinking": False, "local_context": 32768}})
+    try:
+        src = agentlab.codegen(agentlab.template("reverse"))["source"]
+        providers.save({"defaults": {"local_thinking": "true", "local_context": 999999}})
+        on = providers.load()["defaults"]
+        assert on["local_thinking"] is True and on["local_context"] == 262144
+        providers.save({"defaults": {"local_thinking": "false"}})
+        assert providers.load()["defaults"]["local_thinking"] is False
+    finally:
+        providers._write(old)
+    assert '"provider": "ollama"' in src and '"think": False, "num_ctx": 32768' in src
+    space = {}
+    exec(compile(src, "agent.py", "exec"), space)
+    settings = next(v for k, v in space.items() if k.endswith("_SETTINGS") and isinstance(v, dict) and "num_ctx" in v)
+    sent = []
+    replies = [[json.dumps({"message": {"content": "", "tool_calls": [{"function": {"name": "open_binary",
+                "arguments": {"path": "/x"}}}]}, "done": True, "done_reason": "stop"}).encode()],
+               [b'{"message": {"content": "Hel"}, "done": false}\n', b'{"message": {"content": "lo"}, "done": true}'],
+               [b'{"message": {"content": ""}, "done": true, "done_reason": "length"}']]
+
+    class Reply:
+        def __init__(self, chunks):
+            self.chunks = chunks
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"".join(self.chunks)
+
+        def __iter__(self):
+            return iter(self.chunks)
+
+    space["send"] = lambda request: (sent.append((request.full_url, json.loads(request.data))), Reply(replies[len(sent) - 1]))[1]
+    tools = [{"name": "open_binary", "description": "d", "input_schema": {"type": "object"}}]
+    first = space["call_model"]("sys", [{"role": "user", "content": "go"}], tools, **settings)
+    assert first["stop_reason"] == "tool_use" and first["content"][0]["input"] == {"path": "/x"}
+    url, body = sent[0]
+    assert url.endswith(":11434/api/chat") and body["think"] is False and body["options"]["num_ctx"] == 32768
+    assert body["options"]["num_predict"] == 8192
+    history = [{"role": "user", "content": "go"}, {"role": "assistant", "content": first["content"]},
+               {"role": "user", "content": [{"type": "tool_result", "tool_use_id": first["content"][0]["id"], "content": "ok"}]}]
+    pieces = []
+    second = space["call_model"]("sys", history, None, on_text=pieces.append, **settings)
+    assert second["content"] == [{"type": "text", "text": "Hello"}] and pieces == ["Hel", "lo"]
+    assert sent[1][1]["messages"][3] == {"role": "tool", "content": "ok", "tool_name": "open_binary"}
+    try:
+        space["call_model"]("sys", history, None, **settings)
+        raise AssertionError("a reply cut off before any answer should say why")
+    except RuntimeError as exc:
+        assert "Max tokens per step" in str(exc)
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

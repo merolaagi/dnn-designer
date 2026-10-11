@@ -26,6 +26,7 @@ import agents
 import agentlab
 import packager
 import roster
+import evolve
 import providers
 import advisor
 import assistant
@@ -753,6 +754,52 @@ class AgentLabStudy(BaseModel):
     prompts: Optional[Dict[str, Any]] = None
     removals: bool = True
     pairwise: bool = False
+
+
+class AgentLabEvolve(BaseModel):
+    graph: Dict[str, Any]
+    cases: str = ""
+    heldout: str = ""
+    mode: str = "rehearsal"
+    approvals: str = "approve"
+    cfg: Optional[Dict[str, Any]] = None
+
+
+@app.get("/api/agentlab/evolve")
+def agentlab_evolve_list():
+    """Earlier evolutions, and the method's default settings."""
+    return {"evolutions": evolve.listing(), "defaults": evolve.DEFAULTS, "limits": evolve.LIMITS,
+            "components": evolve.K}
+
+
+@app.post("/api/agentlab/evolve/plan")
+def agentlab_evolve_plan(body: AgentLabEvolve):
+    return evolve.plan(body.graph, body.cases, body.heldout, body.cfg)
+
+
+@app.post("/api/agentlab/evolve")
+def agentlab_evolve_start(body: AgentLabEvolve):
+    """Evolve the design: propose edits, screen them, run them on the cases, keep what earns its place."""
+    try:
+        return evolve.start(body.graph, body.cases, body.heldout, body.mode, body.approvals, body.cfg)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/agentlab/evolve/{evo_id}")
+def agentlab_evolve_get(evo_id: str):
+    try:
+        return evolve.load(evo_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such evolution."})
+
+
+@app.post("/api/agentlab/evolve/{evo_id}/stop")
+def agentlab_evolve_stop(evo_id: str):
+    try:
+        return evolve.stop(evo_id)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 class AgentLabDataset(BaseModel):

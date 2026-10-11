@@ -1,5 +1,88 @@
 # Changelog
 
+## 4.5.2
+
+- **A saved agent inside another no longer goes online in a rehearsal.** Its
+  web search, training, designer and experiment tools now use the host run's
+  backends, so in a rehearsal they get the same stand-ins. Before, a web search
+  inside a saved agent searched DuckDuckGo for real, which made rehearsals
+  differ from run to run.
+- Two tests no longer depend on this computer's Settings (its time limit per
+  call, and its Ollama context length).
+
+## 4.5.1
+
+- **Models in Ollama answer without thinking first, unless you ask.** Agents
+  now reach a model in Ollama through its own API (/api/chat) instead of the
+  OpenAI-compatible one, which cannot switch thinking off. qwen3.6 had been
+  spending a whole 8,192-token step on reasoning and returning nothing. Two new
+  settings: "Let models in Ollama think before answering" (off by default) and
+  "Context length for models in Ollama" (32,768 by default, sent with every
+  call, so Ollama's own setting no longer matters). The judge, the Try button
+  and Evolve's proposer use the same path.
+- The message for a step cut off before any answer now says to raise Max
+  tokens above its current value, or to turn thinking off.
+
+## 4.5.0
+
+- **Reverse engineer (REA).** A new starting design, "Reverse engineer: how a
+  shipped app works", connects an agent to REA (Reverse Engineer Anything,
+  github.com/morluto/rea, MIT) through its MCP server, started with
+  `npx -y rea-agents@latest mcp`. It is offered 19 of REA's 139 tools: Electron
+  and JavaScript apps, app bundles and archives, .NET assemblies, Android
+  packages, plists and, with Ghidra, Hopper or IDA installed, native binaries
+  (pseudocode, strings, callers, cross-references). Its instructions follow
+  REA's own workflow; its critic requires every claim to point to evidence and
+  keeps observations, inferences and unknowns apart. It appears in Talk to
+  agents too.
+- **Large MCP results are digested.** A tool result over 12,000 characters
+  reaches the model as a digest: JSON keeps its summary first and drops ids,
+  hashes and repeated caveats, with lists cut until it fits (REA's analysis of
+  a four-file app is 331,000 characters; the digest is under 9,000).
+- **Leave MCP tools out.** Each discovered tool has a × to drop it, and a
+  warning shows when the tool list adds 6K+ tokens to every model call.
+- Fixed: a design with an MCP server or the network designer wrote every tool
+  function once per tool (the REA design's file shrinks from 595 KB to 70 KB);
+  and an MCP tool whose
+  schema holds true, false or null broke the generated file.
+
+## 4.4.0
+
+- **Evolve: the design improves itself.** A new Evolve tab in the Agent lab
+  runs RRSI (Regularized Recursive Self-Improvement of agent harnesses, Google
+  Research, 2026) on the design on the canvas. Each round a model proposes
+  candidate edits (prompts, settings, adding or removing a summarizer, a code
+  runner, web search, a critic, a planner or long-term memory), and only what
+  earns its place is kept:
+  - an annealed edit budget: a few bundled edits early, one at a time late, so
+    late gains can be traced to their cause;
+  - the proposer sees every earlier edit with its measured effect, so a
+    disproved idea isn't tried again, and a stalled run reserves a slot for a
+    component never tried;
+  - a critic screens each candidate before it runs, refusing edits that quote
+    a case's wording or carry its expected answer, plus a model review in Live;
+  - a noise band measured from the starting design's own spread: a candidate
+    must reach the best score minus that band, and a gain bigger than the band
+    may cost more tokens only in proportion to the gain;
+  - held-out cases, never seen by the search, measured at the start and the
+    end, so gains that are only memorised show up.
+  The winner is saved as "<design> evolved"; the original is unchanged. Every
+  round shows each candidate's edits, score, token change and the reason it
+  was kept or not. Rehearsal uses a scripted proposer, so the whole loop can be
+  tried for free.
+
+## 4.3.4
+
+- **Web search works in every agent.** In designs without a guard or a
+  number-checking critic (Math search among them), the search code ran without
+  the module it needs and failed with "name 're' is not defined".
+- **A failed run can be resumed.** Resume now appears on a run that ended in an
+  error, not only one that was stopped or interrupted, and carries on from the
+  last step that finished. A resumed conversation turn catches up with its run.
+- **Local models get time to think.** A model on this computer gets 900 s per
+  step unless you set your own time limit in Settings, and a step that still runs
+  out says to raise "Time limit per call".
+
 ## 4.3.3
 
 - **Local models no longer trip Ollama's checks.** When a thinking model spent

@@ -58,6 +58,7 @@ def _p(label, value, kind="text", options=None):
 READS, CHANGES = "only reads", "changes things"
 # Where a core's calls go: the default set in Settings, or a provider named there (providers.py).
 # "openai-compatible" is how earlier versions named any chat-completions server; it still works.
+import mcp_presets as _mcp_presets
 import providers as _providers  # noqa: E402
 PROVIDERS = {"default": "The default in Settings", **{k: v["name"] for k, v in _providers.CATALOG.items()},
              "openai-compatible": "OpenAI-compatible server (set its address below)"}
@@ -357,8 +358,77 @@ def ask_app(path, request, wait):
         return {"error": f"Could not reach the designer at {APP_URL}: {exc}"}
 '''
 
+OLLAMA_CODE = r'''def call_ollama(base_url, system, messages, tools, model, temperature, max_tokens, think=False, num_ctx=None,
+                on_text=None):
+    """The same call through Ollama's own API (/api/chat), which can switch a model's thinking off and sets
+    the context window per call; translated both ways, so the rest of the file sees the Messages API's shape."""
+    chat, names = [{"role": "system", "content": system}], {}
+    for m in messages:
+        if isinstance(m["content"], str):
+            chat.append({"role": m["role"], "content": m["content"]})
+        elif m["role"] == "assistant":
+            text = "".join(b.get("text", "") for b in m["content"] if b.get("type") == "text")
+            calls = []
+            for b in m["content"]:
+                if b.get("type") == "tool_use":
+                    names[b["id"]] = b["name"]
+                    args = b.get("input")
+                    calls.append({"function": {"name": b["name"], "arguments": args if isinstance(args, dict) else {"input": args}}})
+            chat.append({"role": "assistant", "content": text, **({"tool_calls": calls} if calls else {})})
+        else:
+            for b in m["content"]:
+                if b.get("type") == "tool_result":
+                    chat.append({"role": "tool", "content": str(b.get("content")),
+                                 "tool_name": names.get(b.get("tool_use_id"), "")})
+                elif b.get("type") == "text":
+                    chat.append({"role": "user", "content": b["text"]})
+    options = {"temperature": temperature, "num_predict": max_tokens}
+    if num_ctx:
+        options["num_ctx"] = int(num_ctx)
+    body = {"model": model, "messages": chat, "stream": bool(on_text), "think": bool(think), "options": options}
+    if tools:
+        body["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                                         "parameters": t["input_schema"]}} for t in tools]
+    root = re.sub(r"/v1/?$", "", (base_url or "http://localhost:11434").rstrip("/"))
+    request = urllib.request.Request(root + "/api/chat", data=json.dumps(body).encode(),
+                                     headers={"content-type": "application/json"})
+    text, calls, data = "", [], {}
+    with send(request) as reply, too_slow():
+        for raw in (reply if on_text else [reply.read()]):
+            for line in raw.decode("utf-8").splitlines():
+                if not line.strip():
+                    continue
+                data = json.loads(line)
+                if data.get("error"):
+                    raise RuntimeError("Ollama: " + str(data["error"]))
+                piece = (data.get("message") or {}).get("content") or ""
+                if piece:
+                    text += piece
+                    if on_text:
+                        on_text(piece)
+                calls += (data.get("message") or {}).get("tool_calls") or []
+    content = [{"type": "text", "text": text}] if text else []
+    for i, call in enumerate(calls):
+        fn = call.get("function") or {}
+        args = fn.get("arguments")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args or "{}")
+            except ValueError:
+                args = {"input": args}
+        content.append({"type": "tool_use", "id": call.get("id") or f"call_{i}_{fn.get('name')}", "name": fn.get("name"),
+                        "input": args if isinstance(args, dict) else {"input": args}})
+    if not content and data.get("done_reason") == "length":
+        raise RuntimeError(f"The model used all {max_tokens} of its output tokens before answering"
+                           + (" (with thinking on, most go on reasoning). Turn thinking off, or raise"
+                              if think else ". Raise") + " Max tokens per step in Settings.")
+    return {"content": content,
+            "stop_reason": "tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn",
+            "usage": {"input_tokens": data.get("prompt_eval_count"), "output_tokens": data.get("eval_count")}}
+'''
+
 DESIGNER_CODE = r'''# ---- the network canvas, as tools ----
-DESIGNER_BACKEND = None    # the app sets this to work in-process; on its own, this file asks the app
+DESIGNER_BACKEND = globals().get("DESIGNER_BACKEND")    # a saved agent inside another uses its host's; the app sets this to work in-process; on its own, this file asks the app
 
 
 def designer_call(op, args):
@@ -367,7 +437,7 @@ def designer_call(op, args):
 '''
 
 EXPERIMENT_CODE = r'''# ---- experiments: sweeps, searches and repairs ----
-EXPERIMENT_BACKEND = None    # the app sets this to run in-process; on its own, this file asks the app
+EXPERIMENT_BACKEND = globals().get("EXPERIMENT_BACKEND")    # a saved agent inside another uses its host's; the app sets this to run in-process; on its own, this file asks the app
 
 
 def experiment_with(design, args, most):
@@ -402,7 +472,7 @@ def experiment_with(design, args, most):
 '''
 
 WEB_CODE = r'''# ---- web search: DuckDuckGo with no key, or Brave Search with BRAVE_API_KEY ----
-WEB_BACKEND = None    # the lab swaps in a stand-in for rehearsals; on its own, this file searches for real
+WEB_BACKEND = globals().get("WEB_BACKEND")    # a saved agent inside another uses its host's; the lab swaps in a stand-in for rehearsals; on its own, this file searches for real
 WEB_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
 
 
@@ -458,7 +528,7 @@ def search_web(query):
 '''
 
 TRAIN_CODE = r'''# ---- training a network from the designer ----
-TRAIN_BACKEND = None    # the app sets this to train in-process; on its own, this file asks the app over HTTP
+TRAIN_BACKEND = globals().get("TRAIN_BACKEND")    # a saved agent inside another uses its host's; the app sets this to train in-process; on its own, this file asks the app over HTTP
 
 
 def train_with(design, args, most_epochs, wait):
@@ -683,7 +753,50 @@ def sandbox_report() -> Dict[str, Any]:
 
 # The MCP client every generated file carries when it uses an MCP server, and the lab uses to
 # discover a server's tools: one copy of the code, so discovery and the run speak the same way.
-MCP_CLIENT = r'''class MCPServer:
+MCP_CLIENT = r'''MCP_RESULT_LIMIT = 12000   # characters of one tool result the model reads; bigger JSON is digested
+
+
+def mcp_digest(text, limit=MCP_RESULT_LIMIT):
+    """A tool result short enough to read. Large JSON keeps its summary first and drops ids, hashes and
+    repeated caveats, with lists cut until it fits; other large text is cut, with a note either way."""
+    import re
+    if len(text) <= limit:
+        return text
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text[:limit] + f"\n[... {len(text) - limit:,} more characters cut. Ask for something narrower.]"
+    noise = re.compile(r"(sha256|digest|_ids?$|^id$|identity|extractor|fingerprints?|stability|strategy|"
+                       r"evidence_contexts|predicate_type|executable|raw_result|evidence_links|authority|artifact|"
+                       r"coverage|schema)$", re.I)
+    first = ("summary", "statistics", "overview", "answer", "result", "findings", "next_probes", "hypotheses", "unknowns")
+    last = ("graph", "semantic_graph", "nodes", "edges", "relations", "observations", "raw")
+
+    def compact(o, cap, s_cap, depth):
+        if isinstance(o, dict):
+            out = {}
+            for k, v in sorted(o.items(), key=lambda kv: 0 if kv[0].lower() in first else 2 if kv[0].lower() in last else 1):
+                if noise.search(k) or v in (None, [], {}, "") or (k == "limitations" and depth > 1):
+                    continue
+                out[k] = compact(v, cap, s_cap, depth + 1)
+            return out
+        if isinstance(o, list):
+            kept = [compact(v, cap, s_cap, depth + 1) for v in o[:cap]]
+            return kept + ([f"... {len(o) - cap} more"] if len(o) > cap else [])
+        if isinstance(o, str) and len(o) > s_cap:
+            return o[:s_cap] + "..."
+        return o
+
+    for cap, s_cap in ((40, 400), (20, 300), (10, 200), (6, 160), (4, 120), (3, 100), (2, 80)):
+        small = json.dumps(compact(data, cap, s_cap, 0), separators=(",", ":"), ensure_ascii=False)
+        if len(small) <= limit:
+            break
+    note = (f"[A digest of a {len(text):,}-character result: ids, hashes and repeated caveats left out, lists cut "
+            f"to {cap} items. Ask a narrower question for the rest.]")
+    return note + "\n" + small[:limit] + ("" if len(small) <= limit else " [... cut]")
+
+
+class MCPServer:
     """A Model Context Protocol server, spoken to with the standard library.
 
     transport "stdio": target is a command; the server runs as a child process and
@@ -752,7 +865,7 @@ MCP_CLIENT = r'''class MCPServer:
     def call(self, tool, args):
         result = self.request("tools/call", {"name": tool, "arguments": args})
         text = "\n".join(c.get("text", "") for c in result.get("content", []) if c.get("type") == "text")
-        return ("Error: " + text) if result.get("isError") else text
+        return ("Error: " + mcp_digest(text)) if result.get("isError") else mcp_digest(text)
 
     def close(self):
         if self.process:
@@ -765,7 +878,7 @@ MCP_CLIENT = r'''class MCPServer:
 '''
 
 
-def mcp_discover(transport: str, target: str, timeout: float = 30.0) -> List[Dict[str, Any]]:
+def mcp_discover(transport: str, target: str, timeout: float = 120.0) -> List[Dict[str, Any]]:
     """Connect to an MCP server and list its tools, with the same client the generated file uses."""
     import subprocess
     import threading
@@ -1112,6 +1225,35 @@ MATH_PROMPT = (
     "Finish with: the best verified score, the candidate or the code that regenerates it, the VERIFIED line "
     "word for word, and what to try next.")
 
+# after the reverse-engineer-anything skill of REA (github.com/morluto/rea, MIT)
+REA_PROMPT = (
+    "You reverse engineer software the user has on this computer with REA's tools, and explain how a feature "
+    "works from evidence in the shipped files, without source code.\n"
+    "Route by what the user gave you:\n"
+    "- An extracted JavaScript or Electron app folder, or an .asar file: analyze_javascript_application with its "
+    "absolute path. On a Mac an Electron app keeps it at /Applications/<App>.app/Contents/Resources/app.asar.\n"
+    "- An app bundle, archive or package (.app, .zip, .apk, .ipa, .dmg): open_binary with its path, then "
+    "inspect_artifact.\n"
+    "- A .NET assembly: inspect_managed_artifact. An Android APK's code: inspect_android_package. A plist: inspect_plist.\n"
+    "- A native executable or library: open_binary, then binary_overview, search_strings or trace_feature for the "
+    "feature's words, then procedure_pseudo_code, procedure_callers/callees and xrefs on what you find. Native "
+    "analysis needs Ghidra, Hopper or IDA installed; if open_binary says none is available, say so and use what "
+    "still works.\n"
+    "If the user names an app without a path, ask which file, or look only where they said. Never pick a different "
+    "app for them.\n"
+    "Work summary-first: start from the overview a tool returns, then ask focused follow-up questions about the "
+    "functions, strings, modules or channels that bear on the feature. Results may arrive as a digest with lists "
+    "cut short: ask a narrower question rather than repeating the same call.\n"
+    "In your answer, separate what was observed (with where: file and line, function or address), what you infer "
+    "from it, and what remains unknown. Static analysis never shows the code running: do not claim it does. When "
+    "the user asks how to build something similar, describe the mechanism in your own words and code; do not copy "
+    "the app's code wholesale.\n"
+    "Use run_python for any decoding or arithmetic you need to check.\n"
+    "Always answer in the language the user writes in.")
+REA_STANDARDS = ("Every claim about how the target works points to evidence a tool returned: a file and line, a "
+                 "function, an address or a module. Observations, inferences and unknowns are kept apart. Nothing "
+                 "says the code was seen running unless a runtime tool observed it.")
+
 MODEL_PROMPT = (
     "You build working neural networks for the user with the network designer's tools.\n"
     "1. Pin down the task: what goes in, what comes out, and what data exists. If there is no data, you may "
@@ -1213,6 +1355,20 @@ TEMPLATES = {
                               7: {"seconds": 30},
                               8: {"max_calls": 8},
                               9: {"max_revisions": 1}}},
+    "reverse": {"name": "Reverse engineer: how a shipped app works (REA)",
+                "nodes": [("user_input", 40, 260), ("long_mem", 270, 260), ("system_prompt", 520, 40),
+                          ("llm", 520, 260), ("loop", 270, 470), ("summarizer", 520, 470), ("router", 770, 260),
+                          ("mcp", 1020, 110), ("code_exec", 1020, 290), ("reflector", 1020, 470),
+                          ("long_mem", 1270, 470), ("output", 1520, 470)],
+                "edges": [(0, 1), (1, 3), (2, 3), (4, 3), (5, 3), (3, 6), (6, 7), (6, 8), (7, 3), (8, 3),
+                          (6, 9), (9, 3), (9, 10), (10, 11)],
+                "params": {2: {"text": REA_PROMPT},
+                           4: {"max_steps": 24},
+                           5: {"limit": 4000, "keep": 6},
+                           7: {"transport": "stdio", "target": _mcp_presets.REA_COMMAND,
+                               "tools": _mcp_presets.REA_TOOLS, "effects": READS},
+                           8: {"seconds": 30},
+                           9: {"max_revisions": 1, "standards": REA_STANDARDS}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1263,6 +1419,14 @@ def _core_target(p: Dict[str, Any]) -> Dict[str, Any]:
     """Where one LLM core's calls go, with its model, after the Settings default is applied."""
     return _providers.resolve(str(p.get("provider") or "default"), str(p.get("model") or ""),
                               str(p.get("base_url") or ""))
+
+
+LOCAL_TIMEOUT = 900
+
+
+def _wire_kind(t: Dict[str, Any]) -> str:
+    """How a core's calls are sent: Ollama gets its own API, which can switch thinking off and set the context."""
+    return "ollama" if t.get("provider") == "ollama" else t["kind"]
 
 
 def _core_sampling(p: Dict[str, Any]) -> tuple:
@@ -1765,6 +1929,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     langgraph = target == "langgraph"
     targets = {n["id"]: _core_target(_params(n)) for n in graph.get("nodes", []) if n.get("type") == "llm"}
     openai_used = any(t["kind"] == "openai" for t in _targets(graph))
+    ollama_used = any(_wire_kind(t) == "ollama" for t in _targets(graph))
     model_defaults = _providers.load()["defaults"]
 
     L: List[str] = []
@@ -1796,7 +1961,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     llm_ids = [nid for nid in of_kind("llm")]
     first_llm = _params(nodes[llm_ids[0]])
     routers, llms, critics = a["routers"], a["llms"], a["critics"]
-    tools = [(tid, name) for tid in a["given"]
+    tools = [(tid, name) for tid in dict.fromkeys(a["given"])
              for name in ([t["name"] for t in a["mcp_tools"][tid]] if tid in a["mcp_tools"] else [a["tool_names"][tid]])]
     mcp_by_name = {t["name"]: t for ts in a["mcp_tools"].values() for t in ts}
     gates = sorted({r["gate"] for rt in routers.values() for r in rt["routes"].values() if r["gate"]})
@@ -1827,7 +1992,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         imports += ["import subprocess", "import sys"]
     if a["parallels"]:
         imports += ["import copy", "from concurrent.futures import ThreadPoolExecutor"]
-    if present("guard_in") or present("guard_out") or any(
+    if ollama_used or present("guard_in") or present("guard_out") or any(kind[t] == "web_search" for t, _ in tools) or any(
             kind[n] == "reflector" and _params(nodes[n]).get("gate") == GROUNDED_GATE for n in nodes):
         imports.append("import re")
     if any(kind[n] == "long_mem" for n in nodes) and "from pathlib import Path" not in imports:
@@ -1863,8 +2028,11 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
         add([f"# {t['name']}" + ("" if (p.get("provider") or "default") != "default" else ", the default set in Settings"),
              f'{const(lid)}_SETTINGS = {{"model": os.environ.get("AGENT_MODEL", {json.dumps(t["model"])}), '
              f'"temperature": {temperature}, "max_tokens": {max_tokens}, '
-             f'"provider": "{t["kind"]}", "base_url": os.environ.get("AGENT_BASE_URL", {json.dumps(t["base_url"])}), '
-             f'"key": {json.dumps(t["key_env"])}}}'], lid)
+             f'"provider": "{_wire_kind(t)}", "base_url": os.environ.get("AGENT_BASE_URL", {json.dumps(t["base_url"])}), '
+             f'"key": {json.dumps(t["key_env"])}'
+             + (f', "think": {bool(model_defaults.get("local_thinking"))}, '
+                f'"num_ctx": {int(model_defaults.get("local_context") or 32768)}' if _wire_kind(t) == "ollama" else "")
+             + "}"], lid)
     add([f"COMPLETE_SETTINGS = {const(llm_ids[0])}_SETTINGS  # the planner, critic and summarizer use the first core"],
         llm_ids[0])
     for sid in of_kind("system_prompt"):
@@ -1873,13 +2041,30 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
     add([f"DEFAULT_SYSTEM = {_doc(DEFAULT_PROMPT)}"])
     add(["", ""])
     if not embedded:
-        add([f"TIMEOUT = {int(model_defaults['timeout'])}  # seconds a model call may take",
+        timeout = int(model_defaults["timeout"])
+        if timeout == _providers.DEFAULTS["timeout"] and any(_providers.CATALOG.get(t["provider"], {}).get("local")
+                                                             for t in targets.values()):
+            timeout = LOCAL_TIMEOUT     # a model on this computer, thinking, can take many minutes a step
+        add([f"TIMEOUT = {timeout}  # seconds a model call may take",
              f"RETRIES = {int(model_defaults['retries'])}  # tries again after a rate limit, an overloaded server or a dropped connection",
              "KEYS = {}  # the lab fills this from Settings; on its own, the file reads keys from the environment",
              "", "",
              "def api_key(name):",
              '    return (KEYS.get(name) or os.environ.get(name, "")) if name else ""',
              "", "",
+             "class too_slow:",
+             '    """Turns a model call that runs past TIMEOUT into an error that says what to change."""',
+             "",
+             "    def __enter__(self):",
+             "        return self",
+             "",
+             "    def __exit__(self, kind, exc, trace):",
+             "        if kind is not None and issubclass(kind, TimeoutError):",
+             '            raise TimeoutError(f"The model took more than {TIMEOUT} s on one step. Raise \'Time limit per call\' "',
+             '                               "in Settings; a thinking model on this computer can need 600 to 1200 s.") from None',
+             "        return False",
+             "",
+             "",
              "def explained(exc):",
              '    """The same HTTP error, carrying what the server said about it, not just its status."""',
              "    try:",
@@ -1913,17 +2098,24 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              "        except urllib.error.HTTPError as exc:",
              "            if exc.code not in (408, 409, 429, 500, 502, 503, 504, 529) or attempt == RETRIES:",
              "                raise explained(exc) from None",
-             "        except urllib.error.URLError:",
+             "        except TimeoutError:",
+             "            raise",
+             "        except urllib.error.URLError as exc:",
+             "            if isinstance(exc.reason, TimeoutError):",
+             "                raise exc.reason",
              "            if attempt == RETRIES:",
              "                raise",
              "        time.sleep(min(30, 2 ** attempt))", "", ""], *llm_ids)
     add(([] if embedded else [
          "def call_model(system, messages, tools=None, model=MODEL, temperature=0.3, max_tokens=2048,",
-         '               provider="anthropic", base_url=None, key="ANTHROPIC_API_KEY", on_text=None):',
+         '               provider="anthropic", base_url=None, key="ANTHROPIC_API_KEY", on_text=None, think=None, num_ctx=None):',
          '    """One heartbeat of thought: the model reads the whole context and returns text or tool requests.',
          "",
          "    With on_text, the reply is streamed: on_text gets each piece of text as it arrives, and the",
          '    response returned is the same one a plain call gives."""']
+        + (['    if provider == "ollama":',
+            "        return call_ollama(base_url, system, messages, tools, model, temperature, max_tokens, think, num_ctx, on_text)"]
+           if ollama_used else [])
         + (['    if provider == "openai":',
             "        return call_openai(base_url, system, messages, tools, model, temperature, max_tokens, key, on_text)"]
            if openai_used else []) + [
@@ -1937,12 +2129,15 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
          '        (base_url or "https://api.anthropic.com").rstrip("/") + "/v1/messages", data=json.dumps(body).encode(),',
          '        headers={"content-type": "application/json", "x-api-key": api_key(key),',
          '                 "anthropic-version": "2023-06-01"})',
-         "    with send(request) as reply:",
+         "    with send(request) as reply, too_slow():",
          "        return read_anthropic_stream(reply, on_text) if streamed(reply, on_text) else json.load(reply)", "", ""]
         + STREAM_CODE.strip().split("\n") + ["", ""]) + [
          "def text_of(response):",
          '    return "".join(b.get("text", "") for b in response.get("content", []) if b.get("type") == "text")'],
         *llm_ids)
+    if ollama_used and not embedded:
+        add(["", ""])
+        add(OLLAMA_CODE.strip().split("\n"), *[lid for lid in llm_ids if _wire_kind(targets[lid]) == "ollama"])
     if openai_used and not embedded:
         add(["", ""])
         add(["def call_openai(base_url, system, messages, tools, model, temperature, max_tokens, key=\"\", on_text=None):",
@@ -1980,7 +2175,7 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '        headers["authorization"] = "Bearer " + api_key(key)',
              '    request = urllib.request.Request(base_url.rstrip("/") + "/chat/completions",',
              "                                     data=json.dumps(body).encode(), headers=headers)",
-             "    with send(request) as reply:",
+             "    with send(request) as reply, too_slow():",
              "        data = read_openai_stream(reply, on_text) if streamed(reply, on_text) else json.load(reply)",
              '    choice = data["choices"][0]',
              '    message = choice.get("message") or {}',
@@ -1994,7 +2189,8 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
              '                        "name": call["function"]["name"], "input": args})',
              '    if not content and choice.get("finish_reason") == "length":',
              '        raise RuntimeError(f"The model used all {max_tokens} of its output tokens before answering (thinking "',
-             '                           "models spend many on reasoning). Raise Max tokens per step in Settings to 8192 or more.")',
+             '                           f"models spend many on reasoning). Raise Max tokens per step in Settings above {max_tokens}, "',
+             '                           "or, for a model in Ollama, turn its thinking off in Settings.")',
              '    usage = data.get("usage") or {}',
              '    return {"content": content,',
              '            "stop_reason": "tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn",',
@@ -2152,16 +2348,16 @@ def codegen(graph, target: str = "python", embedded: Optional[Dict[str, Any]] = 
                 design = _params(nodes[tid]).get("design") or "you name in design"
                 return ["    {", f'        "name": {json.dumps(name)},',
                         f'        "description": {json.dumps(TRAIN_DESCRIPTION.format(design=design))},',
-                        f'        "input_schema": {json.dumps(TRAIN_SCHEMA)},', "    },"]
+                        f'        "input_schema": {TRAIN_SCHEMA!r},', "    },"]
             if kind[tid] == "experiment":
                 return ["    {", f'        "name": {json.dumps(name)},',
                         f'        "description": {json.dumps(EXPERIMENT_DESCRIPTION)},',
-                        f'        "input_schema": {json.dumps(EXPERIMENT_SCHEMA)},', "    },"]
+                        f'        "input_schema": {EXPERIMENT_SCHEMA!r},', "    },"]
             if kind[tid] in ("mcp", "designer"):
                 t = mcp_by_name[name]
                 return ["    {", f'        "name": {json.dumps(name)},',
                         f'        "description": {json.dumps(t["description"] or t["remote"])},',
-                        f'        "input_schema": {json.dumps(t["schema"])},', "    },"]
+                        f'        "input_schema": {t["schema"]!r},', "    },"]
             arg = {"tool": "input", "web_search": "query", "code_exec": "code", "sub_agent": "task",
                    "subgraph": "task"}[kind[tid]]
             p = _params(nodes[tid])
@@ -3646,14 +3842,10 @@ def _prepare(graph, mode: str, approvals: str, memory_dir: Optional[Path] = None
         space["STREAM"] = on_stream
     if "KEYS" in space and mode == "live":
         space["KEYS"].update(_providers.keys_for_run())     # never written into the file
-    if "TRAIN_BACKEND" in space:
-        space["TRAIN_BACKEND"] = (TRAINER or _no_trainer) if mode == "live" else _rehearsal_trainer
-    if "WEB_BACKEND" in space:
-        space["WEB_BACKEND"] = None if mode == "live" else _rehearsal_search
-    if "DESIGNER_BACKEND" in space:
-        space["DESIGNER_BACKEND"] = (DESIGNER or _no_designer) if mode == "live" else _rehearsal_designer
-    if "EXPERIMENT_BACKEND" in space:
-        space["EXPERIMENT_BACKEND"] = (EXPERIMENTER or _no_trainer) if mode == "live" else _rehearsal_experiment
+    space["TRAIN_BACKEND"] = (TRAINER or _no_trainer) if mode == "live" else _rehearsal_trainer     # set even when only a saved agent inside uses it
+    space["WEB_BACKEND"] = None if mode == "live" else _rehearsal_search     # set even when only a saved agent inside uses it
+    space["DESIGNER_BACKEND"] = (DESIGNER or _no_designer) if mode == "live" else _rehearsal_designer     # set even when only a saved agent inside uses it
+    space["EXPERIMENT_BACKEND"] = (EXPERIMENTER or _no_trainer) if mode == "live" else _rehearsal_experiment     # set even when only a saved agent inside uses it
     if "PARALLEL" in space:
         # a rehearsal runs branches in order, so its stand-in model answers the same way every
         # time and a fork from a checkpoint repeats the original; live runs keep them concurrent
@@ -5554,8 +5746,8 @@ def stop_run(run_id: str) -> Dict[str, Any]:
 def resume_run(run_id: str, memory_dir: Optional[Path] = None, background: bool = True) -> Dict[str, Any]:
     """Carry an interrupted or stopped run on from its last checkpoint, under the same id."""
     rec = _record(run_id)
-    if rec.get("status") not in ("interrupted", "stopped"):
-        raise ValueError("Only an interrupted or stopped run can be resumed.")
+    if rec.get("status") not in ("interrupted", "stopped", "error"):
+        raise ValueError("Only a run that stopped, failed or was interrupted can be resumed.")
     last = next((c for c in reversed(rec.get("checkpoints") or []) if c["next"] is not None), None)
     if last is None:
         raise ValueError("That run has no checkpoint to resume from.")
@@ -5748,7 +5940,7 @@ def new_conversation(agent: Dict[str, Any], mode: str = "rehearsal") -> Dict[str
 
 def _turn_from_run(turn: Dict[str, Any]) -> bool:
     """Bring a turn up to date from its run. True if anything changed."""
-    if turn.get("status") not in (None,) + LIVE_STATUSES + ("interrupted",):
+    if turn.get("status") not in (None,) + LIVE_STATUSES + ("interrupted", "stopped", "error"):
         return False
     try:
         rec = _record(turn["run"])
