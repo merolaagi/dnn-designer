@@ -2723,6 +2723,19 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 .al-check{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;margin:6px 0}
 .al-mcpdrop{border:0;background:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 4px}
 .al-mcpdrop:hover{color:#B3261E}
+#bmPast{flex:1;min-width:0;max-width:100%}
+.bm-tasks{font-size:12px;margin:4px 0 8px}
+.bm-tasks label{display:flex;gap:7px;align-items:flex-start;padding:4px 0;border-bottom:1px solid var(--paper-3)}
+.bm-tasks small{display:block;color:var(--muted)}
+.bm-model{display:flex;gap:6px;margin:4px 0}
+.bm-model select,.bm-model input{flex:1;min-width:0}
+.bm-table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+.bm-table th,.bm-table td{border-bottom:1px solid var(--paper-3);padding:5px 4px;text-align:left;vertical-align:top}
+.bm-table td.c{text-align:center;white-space:nowrap}
+.bm-ok{color:#1E6B35;font-weight:600}.bm-bad{color:#8C2F27;font-weight:600}
+.bm-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:8px 0}
+.bm-sum div{border:1px solid var(--paper-3);border-radius:10px;padding:8px 10px;background:#fff;font-size:12px}
+.bm-sum b{display:block;font-size:20px}
 .ev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .ev-grid .field{margin:0}
 .ev-status{margin:10px 0 6px;font-size:12.5px;line-height:1.5}
@@ -13642,6 +13655,7 @@ function alBuildShell(){
           <button data-altab="timeline">Timeline</button>
           <button data-altab="study">Study</button>
           <button data-altab="evolve">Evolve</button>
+          <button data-altab="bench">Benchmark</button>
           <button data-altab="monitor">Monitor<span class="al-badge bad" id="alMonBadge"></span></button>
         </div>
         <div class="al-pane" id="alPane"></div>
@@ -14216,6 +14230,7 @@ function alRenderPane(){
   if (agentLabState.tab === "safety") return alRenderSafety();
   if (agentLabState.tab === "study") return alRenderStudy();
   if (agentLabState.tab === "evolve") return alRenderEvolve();
+  if (agentLabState.tab === "bench") return alRenderBench();
   if (agentLabState.tab === "timeline") return alRenderTimeline();
   if (agentLabState.tab === "monitor") return alRenderMonitor();
   alRenderAnatomy();
@@ -14898,6 +14913,127 @@ function alCostsHtml(c){
 
 /* One version of the design per block removed, every case run on each, and a
    verdict that only calls a difference real when it is bigger than its noise. */
+/* ---------- benchmark: does the system work, and how much is the model? ----------
+   The same real tasks for the lab's agents, run on up to three models, each checked automatically. */
+async function alRenderBench(){
+  const S = agentLabState;
+  S.bench = S.bench || {data: null, models: null, ids: null, k: 1, current: null};
+  const bm = S.bench;
+  try{ bm.data = await (await fetch(API + "/api/benchmark")).json(); } catch { bm.data = bm.data || {suite: [], runs: [], ready: []}; }
+  if (S.tab !== "bench") return;
+  const d = bm.data;
+  bm.ids = bm.ids || d.suite.map(t => t.id);
+  bm.models = bm.models || [{provider: (d.default || {}).provider || "", model: (d.default || {}).model || ""}];
+  const running = bm.current && ["running", "stopping"].includes(bm.current.status);
+  const provOpts = sel => d.ready.map(p => `<option value="${alEsc(p.provider)}"${p.provider === sel ? " selected" : ""}>${alEsc(p.name)}</option>`).join("");
+  const modelList = pid => ((d.ready.find(p => p.provider === pid) || {}).models || []);
+  const base = d.baseline;
+  $("alPane").innerHTML = `<h3>Benchmark the system</h3>
+    <p class="al-muted">Real tasks for the lab's agents (Math search, Model builder, Reverse engineer, Specialist, ReAct),
+    each checked automatically: no judge model. Run the same tasks on two or three models to see how much of a failure
+    is the model's and how much the system's. Every trial is sorted into passed, wrong answer, no tool use or error.</p>
+    ${base ? `<p class="al-muted">Baseline: <b>${alEsc(base.label)}</b> passed ${Math.round(base.pass_rate * 100)}% on v${alEsc(base.version)}.
+      Releases are refused if a benchmark of the new version on this model scores lower, beyond its noise.
+      <button class="al-link" id="bmClear" style="border:0;background:none;padding:0;cursor:pointer">Clear the baseline</button></p>` : ""}
+    <h4>Models</h4>
+    ${bm.models.map((m, i) => `<div class="bm-model">
+      <select data-bmprov="${i}" aria-label="Provider">${provOpts(m.provider)}</select>
+      <input data-bmmodel="${i}" list="bmList${i}" value="${alEsc(m.model)}" placeholder="model" aria-label="Model">
+      <datalist id="bmList${i}">${modelList(m.provider).map(x => `<option value="${alEsc(x)}">`).join("")}</datalist>
+      ${bm.models.length > 1 ? `<button class="btn" data-bmdrop="${i}" aria-label="Remove this model">×</button>` : ""}</div>`).join("")}
+    ${bm.models.length < 3 ? `<button class="btn" id="bmAdd">Add a model to compare</button>` : ""}
+    ${!d.ready.length ? `<div class="help bad">No provider is ready: add a key or start Ollama in Settings.</div>` : ""}
+    <h4>Tasks</h4>
+    <div class="bm-tasks">${d.suite.map(t => `<label><input type="checkbox" data-bmid="${alEsc(t.id)}"${bm.ids.includes(t.id) ? " checked" : ""}>
+      <span><b>${alEsc(t.id)}</b> · ${alEsc(t.agent)} · ${alEsc(t.skill)}<small>${alEsc(t.task.slice(0, 160))}${t.task.length > 160 ? "…" : ""}</small>
+      <small>checks: ${alEsc(t.checks.split("\n").join(" · "))}</small></span></label>`).join("")}</div>
+    <div class="al-row2"><div class="field"><label for="bmK">Trials per task</label><input type="number" id="bmK" min="1" max="5" value="${bm.k}"></div></div>
+    <p class="al-muted">${bm.ids.length * bm.models.length * bm.k} live runs. On a model on this computer, budget several minutes each.</p>
+    <div class="row" style="margin:8px 0 4px">
+      <button class="btn go" id="bmGo"${running || !d.ready.length ? " disabled" : ""}>${running ? "Running…" : "Run the benchmark"}</button>
+      ${running ? `<button class="btn stop" id="bmStop">Stop</button>` : ""}
+      ${(d.runs || []).length ? `<select id="bmPast"><option value="">Earlier benchmarks…</option>${d.runs.map(r =>
+        `<option value="${alEsc(r.id)}">v${alEsc(r.version || "?")} · ${r.models.map(m => `${m.label} ${m.pass_rate != null ? Math.round(m.pass_rate * 100) + "%" : "–"}`).join(" vs ")} · ${new Date(r.started * 1000).toLocaleString()}</option>`).join("")}</select>` : ""}
+    </div>
+    <div id="bmOut">${bm.current ? alBenchHtml(bm.current) : ""}</div>`;
+  $("alPane").querySelectorAll("[data-bmprov]").forEach(el => el.onchange = () => {
+    const i = +el.dataset.bmprov; bm.models[i] = {provider: el.value, model: modelList(el.value)[0] || ""}; alRenderBench(); });
+  $("alPane").querySelectorAll("[data-bmmodel]").forEach(el => el.oninput = () => { bm.models[+el.dataset.bmmodel].model = el.value.trim(); });
+  $("alPane").querySelectorAll("[data-bmdrop]").forEach(el => el.onclick = () => { bm.models.splice(+el.dataset.bmdrop, 1); alRenderBench(); });
+  if ($("bmAdd")) $("bmAdd").onclick = () => { const p = d.ready[0] || {provider: "", models: []}; bm.models.push({provider: p.provider, model: (p.models || [])[0] || ""}); alRenderBench(); };
+  $("alPane").querySelectorAll("[data-bmid]").forEach(el => el.onchange = () => {
+    bm.ids = el.checked ? [...new Set([...bm.ids, el.dataset.bmid])] : bm.ids.filter(x => x !== el.dataset.bmid); alRenderBench(); });
+  $("bmK").oninput = e => { bm.k = Math.max(1, Math.min(5, +e.target.value || 1)); };
+  $("bmGo").onclick = alBenchStart;
+  if ($("bmStop")) $("bmStop").onclick = () => fetch(API + `/api/benchmark/${bm.current.id}/stop`, {method: "POST"});
+  if ($("bmClear")) $("bmClear").onclick = async () => { await fetch(API + "/api/benchmark/baseline", {method: "DELETE"}); alRenderBench(); };
+  if ($("bmPast")) $("bmPast").onchange = async e => {
+    if (!e.target.value) return;
+    bm.current = await (await fetch(API + "/api/benchmark/" + e.target.value)).json();
+    $("bmOut").innerHTML = alBenchHtml(bm.current); alBenchWire();
+    if (["running", "stopping"].includes(bm.current.status)) alBenchFollow(bm.current.id);
+  };
+  alBenchWire();
+}
+
+async function alBenchStart(){
+  const bm = agentLabState.bench;
+  let r, d;
+  try{
+    r = await fetch(API + "/api/benchmark", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({models: bm.models, k: bm.k, ids: bm.ids, mode: "live"})});
+    d = await r.json();
+  } catch { $("bmOut").innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
+  if (!r.ok){ $("bmOut").innerHTML = `<div class="runfail">${alEsc((d.detail && d.detail.message) || "The benchmark did not start.")}</div>`; return; }
+  bm.current = d;
+  await alRenderBench();
+  alBenchFollow(d.id);
+}
+
+function alBenchFollow(id){
+  const bm = agentLabState.bench;
+  clearInterval(bm.timer);
+  bm.timer = setInterval(async () => {
+    let d;
+    try{ d = await (await fetch(API + "/api/benchmark/" + id)).json(); } catch { return; }
+    bm.current = d;
+    if (!["running", "stopping"].includes(d.status)){ clearInterval(bm.timer); if (agentLabState.tab === "bench") alRenderBench(); return; }
+    if ($("bmOut")){ $("bmOut").innerHTML = alBenchHtml(d); alBenchWire(); }
+  }, 3000);
+}
+
+function alBenchWire(){
+  document.querySelectorAll("[data-bmbase]").forEach(b => b.onclick = async () => {
+    const bm = agentLabState.bench;
+    const r = await fetch(API + `/api/benchmark/${bm.current.id}/baseline`, {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({label: b.dataset.bmbase})});
+    const d = await r.json();
+    toast(r.ok ? `Baseline set: ${d.label}, ${Math.round(d.pass_rate * 100)}%` : ((d.detail && d.detail.message) || "Not set"));
+    if (r.ok) alRenderBench();
+  });
+}
+
+function alBenchHtml(b){
+  const labels = b.models.map(m => m.label), pct = v => v == null ? "–" : Math.round(v * 100) + "%";
+  const head = ["running", "stopping"].includes(b.status)
+    ? `<div class="ev-status"><b>Running ${alEsc(b.at || "")}</b> · ${b.done} of ${b.planned} runs</div><div class="ev-bar"><i style="width:${Math.round(100 * b.done / Math.max(1, b.planned))}%"></i></div>`
+    : b.status === "error" ? `<div class="runfail">${alEsc(b.error || "The benchmark failed.")}</div>`
+    : `<div class="ev-status"><b>${b.status === "done" ? "Finished" : alEsc(b.status)}</b> · v${alEsc(b.version)} · ${b.done} runs</div>`;
+  const sums = `<div class="bm-sum">${labels.map(l => { const s = b.summary[l] || {}; return `<div>${alEsc(l)}<b>${pct(s.pass_rate)}</b>
+      passed · ±${pct(s.noise)} noise<br>${s.trials || 0} trials · ${s.seconds != null ? s.seconds + " s" : "–"} and ${s.tokens != null ? s.tokens.toLocaleString() : "–"} tokens each
+      <br>${Object.entries(s.outcomes || {}).map(([k, v]) => `${v} ${alEsc(k)}`).join(" · ")}
+      ${b.status === "done" && b.mode === "live" && s.trials ? `<br><button class="al-link" data-bmbase="${alEsc(l)}" style="border:0;background:none;padding:0;cursor:pointer">Make this the baseline</button>` : ""}</div>`; }).join("")}</div>`;
+  const cell = (label, tid) => {
+    const ts = (b.trials[label] || []).filter(t => t.task === tid);
+    if (!ts.length) return `<td class="c al-muted">…</td>`;
+    return `<td class="c">${ts.map(t => `<span class="${t.passed ? "bm-ok" : "bm-bad"}" title="${alEsc(t.outcome + (t.error ? ": " + t.error : "") + " · " + t.checks.filter(c => c.passed === false).map(c => c.check).join("; "))}">${t.passed ? "✓" : "✗"}</span>`).join(" ")}
+      <div class="al-muted" style="font-size:10.5px">${alEsc(ts[ts.length - 1].outcome)} · ${ts[ts.length - 1].seconds}s</div></td>`;
+  };
+  const table = `<table class="bm-table"><tr><th>Task</th>${labels.map(l => `<th>${alEsc(l)}</th>`).join("")}</tr>
+    ${b.tasks.map(t => `<tr><td><b>${alEsc(t.id)}</b><div class="al-muted">${alEsc(t.skill)}</div></td>${labels.map(l => cell(l, t.id)).join("")}</tr>`).join("")}</table>`;
+  return head + sums + table + `<p class="al-muted">Hover a mark for what failed. The trials' runs are in Run history.</p>`;
+}
+
 /* ---------- evolve: the design improves itself, under regularisers ----------
    After RRSI (Regularized Recursive Self-Improvement of agent harnesses, Google Research, 2026).
    A model proposes edits to this design; each candidate is screened for edits that copy the cases, run on
@@ -15093,7 +15229,7 @@ async function alRenderStudy(){
     <div class="field"><label for="alCases">Cases</label>
       <textarea id="alCases" class="al-cases" spellcheck="false">${alEsc(st.cases)}</textarea>
       <div class="help">A task on the first line, then one check per line: <code>contains:</code>, <code>excludes:</code>,
-      <code>regex:</code>, <code>tool:</code>, <code>max calls:</code>, <code>finished</code>, <code>judge:</code> with a
+      <code>regex:</code>, <code>tool:</code>, <code>result:</code> (a regex over what the tools returned), <code>max calls:</code>, <code>finished</code>, <code>judge:</code> with a
       criterion in plain words, or <code>eval:</code> and an evaluator from the library. <code>reference:</code> and
       <code>bad example:</code> give the judge an answer to compare against. A blank line starts the next case.</div></div>
     <details class="al-evlib"><summary>Evaluator library</summary><div id="alEvLib" class="al-muted">loading…</div></details>

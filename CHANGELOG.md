@@ -1,5 +1,24 @@
 # Changelog
 
+## 4.6.0
+
+- **Benchmark the system.** A Benchmark tab in the Agent lab runs nine real
+  tasks across the lab's agents on up to three models side by side: verified
+  computation and search (Math search), design, train and package (Model
+  builder), reverse engineering a small bundled Electron app (REA), arithmetic
+  with code and web research with sources (Specialist), and answering in the
+  user's language (ReAct). Every task is checked automatically, with no judge
+  model, and every trial is sorted into passed, wrong answer, no tool use or
+  error, so you can see how much of a failure is the model's and how much the
+  system's. Each trial starts with empty long-term memory.
+- **A release gate on the benchmark.** "Make this the baseline" records one
+  model's result; `release.sh` then refuses a release when a live benchmark of
+  the new version on that model scores lower than the baseline beyond its
+  noise. A version that hasn't been benchmarked yet only gets a reminder.
+- **A new check, `result:`**: a regex over everything the tools returned in the
+  run, for checking work that was done ("Trained …: done", "packaged": true)
+  rather than what the answer says.
+
 ## 4.5.2
 
 - **A saved agent inside another no longer goes online in a rehearsal.** Its

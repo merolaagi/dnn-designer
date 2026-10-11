@@ -38,6 +38,12 @@ python3 tests/test_designer.py
 echo "==> agent release gates"
 python3 agentlab.py gate
 
+# The system benchmark: a live benchmark of this version on the baseline's model may not
+# score lower than the baseline beyond its noise. No baseline, or no run of this version yet,
+# only prints a reminder.
+echo "==> system benchmark"
+python3 benchmark.py gate
+
 if [ -z "$(git status --porcelain)" ]; then
   echo "==> nothing to commit"
 else

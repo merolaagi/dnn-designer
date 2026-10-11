@@ -27,6 +27,7 @@ import agentlab
 import packager
 import roster
 import evolve
+import benchmark
 import providers
 import advisor
 import assistant
@@ -754,6 +755,63 @@ class AgentLabStudy(BaseModel):
     prompts: Optional[Dict[str, Any]] = None
     removals: bool = True
     pairwise: bool = False
+
+
+class BenchmarkStart(BaseModel):
+    models: List[Dict[str, str]]
+    k: int = 1
+    ids: Optional[List[str]] = None
+    mode: str = "live"
+
+
+class BenchmarkBaseline(BaseModel):
+    label: str
+
+
+def _bench_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such benchmark."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/benchmark")
+def benchmark_overview():
+    """The tasks, earlier runs, the baseline, and the models that are ready to run."""
+    view = providers.view()
+    ready = [{"provider": p["id"], "name": p["name"], "models": (p.get("models") or []) + [
+                 m for m in (p.get("suggested") or []) if m not in (p.get("models") or [])]}
+             for p in view["providers"] if p.get("ready")]
+    return {"suite": [{k: t[k] for k in ("id", "agent", "skill", "task", "checks")} for t in benchmark.SUITE],
+            "runs": benchmark.listing(), "baseline": benchmark.baseline(), "ready": ready,
+            "default": {"provider": view["defaults"]["provider"], "model": view["defaults"]["model"]}}
+
+
+@app.post("/api/benchmark")
+def benchmark_start(body: BenchmarkStart):
+    return _bench_action(benchmark.start, body.models, body.k, body.ids, body.mode)
+
+
+@app.get("/api/benchmark/{bench_id}")
+def benchmark_get(bench_id: str):
+    return _bench_action(benchmark.load, bench_id)
+
+
+@app.post("/api/benchmark/{bench_id}/stop")
+def benchmark_stop(bench_id: str):
+    return _bench_action(benchmark.stop, bench_id)
+
+
+@app.post("/api/benchmark/{bench_id}/baseline")
+def benchmark_set_baseline(bench_id: str, body: BenchmarkBaseline):
+    return _bench_action(benchmark.set_baseline, bench_id, body.label)
+
+
+@app.delete("/api/benchmark/baseline")
+def benchmark_clear_baseline():
+    return benchmark.clear_baseline()
 
 
 class AgentLabEvolve(BaseModel):

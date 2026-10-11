@@ -10505,6 +10505,92 @@ def _():
         assert "Max tokens per step" in str(exc)
 
 
+@check("benchmark: every task parses, its checks pass on a right answer and fail on a wrong one")
+def _():
+    import benchmark as BM
+    tasks = BM.suite_cases()
+    assert len(tasks) >= 8 and {t["agent"] for t in tasks} <= set(agentlab.TEMPLATES)
+    assert (BM.FIXTURES / "notes-app" / "preload.js").exists()
+    rea = next(t for t in tasks if t["id"] == "reverse-notes")
+    assert str(BM.FIXTURES) in rea["task"]
+
+    def fake(answer, tools, results=()):
+        events = [{"event": "tool_result", "tool": t} for t in tools]
+        state = {"messages": [{"role": "user", "content": [{"type": "tool_result", "content": r} for r in results]}]}
+        return {"ok": True, "answer": answer, "events": events, "checkpoints": [{"state": state}]}
+    model = next(t for t in tasks if t["id"] == "model-synthetic")
+    right = fake("Packaged.", ["check_network", "train_network"],
+                 ["Trained tiny v1 on synthetic: done, epoch 2 of 2", '{"packaged": true, "download": "/x.zip"}'])
+    checks = agentlab.score(right, model["case"]["checks"], model["case"])
+    assert all(c["passed"] for c in checks) and BM.classify(checks, right) == "passed", checks
+    lazy = fake("I would train it.", ["check_network"])
+    checks = agentlab.score(lazy, model["case"]["checks"], model["case"])
+    assert BM.classify(checks, lazy) == "no tool use"
+    loan = next(t for t in tasks if t["id"] == "specialist-loan")
+    assert all(c["passed"] for c in agentlab.score(fake("About $489.15 a month.", ["run_python"]), loan["case"]["checks"], loan["case"]))
+    assert BM.classify(agentlab.score(fake("$500", ["run_python"]), loan["case"]["checks"], loan["case"]), {"ok": True}) == "wrong answer"
+    assert BM.classify([], {"error": "TimeoutError"}) == "error"
+    g = BM.with_model(agentlab.template("mathsearch"), "ollama", "qwen3.6:27b")
+    assert all(n["params"]["model"] == "qwen3.6:27b" for n in g["nodes"] if n["type"] == "llm")
+
+
+@check("benchmark: a run is kept with a summary per model, a baseline is set from it, and the gate holds releases to it")
+def _():
+    import benchmark as BM, version
+    real_run, real_keys = BM.run_trial, agentlab.missing_keys
+    good = {"strong": True}
+
+    def fake_trial(task, provider, model, mode):
+        ok = model == "strong" or task["id"].startswith("math")
+        return {"task": task["id"], "outcome": "passed" if ok else "wrong answer", "passed": ok, "score": 1.0 if ok else 0.5,
+                "checks": [], "error": None, "seconds": 1.0, "tokens": 100, "calls": 2, "answer": "", "run": None}
+    BM.run_trial, agentlab.missing_keys = fake_trial, (lambda g: [])
+    made = []
+    old_base = BM._baseline_path().read_text() if BM._baseline_path().exists() else None
+    try:
+        b = BM.start([{"provider": "x", "model": "strong"}, {"provider": "x", "model": "weak"}], k=1, mode="live",
+                     background=False)
+        made.append(b["id"])
+        assert b["status"] == "done" and b["summary"]["x: strong"]["pass_rate"] == 1.0
+        weak = b["summary"]["x: weak"]
+        assert 0 < weak["pass_rate"] < 1 and weak["outcomes"]["wrong answer"] > 0
+        assert BM.set_baseline(b["id"], "x: strong")["pass_rate"] == 1.0
+        assert BM._gate_in(BM._dir()) == 0                      # this version, as good as the baseline
+        base = json.loads(BM._baseline_path().read_text())
+        base["label"] = "x: weak"; base["pass_rate"] = 1.0; base["noise"] = 0.0
+        BM._baseline_path().write_text(json.dumps(base))
+        assert BM._gate_in(BM._dir()) == 1                      # worse than the baseline: the release stops
+        base["version"] = "0.0.1"
+        BM._baseline_path().write_text(json.dumps(base))
+        for path in BM._dir().glob("bm*.json"):
+            rec = json.loads(path.read_text())
+            if rec["id"] in made:
+                rec["version"] = "0.0.0"; path.write_text(json.dumps(rec))
+        assert BM._gate_in(BM._dir()) == 0                      # this version not benchmarked yet: only a reminder
+        try:
+            BM.set_baseline(BM.start([{"provider": "x", "model": "strong"}], mode="rehearsal", background=False)["id"], "x: strong")
+            raise AssertionError("a rehearsal cannot be the baseline")
+        except ValueError:
+            pass
+    finally:
+        BM.run_trial, agentlab.missing_keys = real_run, real_keys
+        for path in BM._dir().glob("bm*.json"):
+            if json.loads(path.read_text()).get("version") in ("0.0.0", version.__version__) and path.stem not in ():
+                rec = json.loads(path.read_text())
+                if rec["models"][0]["provider"] == "x":
+                    path.unlink()
+        if old_base is None:
+            BM._baseline_path().unlink(missing_ok=True)
+        else:
+            BM._baseline_path().write_text(old_base)
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/benchmark", "/api/benchmark/{bench_id}", "/api/benchmark/{bench_id}/baseline"} <= paths
+    for needle in ('data-altab="bench"', "function alRenderBench", "Make this the baseline", "/api/benchmark/baseline"):
+        assert needle in PAGE, needle
+    assert "python3 benchmark.py gate" in (ROOT / "release.sh").read_text()
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

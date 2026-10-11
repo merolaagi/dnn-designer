@@ -1,0 +1,6 @@
+{
+  "name": "bench-notes",
+  "version": "1.0.0",
+  "description": "A tiny Electron notes app the benchmark's reverse-engineering task analyses. It is never run.",
+  "main": "main.js"
+}
