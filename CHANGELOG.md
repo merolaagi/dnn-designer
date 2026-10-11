@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.8.0
+
+- **Scheduled agents.** In any conversation in Talk to agents, Schedule… runs
+  that agent (Muse, a starting design, a specialist or a saved agent) on a task
+  every hour, every day, on weekdays or once a week, by this computer's clock.
+  Each run is a new turn of that conversation, so you can read every result
+  with its steps. The sidebar lists schedules with Run now, Pause and Delete.
+- **An inbox.** A bell in the header shows what scheduled agents reported: done
+  (with the start of the answer), failed, stopped, or waiting for your
+  approval. Clicking an item opens its conversation.
+- **Picks up after a restart.** When the server starts again, a scheduled run
+  it had going is resumed from its last finished step, and a schedule that
+  came due while it was down runs once.
+
 ## 4.7.0
 
 - **Muse: one front door for every agent.** In Talk to agents, Muse takes a

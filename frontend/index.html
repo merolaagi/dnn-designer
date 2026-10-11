@@ -2539,6 +2539,21 @@ body[data-page="pageTalk"] #dockTab{display:none}
 .tk-card:hover{border-color:#2D7DD2;box-shadow:0 4px 14px rgba(45,125,210,.12)}
 .tk-card b{display:block;font-size:13px;margin-bottom:3px}
 .tk-card small{display:block;font-size:12px;color:var(--muted);line-height:1.45}
+.hd-inboxwrap{position:relative;display:inline-flex}
+.hd-badge{position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:8px;background:#C2410C;color:#fff;font:600 9.5px/15px var(--ui);text-align:center;padding:0 3px}
+.hd-inbox{position:absolute;right:0;top:38px;width:360px;max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--paper-3);border-radius:12px;box-shadow:0 12px 30px rgba(20,30,50,.16);z-index:80;padding:6px}
+.hd-inbox .it{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 9px;border-radius:8px;cursor:pointer;font:12px/1.45 var(--ui);color:var(--text)}
+.hd-inbox .it:hover{background:var(--paper)}
+.hd-inbox .it b{display:block;font-size:12.5px}.hd-inbox .it small{color:var(--muted)}
+.hd-inbox .it.unread b::before{content:"● ";color:#C2410C}
+.hd-inbox .empty{padding:14px;color:var(--muted);font-size:12.5px}
+.tk-sched{padding:10px 16px;border-bottom:1px solid var(--paper-3);background:#FBFAF7}
+.tk-sched textarea{width:100%;font:13px var(--ui)}
+.tk-sched .help{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:6px}
+.tk-sched .field{margin:0}.tk-sched label{font-size:11px;color:var(--muted)}
+.tk-schedrow{border-radius:8px}.tk-schedrow.off{opacity:.6}
+.tk-schedrow .acts{display:flex;gap:8px;padding:0 10px 6px}
+.tk-schedrow .acts button{border:0;background:none;color:#2D7DD2;font:500 11px var(--ui);cursor:pointer;padding:0}
 .mu-card{border-color:#C9B8F0;background:linear-gradient(135deg,#FBF8FF,#fff)}
 .mu-plan{border:1px solid var(--paper-3);border-radius:10px;background:#fff;padding:9px 12px;margin-bottom:8px;font-size:12.5px}
 .mu-plan ol{margin:6px 0 0;padding-left:20px}.mu-plan li{margin:4px 0}
@@ -2982,6 +2997,9 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
   <span class="hd-div hd-design"></span>
   <button class="hb outline hd-design" id="btnSave" title="Save this design"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h5.8L13 4.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 12.5z"/><path d="M5.5 2v3h4V2M5.5 14v-4h5v4"/></svg><span>Save</span></button>
   <button class="hb primary hd-design" id="btnTrain" title="Train this network"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg><span>Train</span></button>
+  <span class="hd-inboxwrap"><button class="hb icon" id="hdInbox" title="Inbox: what scheduled agents reported" aria-label="Inbox">
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3z"/><path d="M6.5 14a1.6 1.6 0 0 0 3 0"/></svg>
+    <span class="hd-badge" id="hdInboxN" hidden></span></button><div class="hd-inbox" id="hdInboxPanel" hidden></div></span>
   <button class="hb icon" id="hdSettings" title="Settings: models, keys and defaults" aria-label="Settings"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6"/></svg></button>
   <span id="whoami" style="display:none"></span>
 </header>
@@ -3228,6 +3246,7 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
       <button class="tk-new" id="tkNew"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor"
         stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>New conversation</button>
       <div class="tk-list" id="tkList"></div>
+      <div class="tk-list" id="tkSchedList"></div>
     </aside>
     <div class="tk-main" id="tkMain"></div>
   </section>
@@ -3517,6 +3536,7 @@ function nodeById(id){ return state.graph.nodes.find(n=>n.id===id); }
 /* ============================ boot ============================ */
 
 async function boot(){
+  try{ hdInboxInit(); } catch {}
   const res = await fetch(API + "/api/catalog");
   const data = await res.json();
   state.catalog = data.layers;
@@ -16369,6 +16389,44 @@ const TK_ICON = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="tr
   <circle cx="5" cy="7" r="2.1"/><circle cx="5" cy="17" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.4"/></g>
   <g stroke="currentColor" stroke-width="1.2" opacity=".6"><path d="M5 7l7 5M5 17l7-5M12 12h7"/></g></svg>`;
 
+/* The inbox: what scheduled agents reported. */
+async function hdInboxPoll(){
+  try{
+    const d = await (await fetch(API + "/api/inbox")).json();
+    const n = $("hdInboxN");
+    if (n){ n.hidden = !d.unread; n.textContent = d.unread > 9 ? "9+" : String(d.unread); }
+    return d;
+  } catch { return null; }
+}
+async function hdInboxOpen(){
+  const panel = $("hdInboxPanel");
+  if (!panel.hidden){ panel.hidden = true; return; }
+  const d = await hdInboxPoll();
+  if (!d) return;
+  const ago = t => { const s = Date.now() / 1000 - t; return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago"
+    : s < 129600 ? Math.round(s / 3600) + " h ago" : new Date(t * 1000).toLocaleDateString(); };
+  panel.innerHTML = d.items.length ? d.items.map(x => `<button class="it${x.read ? "" : " unread"}" data-inconv="${alEsc(x.conv || "")}">
+      <b>${alEsc(x.title)}</b><small>${ago(x.t)}</small>${x.text ? `<div>${alEsc(x.text.slice(0, 220))}</div>` : ""}</button>`).join("")
+    : `<div class="empty">Nothing yet. Schedule an agent from a conversation (Schedule…) and it reports here.</div>`;
+  panel.hidden = false;
+  panel.querySelectorAll("[data-inconv]").forEach(b => b.onclick = async () => {
+    panel.hidden = true;
+    if (!b.dataset.inconv) return;
+    try{ localStorage.setItem("tk-conversation", b.dataset.inconv); } catch {}
+    const nav = document.querySelector('button[data-page="pageTalk"]');
+    if (nav) nav.click();
+    setTimeout(() => tkOpen(b.dataset.inconv), 400);
+  });
+  if (d.unread){ await fetch(API + "/api/inbox/read", {method: "POST", headers: {"content-type": "application/json"}, body: "{}"}); hdInboxPoll(); }
+}
+function hdInboxInit(){
+  const b = $("hdInbox");
+  if (!b) return;
+  b.onclick = hdInboxOpen; hdInboxPoll(); setInterval(hdInboxPoll, 30000);
+  document.addEventListener("pointerdown", ev => { const p = $("hdInboxPanel");
+    if (p && !p.hidden && !ev.target.closest(".hd-inboxwrap")) p.hidden = true; });
+}
+
 async function tkOpenPage(){
   // asked every time: a key added in Settings a minute ago counts now
   const s = await stLoad();
@@ -16385,6 +16443,31 @@ async function tkOpenPage(){
   else tkPicker();
 }
 
+async function tkSchedules(){
+  const host = $("tkSchedList");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/schedules")).json(); } catch { return; }
+  const list = d.schedules || [];
+  if (!list.length){ host.innerHTML = ""; return; }
+  const when = t => t ? new Date(t * 1000).toLocaleString([], {weekday: "short", hour: "2-digit", minute: "2-digit"}) : "–";
+  host.innerHTML = `<div class="head">Scheduled</div>` + list.map(s => `<div class="tk-schedrow${s.enabled ? "" : " off"}">
+      <button class="tk-item" data-conv="${alEsc(s.conv || "")}"><b>${alEsc(s.name)}</b>
+        <small>${alEsc(s.when)} · next ${alEsc(s.enabled ? when(s.next_run) : "paused")}${s.last_status ? " · last " + alEsc(s.last_status) : ""}</small></button>
+      <div class="acts"><button data-scrun="${s.id}" title="Run now">Run now</button>
+        <button data-sctoggle="${s.id}" data-on="${s.enabled ? 1 : 0}">${s.enabled ? "Pause" : "Resume"}</button>
+        <button data-scdel="${s.id}" title="Delete the schedule">Delete</button></div></div>`).join("");
+  host.querySelectorAll("[data-conv]").forEach(b => b.onclick = () => b.dataset.conv && tkOpen(b.dataset.conv));
+  host.querySelectorAll("[data-scrun]").forEach(b => b.onclick = async () => {
+    await fetch(API + `/api/schedules/${b.dataset.scrun}/run`, {method: "POST"}); toast("Started"); tkRefreshList(); });
+  host.querySelectorAll("[data-sctoggle]").forEach(b => b.onclick = async () => {
+    await fetch(API + `/api/schedules/${b.dataset.sctoggle}`, {method: "PATCH", headers: {"content-type": "application/json"},
+      body: JSON.stringify({enabled: b.dataset.on !== "1"})}); tkSchedules(); });
+  host.querySelectorAll("[data-scdel]").forEach(b => b.onclick = async () => {
+    if (!confirm("Delete this schedule? Its conversation stays.")) return;
+    await fetch(API + `/api/schedules/${b.dataset.scdel}`, {method: "DELETE"}); tkSchedules(); });
+}
+
 async function tkRefreshList(){
   try{
     const r = await fetch(API + "/api/agentlab/conversations");
@@ -16394,6 +16477,7 @@ async function tkRefreshList(){
   } catch (exc){
     tkState.problem = exc.message || "the server did not answer";
   }
+  tkSchedules();
   const host = $("tkList");
   if (!tkState.list.length){
     host.innerHTML = `<div class="tk-empty-list">No conversations yet. Start one and it is kept here.</div>`;
@@ -16553,9 +16637,11 @@ function tkRender(){
         <button data-mode="rehearsal" class="${live ? "" : "on"}" title="A scripted stand-in model: free, to see the flow">Rehearsal</button>
         <button data-mode="live" class="${live ? "on" : ""}" title="The real model set on the agent's LLM cores">Live</button>
       </div>
+      <button class="tk-tb" id="tkSched" title="Run this agent on a task every hour, day or week">Schedule…</button>
       ${c.agent.kind === "muse" ? "" : `<button class="tk-tb" id="tkLab" title="Open this agent in the Agent lab">Open in lab</button>`}
       <button class="tk-tb danger" id="tkDel" title="Delete this conversation">Delete</button>
     </div>
+    <div id="tkSchedForm" class="tk-sched" hidden></div>
     ${live ? "" : `<div class="tk-note">Rehearsal: a scripted stand-in plays the model, so answers are placeholders. Switch to Live for real answers.</div>`}
     <div class="tk-scroll" id="tkScroll"><div class="tk-thread" id="tkThread"></div></div>
     <div class="tk-compose"><div class="tk-box">
@@ -16573,6 +16659,7 @@ function tkRender(){
     tkState.conv = null; try{ localStorage.removeItem("tk-conversation"); } catch {} tkPicker(); tkRefreshList();
   };
   if ($("tkLab")) $("tkLab").onclick = () => tkOpenInLab(null);
+  $("tkSched").onclick = () => tkScheduleForm(c);
   const box = $("tkInput");
   box.addEventListener("input", () => { box.style.height = "auto"; box.style.height = Math.min(200, box.scrollHeight) + "px"; });
   box.addEventListener("keydown", ev => {
@@ -16706,6 +16793,37 @@ function tkStepText(ev){
     case "final": return null;
     default: return null;
   }
+}
+
+/* Schedule this conversation's agent: the task runs at the chosen time, and each run is a new turn here. */
+function tkScheduleForm(c){
+  const host = $("tkSchedForm");
+  if (!host.hidden){ host.hidden = true; return; }
+  const last = [...(c.turns || [])].reverse().find(t => t.task);
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  host.innerHTML = `<div class="row" style="flex-wrap:wrap;gap:8px;align-items:flex-end">
+      <div class="field" style="flex:2;min-width:200px"><label for="scTask">Each time, ask ${alEsc(c.agent.name)}:</label>
+        <textarea id="scTask" rows="2">${alEsc(last ? last.task : "")}</textarea></div>
+      <div class="field"><label for="scEvery">How often</label><select id="scEvery">
+        <option value="day">Every day</option><option value="weekdays">Weekdays</option><option value="week">Once a week</option><option value="hour">Every hour</option></select></div>
+      <div class="field" id="scDayF" hidden><label for="scDay">On</label><select id="scDay">${days.map((d, i) => `<option value="${i}">${d}</option>`).join("")}</select></div>
+      <div class="field"><label for="scAt">At</label><input id="scAt" type="time" value="06:00"></div>
+      <div class="field"><label for="scName">Name</label><input id="scName" placeholder="Morning brief"></div>
+      <button class="btn go" id="scSave">Schedule it</button><button class="btn" id="scCancel">Cancel</button></div>
+    <div class="help">Runs ${c.mode === "live" ? "live" : "in rehearsal"} on this computer's clock, while the server is running. Each run is
+      a new message in this conversation, and the inbox (the bell at the top) says when it is done or needs your approval.</div>
+    <div class="st-msg" id="scMsg"></div>`;
+  host.hidden = false;
+  $("scEvery").onchange = e => { $("scDayF").hidden = e.target.value !== "week"; };
+  $("scCancel").onclick = () => { host.hidden = true; };
+  $("scSave").onclick = async () => {
+    const r = await fetch(API + "/api/schedules", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({name: $("scName").value.trim(), agent: {kind: c.agent.kind, key: c.agent.key}, task: $("scTask").value.trim(),
+        every: $("scEvery").value, at: $("scAt").value || "06:00", weekday: +$("scDay").value, mode: c.mode, conv: c.id})});
+    const d = await r.json();
+    if (!r.ok){ $("scMsg").textContent = (d.detail && d.detail.message) || "Not scheduled."; return; }
+    host.hidden = true; toast(`Scheduled ${d.when}`); tkRefreshList();
+  };
 }
 
 /* A Muse turn is several runs in a row: show the plan, and follow whichever step is running,

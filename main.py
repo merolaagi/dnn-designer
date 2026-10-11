@@ -29,6 +29,7 @@ import roster
 import evolve
 import benchmark
 import muse
+import schedules
 import providers
 import advisor
 import assistant
@@ -776,6 +777,83 @@ def _bench_action(fn, *args):
         raise HTTPException(404, detail={"message": "No such benchmark."})
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
+
+
+class ScheduleIn(BaseModel):
+    name: str = ""
+    agent: Dict[str, Any]
+    task: str
+    every: str = "day"
+    at: str = "06:00"
+    weekday: int = 0
+    mode: str = "live"
+    conv: Optional[str] = None
+
+
+class ScheduleChange(BaseModel):
+    name: Optional[str] = None
+    task: Optional[str] = None
+    every: Optional[str] = None
+    at: Optional[str] = None
+    weekday: Optional[int] = None
+    mode: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class InboxRead(BaseModel):
+    ids: Optional[List[str]] = None
+
+
+def _sched_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such schedule."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.on_event("startup")
+def _start_scheduler():
+    schedules.start()
+
+
+@app.get("/api/schedules")
+def schedules_list():
+    return {"schedules": schedules.listing(), "inbox": schedules.inbox(10)}
+
+
+@app.post("/api/schedules")
+def schedules_create(body: ScheduleIn):
+    """Run an agent on a task every hour, day, weekday or week; it reports to the inbox."""
+    return _sched_action(schedules.create, body.name, body.agent, body.task, body.every, body.at, body.weekday,
+                         body.mode, body.conv)
+
+
+@app.patch("/api/schedules/{sid}")
+def schedules_update(sid: str, body: ScheduleChange):
+    change = body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True)
+    return _sched_action(schedules.update, sid, change)
+
+
+@app.delete("/api/schedules/{sid}")
+def schedules_delete(sid: str):
+    return schedules.delete(sid)
+
+
+@app.post("/api/schedules/{sid}/run")
+def schedules_run_now(sid: str):
+    return _sched_action(schedules.run_now, sid)
+
+
+@app.get("/api/inbox")
+def inbox_list():
+    return schedules.inbox()
+
+
+@app.post("/api/inbox/read")
+def inbox_read(body: InboxRead):
+    return schedules.mark_read(body.ids)
 
 
 class RouteCheck(BaseModel):

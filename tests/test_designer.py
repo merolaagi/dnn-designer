@@ -10662,6 +10662,95 @@ def _():
         assert needle in PAGE, needle
 
 
+@check("schedules: the next run is worked out by this computer's clock, for hours, days, weekdays and weeks")
+def _():
+    import schedules as SC
+    friday_9 = time.mktime((2026, 10, 9, 9, 0, 0, 0, 0, -1))           # a Friday, 09:00 local time
+    at = lambda s: time.localtime(SC.next_run(s, friday_9))
+    day = at({"every": "day", "at": "06:00"})
+    assert (day.tm_mday, day.tm_hour, day.tm_min) == (10, 6, 0)
+    later = at({"every": "day", "at": "18:30"})
+    assert (later.tm_mday, later.tm_hour, later.tm_min) == (9, 18, 30)
+    wk = at({"every": "weekdays", "at": "06:00"})
+    assert (wk.tm_mday, wk.tm_wday) == (12, 0)                            # skips the weekend to Monday
+    week = at({"every": "week", "at": "07:00", "weekday": 2})
+    assert (week.tm_mday, week.tm_wday, week.tm_hour) == (14, 2, 7)
+    hour = at({"every": "hour", "at": "00:15"})
+    assert (hour.tm_hour, hour.tm_min) == (9, 15)
+    assert SC.describe({"every": "week", "at": "07:00", "weekday": 2}) == "every Wednesday at 07:00"
+    for bad in ({"every": "day", "at": "25:00"}, {"every": "day", "at": "soon"}):
+        try:
+            SC.next_run(bad, friday_9)
+            raise AssertionError("a bad time is refused")
+        except ValueError:
+            pass
+
+
+@check("schedules: a due schedule runs as a turn of its own conversation, and the inbox says how it went")
+def _():
+    import schedules as SC
+    saved = SC._path().read_text() if SC._path().exists() else None
+    inbox = SC._inbox_path().read_text() if SC._inbox_path().exists() else None
+    made = []
+    try:
+        s = SC.create("Lisbon check", {"kind": "starting", "key": "react"}, "Estimate the cafes Lisbon can support",
+                      "day", "06:00", mode="rehearsal")
+        assert s["when"] == "every day at 06:00" and s["next_run"] > time.time()
+        assert SC.tick() == 0                                             # not due yet
+        assert SC.tick(now=s["next_run"] + 1) == 1                       # due: it starts
+        for _i in range(60):
+            SC.tick(now=s["next_run"] + 2)
+            row = next(x for x in SC.listing() if x["id"] == s["id"])
+            if row["watching"] is None:
+                break
+            time.sleep(0.3)
+        assert row["last_status"] == "done" and row["conv"], row
+        made.append(row["conv"])
+        conv = agentlab.conversation(row["conv"])
+        assert conv["title"] == "Scheduled: Lisbon check" and len(conv["turns"]) == 1
+        news = SC.inbox()
+        assert news["unread"] >= 1 and news["items"][0]["title"] == "Lisbon check: done" and news["items"][0]["conv"] == row["conv"]
+        assert SC.mark_read()["unread"] == 0
+        SC.run_now(s["id"])
+        for _i in range(60):
+            SC.tick(now=time.time())
+            if next(x for x in SC.listing() if x["id"] == s["id"])["watching"] is None:
+                break
+            time.sleep(0.3)
+        assert len(agentlab.conversation(row["conv"])["turns"]) == 2       # the same conversation, a new turn
+        paused = SC.update(s["id"], {"enabled": False})
+        assert paused["enabled"] is False and SC.tick(now=time.time() + 10 ** 6) == 0
+        for bad in (lambda: SC.create("x", {"kind": "starting", "key": "react"}, "", "day"),
+                    lambda: SC.create("x", {"kind": "starting", "key": "react"}, "t", "monthly"),
+                    lambda: SC.create("x", {"kind": "starting", "key": "nope"}, "t", "day")):
+            try:
+                bad()
+                raise AssertionError("a bad schedule is refused")
+            except ValueError:
+                pass
+        SC.delete(s["id"])
+        assert not any(x["id"] == s["id"] for x in SC.listing())
+    finally:
+        for cid in made:
+            try:
+                agentlab.delete_conversation(cid)
+            except (KeyError, ValueError):
+                pass
+        if saved is None:
+            SC._path().unlink(missing_ok=True)
+        else:
+            SC._path().write_text(saved)
+        if inbox is None:
+            SC._inbox_path().unlink(missing_ok=True)
+        else:
+            SC._inbox_path().write_text(inbox)
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/schedules", "/api/schedules/{sid}", "/api/schedules/{sid}/run", "/api/inbox", "/api/inbox/read"} <= paths
+    for needle in ('id="hdInbox"', "function hdInboxOpen", "function tkScheduleForm", "function tkSchedules", "Schedule it"):
+        assert needle in PAGE, needle
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
