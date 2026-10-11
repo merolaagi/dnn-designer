@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.20.1
+
+- `./serve.sh` restarts the server in the background on port 8770. It stops
+  whatever was listening there, starts uvicorn (from `.venv` if there is
+  one) with its log in `data/server.log`, and waits until the server answers
+  before printing the running version. `./serve.sh log` follows the log;
+  `./serve.sh stop` stops the server.
+
 ## 4.20.0
 
 - **Today's date in every request.** Muse's planner and every agent now get

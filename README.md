@@ -16,6 +16,8 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8770
 ```
 
+Or, in the background (and after every update): `./serve.sh`. `./serve.sh log` follows its log.
+
 Then open http://127.0.0.1:8770 and press **Open → MiniGPT** for the worked
 example.
 
