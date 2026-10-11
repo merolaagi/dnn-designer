@@ -6057,6 +6057,16 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
     if conv["turns"] and conv["turns"][-1].get("status") in LIVE_STATUSES:
         raise ValueError("The agent is still working on your last message. Wait for it, or stop it.")
     conv["mode"] = mode or conv.get("mode") or "rehearsal"
+    import muse_profile as profile
+    reply = profile.command(text)
+    if reply is not None:
+        # "remember: …" and "forget: …" change the profile; no agent runs
+        conv["turns"].append({"task": text, "at": time.time(), "mode": conv["mode"], "status": "done", "ok": True,
+                              "answer": reply, "profile": True})
+        conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
+        conv["updated"] = time.time()
+        _conv_save(conv)
+        return {"conversation": conv, "run": None}
     if conv["agent"].get("kind") == "muse":
         import muse
         if conv["mode"] == "live" and not live_available():
@@ -6072,7 +6082,7 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
     if conv["agent"].get("kind") == "role":
         import roster
         memory_dir = roster.memory_dir(conv["agent"]["key"])    # each specialist keeps its own notes
-    view = start_run(graph, text, conv["mode"], "ask", memory_dir=memory_dir, thread=conv["id"])
+    view = start_run(graph, profile.with_profile(text), conv["mode"], "ask", memory_dir=memory_dir, thread=conv["id"])
     conv["turns"].append({"run": view["id"], "task": text, "at": time.time(), "mode": conv["mode"],
                           "status": "running"})
     conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))

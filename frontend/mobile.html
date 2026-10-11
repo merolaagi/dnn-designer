@@ -111,6 +111,7 @@ label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 <nav id="nav" class="hidden">
   <button data-tab="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Ask</button>
   <button data-tab="inbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.3 20a2 2 0 0 0 3.4 0"/></svg>Inbox<span class="badge hidden" id="badge"></span></button>
+  <button data-tab="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Me</button>
 </nav>
 <script>
 "use strict";
@@ -200,12 +201,14 @@ function showLogin(msg){
 }
 
 /* ---------- routing ---------- */
+const TABS = ["inbox", "me"];
 function route(){
   clearInterval(S.timer);
   const h = location.hash.slice(1), m = h.match(/^conv=(\w+)/);
   if (m){ S.tab = "ask"; return openConv(m[1]); }
-  S.tab = ["inbox"].concat(window.MUSE_TABS || []).includes(h) ? h : "ask";
+  S.tab = TABS.includes(h) ? h : "ask";
   if (S.tab === "inbox") return showInbox();
+  if (S.tab === "me") return showMe();
   if (window.MUSE_VIEWS && window.MUSE_VIEWS[S.tab]) return window.MUSE_VIEWS[S.tab]();
   return showConvs();
 }
@@ -336,6 +339,28 @@ async function showInbox(){
     try{ await post("/api/inbox/read", {ids: [b.dataset.in]}); } catch {}
     if (b.dataset.conv) location.hash = "conv=" + b.dataset.conv; else showInbox();
   });
+}
+
+/* ---------- what Muse knows about you ---------- */
+async function showMe(){
+  chrome("What Muse knows about you");
+  let d;
+  try{ d = await api("/api/profile"); } catch(e){ if (e.message !== "signin") $("view").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  $("view").innerHTML = `<p class="muted" style="margin:0 0 12px">Every request starts with these lines. In a chat you can also say
+      “remember: …” or “forget: …”.</p>
+    ${d.facts.length ? d.facts.map(f => `<div class="card" style="padding:10px 12px;display:flex;gap:8px;align-items:flex-start">
+        <div style="flex:1">${esc(f.text)}<div class="muted" style="font-size:12px">${f.by === "muse" ? "you told Muse" : "you wrote"}</div></div>
+        <button class="icon-btn" data-del="${esc(f.id)}" aria-label="Remove" style="color:var(--bad)">Remove</button></div>`).join("")
+      : `<div class="empty" style="padding:20px 10px">Nothing yet. Try: “My store is University Chevron #90877, open 24/7.”</div>`}
+    <label for="fact">Add a fact</label><textarea id="fact" rows="2" maxlength="300" placeholder="In your own words"></textarea>
+    <div class="rowbtns"><button class="btn go" id="addFact">Add</button></div><div class="err" id="ferr"></div>
+    <div class="rowbtns" style="margin-top:28px"><button class="btn" id="signout">Sign out</button></div>`;
+  $("addFact").onclick = async () => {
+    try{ await post("/api/profile", {text: $("fact").value}); showMe(); } catch(e){ if (e.message !== "signin") $("ferr").textContent = e.message; }
+  };
+  $("view").querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    try{ await api("/api/profile/" + b.dataset.del, {method: "DELETE"}); } catch {} showMe(); });
+  $("signout").onclick = async () => { try{ await post("/api/auth/logout"); } catch {} showLogin(); };
 }
 
 (async function boot(){

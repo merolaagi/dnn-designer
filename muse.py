@@ -148,7 +148,10 @@ def decode(request: str, mode: str = "live", context: str = "") -> Dict[str, Any
     import evolve
     agents, roles_text, roles = _catalog_text(request)
     system = DECODER.format(agents=agents, roles=roles_text)
-    prompt = (f"Earlier in this conversation:\n{context}\n\n" if context else "") + f"The request:\n{request}"
+    import muse_profile as profile
+    about = profile.as_text()
+    prompt = ((about + "\n\n") if about else "") + \
+        (f"Earlier in this conversation:\n{context}\n\n" if context else "") + f"The request:\n{request}"
     tokens, plan, problems = 0, None, []
     for attempt in range(2):
         out = evolve.ask(system, prompt if not problems else prompt + "\n\nYour last reply had problems. Fix them:\n- "
@@ -242,7 +245,8 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
             return
         earlier: List[str] = []
         for i, step in enumerate(plan["steps"]):
-            task = step["task"]
+            import muse_profile as profile
+            task = profile.with_profile(step["task"])
             if earlier:
                 task += "\n\nWhat the earlier steps found (use it):\n" + "\n\n".join(earlier)
             memory = None

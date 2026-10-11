@@ -2394,6 +2394,9 @@ body.sizing{user-select:none}
 .st-wrap{max-width:980px;margin:0 auto;padding:26px 24px 60px}
 .st-wrap > h2{margin:0 0 4px;font-size:20px}
 .st-wrap > p.lead{margin:0 0 20px;color:var(--muted);font-size:13px}
+.pf-list{display:flex;flex-direction:column;gap:8px}
+.pf-row{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center}
+.pf-row small{grid-column:1/-1;color:var(--muted);font-size:11.5px;margin-top:-4px}
 .st-card{background:#fff;border:1px solid var(--paper-3);border-radius:12px;margin-bottom:18px}
 .st-card > header{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--paper-2);height:auto;box-shadow:none;position:static}
 .st-card > header h3{margin:0;font-size:14px}
@@ -16200,6 +16203,12 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>What Muse knows about you</h3><small>Every Muse request and every conversation with an agent starts
+        with these lines. Nothing is added unless you write it here or tell Muse “remember: …”</small></header>
+      <div class="st-body" id="stProfile"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Muse on your phone</h3><small>Ask Muse, approve its steps and read the inbox from your phone, and get
         store alerts and the morning brief as notifications</small></header>
       <div class="st-body" id="stPush"><p class="st-msg">Loading…</p></div>
@@ -16239,6 +16248,32 @@ function stRender(){
   stOllama();
   stStation();
   stPush();
+  stProfile();
+}
+
+async function stProfile(){
+  const host = $("stProfile");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/profile")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  host.innerHTML = `${d.facts.length ? `<div class="pf-list">${d.facts.map(f => `<div class="pf-row">
+        <input data-pf="${alEsc(f.id)}" value="${alEsc(f.text)}" aria-label="Fact">
+        <button class="btn" data-pfsave="${alEsc(f.id)}">Save</button><button class="btn danger" data-pfdel="${alEsc(f.id)}" aria-label="Remove">Remove</button>
+        <small>${f.by === "muse" ? "you told Muse" : "you wrote"} · ${new Date(f.t * 1000).toLocaleDateString()}</small></div>`).join("")}</div>`
+      : `<p class="st-msg">Nothing yet. For example: “My store is University Chevron #90877 in Berkeley, open 24/7.” “Answer in short bullet points with the numbers first.”</p>`}
+    <div class="st-keyrow" style="margin-top:10px"><div class="st-field"><label for="pfNew">Add a fact</label>
+      <input id="pfNew" maxlength="300" placeholder="One fact per line, in your own words"></div><button class="btn go" id="pfAdd">Add</button></div>
+    <span class="st-msg" id="pfMsg"></span>`;
+  const call = async (url, method, body) => {
+    const r = await fetch(API + url, {method, headers: {"content-type": "application/json"}, body: body ? JSON.stringify(body) : undefined});
+    if (!r.ok){ const e = await r.json(); $("pfMsg").className = "st-msg bad"; $("pfMsg").textContent = (e.detail && e.detail.message) || "Not saved."; return false; }
+    return true;
+  };
+  $("pfAdd").onclick = async () => { if (await call("/api/profile", "POST", {text: $("pfNew").value})) stProfile(); };
+  $("pfNew").onkeydown = e => { if (e.key === "Enter") $("pfAdd").click(); };
+  host.querySelectorAll("[data-pfsave]").forEach(b => b.onclick = async () => {
+    if (await call("/api/profile/" + b.dataset.pfsave, "PUT", {text: host.querySelector(`[data-pf="${b.dataset.pfsave}"]`).value})) { toast("Saved"); stProfile(); } });
+  host.querySelectorAll("[data-pfdel]").forEach(b => b.onclick = async () => { if (await call("/api/profile/" + b.dataset.pfdel, "DELETE")) stProfile(); });
 }
 
 async function stStation(){

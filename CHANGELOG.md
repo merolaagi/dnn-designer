@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.12.0
+
+- **What Muse knows about you.** A short list of facts, kept per account,
+  such as your store, your supplier and how you like answers. Every Muse
+  request and every conversation with an agent starts with it, including
+  scheduled ones like the morning brief. Benchmarks don't read it, so their
+  scores stay comparable.
+- Nothing is added on its own. Write a fact yourself in Settings → "What Muse
+  knows about you" or under **Me** on the phone page, or tell Muse
+  "remember: …" in any chat. "forget: …" removes the facts that best match.
+  Either one is answered at once, without running an agent.
+- The phone page has a **Me** tab with the profile, and a Sign out button.
+
 ## 4.11.0
 
 - **Muse on your phone** at `/m`. It signs in with the same name and password

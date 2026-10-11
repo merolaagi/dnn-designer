@@ -32,6 +32,7 @@ import muse
 import schedules
 import station
 import push
+import muse_profile
 import providers
 import advisor
 import assistant
@@ -871,6 +872,40 @@ class StationConfig(BaseModel):
 class StationPreset(BaseModel):
     which: str
     at: str = "06:00"
+
+
+class ProfileFact(BaseModel):
+    text: str
+
+
+def _profile_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That fact is not in the profile."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/profile")
+def profile_list():
+    """What Muse knows about you: every request starts with these lines."""
+    return {"facts": muse_profile.listing(), "max": muse_profile.MAX_FACTS}
+
+
+@app.post("/api/profile")
+def profile_add(body: ProfileFact):
+    return _profile_action(muse_profile.add, body.text, "you")
+
+
+@app.put("/api/profile/{fact_id}")
+def profile_update(fact_id: str, body: ProfileFact):
+    return _profile_action(muse_profile.update, fact_id, body.text)
+
+
+@app.delete("/api/profile/{fact_id}")
+def profile_remove(fact_id: str):
+    return _profile_action(muse_profile.remove, fact_id)
 
 
 class PushIn(BaseModel):

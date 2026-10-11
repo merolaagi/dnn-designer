@@ -11049,6 +11049,46 @@ def _():
         assert done.returncode == 0, done.stderr[-400:]
 
 
+@check("profile: facts you add or tell Muse to remember start every request; forget takes them out")
+def _():
+    import muse_profile as PF, muse
+    saved = PF._path().read_text() if PF._path().exists() else None
+    PF._store([])
+    try:
+        assert PF.as_text() == "" and PF.with_profile("task") == "task"
+        f = PF.add("my store is University Chevron #90877, open 24/7")
+        assert f["text"] == "My store is University Chevron #90877, open 24/7." and PF.add(f["text"])["id"] == f["id"]
+        reply = PF.command("Remember: our fuel supplier is Chevron Products")
+        assert reply.startswith("Noted") and "Our fuel supplier is Chevron Products." in PF.as_text()
+        assert PF.command("Remember how fuel did last week?") is None             # a question, not a fact
+        assert PF.command("How did fuel do?") is None
+        assert "supplier" in PF.command("forget the fuel supplier") and "supplier" not in PF.as_text()
+        assert PF.command("forget my dentist").startswith("I found nothing")
+        assert PF.with_profile("Sales yesterday?").startswith("Sales yesterday?\n\nAbout the person")
+        for bad in ("", "x" * 400):
+            try:
+                PF.add(bad)
+                raise AssertionError("refused")
+            except ValueError:
+                pass
+        PF.update(f["id"], "My store is University Chevron #90877")
+        assert PF.listing()[0]["text"].endswith("#90877.")
+        # a conversation: "remember" is answered without any agent, and a normal message carries the profile
+        conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+        out = agentlab.say(conv["id"], "remember: answers should be short", "rehearsal")
+        assert out["run"] is None and out["conversation"]["turns"][-1]["answer"].startswith("Noted")
+        agentlab.delete_conversation(conv["id"])
+        assert "with_profile" in inspect.getsource(muse._carry_out) and "profile.as_text()" in inspect.getsource(muse.decode)
+        import main
+        assert {"/api/profile", "/api/profile/{fact_id}"} <= {r.path for r in main.app.routes}
+        assert "function stProfile" in PAGE and "function showMe" in (ROOT / "frontend" / "mobile.html").read_text()
+    finally:
+        if saved is None:
+            PF._path().unlink(missing_ok=True)
+        else:
+            PF._path().write_text(saved)
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:
