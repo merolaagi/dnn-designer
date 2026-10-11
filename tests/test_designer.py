@@ -10664,6 +10664,16 @@ def _():
         assert needle in PAGE, needle
 
 
+# The schedule tests use a store of their own. On a computer that already has schedules (an hourly
+# watchdog, a morning brief), the real ones would also be due when a test moves the clock forward:
+# they would run, live, and be counted.
+import schedules as _SC
+import tempfile as _tempfile
+_SCHED_DIR = Path(_tempfile.mkdtemp(prefix="agentlab-schedules-"))
+_SC._path = lambda: _SCHED_DIR / "schedules.json"
+_SC._inbox_path = lambda: _SCHED_DIR / "inbox.jsonl"
+
+
 @check("schedules: the next run is worked out by this computer's clock, for hours, days, weekdays and weeks")
 def _():
     import schedules as SC

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.15.1
+
+- The schedule tests use a store of their own. On a computer that already had
+  schedules (the hourly watchdog, the morning brief), moving the test clock
+  forward made the real ones due too. They ran, live, during the tests, and
+  were counted, which failed "a due schedule runs as a turn of its own
+  conversation".
+
 ## 4.15.0
 
 - **Store data now comes from the tables the platform actually writes.** The
