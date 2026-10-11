@@ -6087,6 +6087,16 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         raise ValueError("The agent is still working on your last message. Wait for it, or stop it.")
     conv["mode"] = mode or conv.get("mode") or "rehearsal"
     import muse_profile as profile
+    import schedules
+    planned = schedules.command(text, conv["mode"])
+    if planned is not None:
+        # "every day at 7am …" sets up a schedule; "stop the … schedule" ends one. No agent runs now.
+        conv["turns"].append({"task": text, "at": time.time(), "mode": conv["mode"], "status": "done", "ok": True,
+                              "answer": planned["answer"], "schedule": (planned.get("schedule") or {}).get("id")})
+        conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
+        conv["updated"] = time.time()
+        _conv_save(conv)
+        return {"conversation": conv, "run": None}
     reply = profile.command(text)
     if reply is not None:
         # "remember: …" and "forget: …" change the profile; no agent runs

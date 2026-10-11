@@ -13,6 +13,7 @@ their last finished step, and a schedule that came due while the server was down
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import uuid
@@ -374,3 +375,112 @@ def start() -> None:
     if _THREAD is None or not _THREAD.is_alive():
         _THREAD = threading.Thread(target=_loop, name="schedules", daemon=True)
         _THREAD.start()
+
+
+# --------------------------------------------------------------------------
+# scheduling in your own words, from a chat
+# --------------------------------------------------------------------------
+# "Every day at 7am check my email and tell me what needs a reply" becomes a schedule that asks Muse
+# that task each morning; "stop the daily email check" removes it. Anything else is left to the agents.
+
+_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_TIME = r"(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?"
+_WHEN = re.compile(
+    r"\b(?:(every|each)\s+(day|morning|evening|night|weekday|hour|" + "|".join(_DAYS) + r")s?|daily|hourly|"
+    r"(on\s+)?weekdays)\b(?:\s*,?\s*" + _TIME + r")?", re.I)
+_AT_FIRST = re.compile(r"\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\s+(every|each)\s+(day|morning|evening|weekday|"
+                       + "|".join(_DAYS) + r")s?\b", re.I)
+_STOP = re.compile(r"^\s*(?:please\s+)?(?:stop|cancel|delete|remove|turn off|pause)\b(.*)$", re.I | re.S)
+
+
+def _clock(hour: Optional[str], minute: Optional[str], half: Optional[str], word: str) -> Optional[str]:
+    if hour is None:
+        default = {"morning": "07:00", "evening": "18:00", "night": "21:00"}.get(word)
+        return default
+    h, m = int(hour), int(minute or 0)
+    half = (half or "").lower().replace(".", "")
+    if half == "pm" and h < 12:
+        h += 12
+    if half == "am" and h == 12:
+        h = 0
+    if not half and word in ("evening", "night") and h < 12:
+        h += 12
+    if not (0 <= h < 24 and 0 <= m < 60):
+        return None
+    return f"{h:02d}:{m:02d}"
+
+
+_QUESTION = re.compile(r"^\s*(how|what|which|when|why|who|did|do|does|is|are|was|were|has|have)\b", re.I)
+
+
+def from_words(text: str) -> Optional[Dict[str, Any]]:
+    """{every, at, weekday, task} when the message asks for something to happen on a schedule; else None.
+
+    A question about the data ("how much do we sell every day at noon?") is a question, not a schedule."""
+    text = str(text or "").strip()
+    if _QUESTION.match(text):
+        return None
+    m = _AT_FIRST.search(text)
+    if m:
+        word = m.group(5).lower()
+        at = _clock(m.group(1), m.group(2), m.group(3), word)
+        span = m.span()
+    else:
+        m = _WHEN.search(text)
+        if not m:
+            return None
+        word = (m.group(2) or ("hour" if m.group(0).lower().startswith("hourly") else
+                               "weekday" if "weekday" in m.group(0).lower() else "day")).lower()
+        at = _clock(m.group(4), m.group(5), m.group(6), word)
+        span = m.span()
+    if word == "hour":
+        every, at = "hour", "00:00"
+    elif word == "weekday":
+        every = "weekdays"
+    elif word in _DAYS:
+        every = "week"
+    else:
+        every = "day"
+    if every != "hour" and not at:
+        return None                                      # "every day" with no time: ask rather than guess
+    task = re.sub(r"\s{2,}", " ", text[:span[0]] + " " + text[span[1]:]).strip(" ,.;:-")
+    task = re.sub(r"^(?:can you|could you|please|i want you to|i'd like you to)\s+", "", task, flags=re.I).strip(" ,.")
+    task = re.sub(r"^(?:and|then)\s+", "", task, flags=re.I)
+    if len(task) < 6:
+        return None
+    return {"every": every, "at": at or "00:00", "weekday": _DAYS.index(word) if word in _DAYS else 0,
+            "task": task[0].upper() + task[1:]}
+
+
+def _words(text: str) -> set:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) > 2 and w not in
+            {"the", "and", "every", "each", "day", "schedule", "scheduled", "please", "that", "this", "check", "stop"}}
+
+
+def command(text: str, mode: str = "live") -> Optional[Dict[str, Any]]:
+    """If the message sets up or stops a schedule, do it and return {answer, schedule}; otherwise None."""
+    stop = _STOP.match(text or "")
+    if stop and re.search(r"\b(schedul|every|daily|hourly|weekday|morning|brief|digest|check)", stop.group(1), re.I):
+        want = _words(stop.group(1))
+        mine = [s for s in listing() if s["agent"]["kind"] != "check"]
+        scored = sorted(((len(want & _words(s["name"] + " " + s["task"])), s) for s in mine), key=lambda x: -x[0])
+        if not scored or scored[0][0] == 0:
+            return {"answer": "I found no scheduled task like that. Your scheduled tasks are listed under **Me**."}
+        s = scored[0][1]
+        delete(s["id"])
+        return {"answer": f"Stopped: **{s['name']}** ({s['when']}). It will not run again."}
+    plan = from_words(text)
+    if not plan:
+        m = _WHEN.search(text or "")
+        if m and re.search(r"\b(schedule|remind|set up|automatically|each time)\b", text, re.I) and not m.group(4) and (m.group(2) or "").lower() not in ("hour", "morning", "evening", "night") \
+                and not m.group(0).lower().startswith("hourly"):
+            rest = re.sub(r"\s{2,}", " ", text[:m.start()] + text[m.end():]).strip(" ,.")
+            rest = re.sub(r"^(?:please\s+)?(?:schedule|set up|remind me to)[:\s]+", "", rest, flags=re.I).lower()
+            return {"answer": f"What time should I do it? Say it again with a time, for example: “every day at 7am {rest}”."}
+        return None
+    name = plan["task"][:60]
+    s = create(name, {"kind": "muse", "key": "muse"}, plan["task"], plan["every"], plan["at"], plan["weekday"], mode)
+    first = time.strftime("%a %b %-d at %-I:%M %p", time.localtime(s["next_run"]))
+    return {"schedule": s, "answer": f"Scheduled: **{s['task']}**, {s['when']}. The first run is {first}. Each result "
+            "goes to your Inbox, with a notification if you have them on. Say \"stop the "
+            f"{name[:30].lower()} schedule\" to end it, or switch it off under **Me**."}

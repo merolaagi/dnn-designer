@@ -11377,6 +11377,35 @@ def _():
     assert {"/api/mail", "/api/mail/test"} <= {r.path for r in main.app.routes} and "function stMail" in PAGE
 
 
+@check("schedules from a chat: “every day at 7am check my email” becomes a Muse schedule; questions stay questions")
+def _():
+    import schedules as SC
+    w = SC.from_words
+    assert w("Every day at 7am check my email and tell me what needs a reply") == \
+        {"every": "day", "at": "07:00", "weekday": 0, "task": "Check my email and tell me what needs a reply"}
+    assert w("can you read my email every morning")["at"] == "07:00"
+    assert w("check my inbox every weekday at 8:30")["every"] == "weekdays"
+    assert w("At 6 pm every friday summarize the week") == {"every": "week", "at": "18:00", "weekday": 4, "task": "Summarize the week"}
+    assert w("every hour check if POS data is arriving")["every"] == "hour"
+    for q in ("How much do we sell every day on average?", "What did we sell every Friday at 6pm last month?",
+              "what did I sell yesterday", "every day check my email"):
+        assert w(q) is None, q
+    assert "What time" in SC.command("schedule every day: check my email")["answer"]
+    assert SC.command("How did fuel do yesterday?") is None
+    conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+    try:
+        out = agentlab.say(conv["id"], "Every day at 7am check my email and tell me what needs a reply", "rehearsal")
+        turn = out["conversation"]["turns"][-1]
+        assert out["run"] is None and turn["answer"].startswith("Scheduled") and turn["schedule"]
+        s = next(x for x in SC.listing() if x["id"] == turn["schedule"])
+        assert s["agent"] == {"kind": "muse", "key": "muse"} and s["when"] == "every day at 07:00"
+        gone = agentlab.say(conv["id"], "stop the check my email schedule", "rehearsal")["conversation"]["turns"][-1]
+        assert gone["answer"].startswith("Stopped") and not any(x["id"] == s["id"] for x in SC.listing())
+        assert agentlab.say(conv["id"], "cancel the lottery schedule", "rehearsal")["conversation"]["turns"][-1]["answer"].startswith("I found no")
+    finally:
+        agentlab.delete_conversation(conv["id"])
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

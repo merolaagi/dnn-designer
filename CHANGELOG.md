@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.18.0
+
+- **Scheduled tasks from a chat.** Say "every day at 7am check my email and
+  tell me what needs a reply" (or "every weekday at 8:30 …", "every Friday at
+  6pm …", "every morning …", "every hour …") to Saathi, Muse or any agent.
+  It becomes a scheduled task that asks Muse that task each time, so the
+  right agent does it. Each result goes to the Inbox, with a notification if
+  you have them on. No agent runs when you set it up.
+- "Stop the check my email schedule" removes the one that best matches.
+- Questions stay questions: "how much do we sell every day at noon?" is
+  answered, not scheduled. Asked to schedule something without a time, it
+  asks for one.
+
 ## 4.17.2
 
 - A reply that says email isn't connected now carries `connect: "mail"`, so
