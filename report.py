@@ -35,15 +35,9 @@ def snapshot(cfg=None) -> Dict[str, Any]:
     def rows(sql):
         return ST.query(sql.replace("{mine}", mine), cfg=cfg)["rows"]
 
-    pick = ST.query("SELECT d.site_id, s.name, max(d.business_date) FROM day_reports d JOIN sites s ON s.id = d.site_id "
-                    f"WHERE s.tenant_id = current_setting('app.current_tenant_id', true) AND d.{ST.MINE} "
-                    "GROUP BY d.site_id, s.name ORDER BY 3 DESC, 2 LIMIT 1", cfg=cfg)["rows"]
-    if not pick or not pick[0][2]:
-        raise ValueError("There are no day reports yet, so there is nothing to report.")
-    site, name, last = pick[0]
-    mine = f"site_id = '{site.replace(chr(39), chr(39) * 2)}' AND {ST.MINE}"
-    fin = rows("SELECT max(business_date) FROM day_reports WHERE {mine} AND business_date < current_date")
-    day = dt.date.fromisoformat(((fin[0][0] if fin and fin[0][0] else "") or last)[:10])
+    site, name, last = ST.anchor(cfg)
+    mine = ST.site_filter(site)
+    day = dt.date.fromisoformat(last)
     D, W = day.isoformat(), (day - dt.timedelta(days=7)).isoformat()
     snap: Dict[str, Any] = {"site": name, "day": D, "week_before": W, "made": time.time(), "notes": [], "sections": []}
 
@@ -54,17 +48,15 @@ def snapshot(cfg=None) -> Dict[str, Any]:
         except (RuntimeError, ValueError) as exc:
             snap["notes"].append(f"{key.replace('_', ' ')}: could not be read ({exc})")
 
-    def days():
-        out = []
-        for r in rows("SELECT business_date, fuel_volume_gallons, fuel_net_sales, inside_net_sales, total_net_sales, "
-                      "cash_over_short FROM day_reports WHERE {mine} AND business_date > '" + D + "'::date - 14 "
-                      "AND business_date <= '" + D + "' ORDER BY business_date"):
-            out.append({"date": r[0][:10], "gallons": _f(r[1]), "fuel": _f(r[2]), "inside": _f(r[3]), "total": _f(r[4]),
-                        "cash": _f(r[5])})
-        return out
-    section("days", days)
+    # Day Close's figures (day_cash_summary), gallons from fuel_grade_sales, and the MCM split to cross-check
+    section("days", lambda: ST.days(site, (day - dt.timedelta(days=13)).isoformat(), D, cfg))
     by = {d["date"]: d for d in snap.get("days") or []}
     snap["today"], snap["last_week"] = by.get(D), by.get(W)
+    t = snap["today"] or {}
+    for what, ours, mcm in (("fuel sales", t.get("fuel"), t.get("mcm_fuel")), ("non-fuel sales", t.get("nonfuel"), t.get("mcm_nonfuel"))):
+        if ours and mcm and abs(ours - mcm) > 0.01 * max(abs(ours), abs(mcm)):
+            snap["notes"].append(f"For {D}, Day Close's {what} are {money(ours, True)} but the merchandise feed (MCM) "
+                                 f"adds up to {money(mcm, True)}: one of the two is missing something.")
 
     def tanks():
         t = rows("WITH last AS (SELECT tank_number, max(product_name) AS product, sum(close_volume) AS close "
@@ -85,15 +77,18 @@ def snapshot(cfg=None) -> Dict[str, Any]:
 
     def merch():
         r = rows("SELECT coalesce(nullif(description, ''), merchandise_code), sum(sales_amount), sum(sales_quantity) "
-                 "FROM naxml_mcm_daily WHERE {mine} AND business_date = '" + D + "' AND coalesce(description, '') !~* "
+                 "FROM naxml_mcm_daily WHERE {mine} AND business_date = '" + D + "' AND merchandise_code <> '"
+                 + ST.FUEL_DEPT + "' AND coalesce(description, '') !~* "
                  "'(\\mfuel\\M|diesel|unleaded|gasoline)' GROUP BY 1 ORDER BY 2 DESC LIMIT 6")
         return [{"name": a.strip(), "sales": _f(b), "qty": _f(c)} for a, b, c in r]
     section("merch", merch)
 
     def deliveries():
-        r = rows("SELECT business_date, coalesce(grade_name, grade_code), gallons, supplier, bol_number FROM fuel_deliveries "
-                 "WHERE {mine} AND business_date <= '" + D + "' ORDER BY business_date DESC LIMIT 5")
-        return [{"date": a[:10], "grade": b, "gallons": _f(c), "supplier": d or "", "bol": e or ""} for a, b, c, d, e in r]
+        # what the tank gauges recorded coming in: fuel_deliveries holds only deliveries entered by hand
+        r = rows("SELECT business_date, tank_number, max(product_name), sum(delivery_volume) FROM fuel_inventory_daily "
+                 "WHERE {mine} AND business_date <= '" + D + "' AND delivery_volume > 0 GROUP BY 1, 2 "
+                 "ORDER BY 1 DESC, 2 LIMIT 8")
+        return [{"date": a[:10], "tank": b, "grade": c or "", "gallons": _f(d)} for a, b, c, d in r]
     section("deliveries", deliveries)
 
     def freshness():
@@ -104,7 +99,7 @@ def snapshot(cfg=None) -> Dict[str, Any]:
     section("freshness", freshness)
     fr = snap.get("freshness") or {}
     if fr.get("day_age", 0) > 2:
-        snap["notes"].insert(0, f"The newest day report is {D}, {fr['day_age']} days ago: these are not yesterday's figures.")
+        snap["notes"].insert(0, f"The newest business day built is {D}, {fr['day_age']} days ago: these are not yesterday's figures.")
     if snap.get("today") and any(d["days"] is not None and d["days"] < LOW_DAYS for d in snap.get("tanks") or []):
         snap["low_tanks"] = [d for d in snap["tanks"] if d["days"] is not None and d["days"] < LOW_DAYS]
     return snap
@@ -138,14 +133,11 @@ def _pretty_day(iso: str) -> str:
 def tiles(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
     t, w = snap.get("today") or {}, snap.get("last_week") or {}
     out = []
-    for key, label, fmt in (("total", "Total net sales", money), ("inside", "Inside sales", money),
-                            ("fuel", "Fuel sales", money), ("gallons", "Fuel gallons", gal)):
+    for key, label, fmt in (("sales", "Fuel + non-fuel sales", money), ("fuel", "Fuel sales", money),
+                            ("nonfuel", "Non-fuel sales", money), ("gallons", "Fuel gallons", gal),
+                            ("drops", "Safe drops", money)):
         out.append({"label": label, "value": fmt(t.get(key)), "delta": change(t.get(key), w.get(key)),
                     "before": fmt(w.get(key))})
-    cash = t.get("cash")
-    out.append({"label": "Cash over/short", "value": money(abs(cash), True) if cash is not None else "–",
-                "delta": None, "before": None,
-                "status": None if cash is None else ("over" if cash > 0 else "short" if cash < 0 else "even")})
     return out
 
 
@@ -229,9 +221,9 @@ def html(snap: Dict[str, Any], brief: Optional[Dict[str, Any]] = None) -> str:
     tile_html = "".join(
         f'<div class="tile"><div class="lab">{_e(t["label"])}</div><div class="val">{_e(t["value"])}'
         f'{" <small>" + _e(t["status"]) + "</small>" if t.get("status") else ""}</div><div class="d">{delta(t) if not t.get("status") else ""}</div></div>'
-        for t in tiles(snap)) if snap.get("today") else '<p class="note">There is no day report for this day.</p>'
+        for t in tiles(snap)) if snap.get("today") else '<p class="note">There is no Day Close for this day.</p>'
     days = snap.get("days") or []
-    charts = (_bars(days, "gallons", gal, "Fuel gallons", snap["day"]) + _bars(days, "inside", money, "Inside sales", snap["day"])) if days else ""
+    charts = (_bars(days, "gallons", gal, "Fuel gallons", snap["day"]) + _bars(days, "nonfuel", money, "Non-fuel sales", snap["day"])) if days else ""
     def tank_row(t):
         full = "" if t["full"] is None else f"{t['full']:.0%}"
         width = 0 if t["full"] is None else min(100, t["full"] * 100)
@@ -246,8 +238,8 @@ def html(snap: Dict[str, Any], brief: Optional[Dict[str, Any]] = None) -> str:
         qty = "" if m["qty"] is None else f"{m['qty']:,.0f}"
         return f'<tr><td>{_e(m["name"])}</td><td class="n">{money(m["sales"], True)}</td><td class="n">{qty}</td></tr>'
     merch_rows = "".join(merch_row(m) for m in snap.get("merch") or [])
-    dl_rows = "".join(f'<tr><td>{_e(d["date"])}</td><td>{_e(d["grade"])}</td><td class="n">{gal(d["gallons"])}</td>'
-                      f'<td>{_e(d["supplier"])}</td><td>{_e(d["bol"])}</td></tr>' for d in snap.get("deliveries") or [])
+    dl_rows = "".join(f'<tr><td>{_e(d["date"])}</td><td>{_e(d["tank"])}</td><td>{_e(d["grade"])}</td>'
+                      f'<td class="n">{gal(d["gallons"])}</td></tr>' for d in snap.get("deliveries") or [])
     notes = "".join(f'<p class="note">{_e(n)}</p>' for n in snap.get("notes") or [])
     brief_html = ""
     if brief and brief.get("answer"):
@@ -305,7 +297,8 @@ footer{{color:var(--muted);font-size:12px;margin-top:28px}}
 <h2>Tanks</h2><div class="tw">{table(["Tank", "Product", "Gallons", "Full", "Days left"], tank_rows)}</div>
 <p class="muted" style="font-size:12.5px">Gallons at the day's close. Days left: the close volume over the average daily sales of the last 7 business days.</p>
 <h2>Top merchandise (fuel left out)</h2><div class="tw">{table(["Category", "Sales", "Items"], merch_rows)}</div>
-<h2>Recent deliveries</h2><div class="tw">{table(["Date", "Grade", "Gallons", "Supplier", "BOL"], dl_rows)}</div>
+<h2>Recent deliveries</h2><div class="tw">{table(["Date", "Tank", "Product", "Gallons"], dl_rows)}</div>
+<p class="muted" style="font-size:12.5px">As the tank gauges recorded them coming in.</p>
 {brief_html}
 <footer>Read-only from the store's database at {_e(time.strftime("%b %-d, %Y %-I:%M %p", time.localtime(snap["made"])))}.
 Every figure above is a query result; none is a model's.</footer>
@@ -342,13 +335,13 @@ def pdf(snap: Dict[str, Any], brief: Optional[Dict[str, Any]] = None) -> bytes:
             x = P.MARGIN + k * (tw + 8)
             doc.rect(x, top - 62, tw, 62, "#f3f2ee")
             doc.text(x + 8, top - 16, t["label"], 8, color="#52514e")
-            doc.text(x + 8, top - 36, t["value"] + (f" {t['status']}" if t.get("status") else ""), 13, True)
+            doc.text(x + 8, top - 36, t["value"], 13, True)
             if t["delta"] is not None:
                 doc.text(x + 8, top - 52, f"{'+' if t['delta'] >= 0 else '-'}{abs(t['delta']):.1f}% vs {t['before']}", 7.5,
                          color="#52514e")
         doc.y = top - 78
     days = snap.get("days") or []
-    for key, label, fmt in (("gallons", "Fuel gallons", gal), ("inside", "Inside sales", money)):
+    for key, label, fmt in (("gallons", "Fuel gallons", gal), ("nonfuel", "Non-fuel sales", money)):
         vals = [(d["date"], d.get(key)) for d in days]
         if not any(v for _, v in vals):
             continue
@@ -378,8 +371,8 @@ def pdf(snap: Dict[str, Any], brief: Optional[Dict[str, Any]] = None) -> bytes:
           for t in snap.get("tanks") or []]),
         ("Top merchandise (fuel left out)", ["Category", "Sales", "Items"],
          [[m["name"], money(m["sales"], True), "" if m["qty"] is None else f"{m['qty']:,.0f}"] for m in snap.get("merch") or []]),
-        ("Recent deliveries", ["Date", "Grade", "Gallons", "Supplier", "BOL"],
-         [[d["date"], d["grade"] or "", gal(d["gallons"]), d["supplier"], d["bol"]] for d in snap.get("deliveries") or []]),
+        ("Recent deliveries (as the tank gauges recorded them)", ["Date", "Tank", "Product", "Gallons"],
+         [[d["date"], str(d["tank"]), d["grade"] or "", gal(d["gallons"])] for d in snap.get("deliveries") or []]),
     ]
     for title, head, body in sections:
         doc.need(50)

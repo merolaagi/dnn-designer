@@ -155,7 +155,11 @@ def _run(sql: str, cfg: Optional[Dict[str, Any]] = None) -> str:
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"The query took more than {TIMEOUT} seconds.") from None
     if done.returncode != 0:
-        raise RuntimeError((done.stderr or done.stdout or "psql failed").strip().splitlines()[-1][:500])
+        # psql's message, not the caret line it prints under the query
+        lines = [ln for ln in (done.stderr or done.stdout or "psql failed").strip().splitlines() if ln.strip()]
+        said = next((ln for ln in lines if re.match(r"\s*(psql:.*)?(ERROR|FATAL)", ln)), lines[-1] if lines else "psql failed")
+        hint = next((ln.strip() for ln in lines if ln.strip().startswith("HINT")), "")
+        raise RuntimeError((said.strip() + (" " + hint if hint else ""))[:500])
     return done.stdout
 
 
@@ -191,7 +195,7 @@ def tables(cfg=None) -> List[Dict[str, Any]]:
 
 def describe(table: str, cfg=None) -> Dict[str, Any]:
     if not re.fullmatch(r"[a-z_][a-z0-9_]*", str(table or "")):
-        raise ValueError("Name one table, such as day_reports.")
+        raise ValueError("Name one table, such as day_cash_summary.")
     out = query("SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' "
                 f"AND table_name = '{table}' ORDER BY ordinal_position", cfg=cfg)
     if not out["rows"]:
@@ -216,12 +220,70 @@ def test(cfg=None) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
+# a day's figures, the way the platform's Day Close page reads them
+# --------------------------------------------------------------------------
+# The platform's day_reports table stopped being written: for a Gilbarco site it builds each day from
+# NAXML. The Day Close page reads day_cash_summary; gallons are the sum of fuel_grade_sales; and the
+# platform's sales detail splits naxml_mcm_daily into fuel (department 1024) and the rest.
+
+FUEL_DEPT = "1024"
+
+
+def anchor(cfg=None) -> Tuple[str, str, str]:
+    """(site id, site name, business day): the latest finished day of the tenant's busiest-recent site."""
+    rows = query("SELECT c.site_id, s.name, max(c.business_date) FROM day_cash_summary c JOIN sites s ON s.id = c.site_id "
+                 f"WHERE s.tenant_id = current_setting('app.current_tenant_id', true) AND c.{MINE} "
+                 "AND c.business_date < current_date GROUP BY c.site_id, s.name ORDER BY 3 DESC, 2 LIMIT 1", cfg=cfg)["rows"]
+    if not rows or not rows[0][2]:
+        rows = query("SELECT c.site_id, s.name, max(c.business_date) FROM day_cash_summary c JOIN sites s ON s.id = c.site_id "
+                     f"WHERE s.tenant_id = current_setting('app.current_tenant_id', true) AND c.{MINE} "
+                     "GROUP BY c.site_id, s.name ORDER BY 3 DESC, 2 LIMIT 1", cfg=cfg)["rows"]
+    if not rows or not rows[0][2]:
+        raise ValueError("There is no day in day_cash_summary yet: no business day has been built.")
+    return rows[0][0], rows[0][1], rows[0][2][:10]
+
+
+def site_filter(site: str) -> str:
+    return f"site_id = '{site.replace(chr(39), chr(39) * 2)}' AND {MINE}"
+
+
+def days(site: str, start: str, end: str, cfg=None) -> List[Dict[str, Any]]:
+    """Each business day from start to end: Day Close's figures, gallons, and the MCM split to cross-check."""
+    mine = site_filter(site)
+    rows = query("WITH c AS (SELECT business_date, sum(fuel_only_sales) AS fuel, sum(mdse_only_sales) AS nonfuel, "
+                 "sum(tax_collected) AS tax, sum(sales_total) AS sales_total, sum(payouts_total) AS payouts, "
+                 "sum(safe_drops_total) AS drops, sum(sales_transaction_count) AS txns FROM day_cash_summary "
+                 f"WHERE {mine} AND business_date BETWEEN '{start}' AND '{end}' GROUP BY business_date), "
+                 "g AS (SELECT business_date, sum(sales_volume) AS gallons FROM fuel_grade_sales "
+                 f"WHERE {mine} AND business_date BETWEEN '{start}' AND '{end}' GROUP BY business_date), "
+                 f"m AS (SELECT business_date, sum(CASE WHEN merchandise_code = '{FUEL_DEPT}' THEN sales_amount END) "
+                 f"AS mcm_fuel, sum(CASE WHEN merchandise_code <> '{FUEL_DEPT}' THEN sales_amount END) AS mcm_nonfuel "
+                 f"FROM naxml_mcm_daily WHERE {mine} AND business_date BETWEEN '{start}' AND '{end}' GROUP BY business_date) "
+                 "SELECT c.business_date, c.fuel, c.nonfuel, c.tax, c.sales_total, c.payouts, c.drops, c.txns, g.gallons, "
+                 "m.mcm_fuel, m.mcm_nonfuel FROM c LEFT JOIN g USING (business_date) LEFT JOIN m USING (business_date) "
+                 "ORDER BY 1", cfg=cfg)["rows"]
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    out = []
+    for r in rows:
+        d = dict(zip(("date", "fuel", "nonfuel", "tax", "sales_total", "payouts", "drops", "txns", "gallons",
+                      "mcm_fuel", "mcm_nonfuel"), [r[0][:10]] + [num(x) for x in r[1:]]))
+        d["sales"] = round((d["fuel"] or 0) + (d["nonfuel"] or 0), 2) if d["fuel"] is not None or d["nonfuel"] is not None else None
+        out.append(d)
+    return out
+
+
+# --------------------------------------------------------------------------
 # the ingest watchdog
 # --------------------------------------------------------------------------
 
 WATCH_SQL = ("SELECT s.id, s.name, max(x.received_at) AS last_file, "
              "round((extract(epoch FROM now() - max(x.received_at)) / 3600)::numeric, 1) AS hours, "
-             "(SELECT max(d.business_date) FROM day_reports d WHERE d.site_id = s.id) AS last_day "
+             "(SELECT max(d.business_date) FROM day_cash_summary d WHERE d.site_id = s.id) AS last_day "
              "FROM sites s LEFT JOIN xml_files x ON x.site_id = s.id "
              "WHERE coalesce(s.is_active, true) "
              # the sites table has no row-level security of its own: keep to this login's tenant
@@ -270,16 +332,22 @@ GUIDE = (
     "aggregate in SQL). Describe a table before you query it if you are unsure of its columns. Report only "
     "numbers a query returned, and say which table and dates they come from.\n"
     "Where things are:\n"
-    "- day_reports: one row per site and business_date: inside_net_sales, fuel_net_sales, fuel_volume_gallons, "
-    "total_net_sales, cash_expected, cash_actual, cash_over_short, is_finalized.\n"
-    "- fuel_grade_sales: per business_date and grade_code: sales_volume (gallons), sales_amount, discount_amount.\n"
+    "- day_cash_summary: one row per site and business_date, the figures on the platform's Day Close page: "
+    "fuel_only_sales (Fuel sales), mdse_only_sales (Non-fuel sales), tax_collected, sales_total, inside_sales, "
+    "outside_fuel_sales, payouts_total, payins_total, safe_drops_total, safe_loans_total, refunds_total, "
+    "sales_transaction_count. Use it for a day's sales.\n"
+    "- Fuel gallons for a day: sum(sales_volume) from fuel_grade_sales (per business_date, grade_code, "
+    "fuel_position_id and price tier: sum them). It also has sales_amount, discount_amount and dispenser_discount_amt.\n"
+    "- day_reports and shift_reports are no longer written (their newest rows are old): do not use them.\n"
+    "- day_mop_totals: sales by method of payment per day; day_cash_summary has the cash drawer totals.\n"
     "- fuel_inventory_daily: per business_date and tank_number: product_name, open_volume, close_volume, "
     "sales_volume, delivery_volume, ullage_gal, water_depth_inches, over_short_volume. fuel_tanks has capacity_gal.\n"
-    "- fuel_deliveries: business_date, grade_code, gallons, price_per_gallon, total_cost, supplier, bol_number.\n"
+    "- Deliveries: fuel_inventory_daily.delivery_volume per tank and day is where they show up. fuel_deliveries "
+    "(business_date, grade_code, gallons, price_per_gallon, supplier, bol_number) holds only those entered by hand.\n"
     "- fuel_price_changes: occurred_at, product_code, new_price. fuel_costs and dept_margins hold costs and margins.\n"
-    "- naxml_mcm_daily: merchandise sales per business_date and merchandise_code (description, sales_quantity, "
-    "sales_amount, refund_amount, discount_amount).\n"
-    "- shift_reports, department_totals (per shift: dept_name, net_sales, cost_of_goods), cashier_stats, "
+    "- naxml_mcm_daily: sales per business_date and merchandise_code (description, sales_quantity, sales_amount, "
+    "refund_amount, discount_amount). Code 1024 (\"Fuel 1\") is fuel: leave it out when asked about merchandise.\n"
+    "- department_totals (per shift: dept_name, net_sales, cost_of_goods), cashier_stats, "
     "tender_totals; lottery_* for lottery; purchase_orders, items, inventory_levels for stock.\n"
     "- xml_files (received_at) and agent_pings show whether the store's POS data is arriving.\n"
     "A few tables hold every store on the platform (the query tool says which, and gives the filter to add): "
@@ -287,3 +355,16 @@ GUIDE = (
     "Days of fuel supply for a tank = its latest close_volume divided by its average daily sales_volume over the "
     "last 7 business days. Compare a day with the same weekday a week earlier, not the day before.\n"
     "Always answer in the language the user writes in.")
+
+
+# the morning brief's task; a brief scheduled before 4.15 read day_reports and is moved onto this one
+BRIEF_TASK = (
+    "Write my morning brief for yesterday's business day. For each site: fuel sales, non-fuel sales and tax from "
+    "day_cash_summary (the Day Close figures) and fuel gallons from fuel_grade_sales, each compared with the same "
+    "weekday one week earlier (amount and percent); safe drops and pay-outs; each tank's latest close volume, how "
+    "full it is against capacity, and its days of supply at the last 7 days' average sales (fuel_inventory_daily); "
+    "fuel delivered into the tanks and any price changes; the five merchandise codes in naxml_mcm_daily (not code "
+    "1024, which is fuel) whose sales rose or fell the most against the week before. Then list anything that needs "
+    "my attention today. Use only numbers the queries return, keep it short, and say if yesterday's Day Close is "
+    "missing.")
+OLD_BRIEF = "Write my morning brief for yesterday's business day. For each site: total, inside and fuel net sales"

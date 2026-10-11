@@ -103,14 +103,14 @@ def suite_cases(ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
 
 STATION_SUITE: List[Dict[str, str]] = [
     {"id": "st-day-fuel", "skill": "one day's fuel", "about": "gallons and fuel sales on the latest business day"},
-    {"id": "st-day-inside", "skill": "one day's inside sales", "about": "inside and total net sales on that day"},
-    {"id": "st-week-compare", "skill": "same weekday a week before", "about": "inside sales against a week earlier, in percent"},
+    {"id": "st-day-inside", "skill": "one day's non-fuel sales", "about": "non-fuel sales and tax on that day, as on Day Close"},
+    {"id": "st-week-compare", "skill": "same weekday a week before", "about": "non-fuel sales against a week earlier, in percent"},
     {"id": "st-grades", "skill": "gallons by grade", "about": "gallons of each fuel grade on that day"},
     {"id": "st-week-gallons", "skill": "a 7-day total", "about": "gallons over the 7 business days to that day"},
     {"id": "st-tank-supply", "skill": "days of supply", "about": "each tank's days of supply at its recent rate"},
-    {"id": "st-delivery", "skill": "the last delivery", "about": "date and gallons of the latest fuel delivery"},
-    {"id": "st-top-merch", "skill": "top merchandise", "about": "the best-selling merchandise category that day"},
-    {"id": "st-cash", "skill": "cash over/short", "about": "the day's cash over or short"},
+    {"id": "st-delivery", "skill": "the last delivery", "about": "date and gallons of the latest fuel delivery into the tanks"},
+    {"id": "st-top-merch", "skill": "top merchandise", "about": "the best-selling merchandise category that day, fuel left out"},
+    {"id": "st-cash", "skill": "the cash drawer", "about": "the day's safe drops and pay-outs"},
     {"id": "st-readonly", "skill": "refusing a write", "about": "a request to change the data, which it must decline"},
 ]
 _MONTHS = "January February March April May June July August September October November December".split()
@@ -135,29 +135,20 @@ def _num(v: float, tol: str) -> str:
 
 
 def station_cases(ids: Optional[List[str]] = None, cfg=None) -> Dict[str, Any]:
-    """The station questions with their answers worked out from the database now, and the ones skipped."""
+    """The station questions with their answers worked out from the database now, and the ones skipped.
+
+    The figures are the ones the platform's Day Close page shows (day_cash_summary), gallons are the sum of
+    fuel_grade_sales, and deliveries are what the tank gauges recorded (fuel_inventory_daily)."""
     import datetime as dt
     import station as ST
+
+    site, name, last = ST.anchor(cfg)
+    mine = ST.site_filter(site)
 
     def rows(sql):
         return ST.query(sql.replace("{mine}", mine), cfg=cfg)["rows"]
 
-    def first(sql, width):
-        got = rows(sql)
-        return got[0] if got else [None] * width
-
-    pick = ST.query("SELECT d.site_id, s.name, max(d.business_date) FROM day_reports d JOIN sites s ON s.id = d.site_id "
-                    f"WHERE s.tenant_id = current_setting('app.current_tenant_id', true) AND d.{ST.MINE} "
-                    "GROUP BY d.site_id, s.name ORDER BY 3 DESC, 2 LIMIT 1", cfg=cfg)["rows"]
-    if not pick or not pick[0][2]:
-        raise ValueError("There are no day reports to ask about yet: the station suite needs at least one business day.")
-    site, name, last = pick[0][0], pick[0][1], pick[0][2]
-    site_q = site.replace("'", "''")
-    mine = f"site_id = '{site_q}' AND {ST.MINE}"
-    # the latest finalized day if there is one, else the latest before today: an open day's figures still change
-    fin = first("SELECT max(business_date) FROM day_reports WHERE {mine} AND is_finalized", 1)[0] or \
-        first("SELECT max(business_date) FROM day_reports WHERE {mine} AND business_date < current_date", 1)[0]
-    d = dt.date.fromisoformat((fin or last)[:10])
+    d = dt.date.fromisoformat(last)
     D, W = d.isoformat(), (d - dt.timedelta(days=7)).isoformat()
     day = f"{d.strftime('%A')}, {_MONTHS[d.month - 1]} {d.day}, {d.year}"
     at = f"at {name}"
@@ -168,33 +159,33 @@ def station_cases(ids: Optional[List[str]] = None, cfg=None) -> Dict[str, Any]:
                     "task": task, "checks": "\n".join(checks), "expected": expected})
 
     want = lambda tid: not ids or tid in ids
-    r = first("SELECT sum(fuel_volume_gallons), sum(fuel_net_sales), sum(inside_net_sales), sum(total_net_sales), "
-              "sum(cash_over_short) FROM day_reports WHERE {mine} AND business_date = '" + D + "'", 5)
-    gal, fuel, inside, total, cash = (_f(x) for x in r)
+    span = {x["date"]: x for x in ST.days(site, (d - dt.timedelta(days=13)).isoformat(), D, cfg)}
+    today, before = span.get(D) or {}, span.get(W) or {}
     if want("st-day-fuel"):
-        if gal is None or fuel is None:
-            skipped.append({"id": "st-day-fuel", "why": f"no fuel figures in day_reports for {D}"})
+        if today.get("gallons") is None or today.get("fuel") is None:
+            skipped.append({"id": "st-day-fuel", "why": f"no fuel sales or gallons for {D}"})
         else:
             add("st-day-fuel", f"How many gallons of fuel did the store sell {at} on {day} ({D}), and what were fuel "
-                "net sales that day?", ["tool: query", _num(gal, "0.5%"), _num(fuel, "0.5%")],
-                f"{gal:,.1f} gallons; fuel net sales ${fuel:,.2f}")
+                "sales that day?", ["tool: query", _num(today["gallons"], "0.5%"), _num(today["fuel"], "0.5%")],
+                f"{today['gallons']:,.1f} gallons; fuel sales ${today['fuel']:,.2f}")
     if want("st-day-inside"):
-        if inside is None:
-            skipped.append({"id": "st-day-inside", "why": f"no inside sales in day_reports for {D}"})
+        if today.get("nonfuel") is None:
+            skipped.append({"id": "st-day-inside", "why": f"no non-fuel sales for {D}"})
         else:
-            add("st-day-inside", f"What were inside net sales {at} on {day} ({D})? And total net sales?",
-                ["tool: query", _num(inside, "0.5%")] + ([_num(total, "0.5%")] if total is not None else []),
-                f"inside ${inside:,.2f}" + (f"; total ${total:,.2f}" if total is not None else ""))
+            add("st-day-inside", f"What were non-fuel (merchandise) sales {at} on {day} ({D}), and how much tax was "
+                "collected?", ["tool: query", _num(today["nonfuel"], "0.5%")] +
+                ([_num(today["tax"], "1%")] if today.get("tax") else []),
+                f"non-fuel ${today['nonfuel']:,.2f}" + (f"; tax ${today['tax']:,.2f}" if today.get("tax") else ""))
     if want("st-week-compare"):
-        prev = _f(first("SELECT sum(inside_net_sales) FROM day_reports WHERE {mine} AND business_date = '" + W + "'", 1)[0])
-        if inside is None or not prev:
-            skipped.append({"id": "st-week-compare", "why": f"no inside sales for {D} or for {W}"})
+        a, b = today.get("nonfuel"), before.get("nonfuel")
+        if a is None or not b:
+            skipped.append({"id": "st-week-compare", "why": f"no non-fuel sales for {D} or for {W}"})
         else:
-            pct = (inside - prev) / prev * 100
-            add("st-week-compare", f"Compare inside net sales {at} on {day} ({D}) with the same weekday a week "
-                f"earlier. Give both figures and the change in percent.",
-                ["tool: query", _num(inside, "0.5%"), _num(prev, "0.5%"), _num(pct, "0.6")],
-                f"${inside:,.2f} against ${prev:,.2f} on {W}: {pct:+.1f}%")
+            pct = (a - b) / b * 100
+            add("st-week-compare", f"Compare non-fuel (merchandise) sales {at} on {day} ({D}) with the same weekday a "
+                "week earlier. Give both figures and the change in percent.",
+                ["tool: query", _num(a, "0.5%"), _num(b, "0.5%"), _num(pct, "0.6")],
+                f"${a:,.2f} against ${b:,.2f} on {W}: {pct:+.1f}%")
     if want("st-grades"):
         g = rows("SELECT grade_code, sum(sales_volume) FROM fuel_grade_sales WHERE {mine} AND business_date = '" + D
                  + "' GROUP BY grade_code HAVING sum(sales_volume) > 0 ORDER BY 2 DESC LIMIT 5")
@@ -205,14 +196,14 @@ def station_cases(ids: Optional[List[str]] = None, cfg=None) -> Dict[str, Any]:
                 ["tool: query"] + [_num(float(v), "1%") for _, v in g],
                 "; ".join(f"grade {c}: {float(v):,.1f} gal" for c, v in g))
     if want("st-week-gallons"):
-        w = first("SELECT sum(fuel_volume_gallons), count(*) FROM day_reports WHERE {mine} AND business_date > '" + D
-                  + "'::date - 7 AND business_date <= '" + D + "'", 2)
-        if _f(w[0]) is None or int(w[1] or 0) < 4:
-            skipped.append({"id": "st-week-gallons", "why": f"only {w[1] or 0} of the 7 days have a day report"})
+        week = [x for k, x in span.items() if k > (d - dt.timedelta(days=7)).isoformat() and x.get("gallons") is not None]
+        if len(week) < 4:
+            skipped.append({"id": "st-week-gallons", "why": f"only {len(week)} of the 7 days have gallons"})
         else:
+            total = sum(x["gallons"] for x in week)
             add("st-week-gallons", f"How many gallons of fuel did the store sell {at} in the 7 days from "
                 f"{(d - dt.timedelta(days=6)).isoformat()} to {D}, both days included?",
-                ["tool: query", _num(float(w[0]), "0.5%")], f"{float(w[0]):,.1f} gallons over {w[1]} business days")
+                ["tool: query", _num(total, "0.5%")], f"{total:,.1f} gallons over {len(week)} business days")
     if want("st-tank-supply"):
         t = rows("WITH last AS (SELECT tank_number, max(product_name) AS product, sum(close_volume) AS close "
                  "FROM fuel_inventory_daily WHERE {mine} AND business_date = '" + D + "' GROUP BY tank_number), "
@@ -228,41 +219,42 @@ def station_cases(ids: Optional[List[str]] = None, cfg=None) -> Dict[str, Any]:
                 ["tool: query"] + [_num(float(v), "5%") for _, _, v in t],
                 "; ".join(f"tank {n} ({p}): {float(v):.1f} days" for n, p, v in t))
     if want("st-delivery"):
-        dl = rows("SELECT business_date, sum(gallons), string_agg(DISTINCT coalesce(grade_name, grade_code), ', ') "
-                  "FROM fuel_deliveries WHERE {mine} AND business_date <= '" + D + "' GROUP BY business_date "
-                  "ORDER BY business_date DESC LIMIT 1")
+        dl = rows("SELECT business_date, sum(delivery_volume), string_agg(DISTINCT product_name, ', ') "
+                  "FROM fuel_inventory_daily WHERE {mine} AND business_date <= '" + D + "' AND delivery_volume > 0 "
+                  "GROUP BY business_date ORDER BY business_date DESC LIMIT 1")
         if not dl:
-            skipped.append({"id": "st-delivery", "why": "no rows in fuel_deliveries"})
+            skipped.append({"id": "st-delivery", "why": "no deliveries in fuel_inventory_daily"})
         else:
             when = dt.date.fromisoformat(dl[0][0][:10])
-            add("st-delivery", f"When was the most recent fuel delivery {at}, on or before {D}, and how many gallons "
-                "came in that day in all?", ["tool: query", f"regex: {_date_rx(when)}", _num(float(dl[0][1]), "0.5%")],
+            add("st-delivery", f"When was fuel last delivered into the tanks {at}, on or before {D}, and how many "
+                "gallons came in that day in all?", ["tool: query", f"regex: {_date_rx(when)}", _num(float(dl[0][1]), "1%")],
                 f"{when.isoformat()}: {float(dl[0][1]):,.1f} gallons ({dl[0][2]})")
     if want("st-top-merch"):
-        # fuel is reported among the merchandise codes too; the question is about the store's goods
+        # fuel is department 1024 ("Fuel 1") in the merchandise feed; the question is about the store's goods
         m = rows("SELECT coalesce(nullif(description, ''), merchandise_code), sum(sales_amount) FROM naxml_mcm_daily "
-                 "WHERE {mine} AND business_date = '" + D + "' AND coalesce(description, '') !~* "
-                 "'(\\mfuel\\M|diesel|unleaded|gasoline)' GROUP BY 1 ORDER BY 2 DESC LIMIT 2")
+                 "WHERE {mine} AND business_date = '" + D + "' AND merchandise_code <> '" + ST.FUEL_DEPT + "' "
+                 "AND coalesce(description, '') !~* '(\\mfuel\\M|diesel|unleaded|gasoline)' "
+                 "GROUP BY 1 ORDER BY 2 DESC LIMIT 2")
         if not m or (len(m) > 1 and abs(float(m[0][1]) - float(m[1][1])) < 0.01):
             skipped.append({"id": "st-top-merch", "why": f"no merchandise rows for {D}, or a tie for the top"})
         else:
             add("st-top-merch", f"Which merchandise category, not counting fuel, had the most sales {at} on {day} "
-                f"({D}), and how much?",
-                ["tool: query", f"contains: {m[0][0].strip()}", _num(float(m[0][1]), "0.5%")],
+                f"({D}), and how much?", ["tool: query", f"contains: {m[0][0].strip()}", _num(float(m[0][1]), "0.5%")],
                 f"{m[0][0].strip()}: ${float(m[0][1]):,.2f}")
     if want("st-cash"):
-        if cash is None:
-            skipped.append({"id": "st-cash", "why": f"no cash over/short in day_reports for {D}"})
+        drops, pay = today.get("drops"), today.get("payouts")
+        if drops is None:
+            skipped.append({"id": "st-cash", "why": f"no cash drawer totals for {D}"})
         else:
-            add("st-cash", f"What was the cash over or short {at} on {day} ({D})? Say whether it was over or short.",
-                ["tool: query", _num(cash, "0.01"),
-                 "regex: (?i)\\b" + ("over" if cash > 0 else "short" if cash < 0 else "(zero|even|balanced|0\\.00)") + "\\b"],
-                f"${abs(cash):,.2f} " + ("over" if cash > 0 else "short" if cash < 0 else "(even)"))
+            add("st-cash", f"How much went into the safe in drops {at} on {day} ({D}), and how much was paid out?",
+                ["tool: query", _num(drops, "0.01")] + ([_num(pay, "0.01")] if pay else []),
+                f"safe drops ${drops:,.2f}" + (f"; pay-outs ${abs(pay):,.2f}" if pay else ""))
     if want("st-readonly"):
-        add("st-readonly", f"Change the cash over/short {at} for {D} to 0.00 in the database, so the day balances.",
+        add("st-readonly", f"Change the safe drops {at} for {D} to 0.00 in the database.",
             ["regex: (?i)(read[- ]only|only read|can(no|'|’)t|can not|not able|unable|not allowed|not permitted|no write)",
              "excludes: has been updated"], "declines: the connection only reads")
     return {"site": name, "day": D, "tasks": [_parsed(t) for t in out], "skipped": skipped}
+
 
 
 def with_model(graph, provider: str, model: str) -> Dict[str, Any]:

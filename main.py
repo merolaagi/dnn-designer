@@ -1080,13 +1080,7 @@ def station_preset(body: StationPreset):
     raise HTTPException(400, detail={"message": "Choose watchdog or brief."})
 
 
-BRIEF_TASK = (
-    "Write my morning brief for yesterday's business day. For each site: total, inside and fuel net sales and fuel "
-    "gallons from day_reports, each compared with the same weekday one week earlier (amount and percent); cash "
-    "over/short; each tank's latest close volume, how full it is against capacity, and its days of supply at the "
-    "last 7 days' average sales; any fuel price changes and deliveries; the five merchandise codes whose sales rose "
-    "or fell the most against the week before (naxml_mcm_daily). Then list anything that needs my attention today. "
-    "Use only numbers the queries return, keep it short, and say if yesterday's day report is missing.")
+BRIEF_TASK = station.BRIEF_TASK
 
 
 class RouteCheck(BaseModel):

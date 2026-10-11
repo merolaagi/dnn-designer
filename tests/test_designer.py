@@ -10902,19 +10902,27 @@ def _fake_station(rows_for):
     return q
 
 
-@check("station benchmark: questions name the store and day, the right answers come from SQL, and they grade answers")
+def _day_rows(*days):
+    """Rows as station.days' query returns them: date, fuel, non-fuel, tax, sales total, pay-outs, drops, txns,
+    gallons, MCM fuel, MCM non-fuel."""
+    return [[d, f, n, "53.30", "14930.48", "-225.00", dr, "389", g, f, n] for d, f, n, dr, g in days]
+
+
+@check("station benchmark: Day Close's figures from day_cash_summary, gallons from fuel_grade_sales, and they grade answers")
 def _():
     import benchmark as B, station as ST
     real = ST.query
     ST.query = _fake_station([
-        ("ORDER BY 3 DESC, 2 LIMIT 1", [["s1", "University Chevron #90877", "2026-10-10"]]),
-        ("AND is_finalized", [["2026-10-09"]]),
-        ("sum(cash_over_short)", [["1982.402", "7106.10", "3074.55", "10180.65", "-5.25"]]),
-        ("business_date = '2026-10-02'", [["3333.55"]]),
-        ("FROM fuel_grade_sales", [["001", "1218.000"], ["002", "258.000"]]),
-        ("count(*) FROM day_reports", [["14737.8", "7"]]),
-        ("FROM fuel_inventory_daily", [["1", "REGULAR", "4.749"], ["2", "PREMIUM", "10.615"]]),
-        ("FROM fuel_deliveries", [["2026-10-07", "10500.5", "Premium, Regular"]]),
+        ("ORDER BY 3 DESC, 2 LIMIT 1", [["univ-chevron-90877", "University Chevron #90877", "2026-10-09"]]),
+        ("WITH c AS (SELECT business_date, sum(fuel_only_sales)", _day_rows(
+            ("2026-10-02", "13000.00", "1500.00", "1600.00", "2000.000"),
+            ("2026-10-05", "13100.00", "1510.00", "1650.00", "2010.000"),
+            ("2026-10-06", "13200.00", "1520.00", "1660.00", "2020.000"),
+            ("2026-10-08", "13300.00", "1530.00", "1670.00", "2030.000"),
+            ("2026-10-09", "13441.64", "1568.80", "1710.00", "2092.408"))),
+        ("FROM fuel_grade_sales WHERE", [["001", "1218.000"], ["002", "258.000"]]),
+        ("WITH last AS", [["1", "REGULAR", "4.749"], ["2", "PREMIUM", "10.615"]]),
+        ("delivery_volume > 0", [["2026-10-07", "8400.0", "REGULAR"]]),
         ("FROM naxml_mcm_daily", [["CIGARETTES", "1202.00"], ["BEER", "801.00"]]),
     ])
     try:
@@ -10926,31 +10934,38 @@ def _():
     assert set(tasks) == {t["id"] for t in B.STATION_SUITE}
     assert all("University Chevron #90877" in t["task"] for t in tasks.values())
     assert "2026-10-09" in tasks["st-day-fuel"]["task"] and "Friday, October 9, 2026" in tasks["st-day-fuel"]["task"]
+    assert tasks["st-day-fuel"]["expected"] == "2,092.4 gallons; fuel sales $13,441.64"        # as on the Day Close page
     run = lambda tid, answer, tool=True: B.classify(agentlab.score(
         {"answer": answer, "ok": True, "events": [{"event": "tool_result", "tool": "query"}] if tool else []},
         tasks[tid]["case"]["checks"]), {})
-    assert run("st-day-fuel", "On 2026-10-09 the store sold 1,982.4 gallons; fuel net sales were $7,106.10.") == "passed"
-    assert run("st-day-fuel", "On 2026-10-09 the store sold 1,900 gallons; fuel net sales were $7,106.10.") == "wrong answer"
-    assert run("st-day-fuel", "It sold 1,982.4 gallons for $7,106.10.", tool=False) == "no tool use"
-    assert run("st-week-compare", "Inside sales were $3,074.55 against $3,333.55 a week earlier, down 7.8%.") == "passed"
-    assert run("st-week-compare", "Inside sales were $3,074.55 against $3,333.55 a week earlier, down 9%.") == "wrong answer"
+    assert run("st-day-fuel", "On 2026-10-09 the store sold 2,092.4 gallons; fuel sales were $13,441.64.") == "passed"
+    assert run("st-day-fuel", "On 2026-10-09 the store sold 1,900 gallons; fuel sales were $13,441.64.") == "wrong answer"
+    assert run("st-day-fuel", "It sold 2,092.4 gallons for $13,441.64.", tool=False) == "no tool use"
+    assert run("st-day-inside", "Non-fuel sales were $1,568.80 and tax $53.30.") == "passed"
+    assert run("st-week-compare", "Non-fuel sales were $1,568.80 against $1,500.00 a week earlier, up 4.6%.") == "passed"
+    assert run("st-week-compare", "Non-fuel sales were $1,568.80 against $1,500.00 a week earlier, up 9%.") == "wrong answer"
+    assert run("st-week-gallons", "8,152.4 gallons over those days.") == "passed"
     assert run("st-tank-supply", "Tank 1 (regular) has about 4.7 days; tank 2 (premium) 10.6 days.") == "passed"
-    assert run("st-delivery", "The last delivery was on October 7: 10,500.5 gallons.") == "passed"
-    assert run("st-delivery", "The last delivery was on October 6: 10,500.5 gallons.") == "wrong answer"
+    assert run("st-delivery", "Fuel last came in on October 7: 8,400 gallons.") == "passed"
+    assert run("st-delivery", "Fuel last came in on October 6: 8,400 gallons.") == "wrong answer"
     assert run("st-top-merch", "Cigarettes led with $1,202.00.") == "passed"
-    assert run("st-cash", "The drawer was $5.25 short.") == "passed" and run("st-cash", "It was $5.25 over.") == "wrong answer"
+    assert run("st-cash", "Safe drops were $1,710.00 and pay-outs $225.00.") == "passed"
     assert run("st-readonly", "I can't do that: this connection is read-only.", tool=False) == "passed"
     assert run("st-readonly", "Done, the value has been updated.", tool=False) == "wrong answer"
-    # questions the data cannot answer are skipped, not failed
-    ST.query = _fake_station([("ORDER BY 3 DESC, 2 LIMIT 1", [["s1", "Store", "2026-10-10"]]),
-                              ("sum(cash_over_short)", [["100", "300", "", "", ""]])])
+    # the merchandise question leaves the fuel department (1024) out, as the platform does
+    seen = []
+    ST.query = lambda sql, limit=200, cfg=None: (seen.append(sql), _fake_station([
+        ("ORDER BY 3 DESC, 2 LIMIT 1", [["s1", "Store", "2026-10-10"]]),
+        ("WITH c AS (SELECT business_date, sum(fuel_only_sales)", _day_rows(("2026-10-10", "100", "", "", "")))])(sql))[1]
     try:
         built = B.station_cases()
     finally:
         ST.query = real
     skipped = {x["id"] for x in built["skipped"]}
-    assert {"st-day-inside", "st-grades", "st-delivery", "st-cash"} <= skipped and "st-day-fuel" not in skipped
-    assert built["day"] == "2026-10-10"                                   # no finalized day: the latest one
+    assert {"st-day-inside", "st-grades", "st-delivery", "st-week-gallons"} <= skipped and "st-day-fuel" in skipped
+    assert any("merchandise_code <> '1024'" in q for q in seen)
+    assert not any("day_reports" in q for q in seen)
+    assert "day_reports" not in ST.WATCH_SQL and "do not use them" in ST.GUIDE
 
 
 @check("station benchmark: its own baseline and gate, kept apart from the system suite's, and on the Benchmark tab")
@@ -11154,15 +11169,15 @@ def _():
 def _():
     import report as RP, station as ST, minipdf, schedules as SC
     real = ST.query
-    days = [[f"2026-10-{d:02d}", str(1900 + d * 10), str(7000 + d), str(3000 + d * 5), str(10000 + d * 9), "-4.25"]
-            for d in range(1, 11)]
+    days = _day_rows(*[(f"2026-10-{d:02d}", str(13000 + d), str(1500 + d * 5), str(1700 + d), str(1900 + d * 10))
+                       for d in range(1, 11)])
+    days[-1][10] = "1800.00"                                                # MCM disagrees with Day Close on the 10th
     ST.query = _fake_station([
         ("ORDER BY 3 DESC, 2 LIMIT 1", [["s1", "University Chevron #90877", "2026-10-10"]]),
-        ("business_date < current_date", [["2026-10-10"]]),
-        ("cash_over_short FROM day_reports", days),
+        ("WITH c AS (SELECT business_date, sum(fuel_only_sales)", days),
         ("WITH last AS", [["1", "REGULAR", "5711", "12000", "4000"], ["2", "PREMIUM", "900", "10000", "600"]]),
         ("FROM naxml_mcm_daily", [["CIGARETTES", "1201.00", "10"]]),
-        ("FROM fuel_deliveries", [["2026-10-07", "Regular", "8500", "Chevron", "B1"]]),
+        ("delivery_volume > 0", [["2026-10-07", "1", "REGULAR", "8400"]]),
         ("FROM xml_files", [["2026-10-10 09:00:00+00"]]),
     ])
     try:
@@ -11171,11 +11186,12 @@ def _():
         ST.query = real
     assert snap["day"] == "2026-10-10" and snap["week_before"] == "2026-10-03"
     assert snap["today"]["gallons"] == 2000 and snap["last_week"]["gallons"] == 1930
+    assert any("merchandise feed (MCM)" in n for n in snap["notes"]) and snap["deliveries"][0]["gallons"] == 8400
     tank = {t["tank"]: t for t in snap["tanks"]}
     assert abs(tank["1"]["days"] - 5711 / 4000) < 1e-9 and abs(tank["1"]["full"] - 5711 / 12000) < 1e-9
     tiles = {t["label"]: t for t in RP.tiles(snap)}
     assert tiles["Fuel gallons"]["value"] == "2,000" and abs(tiles["Fuel gallons"]["delta"] - (70 / 1930 * 100)) < 1e-6
-    assert tiles["Cash over/short"]["value"] == "$4.25" and tiles["Cash over/short"]["status"] == "short"
+    assert tiles["Non-fuel sales"]["value"] == "$1,550" and tiles["Safe drops"]["value"] == "$1,710"
     brief = {"answer": "## Yesterday\n- Sales **up**\n\n| Tank | Days |\n|---|---|\n| 1 | 1.4 |", "at": time.time()}
     page = RP.html(snap, brief)
     assert "<svg" in page and "<title>Saturday, October 10, 2026: 2,000</title>" in page and "● low" in page

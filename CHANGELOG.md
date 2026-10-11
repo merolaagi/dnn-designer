@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.15.0
+
+- **Store data now comes from the tables the platform actually writes.** The
+  platform's `day_reports` table stopped being written in May. For a Gilbarco
+  site, each day is built from NAXML. So the Station analyst, the morning
+  brief, the store report, the station benchmark and the watchdog's "last
+  business day" had all been reading a table frozen on May 6. Everything now
+  reads:
+  - `day_cash_summary`, the figures on the platform's Day Close page: fuel
+    sales, non-fuel sales, tax, safe drops and pay-outs
+  - `sum(fuel_grade_sales.sales_volume)` for gallons, as the platform computes
+    them
+  - `fuel_inventory_daily.delivery_volume` for deliveries, since
+    `fuel_deliveries` holds only the few entered by hand
+  - `naxml_mcm_daily` without department 1024 ("Fuel 1") for merchandise
+- The analyst is told that `day_reports` and `shift_reports` are not used.
+  A morning brief scheduled earlier is moved onto the new instructions the
+  next time it runs.
+- The store report checks Day Close's fuel and non-fuel figures against the
+  MCM feed's, and says so when they differ by more than 1%.
+- Station benchmark questions now ask about non-fuel sales and tax, safe drops
+  and pay-outs, and the last delivery into the tanks. Its right answers are
+  Day Close's figures.
+- A failed query now reports the database's own message, rather than the
+  line of carets psql prints under the query.
+
 ## 4.14.0
 
 - **The store report.** The latest business day at a glance: total, inside

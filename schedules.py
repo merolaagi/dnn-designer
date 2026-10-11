@@ -239,6 +239,9 @@ def _fire(s: Dict[str, Any], now: Optional[float] = None) -> None:
         s["last_run"], s["next_run"] = now, next_run(s, now)
         return
     try:
+        import station
+        if s.get("task", "").startswith(station.OLD_BRIEF):
+            s["task"] = station.BRIEF_TASK              # the old brief read day_reports, which is no longer written
         conv = None
         if s.get("conv"):
             try:
