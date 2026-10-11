@@ -6199,6 +6199,24 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
     return {"conversation": conv, "run": view}
 
 
+def stop_turn(conv_id: str) -> Dict[str, Any]:
+    """Stop the conversation's last turn, if it is still going (a Muse turn, or an agent's run)."""
+    conv = conversation(conv_id)
+    last = conv["turns"][-1] if conv["turns"] else None
+    if not last or last.get("status") not in LIVE_STATUSES:
+        return {"ok": True}
+    if last.get("muse"):
+        import muse
+        muse.stop(last["muse"])
+    elif last.get("run"):
+        try:
+            stop_run(last["run"])
+        except ValueError:
+            last.update(status="stopped", error="Stopped.")
+            _conv_save(conv)
+    return {"ok": True}
+
+
 def delete_conversation(conv_id: str) -> Dict[str, Any]:
     conv = conversation(conv_id)
     if conv["turns"] and conv["turns"][-1].get("status") in LIVE_STATUSES:

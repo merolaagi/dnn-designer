@@ -461,8 +461,9 @@ GUIDE = (
     "- Hotels: search_hotels, with the place and dates. Same rule: every hotel price comes from the tool.\n"
     "- Booking (only when the user asks to book, and only if bookable_flights is among your tools): run "
     "bookable_flights for the same trip, pick the offer that matches what the user chose (or the cheapest that "
-    "fits), and call book_flight with its offer_id. The user is shown the exact offer and must approve before "
-    "anything is bought. After it, give the booking reference and price. If the tools say booking is not "
+    "fits), and call book_flight with its offer_id and a one-line summary. Do not ask for confirmation in words "
+    "first: book_flight shows the user the exact offer and they approve or decline it there, before anything is "
+    "bought. Ask only when it is unclear which flight they want. After it, give the booking reference and price. If the tools say booking is not "
     "connected, say so and give the Google Flights link instead.\n"
     "- In Duffel TEST mode the airline is pretend: say plainly that nothing real was booked."
 )

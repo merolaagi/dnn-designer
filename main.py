@@ -448,6 +448,12 @@ def agentlab_conversation_say(conv_id: str, body: AgentLabSay):
     return _conv_action(agentlab.say, conv_id, body.text, body.mode, auth.sub("agentlab"))
 
 
+@app.post("/api/agentlab/conversations/{conv_id}/stop")
+def agentlab_conversation_stop(conv_id: str):
+    """Stop the last message's work, whatever stage it is at."""
+    return _conv_action(agentlab.stop_turn, conv_id)
+
+
 @app.delete("/api/agentlab/conversations/{conv_id}")
 def agentlab_conversation_delete(conv_id: str):
     return _conv_action(agentlab.delete_conversation, conv_id)

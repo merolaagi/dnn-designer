@@ -138,7 +138,8 @@ def today() -> str:
 
 
 VOICE = ("Write your answer to the person directly, as \"you\" (by their first name now and then if you know it), "
-         "warmly and plainly, like a capable assistant who knows them. Never call them \"the user\".")
+         "warmly and plainly, like a capable assistant who knows them. Never call them \"the user\". Never name your "
+         "tools or blocks (say \"I can book it\", not \"using the book_flight tool\").")
 
 
 def with_profile(task: str) -> str:

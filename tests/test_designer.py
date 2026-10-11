@@ -11730,6 +11730,40 @@ def _():
     assert MP.VOICE in MP.with_profile("x") and "as_you(" in inspect.getsource(muse.decode)
     assert "You are talking with" in inspect.getsource(muse.decode)
 
+
+@check("a Muse turn cut off by a restart says so instead of 'running' for ever; Stop works at any stage")
+def _():
+    import muse, uuid as _u
+    conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+    try:
+        mid = "mu" + _u.uuid4().hex[:10]
+        muse._save({"id": mid, "task": "x", "mode": "live", "status": "running", "phase": "decoding", "plan": None,
+                    "steps": [], "run": None, "answer": None, "error": None, "started": time.time()})
+        conv["turns"].append({"muse": mid, "task": "x", "at": time.time(), "mode": "live", "status": "running"})
+        agentlab._conv_save(conv)
+        t = agentlab.conversation(conv["id"])["turns"][-1]
+        assert t["status"] == "error" and "restarted" in t["error"]
+        out = agentlab.say(conv["id"], "remember: my home airport is SFO", "rehearsal")   # the chat is free again
+        assert out["conversation"]["turns"][-1]["status"] == "done"
+        import muse_profile as MP
+        for f in MP.listing():
+            if "home airport is SFO" in f["text"]:
+                MP.remove(f["id"])
+        mid2 = "mu" + _u.uuid4().hex[:10]
+        muse._save({"id": mid2, "task": "y", "mode": "live", "status": "running", "phase": "decoding", "plan": None,
+                    "steps": [], "run": None, "answer": None, "error": None, "started": time.time()})
+        muse._ALIVE.add(mid2)
+        conv = agentlab.conversation(conv["id"])
+        conv["turns"].append({"muse": mid2, "task": "y", "at": time.time(), "mode": "live", "status": "running"})
+        agentlab._conv_save(conv)
+        assert agentlab.stop_turn(conv["id"])["ok"] and mid2 in muse._STOP
+        muse._ALIVE.discard(mid2)
+        muse._STOP.discard(mid2)
+        import main
+        assert "/api/agentlab/conversations/{conv_id}/stop" in {r.path for r in main.app.routes}
+    finally:
+        agentlab.delete_conversation(conv["id"]) if not agentlab.conversation(conv["id"])["turns"][-1].get("status") in agentlab.LIVE_STATUSES else None
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

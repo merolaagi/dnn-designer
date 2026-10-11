@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.21.2
+
+- **A turn cut off by a restart no longer stays "running" for ever.**
+  Restarting the server (`./serve.sh`) while Muse was working left that turn
+  marked running. Saathi then wouldn't let you send another message in that
+  chat. Now such a turn says "I was cut off: the Mac's server restarted while
+  I was working on this…", and the chat is free again.
+- `POST /api/agentlab/conversations/{id}/stop` stops the last message's work
+  at any stage, including while Muse is still deciding.
+- Agents don't name their tools in answers. When you have picked a flight,
+  the Travel agent goes straight to the booking approval instead of asking
+  you to confirm in words first.
+
 ## 4.21.1
 
 - **Saathi talks to you.** Muse's one-line "what you asked" and its follow-up

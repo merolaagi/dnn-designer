@@ -276,10 +276,40 @@ def _save(s: Dict[str, Any]) -> None:
     (_dir() / f"{s['id']}.json").write_text(json.dumps(s, default=str))
 
 
+# the Muse turns this server process is carrying out right now; a "running" turn not in here was cut off
+# by a restart, and would otherwise stay "running" for ever (and Saathi would never let you send again)
+_ALIVE: set = set()
+CUT_OFF = ("I was cut off: the Mac's server restarted while I was working on this, so I did not finish. "
+           "Ask me again and I'll start over.")
+
+
+_STOP: set = set()
+
+
+def stop(muse_id: str) -> Dict[str, Any]:
+    """Stop a Muse turn, whatever it is doing: deciding, or running a step."""
+    s = state(muse_id)
+    if not s:
+        raise KeyError(muse_id)
+    if s["status"] != "running":
+        return {"ok": True}
+    _STOP.add(muse_id)
+    if s.get("run"):
+        try:
+            AL.stop_run(s["run"])
+        except Exception:  # noqa: BLE001
+            pass
+    if muse_id not in _ALIVE:
+        s.update(status="stopped", error="Stopped.", phase="stopped", finished=time.time())
+        _save(s)
+    return {"ok": True}
+
+
 def start_turn(text: str, mode: str, context: str = "", background: bool = True) -> Dict[str, Any]:
     s = {"id": "mu" + uuid.uuid4().hex[:10], "task": text, "mode": mode, "status": "running", "phase": "decoding",
          "plan": None, "steps": [], "run": None, "answer": None, "error": None, "started": time.time()}
     _save(s)
+    _ALIVE.add(s["id"])
     if background:
         import contextvars
         threading.Thread(target=contextvars.copy_context().run, args=(_carry_out, s, context), daemon=True).start()
@@ -339,6 +369,9 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
             return
         earlier: List[str] = []
         for i, step in enumerate(plan["steps"]):
+            if s["id"] in _STOP:
+                s.update(status="stopped", error="Stopped.")
+                return
             import muse_profile as profile
             task = profile.with_profile(step["task"])
             if earlier:
@@ -372,7 +405,11 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
     finally:
         s["phase"] = s.get("phase") if s["status"] == "running" else "finished"
         s["finished"] = time.time()
+        if s["id"] in _STOP and s["status"] == "running":
+            s.update(status="stopped", error="Stopped.")
         _save(s)
+        _ALIVE.discard(s["id"])
+        _STOP.discard(s["id"])
 
 
 def overlay(turn: Dict[str, Any]) -> bool:
@@ -380,6 +417,14 @@ def overlay(turn: Dict[str, Any]) -> bool:
     s = state(turn.get("muse") or "")
     if not s:
         return False
+    if s["status"] == "running" and s["id"] not in _ALIVE:
+        if s.get("run"):
+            try:
+                AL.stop_run(s["run"])
+            except Exception:  # noqa: BLE001 - it may be gone already
+                pass
+        s.update(status="error", error=CUT_OFF, phase="cut off", finished=time.time())
+        _save(s)
     keep = {"status": s["status"], "run": s.get("run"), "answer": s.get("answer"), "error": s.get("error"),
             "plan": s.get("plan"), "muse_steps": s.get("steps"), "phase": s.get("phase"), "connect": s.get("connect"),
             "doing": s.get("doing")}
