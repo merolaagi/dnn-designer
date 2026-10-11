@@ -33,6 +33,8 @@ DATA = HERE / "data"
 EXAMPLES = HERE / "examples"
 USERS = DATA / "users.json"
 SESSIONS = DATA / "sessions.json"
+DEVICES = DATA / "devices.json"
+SETTINGS = DATA / "auth_settings.json"
 
 SESSION_COOKIE = "dnn_session"
 SESSION_DAYS = 30
@@ -167,6 +169,112 @@ def user_for(token: Optional[str]) -> Optional[str]:
     if session["user"] not in users():
         return None
     return session["user"]
+
+
+# --------------------------------------------------------------------------
+# new accounts, and phones signed in with a device token
+# --------------------------------------------------------------------------
+# Once an account exists, the sign-up form is closed unless someone signed in opens it: an account
+# can run code on this computer, so the page must not hand them out to whoever finds it.
+
+PAIR_MINUTES = 10
+_PAIRS: Dict[str, Dict[str, Any]] = {}
+
+
+def signups_open() -> bool:
+    if not enabled():
+        return True                        # the first account is how accounts are turned on
+    return bool(_read(SETTINGS, {}).get("signups_open", False))
+
+
+def set_signups(open_: bool) -> Dict[str, Any]:
+    blob = _read(SETTINGS, {})
+    blob["signups_open"] = bool(open_)
+    _write(SETTINGS, blob)
+    return {"signups_open": signups_open()}
+
+
+def _digest(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def pair_code(name: str) -> Dict[str, Any]:
+    """A one-time code a phone exchanges for its own token, good for a few minutes."""
+    code = "".join(secrets.choice("0123456789") for _ in range(8))
+    with _LOCK:
+        now = time.time()
+        for c in [c for c, v in _PAIRS.items() if v["expires"] < now]:
+            _PAIRS.pop(c)
+        _PAIRS[code] = {"user": name, "expires": now + PAIR_MINUTES * 60, "tries": 0}
+    return {"code": code, "expires": _PAIRS[code]["expires"], "minutes": PAIR_MINUTES}
+
+
+def claim(code: str, device: str) -> Dict[str, Any]:
+    """Trade a pairing code for a device token. Each code works once."""
+    code = re.sub(r"\D", "", str(code or ""))
+    with _LOCK:
+        pair = _PAIRS.pop(code, None)
+        if not pair or pair["expires"] < time.time() or pair["user"] not in users():
+            raise ValueError("That code is not valid (they last ten minutes and work once). Make a new one on the Mac.")
+        token = "dev_" + secrets.token_urlsafe(32)
+        devices = _read(DEVICES, {})
+        devices[_digest(token)] = {"id": secrets.token_hex(6), "user": pair["user"],
+                                   "name": re.sub(r"[^\w .'’-]", "", str(device or "Phone"))[:60] or "Phone",
+                                   "created": time.time(), "seen": time.time(), "push": None}
+        _write(DEVICES, devices)
+    return {"token": token, "user": pair["user"]}
+
+
+def device_for(token: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not token or not token.startswith("dev_"):
+        return None
+    d = _read(DEVICES, {}).get(_digest(token))
+    if not d or d["user"] not in users():
+        return None
+    return d
+
+
+def touch_device(token: str, **change) -> Optional[Dict[str, Any]]:
+    with _LOCK:
+        devices = _read(DEVICES, {})
+        d = devices.get(_digest(token))
+        if not d:
+            return None
+        d.update(change, seen=time.time())
+        _write(DEVICES, devices)
+        return d
+
+
+def devices_of(name: Optional[str]) -> List[Dict[str, Any]]:
+    return sorted(({k: v for k, v in d.items() if k != "push"} | {"has_push": bool(d.get("push"))}
+                   for d in _read(DEVICES, {}).values() if d["user"] == name), key=lambda d: -d["created"])
+
+
+def push_tokens(name: Optional[str] = None) -> List[str]:
+    return [d["push"] for d in _read(DEVICES, {}).values() if d.get("push") and (name is None or d["user"] == name)]
+
+
+def forget_device(name: Optional[str], device_id: str) -> Dict[str, Any]:
+    with _LOCK:
+        devices = _read(DEVICES, {})
+        kept = {k: d for k, d in devices.items() if not (d["id"] == device_id and d["user"] == name)}
+        if len(kept) == len(devices):
+            raise KeyError(device_id)
+        _write(DEVICES, kept)
+    return {"ok": True}
+
+
+def request_user(cookies, headers) -> Optional[str]:
+    """The account behind a request: a browser's session cookie, or a phone's device token."""
+    name = user_for(cookies.get(SESSION_COOKIE))
+    if name:
+        return name
+    bearer = (headers.get("authorization") or "")
+    if bearer.lower().startswith("bearer "):
+        d = device_for(bearer[7:].strip())
+        if d:
+            return d["user"]
+    return None
 
 
 # --------------------------------------------------------------------------

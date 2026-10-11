@@ -11224,6 +11224,55 @@ def _():
     assert "function showStore" in m and "/turns/${i}/pdf" in m and "Open the store report" in PAGE and "Save as PDF" in PAGE
 
 
+@check("Saathi: sign-ups close once an account exists; a phone pairs once with a code and then uses its own token")
+def _():
+    import shutil
+    import auth, push as PU, main
+    from fastapi.testclient import TestClient
+    backup = None
+    if auth.DATA.exists():
+        backup = auth.DATA.with_suffix(".backup")
+        shutil.move(auth.DATA, backup)
+    try:
+        client = TestClient(main.app)
+        assert client.post("/api/auth/register", json={"name": "owner", "password": "longenough1"}).status_code == 200
+        shut = client.post("/api/auth/register", json={"name": "stranger", "password": "longenough1"})
+        assert shut.status_code == 403 and "closed" in shut.json()["detail"]["message"]
+        assert TestClient(main.app).post("/api/auth/signups", json={"open": True}).status_code == 401   # not signed in
+        assert client.post("/api/auth/signups", json={"open": True}).json()["signups_open"] is True
+        client.post("/api/auth/signups", json={"open": False})
+        hello = TestClient(main.app).get("/api/app/hello").json()
+        assert hello["app"] == "dnn-designer" and hello["accounts"] is True
+        pair = client.post("/api/app/pair").json()
+        assert len(pair["code"]) == 8 and pair["user"] == "owner"
+        phone = TestClient(main.app)
+        assert phone.get("/api/agentlab/conversations").status_code == 401
+        got = phone.post("/api/app/claim", json={"code": pair["code"][:4] + " " + pair["code"][4:], "device": "Manish's iPhone"}).json()
+        assert got["token"].startswith("dev_") and got["user"] == "owner"
+        again = phone.post("/api/app/claim", json={"code": pair["code"], "device": "x"})
+        assert again.status_code == 400                                            # a code works once
+        h = {"Authorization": "Bearer " + got["token"]}
+        assert phone.get("/api/agentlab/conversations", headers=h).status_code == 200
+        assert phone.get("/api/auth/me", headers=h).json()["user"] == "owner"
+        assert phone.get("/api/agentlab/conversations", headers={"Authorization": "Bearer dev_wrong"}).status_code == 401
+        assert phone.post("/api/app/push-token", json={"token": "nope"}, headers=h).status_code == 400
+        assert phone.post("/api/app/push-token", json={"token": "ExponentPushToken[abc123]"}, headers=h).json()["ok"]
+        assert client.post("/api/app/push-token", json={"token": "ExponentPushToken[abc123]"}).status_code == 401
+        devices = client.get("/api/app/devices").json()["devices"]
+        assert devices[0]["name"] == "Manish's iPhone" and devices[0]["has_push"] and "push" not in devices[0]
+        assert auth.push_tokens("owner") == ["ExponentPushToken[abc123]"]
+        msgs = PU.expo_messages({"kind": "alert", "title": "Store: no POS data", "text": "x", "conv": "c1"},
+                                auth.push_tokens("owner"))
+        assert msgs[0]["to"] == "ExponentPushToken[abc123]" and msgs[0]["priority"] == "high" and msgs[0]["data"]["conv"] == "c1"
+        assert client.delete("/api/app/devices/" + devices[0]["id"]).json()["ok"]
+        assert phone.get("/api/agentlab/conversations", headers=h).status_code == 401   # removed: the token stops working
+        assert "function stApp" in PAGE and "Pair a phone" in PAGE
+    finally:
+        shutil.rmtree(auth.DATA, ignore_errors=True)
+        if backup:
+            shutil.move(backup, auth.DATA)
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.16.0
+
+- **Server side of Saathi, the iPhone app for Muse.** Settings → The Saathi
+  app → Pair a phone gives the Mac's address and an 8-digit code. The code
+  works once, for ten minutes. The phone trades it for its own device token
+  (`Authorization: Bearer …`) and signs in with that from then on. The app's
+  calls work like the browser's, in the same account and workspace. Paired
+  phones are listed with when they were last seen, and Remove stops a token
+  working at once.
+- **Notifications to paired phones.** A phone with the app registers an Expo
+  push token. Inbox rows of the kinds you chose go to it through Expo's push
+  service, alongside or instead of ntfy, and tapping one opens that
+  conversation in the app.
+- **New accounts are closed once one exists.** Anyone who could open the
+  sign-up page could make an account, and an account can run code on this
+  computer. Now new accounts are refused until someone signed in turns on
+  "Let new accounts be created here", in Settings → The Saathi app.
+- A browser's CORS preflight (OPTIONS) is no longer refused for want of a
+  sign-in it never carries.
+
 ## 4.15.1
 
 - The schedule tests use a store of their own. On a computer that already had

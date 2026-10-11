@@ -56,8 +56,13 @@ def config() -> Dict[str, Any]:
 
 def view() -> Dict[str, Any]:
     c = config()
+    try:
+        import auth
+        phones = len(auth.push_tokens(auth.current()))
+    except Exception:  # noqa: BLE001
+        phones = 0
     return {**{k: v for k, v in c.items() if k != "token"}, "has_token": bool(c["token"]), "kinds_all": KINDS,
-            "on": bool(c["topic"]), **_STATUS}
+            "on": bool(c["topic"]) or bool(phones), "phones": phones, **_STATUS}
 
 
 def new_topic() -> str:
@@ -146,17 +151,48 @@ def deliver(row: Dict[str, Any], attachment: Optional[Dict[str, Any]] = None, c:
     _STATUS.update(last_sent=time.time(), last_error=None)
 
 
+EXPO_URL = "https://exp.host/--/api/v2/push/send"
+
+
+def expo_messages(row: Dict[str, Any], tokens: List[str], c: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Notifications for the Saathi app on your phones, through Expo's push service."""
+    c = c or config()
+    msg = message_for(row, c)
+    return [{"to": t, "title": msg["title"], "body": msg["message"], "sound": "default",
+             "priority": "high" if msg["priority"] >= 4 else "default",
+             "data": {"conv": row.get("conv"), "kind": row.get("kind")}} for t in tokens]
+
+
+def deliver_expo(row: Dict[str, Any], tokens: List[str], c: Optional[Dict[str, Any]] = None) -> None:
+    body = json.dumps(expo_messages(row, tokens, c)).encode()
+    req = urllib.request.Request(EXPO_URL, data=body, method="POST",
+                                 headers={"Content-Type": "application/json", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as reply:
+        reply.read()
+    _STATUS.update(last_sent=time.time(), last_error=None)
+
+
 def send(row: Dict[str, Any], attachment: Optional[Dict[str, Any]] = None) -> bool:
-    """Push one inbox row if it is a kind you chose, in the background. True if it was sent on its way."""
+    """Push one inbox row if it is a kind you chose, in the background: to the ntfy topic if one is set,
+    and to the phones paired with this account. True if it was sent on its way."""
     c = config()
-    if not c["topic"] or row.get("kind") not in c["kinds"] or os.environ.get("AGENTLAB_NO_PUSH"):
+    if row.get("kind") not in c["kinds"] or os.environ.get("AGENTLAB_NO_PUSH"):
+        return False
+    try:
+        import auth
+        phones = auth.push_tokens(auth.current())
+    except Exception:  # noqa: BLE001
+        phones = []
+    if not c["topic"] and not phones:
         return False
 
     def go():
-        try:
-            deliver(row, attachment, c)
-        except Exception as exc:  # noqa: BLE001 - a push failing must never stop the scheduler
-            _STATUS["last_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        for job in ([lambda: deliver(row, attachment, c)] if c["topic"] else []) + \
+                   ([lambda: deliver_expo(row, phones, c)] if phones else []):
+            try:
+                job()
+            except Exception as exc:  # noqa: BLE001 - a push failing must never stop the scheduler
+                _STATUS["last_error"] = f"{type(exc).__name__}: {exc}"[:300]
     threading.Thread(target=go, daemon=True).start()
     return True
 

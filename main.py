@@ -114,7 +114,7 @@ async def bind_user(request: Request) -> None:
     Both wrong versions failed the same silent way — every account resolved to
     the same workspace — which is exactly the bug worth not having.
     """
-    auth.set_current(auth.user_for(request.cookies.get(auth.SESSION_COOKIE)))
+    auth.set_current(auth.request_user(request.cookies, request.headers))
 
 
 
@@ -4167,7 +4167,7 @@ def index():
 # accounts
 # --------------------------------------------------------------------------
 
-OPEN_PATHS = ("/api/auth/", "/health", "/favicon")
+OPEN_PATHS = ("/api/auth/", "/health", "/favicon", "/api/app/hello", "/api/app/claim")
 
 
 @app.middleware("http")
@@ -4178,9 +4178,9 @@ async def gate(request: Request, call_next):
     wanted accounts is unaffected.
     """
     path = request.url.path
-    if (auth.enabled() and path.startswith("/api/")
+    if (auth.enabled() and path.startswith("/api/") and request.method != "OPTIONS"   # a CORS preflight carries no sign-in
             and not path.startswith(OPEN_PATHS)
-            and not auth.user_for(request.cookies.get(auth.SESSION_COOKIE))):
+            and not auth.request_user(request.cookies, request.headers)):
         return JSONResponse({"detail": {"message": "Sign in first.",
                                         "auth": True}}, status_code=401)
     return await call_next(request)
@@ -4198,12 +4198,88 @@ class PasswordChange(BaseModel):
 
 @app.get("/api/auth/me")
 def auth_me():
-    return auth.whoami()
+    return {**auth.whoami(), "signups_open": auth.signups_open()}
+
+
+class SignupSwitch(BaseModel):
+    open: bool
+
+
+@app.post("/api/auth/signups")
+def auth_signups(body: SignupSwitch):
+    if auth.enabled() and not auth.current():
+        raise HTTPException(401, detail={"message": "Sign in first."})
+    return auth.set_signups(body.open)
+
+
+# --------------------------------------------------------------------------
+# the Saathi app: a phone signs in once with a pairing code, then with its own token
+# --------------------------------------------------------------------------
+
+class AppClaim(BaseModel):
+    code: str
+    device: str = "Phone"
+
+
+class AppPushToken(BaseModel):
+    token: str
+
+
+@app.get("/api/app/hello")
+def app_hello():
+    """What the app checks first: is this a Deep Network Designer, and does it need pairing."""
+    return {"app": "dnn-designer", "version": __version__, "accounts": auth.enabled()}
+
+
+@app.post("/api/app/pair")
+def app_pair(request: Request):
+    name = auth.current()
+    if auth.enabled() and not name:
+        raise HTTPException(401, detail={"message": "Sign in first."})
+    if not auth.enabled():
+        raise HTTPException(400, detail={"message": "Create an account first (Settings → Accounts): a phone signs in "
+                                                    "to an account."})
+    code = auth.pair_code(name)
+    return {**code, "server": push.config()["public_url"] or str(request.base_url).rstrip("/"), "user": name}
+
+
+@app.post("/api/app/claim")
+def app_claim(body: AppClaim):
+    try:
+        return auth.claim(body.code, body.device)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/app/push-token")
+def app_push_token(body: AppPushToken, request: Request):
+    bearer = (request.headers.get("authorization") or "")[7:].strip()
+    if not re.fullmatch(r"(Exponent|Expo)PushToken\[[\w\-]+\]", body.token.strip()):
+        raise HTTPException(400, detail={"message": "That is not an Expo push token."})
+    if not auth.touch_device(bearer, push=body.token.strip()):
+        raise HTTPException(401, detail={"message": "Only a paired phone can register for notifications."})
+    return {"ok": True}
+
+
+@app.get("/api/app/devices")
+def app_devices():
+    return {"devices": auth.devices_of(auth.current())}
+
+
+@app.delete("/api/app/devices/{device_id}")
+def app_device_forget(device_id: str):
+    try:
+        return auth.forget_device(auth.current(), device_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such phone."})
 
 
 @app.post("/api/auth/register")
 def auth_register(body: Credentials, response: Response):
     first = not auth.enabled()
+    if not auth.signups_open():
+        raise HTTPException(403, detail={"message": "New accounts are closed on this computer. Someone signed in can "
+                                                    "open them in Settings → Accounts."})
     try:
         auth.register(body.name, body.password)
     except ValueError as exc:

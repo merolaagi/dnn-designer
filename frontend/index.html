@@ -16214,6 +16214,11 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>The Saathi app</h3><small>Muse as an iPhone app: pair a phone once with a code, and it signs in on its own</small></header>
+      <div class="st-body" id="stApp"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Muse on your phone</h3><small>Ask Muse, approve its steps and read the inbox from your phone, and get
         store alerts and the morning brief as notifications</small></header>
       <div class="st-body" id="stPush"><p class="st-msg">Loading…</p></div>
@@ -16255,6 +16260,41 @@ function stRender(){
   stPush();
   stProfile();
   stDocs();
+  stApp();
+}
+
+async function stApp(){
+  const host = $("stApp");
+  if (!host) return;
+  let me, dv;
+  try{ me = await (await fetch(API + "/api/auth/me")).json(); dv = me.enabled ? await (await fetch(API + "/api/app/devices")).json() : {devices: []}; }
+  catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  host.innerHTML = `${me.enabled ? "" : `<p class="st-msg bad">A phone signs in to an account: set one up first (Set up an account, top right).</p>`}
+    <div class="st-actions" style="margin-top:0"><button class="btn go" id="apPair"${me.enabled ? "" : " disabled"}>Pair a phone</button>
+      <span class="st-msg" id="apMsg"></span></div>
+    <div id="apCode"></div>
+    ${dv.devices.length ? `<table class="bm-table" style="margin-top:10px"><tr><th>Phone</th><th>Paired</th><th>Last seen</th><th>Notifications</th><th></th></tr>
+      ${dv.devices.map(d => `<tr><td>${alEsc(d.name)}</td><td>${new Date(d.created * 1000).toLocaleDateString()}</td>
+        <td>${new Date(d.seen * 1000).toLocaleString()}</td><td>${d.has_push ? "on" : "off"}</td>
+        <td><button class="btn danger" data-apforget="${alEsc(d.id)}">Remove</button></td></tr>`).join("")}</table>` : ""}
+    <label class="st-toggle" style="margin-top:12px"><input type="checkbox" id="apSignups"${me.signups_open ? " checked" : ""}${me.enabled ? "" : " disabled"}>
+      Let new accounts be created here. Leave this off unless you are adding someone: an account can run code on this computer.</label>`;
+  $("apPair").onclick = async () => {
+    const r = await fetch(API + "/api/app/pair", {method: "POST"}), d = await r.json();
+    if (!r.ok){ $("apMsg").className = "st-msg bad"; $("apMsg").textContent = (d.detail && d.detail.message) || "Not made."; return; }
+    $("apCode").innerHTML = `<div style="margin-top:10px;padding:14px 16px;border:1px solid var(--paper-3);border-radius:10px">
+      <div class="st-msg">In Saathi, enter this server and code. The code works once, for ${d.minutes} minutes.</div>
+      <div style="font:600 15px var(--mono);margin-top:6px">${alEsc(d.server)}</div>
+      ${/localhost|127\.0\.0\.1/.test(d.server) ? `<div class="st-msg bad">That is this Mac's own address; the phone cannot reach it. Put the Tailscale
+        address in “This app's address” below, then pair again.</div>` : ""}
+      <div style="font:700 30px var(--mono);letter-spacing:.18em;margin-top:4px">${alEsc(d.code.slice(0, 4))} ${alEsc(d.code.slice(4))}</div></div>`;
+  };
+  host.querySelectorAll("[data-apforget]").forEach(b => b.onclick = async () => {
+    await fetch(API + "/api/app/devices/" + b.dataset.apforget, {method: "DELETE"}); stApp(); });
+  $("apSignups").onchange = async e => {
+    await fetch(API + "/api/auth/signups", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({open: e.target.checked})});
+    toast(e.target.checked ? "New accounts can be created" : "New accounts are closed");
+  };
 }
 
 async function stDocs(){
