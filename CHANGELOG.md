@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.17.2
+
+- A reply that says email isn't connected now carries `connect: "mail"`, so
+  Saathi shows a Connect Gmail card right in the chat: open Google's
+  app-password page, paste the password, and the Mac saves and tests it. The
+  message no longer sends you to the Mac's Settings first.
+
 ## 4.17.1
 
 - **An agent with nothing connected no longer answers from imagination.**

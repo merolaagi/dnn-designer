@@ -6113,7 +6113,7 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         if missing:
             # the agent's data is not connected: say so, rather than let it answer from nothing
             conv["turns"].append({"task": text, "at": time.time(), "mode": conv["mode"], "status": "done", "ok": True,
-                                  "answer": missing})
+                                  "answer": missing, "connect": conv["agent"]["key"]})
             conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
             conv["updated"] = time.time()
             _conv_save(conv)

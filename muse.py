@@ -246,9 +246,9 @@ def not_connected(agent: str) -> Optional[str]:
     if agent == "mail":
         import mail
         if not mail.view()["configured"]:
-            return ("Your email is not connected yet, so I have not looked at any mail. To connect Gmail: on the Mac, "
-                    "Settings → Your email, enter your address and a Google app password (made at "
-                    "myaccount.google.com/apppasswords), then Save and test. Ask me again after that.")
+            return ("Your email is not connected yet, so I have not looked at any mail. Connect Gmail with an app "
+                    "password: Google makes one for a single app, and you can take it back at any time. (On the Mac it "
+                    "is under Settings → Your email.)")
     if agent == "station":
         import station
         v = station.view()
@@ -266,10 +266,10 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
         if plan.get("question") and not plan["steps"]:
             s.update(status="done", answer=plan["question"], phase="asked")
             return
-        missing = [w for w in (not_connected(st["agent"]) for st in plan["steps"]) if w]
+        missing = [(st["agent"], w) for st, w in ((st, not_connected(st["agent"])) for st in plan["steps"]) if w]
         if missing and s["mode"] == "live":
-            # an agent with nothing to read would answer anyway, from imagination: say what to connect instead
-            s.update(status="done", answer=missing[0], phase="needs a connection")
+            # an agent with nothing to read would answer anyway, from imagination: ask for the connection instead
+            s.update(status="done", answer=missing[0][1], phase="needs a connection", connect=missing[0][0])
             return
         earlier: List[str] = []
         for i, step in enumerate(plan["steps"]):
@@ -314,7 +314,7 @@ def overlay(turn: Dict[str, Any]) -> bool:
     if not s:
         return False
     keep = {"status": s["status"], "run": s.get("run"), "answer": s.get("answer"), "error": s.get("error"),
-            "plan": s.get("plan"), "muse_steps": s.get("steps"), "phase": s.get("phase")}
+            "plan": s.get("plan"), "muse_steps": s.get("steps"), "phase": s.get("phase"), "connect": s.get("connect")}
     if s.get("finished") and s.get("started"):
         keep["seconds"] = round(s["finished"] - s["started"], 1)
     changed = any(turn.get(k) != v for k, v in keep.items())

@@ -11363,7 +11363,7 @@ def _():
         turn = muse.start_turn("Can you check my emails?", "live", background=False)
     finally:
         muse.decode = real_decode
-    assert turn["status"] == "done" and "not connected" in turn["answer"] and not turn["steps"]
+    assert turn["status"] == "done" and "not connected" in turn["answer"] and not turn["steps"] and turn["connect"] == "mail"
     g = agentlab.template("mail")
     assert any(n["type"] == "reflector" and n["params"]["gate"] == agentlab.GROUNDED_GATE for n in g["nodes"])
     assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
