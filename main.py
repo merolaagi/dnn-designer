@@ -33,6 +33,7 @@ import schedules
 import station
 import push
 import muse_profile
+import documents
 import providers
 import advisor
 import assistant
@@ -872,6 +873,72 @@ class StationConfig(BaseModel):
 class StationPreset(BaseModel):
     which: str
     at: str = "06:00"
+
+
+def _doc_action(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such document."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/documents")
+def documents_list():
+    """Invoices and BOLs you photographed, newest first, with how reading them went."""
+    return {"documents": documents.listing(), "settings": documents.settings()}
+
+
+@app.post("/api/documents")
+async def documents_submit(file: UploadFile = File(...)):
+    data = await file.read()
+    return _doc_action(documents.submit, data, file.filename or "", file.content_type or "")
+
+
+@app.get("/api/documents/settings")
+def documents_settings():
+    return documents.settings()
+
+
+@app.post("/api/documents/settings")
+def documents_settings_save(body: Dict[str, Any]):
+    return _doc_action(documents.save_config, body)
+
+
+@app.get("/api/documents/{doc_id}")
+def documents_get(doc_id: str):
+    return _doc_action(documents.load, doc_id)
+
+
+@app.get("/api/documents/{doc_id}/image")
+def documents_image(doc_id: str):
+    path = _doc_action(documents.image_path, doc_id)
+    return FileResponse(path, media_type="image/jpeg")
+
+
+@app.post("/api/documents/{doc_id}/read")
+def documents_reread(doc_id: str):
+    return _doc_action(documents.reread, doc_id)
+
+
+@app.delete("/api/documents/{doc_id}")
+def documents_delete(doc_id: str):
+    return _doc_action(documents.delete, doc_id)
+
+
+@app.post("/api/documents/{doc_id}/ask")
+def documents_ask(doc_id: str):
+    """Hand the document to the Station analyst, as a new conversation."""
+    d = _doc_action(documents.load, doc_id)
+    if d["status"] != "done":
+        raise HTTPException(400, detail={"message": "Wait until it has been read."})
+    mode = "live" if agentlab.live_available() else "rehearsal"
+    conv = agentlab.new_conversation({"kind": "starting", "key": "station"}, mode)
+    x = d.get("extracted") or {}
+    conv["title"] = f"Check {x.get('vendor') or 'a document'} {x.get('number') or x.get('bol_number') or ''}".strip()
+    agentlab._conv_save(conv)
+    return _conv_action(agentlab.say, conv["id"], documents.analyst_task(d), mode, auth.sub("agentlab"))
 
 
 class ProfileFact(BaseModel):

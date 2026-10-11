@@ -1,5 +1,30 @@
 # Changelog
 
+## 4.13.0
+
+- **Invoices and BOLs from a photo.** Under **Scan** on the phone page you
+  photograph a vendor invoice or a fuel bill of lading. The phone shrinks the
+  photo before sending it. A vision model in Ollama on the Mac then reads it
+  into vendor, number, date, line items, totals and gallons by grade, using
+  Ollama's structured output. The photo never leaves the Mac.
+- **Checked by arithmetic, not by the model.** Each line's quantity × price
+  against its amount, the lines against the subtotal, and the subtotal plus tax
+  against the total. A line that doesn't add up is flagged with the right
+  figure.
+- **Matched against your store's records, read-only.** A BOL is matched
+  against `fuel_deliveries` by BOL number, or by gallons within 1% inside 3
+  days, and a delivery that was never entered is flagged. An invoice is
+  matched against the `invoices` table by number, or by total and date, when
+  that table's columns allow it.
+- **Ask the Station analyst** passes what was read, and the checks, to a new
+  Station analyst conversation, which can look at purchase orders and
+  receiving.
+- Settings → "Reading invoices and BOLs" chooses the vision model
+  (qwen2.5vl:7b by default; qwen2.5vl:32b reads small print better) and
+  downloads it.
+- The phone page's list now shows every conversation, not only Muse's, and
+  long messages fold up behind "Show all".
+
 ## 4.12.0
 
 - **What Muse knows about you.** A short list of facts, kept per account,

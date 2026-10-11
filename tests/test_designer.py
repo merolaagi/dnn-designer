@@ -11089,6 +11089,67 @@ def _():
             PF._path().write_text(saved)
 
 
+@check("documents: a photo is read by the vision model, checked by arithmetic, and matched to deliveries")
+def _():
+    import documents as DC, station as ST
+    raw = {"doc_type": "invoice", "vendor": "Core-Mark", "number": "INV-55", "date": "10/07/2026",
+           "lines": [{"description": "Marlboro carton", "quantity": "10", "unit_price": "$62.50", "amount": "625.00"},
+                     {"description": "Red Bull 24", "quantity": 2, "unit_price": 38.4, "amount": 80.0}],
+           "subtotal": "705.00", "tax": None, "total": "1,705.00"}
+    x = DC.normalise(raw)
+    assert x["date"] == "2026-10-07" and x["lines"][0]["unit_price"] == 62.5 and x["total"] == 1705.0
+    checks = {c["check"]: c for c in DC.arithmetic(x)}
+    assert checks["Line 1: 10 × 62.5 = 625.00"]["ok"] is True
+    assert checks["Line 2: 2 × 38.4 = 80.00"]["ok"] is False and "76.80" in checks["Line 2: 2 × 38.4 = 80.00"]["detail"]
+    assert next(c for k, c in checks.items() if k.startswith("Subtotal"))["ok"] is False      # 705 is not 1,705
+    assert DC._number("(12.50)") == -12.5 and DC._number("n/a") is None
+    # a BOL: matched by size within three days, or flagged as not recorded
+    real_q, real_view = ST.query, ST.view
+    ST.view = lambda: {"configured": True}
+    seen = []
+    def fake(sql, limit=200, cfg=None):
+        seen.append(sql)
+        return {"columns": [], "rows": [["2026-10-07", "Regular", "8500.000", "B1", "Chevron"]], "more": False}
+    ST.query = fake
+    try:
+        bol = DC.normalise({"doc_type": "bol", "vendor": "Chevron", "date": "2026-10-07", "lines": [],
+                            "fuel": [{"grade": "Regular", "gallons": 8500}, {"grade": "Diesel", "gallons": 3000}]})
+        m = DC.match(bol)
+        assert [r["ok"] for r in m] == [True, False] and "B1" in m[0]["detail"] and "not have been entered" in m[1]["detail"]
+        assert "current_setting('app.current_tenant_id'" in seen[0] and "- 3 AND" in seen[0]
+        bol["bol_number"] = "b1"
+        assert DC.match(bol)[0]["what"] == "BOL B1 in fuel_deliveries"
+    finally:
+        ST.query, ST.view = real_q, real_view
+    # reading end to end, with the model replaced: stored, listed, and handed to the analyst
+    real_ask = DC.ask_model
+    DC.ask_model = lambda image, model: raw
+    try:
+        d = DC.submit(b"\xff\xd8not really a jpeg", "IMG_0001.HEIC", "image/jpeg", background=False)
+        assert d["status"] == "done" and d["extracted"]["vendor"] == "Core-Mark"
+        assert any(r["id"] == d["id"] and r["problems"] == 2 for r in DC.listing())
+        assert "Core-Mark" in DC.analyst_task(d) and "NOT ok" in DC.analyst_task(d)
+        DC.ask_model = lambda image, model: (_ for _ in ()).throw(RuntimeError("model 'qwen2.5vl:7b' not found"))
+        again = DC.reread(d["id"], background=False)
+        assert again["status"] == "error" and "download it in Settings" in again["error"]
+        DC.delete(d["id"])
+    finally:
+        DC.ask_model = real_ask
+    for bad in ("../x", "dc123", "abc"):
+        try:
+            DC.load(bad)
+            raise AssertionError(bad)
+        except KeyError:
+            pass
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/documents", "/api/documents/{doc_id}", "/api/documents/{doc_id}/image", "/api/documents/{doc_id}/ask",
+            "/api/documents/settings"} <= paths
+    m = (ROOT / "frontend" / "mobile.html").read_text()
+    assert 'capture="environment"' in m and "function openDoc" in m and "createImageBitmap" in m
+    assert "function stDocs" in PAGE
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

@@ -110,6 +110,7 @@ label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
 </div>
 <nav id="nav" class="hidden">
   <button data-tab="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Ask</button>
+  <button data-tab="scan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>Scan</button>
   <button data-tab="inbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.3 20a2 2 0 0 0 3.4 0"/></svg>Inbox<span class="badge hidden" id="badge"></span></button>
   <button data-tab="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Me</button>
 </nav>
@@ -201,14 +202,16 @@ function showLogin(msg){
 }
 
 /* ---------- routing ---------- */
-const TABS = ["inbox", "me"];
+const TABS = ["inbox", "me", "scan"];
 function route(){
   clearInterval(S.timer);
-  const h = location.hash.slice(1), m = h.match(/^conv=(\w+)/);
+  const h = location.hash.slice(1), m = h.match(/^conv=(\w+)/), dm = h.match(/^doc=(\w+)/);
   if (m){ S.tab = "ask"; return openConv(m[1]); }
+  if (dm){ S.tab = "scan"; return openDoc(dm[1]); }
   S.tab = TABS.includes(h) ? h : "ask";
   if (S.tab === "inbox") return showInbox();
   if (S.tab === "me") return showMe();
+  if (S.tab === "scan") return showScan();
   if (window.MUSE_VIEWS && window.MUSE_VIEWS[S.tab]) return window.MUSE_VIEWS[S.tab]();
   return showConvs();
 }
@@ -222,10 +225,10 @@ async function showConvs(){
   chrome("Muse", {newChat: true});
   let d;
   try{ d = await api("/api/agentlab/conversations"); } catch(e){ if (e.message !== "signin") $("view").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  S.convs = (d.conversations || []).filter(c => c.agent === "Muse");
+  S.convs = d.conversations || [];
   $("view").innerHTML = `<div class="rowbtns" style="margin:0 0 12px"><button class="btn go" id="start" style="flex:1">Ask Muse something new</button></div>
     ${S.convs.length ? `<div class="list">${S.convs.map(c => `<button class="row" data-c="${esc(c.id)}"><span class="t">${esc(c.title)}</span>
-      <span class="s">${ago(c.updated)} · ${c.turns} ${c.turns === 1 ? "message" : "messages"}${c.status === "running" || c.status === "waiting" ? " · working…" : ""}</span></button>`).join("")}</div>`
+      <span class="s">${c.agent === "Muse" ? "" : esc(c.agent) + " · "}${ago(c.updated)} · ${c.turns} ${c.turns === 1 ? "message" : "messages"}${c.status === "running" || c.status === "waiting" ? " · working…" : ""}</span></button>`).join("")}</div>`
       : `<div class="empty">Ask about your store, a model, a maths problem or anything else. Muse picks the agent.</div>`}`;
   $("start").onclick = () => newConv();
   $("view").querySelectorAll("[data-c]").forEach(b => b.onclick = () => { location.hash = "conv=" + b.dataset.c; });
@@ -246,7 +249,10 @@ function turnHtml(t, i, last){
       ${steps ? `<ul class="steps">${steps}</ul>` : ""}${ask}<div class="rowbtns"><button class="btn bad" data-stop="${esc(t.run || "")}"${t.run ? "" : " disabled"}>Stop</button></div>`;
   else if (t.status === "done") body = `${md(t.answer)}${(t.muse_steps || []).length > 1 ? `<ul class="steps">${steps}</ul>` : ""}${window.MUSE_TURN_EXTRA ? window.MUSE_TURN_EXTRA(t, i) : ""}`;
   else body = `<div class="err">${esc(t.error || ("It " + (t.status || "stopped") + "."))}</div>`;
-  return `<div class="bubble me">${esc(t.task)}</div><div class="bubble it">${body}</div>`;
+  const long = (t.task || "").length > 360;
+  const mine = long ? `<div class="bubble me"><span>${esc(t.task.slice(0, 280))}…</span><button class="icon-btn" data-more="${i}"
+      style="color:#cfe0f5;padding:4px 0 0;display:block">Show all</button></div>` : `<div class="bubble me">${esc(t.task)}</div>`;
+  return `${mine}<div class="bubble it">${body}</div>`;
 }
 function approvalHtml(p){
   let args = "";
@@ -264,6 +270,7 @@ async function openConv(id){
     if (S.conv !== id) return;
     $("title").textContent = c.title || "Muse";
     const last = c.turns[c.turns.length - 1];
+    S.turns = c.turns;
     const live = last && ["running", "waiting"].includes(last.status);
     if (live && last.run){
       try{ const v = await api(`/api/agentlab/runs/${last.run}/live?since=100000`); S.pending[last.run] = v.status === "waiting" ? v.pending : null; } catch {}
@@ -278,6 +285,7 @@ async function openConv(id){
     if (!live) clearInterval(S.timer);
   };
   const wire = last => {
+    $("view").querySelectorAll("[data-more]").forEach(b => b.onclick = () => { b.parentElement.textContent = S.turns[+b.dataset.more].task; });
     $("view").querySelectorAll("[data-stop]").forEach(b => b.onclick = async () => { try{ await post(`/api/agentlab/runs/${b.dataset.stop}/stop`); } catch(e){ alert(e.message); } draw(); });
     $("view").querySelectorAll("[data-ans]").forEach(b => b.onclick = async () => {
       try{ await post(`/api/agentlab/runs/${last.run}/answer`, {approved: b.dataset.ans === "1"}); S.pending[last.run] = null; } catch(e){ alert(e.message); }
@@ -339,6 +347,97 @@ async function showInbox(){
     try{ await post("/api/inbox/read", {ids: [b.dataset.in]}); } catch {}
     if (b.dataset.conv) location.hash = "conv=" + b.dataset.conv; else showInbox();
   });
+}
+
+/* ---------- invoices and BOLs, from a photo ---------- */
+async function shrink(file){
+  // the phone's photo, at most 2000 px on its long side, as JPEG: a fraction of the upload
+  try{
+    const bmp = await createImageBitmap(file, {imageOrientation: "from-image"});
+    const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise(res => c.toBlob(b => res(b || file), "image/jpeg", 0.88));
+  } catch { return file; }
+}
+async function upload(file){
+  $("scanMsg").textContent = "Sending the photo…";
+  const blob = await shrink(file), fd = new FormData();
+  fd.append("file", blob, (file.name || "photo").replace(/\.\w+$/, "") + ".jpg");
+  const r = await fetch("/api/documents", {method: "POST", body: fd, credentials: "same-origin"});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok){ $("scanMsg").textContent = (d.detail && d.detail.message) || "It did not upload."; return; }
+  location.hash = "doc=" + d.id;
+}
+const money = v => v == null ? "–" : Number(v).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const mark = ok => ok === true ? `<span style="color:var(--good)">✓</span>` : ok === false ? `<span style="color:var(--bad)">✗</span>` : `<span class="muted">–</span>`;
+async function showScan(){
+  chrome("Invoices and BOLs");
+  let d;
+  try{ d = await api("/api/documents"); } catch(e){ if (e.message !== "signin") $("view").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const st = d.settings;
+  $("view").innerHTML = `${st.ready ? "" : `<div class="card" style="border-color:var(--warn)">${st.ollama
+      ? `The vision model <b>${esc(st.model)}</b> is not in Ollama yet. Download it on the Mac: Settings → Reading invoices and BOLs.`
+      : "Ollama is not running on the Mac, so photos cannot be read yet."}</div>`}
+    <div class="rowbtns" style="margin:0 0 6px">
+      <label class="btn go" style="flex:1;text-align:center;margin:0;color:var(--accent-ink)">Take a photo<input type="file" accept="image/*" capture="environment" id="cam" class="hidden"></label>
+      <label class="btn" style="margin:0;color:var(--ink)">Choose one<input type="file" accept="image/*" id="pick" class="hidden"></label></div>
+    <div class="muted" id="scanMsg" style="margin:0 0 12px">Flat, in good light, the whole page in the frame. Read on the Mac by ${esc(st.model)}; nothing leaves it.</div>
+    ${d.documents.length ? `<div class="list">${d.documents.map(x => `<button class="row" data-doc="${esc(x.id)}">
+        <span class="t">${esc(x.vendor || (x.status === "reading" ? "Reading…" : x.name || "Document"))}${x.number ? " · " + esc(x.number) : ""}</span>
+        <span class="s">${x.status === "reading" ? "being read" : x.status === "error" ? "could not be read" : esc(x.doc_type || "")}
+          ${x.date ? " · " + esc(x.date) : ""}${x.total != null ? " · $" + money(x.total) : ""}${x.problems ? ` · <span style="color:var(--bad)">${x.problems} to check</span>` : ""} · ${ago(x.t)}</span></button>`).join("")}</div>`
+      : `<div class="empty">Photograph a vendor invoice or a fuel BOL. It is read into lines and totals, checked, and matched against your store's records.</div>`}`;
+  ["cam", "pick"].forEach(id => $(id).onchange = e => { const f = e.target.files[0]; if (f) upload(f); });
+  $("view").querySelectorAll("[data-doc]").forEach(b => b.onclick = () => { location.hash = "doc=" + b.dataset.doc; });
+}
+async function openDoc(id){
+  chrome("Document", {back: true});
+  const draw = async () => {
+    let d;
+    try{ d = await api("/api/documents/" + id); } catch(e){ if (e.message !== "signin") $("view").innerHTML = `<div class="err">${esc(e.message)}</div>`; clearInterval(S.timer); return; }
+    if (location.hash !== "#doc=" + id){ clearInterval(S.timer); return; }
+    const x = d.extracted || {};
+    $("title").textContent = x.vendor || "Document";
+    const img = `<a href="/api/documents/${esc(id)}/image" target="_blank"><img src="/api/documents/${esc(id)}/image" alt="The photo"
+      style="width:100%;max-height:260px;object-fit:contain;border-radius:12px;background:var(--soft);margin-bottom:10px"></a>`;
+    if (d.status === "reading"){
+      $("view").innerHTML = img + `<div class="card"><div class="phase"><span class="dots"><i></i><i></i><i></i></span>Reading with ${esc(d.model)}…
+        a minute or two on the Mac</div></div>`;
+      return "reading";
+    }
+    clearInterval(S.timer);
+    if (d.status === "error"){
+      $("view").innerHTML = img + `<div class="card"><div class="err" style="margin:0">${esc(d.error)}</div>
+        <div class="rowbtns"><button class="btn go" id="again">Read it again</button><button class="btn bad" id="del">Delete</button></div></div>`;
+    } else {
+      const head = [["Type", x.doc_type], ["Vendor", x.vendor], ["Number", x.number], ["BOL", x.bol_number], ["Date", x.date || x.date_printed],
+        ["Subtotal", x.subtotal != null ? "$" + money(x.subtotal) : null], ["Tax", x.tax != null ? "$" + money(x.tax) : null],
+        ["Total", x.total != null ? "$" + money(x.total) : null]].filter(r => r[1]);
+      $("view").innerHTML = img + `<div class="card md" style="padding:10px 12px"><div class="tw"><table>${head.map(r => `<tr><th>${r[0]}</th><td>${esc(r[1])}</td></tr>`).join("")}</table></div></div>
+        ${(x.fuel || []).length ? `<div class="card md" style="padding:10px 12px"><b>Fuel delivered</b><div class="tw"><table><tr><th>Grade</th><th>Gallons</th></tr>
+          ${x.fuel.map(f => `<tr><td>${esc(f.grade)}</td><td class="n">${Number(f.gallons).toLocaleString()}</td></tr>`).join("")}</table></div></div>` : ""}
+        ${(x.lines || []).length ? `<div class="card md" style="padding:10px 12px"><b>${x.lines.length} line${x.lines.length === 1 ? "" : "s"}</b><div class="tw"><table>
+          <tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr>${x.lines.map(l => `<tr><td style="white-space:normal">${esc(l.description)}${l.item_code ? `<div class="muted" style="font-size:12px">${esc(l.item_code)}</div>` : ""}</td>
+          <td class="n">${l.quantity != null ? l.quantity : "–"}</td><td class="n">${money(l.unit_price)}</td><td class="n">${money(l.amount)}</td></tr>`).join("")}</table></div></div>` : ""}
+        <div class="card"><b>Checks</b>${(d.checks || []).concat(d.matches || []).map(c => `<div style="display:flex;gap:8px;margin-top:8px">
+            <div style="width:16px">${mark(c.ok)}</div><div>${esc(c.check || c.what)}${c.detail ? `<div class="muted">${esc(c.detail)}</div>` : ""}</div></div>`).join("")
+            || `<div class="muted" style="margin-top:6px">Nothing on the page to check.</div>`}
+          <div class="muted" style="margin-top:10px;font-size:13px">Read by ${esc(d.model)} in ${d.seconds} s. Compare it with the photo before acting on it.</div></div>
+        <div class="rowbtns"><button class="btn go" id="ask">Ask the Station analyst</button><button class="btn" id="again">Read it again</button>
+          <button class="btn bad" id="del">Delete</button></div>`;
+      $("ask").onclick = async () => {
+        $("ask").disabled = true;
+        try{ const r = await post(`/api/documents/${id}/ask`); location.hash = "conv=" + r.conversation.id; }
+        catch(e){ $("ask").disabled = false; if (e.message !== "signin") alert(e.message); }
+      };
+    }
+    $("again").onclick = async () => { try{ await post(`/api/documents/${id}/read`); } catch(e){ alert(e.message); } clearInterval(S.timer); S.timer = setInterval(draw, 3000); draw(); };
+    $("del").onclick = async () => { if (!confirm("Delete this photo and what was read from it?")) return;
+      try{ await api("/api/documents/" + id, {method: "DELETE"}); } catch {} location.hash = "scan"; };
+  };
+  clearInterval(S.timer);
+  if (await draw() === "reading") S.timer = setInterval(draw, 3000);
 }
 
 /* ---------- what Muse knows about you ---------- */

@@ -16203,6 +16203,12 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Reading invoices and BOLs</h3><small>Photograph a vendor invoice or a fuel BOL on the phone page; a vision
+        model in Ollama reads it here, then it is checked and matched against your store's records</small></header>
+      <div class="st-body" id="stDocs"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>What Muse knows about you</h3><small>Every Muse request and every conversation with an agent starts
         with these lines. Nothing is added unless you write it here or tell Muse “remember: …”</small></header>
       <div class="st-body" id="stProfile"><p class="st-msg">Loading…</p></div>
@@ -16249,6 +16255,35 @@ function stRender(){
   stStation();
   stPush();
   stProfile();
+  stDocs();
+}
+
+async function stDocs(){
+  const host = $("stDocs");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/documents/settings")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  const all = [...new Set([...d.suggested, ...d.installed.filter(m => /vl|vision|gemma3|llava|minicpm|moondream/i.test(m))])];
+  host.innerHTML = `<div class="st-keyrow"><div class="st-field"><label for="dcModel">Vision model</label>
+      <input id="dcModel" list="dcModels" value="${alEsc(d.model)}"><datalist id="dcModels">${all.map(m => `<option value="${alEsc(m)}">`).join("")}</datalist></div>
+      <button class="btn go" id="dcSave">Save</button>
+      <button class="btn" id="dcPull"${d.ready || !d.ollama ? " disabled" : ""}>Download it</button></div>
+    <div class="st-msg ${d.ready ? "good" : "bad"}" id="dcMsg" style="margin-top:6px">${!d.ollama ? "Ollama is not running." : d.ready
+      ? `${alEsc(d.model)} is in Ollama and ready.` : `${alEsc(d.model)} is not in Ollama yet: Download it.`}</div>
+    <div class="st-msg" style="margin-top:8px;line-height:1.5">qwen2.5vl:7b is quick (about 6 GB). qwen2.5vl:32b reads small print and
+      handwriting better (about 21 GB), and fits in this Mac's memory. Photos are taken on the
+      <a class="al-link" href="/m#scan" target="_blank" rel="noopener">phone page</a>, under Scan.</div>`;
+  $("dcSave").onclick = async () => {
+    const r = await fetch(API + "/api/documents/settings", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({model: $("dcModel").value.trim()})});
+    const x = await r.json();
+    if (!r.ok){ $("dcMsg").className = "st-msg bad"; $("dcMsg").textContent = (x.detail && x.detail.message) || "Not saved."; return; }
+    toast("Saved"); stDocs();
+  };
+  $("dcPull").onclick = async () => {
+    $("dcPull").disabled = true; $("dcMsg").className = "st-msg"; $("dcMsg").textContent = "Downloading… this can take a while; the Ollama card above shows progress.";
+    const r = await fetch(API + "/api/settings/ollama/pull", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({name: d.model})});
+    if (!r.ok){ const x = await r.json(); $("dcMsg").className = "st-msg bad"; $("dcMsg").textContent = (x.detail && x.detail.message) || "Not started."; }
+  };
 }
 
 async function stProfile(){
