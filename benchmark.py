@@ -207,8 +207,8 @@ def station_cases(ids: Optional[List[str]] = None, cfg=None) -> Dict[str, Any]:
     if want("st-week-gallons"):
         w = first("SELECT sum(fuel_volume_gallons), count(*) FROM day_reports WHERE {mine} AND business_date > '" + D
                   + "'::date - 7 AND business_date <= '" + D + "'", 2)
-        if _f(w[0]) is None:
-            skipped.append({"id": "st-week-gallons", "why": "no fuel gallons in the 7 days"})
+        if _f(w[0]) is None or int(w[1] or 0) < 4:
+            skipped.append({"id": "st-week-gallons", "why": f"only {w[1] or 0} of the 7 days have a day report"})
         else:
             add("st-week-gallons", f"How many gallons of fuel did the store sell {at} in the 7 days from "
                 f"{(d - dt.timedelta(days=6)).isoformat()} to {D}, both days included?",
@@ -239,12 +239,15 @@ def station_cases(ids: Optional[List[str]] = None, cfg=None) -> Dict[str, Any]:
                 "came in that day in all?", ["tool: query", f"regex: {_date_rx(when)}", _num(float(dl[0][1]), "0.5%")],
                 f"{when.isoformat()}: {float(dl[0][1]):,.1f} gallons ({dl[0][2]})")
     if want("st-top-merch"):
+        # fuel is reported among the merchandise codes too; the question is about the store's goods
         m = rows("SELECT coalesce(nullif(description, ''), merchandise_code), sum(sales_amount) FROM naxml_mcm_daily "
-                 "WHERE {mine} AND business_date = '" + D + "' GROUP BY 1 ORDER BY 2 DESC LIMIT 2")
+                 "WHERE {mine} AND business_date = '" + D + "' AND coalesce(description, '') !~* "
+                 "'(\\mfuel\\M|diesel|unleaded|gasoline)' GROUP BY 1 ORDER BY 2 DESC LIMIT 2")
         if not m or (len(m) > 1 and abs(float(m[0][1]) - float(m[1][1])) < 0.01):
             skipped.append({"id": "st-top-merch", "why": f"no merchandise rows for {D}, or a tie for the top"})
         else:
-            add("st-top-merch", f"Which merchandise category had the most sales {at} on {day} ({D}), and how much?",
+            add("st-top-merch", f"Which merchandise category, not counting fuel, had the most sales {at} on {day} "
+                f"({D}), and how much?",
                 ["tool: query", f"contains: {m[0][0].strip()}", _num(float(m[0][1]), "0.5%")],
                 f"{m[0][0].strip()}: ${float(m[0][1]):,.2f}")
     if want("st-cash"):

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.10.2
+
+- Station benchmark: the top-merchandise question leaves out fuel. NAXML
+  reports fuel among the merchandise codes ("Fuel 1"), which made fuel the top
+  category.
+- The 7-day gallons question is skipped when fewer than 4 of the 7 days have a
+  day report, rather than asking for a "week" of one day.
+
 ## 4.10.1
 
 - Station benchmark: a store whose day reports are never marked finalized
