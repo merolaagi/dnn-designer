@@ -957,9 +957,13 @@ def report_store():
 
 
 @app.get("/api/report/store.html", response_class=HTMLResponse)
-def report_store_html(brief: bool = True):
+def report_store_html(brief: bool = True, theme: str = ""):
+    """theme=light or dark fixes the colours, for an app with a look of its own; otherwise it follows the device."""
     snap, b = _report(brief)
-    return HTMLResponse(report.html(snap, b))
+    page = report.html(snap, b)
+    if theme in ("light", "dark"):
+        page = page.replace('<html lang="en">', f'<html lang="en" data-theme="{theme}">', 1)
+    return HTMLResponse(page)
 
 
 @app.get("/api/report/store.pdf")

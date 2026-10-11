@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.16.1
+
+- The store report page takes `?theme=light` or `?theme=dark`, so the Saathi
+  app, which has a light look of its own, isn't shown a dark report when the
+  phone is in dark mode.
+
 ## 4.16.0
 
 - **Server side of Saathi, the iPhone app for Muse.** Settings → The Saathi
