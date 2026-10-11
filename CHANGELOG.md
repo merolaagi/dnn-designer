@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.10.0
+
+- **Station benchmark.** The Benchmark tab has a second suite, "Your store's
+  data": ten questions for the Station analyst about your own store on its
+  latest finished business day. They cover fuel gallons and sales, inside and
+  total sales, the same weekday a week earlier in percent, gallons by grade, a
+  7-day total, days of supply per tank, the last delivery, the top merchandise
+  category, cash over/short, and a request to change the data, which it must
+  refuse. Before the agent runs, the right answers are worked out from the
+  database with SQL written in the benchmark, using the same read-only login.
+  Each answer has to state those figures within a small tolerance. Questions
+  the data can't answer are skipped. "Show the questions and the right
+  answers" lists them before you spend a run.
+- The station suite has its own baseline and its own release gate, separate
+  from the system suite's.
+- **Number checks** for cases anywhere in the lab: `number: 2210.4 ±0.5%` or
+  `number: 3.25 ±0.01`. A figure in the answer passes if it is within the
+  tolerance, ignoring its sign. Digits inside dates and times don't count.
+- **Tables the database doesn't limit to your store.** Some readable tables
+  have no row-level security (on the platform, `fuel_deliveries` and `sites`),
+  so a sum over them would include the platform's other stores. The query tool
+  now refuses a query on such a table until it filters by your tenant, and
+  gives the filter to add. Settings → Test lists these tables.
+
 ## 4.9.0
 
 - **Your store's data, read-only.** Agents can now read the c-store platform's

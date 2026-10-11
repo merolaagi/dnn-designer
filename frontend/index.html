@@ -14943,21 +14943,43 @@ function alCostsHtml(c){
    The same real tasks for the lab's agents, run on up to three models, each checked automatically. */
 async function alRenderBench(){
   const S = agentLabState;
-  S.bench = S.bench || {data: null, models: null, ids: null, k: 1, current: null};
+  S.bench = S.bench || {data: null, models: null, ids: null, sids: null, k: 1, current: null, suite: "system", preview: null};
   const bm = S.bench;
   try{ bm.data = await (await fetch(API + "/api/benchmark")).json(); } catch { bm.data = bm.data || {suite: [], runs: [], ready: []}; }
   if (S.tab !== "bench") return;
   const d = bm.data;
+  const st = d.station || {suite: [], configured: false}, onStation = bm.suite === "station";
   bm.ids = bm.ids || d.suite.map(t => t.id);
+  bm.sids = bm.sids || st.suite.map(t => t.id);
+  const chosen = onStation ? bm.sids : bm.ids;
   bm.models = bm.models || [{provider: (d.default || {}).provider || "", model: (d.default || {}).model || ""}];
   const running = bm.current && ["running", "stopping"].includes(bm.current.status);
   const provOpts = sel => d.ready.map(p => `<option value="${alEsc(p.provider)}"${p.provider === sel ? " selected" : ""}>${alEsc(p.name)}</option>`).join("");
   const modelList = pid => ((d.ready.find(p => p.provider === pid) || {}).models || []);
-  const base = d.baseline;
-  $("alPane").innerHTML = `<h3>Benchmark the system</h3>
+  const base = (d.baselines || {})[bm.suite] || (onStation ? null : d.baseline);
+  const runs = (d.runs || []).filter(r => (r.suite || "system") === bm.suite);
+  const taskList = onStation
+    ? `<div class="bm-tasks">${st.suite.map(t => `<label><input type="checkbox" data-bmid="${alEsc(t.id)}"${bm.sids.includes(t.id) ? " checked" : ""}>
+        <span><b>${alEsc(t.id)}</b> · ${alEsc(t.skill)}<small>${alEsc(t.about)}</small></span></label>`).join("")}</div>
+       <div class="row" style="margin:6px 0"><button class="btn" id="bmPreview"${st.configured ? "" : " disabled"}>Show the questions and the right answers</button></div>
+       <div id="bmPrev">${bm.preview ? alBenchPreviewHtml(bm.preview) : ""}</div>`
+    : `<div class="bm-tasks">${d.suite.map(t => `<label><input type="checkbox" data-bmid="${alEsc(t.id)}"${bm.ids.includes(t.id) ? " checked" : ""}>
+      <span><b>${alEsc(t.id)}</b> · ${alEsc(t.agent)} · ${alEsc(t.skill)}<small>${alEsc(t.task.slice(0, 160))}${t.task.length > 160 ? "…" : ""}</small>
+      <small>checks: ${alEsc(t.checks.split("\n").join(" · "))}</small></span></label>`).join("")}</div>`;
+  $("alPane").innerHTML = `<div class="row" style="gap:6px;margin-bottom:6px">
+      <button class="btn${onStation ? "" : " go"}" data-bmsuite="system">The system</button>
+      <button class="btn${onStation ? " go" : ""}" data-bmsuite="station">Your store's data</button></div>
+    ${onStation ? `<h3>Benchmark the Station analyst on your store</h3>
+    <p class="al-muted">Ten questions about your own store on its latest finished business day: one day's fuel and inside
+    sales, the same weekday a week before, gallons by grade, a 7-day total, days of supply per tank, the last delivery,
+    the top merchandise category, cash over/short, and a request to change the data that it must refuse. Before the
+    agent runs, the right answers are worked out from the database with SQL written here, as the same read-only login,
+    and each answer must state those figures, within a small tolerance. Questions the data cannot answer are skipped.</p>
+    ${st.configured ? "" : `<div class="help bad">Connect your store's data in Settings first (Your store's data).</div>`}`
+    : `<h3>Benchmark the system</h3>
     <p class="al-muted">Real tasks for the lab's agents (Math search, Model builder, Reverse engineer, Specialist, ReAct),
     each checked automatically: no judge model. Run the same tasks on two or three models to see how much of a failure
-    is the model's and how much the system's. Every trial is sorted into passed, wrong answer, no tool use or error.</p>
+    is the model's and how much the system's. Every trial is sorted into passed, wrong answer, no tool use or error.</p>`}
     ${base ? `<p class="al-muted">Baseline: <b>${alEsc(base.label)}</b> passed ${Math.round(base.pass_rate * 100)}% on v${alEsc(base.version)}.
       Releases are refused if a benchmark of the new version on this model scores lower, beyond its noise.
       <button class="al-link" id="bmClear" style="border:0;background:none;padding:0;cursor:pointer">Clear the baseline</button></p>` : ""}
@@ -14969,33 +14991,39 @@ async function alRenderBench(){
       ${bm.models.length > 1 ? `<button class="btn" data-bmdrop="${i}" aria-label="Remove this model">×</button>` : ""}</div>`).join("")}
     ${bm.models.length < 3 ? `<button class="btn" id="bmAdd">Add a model to compare</button>` : ""}
     ${!d.ready.length ? `<div class="help bad">No provider is ready: add a key or start Ollama in Settings.</div>` : ""}
-    <h4>Tasks</h4>
-    <div class="bm-tasks">${d.suite.map(t => `<label><input type="checkbox" data-bmid="${alEsc(t.id)}"${bm.ids.includes(t.id) ? " checked" : ""}>
-      <span><b>${alEsc(t.id)}</b> · ${alEsc(t.agent)} · ${alEsc(t.skill)}<small>${alEsc(t.task.slice(0, 160))}${t.task.length > 160 ? "…" : ""}</small>
-      <small>checks: ${alEsc(t.checks.split("\n").join(" · "))}</small></span></label>`).join("")}</div>
+    <h4>${onStation ? "Questions" : "Tasks"}</h4>
+    ${taskList}
     <div class="al-row2"><div class="field"><label for="bmK">Trials per task</label><input type="number" id="bmK" min="1" max="5" value="${bm.k}"></div></div>
-    <p class="al-muted">${bm.ids.length * bm.models.length * bm.k} live runs. On a model on this computer, budget several minutes each.</p>
+    <p class="al-muted">${chosen.length * bm.models.length * bm.k} live runs. On a model on this computer, budget several minutes each.</p>
     <div class="row" style="margin:8px 0 4px">
-      <button class="btn go" id="bmGo"${running || !d.ready.length ? " disabled" : ""}>${running ? "Running…" : "Run the benchmark"}</button>
+      <button class="btn go" id="bmGo"${running || !d.ready.length || (onStation && !st.configured) ? " disabled" : ""}>${running ? "Running…" : "Run the benchmark"}</button>
       ${running ? `<button class="btn stop" id="bmStop">Stop</button>` : ""}
-      ${(d.runs || []).length ? `<select id="bmPast"><option value="">Earlier benchmarks…</option>${d.runs.map(r =>
+      ${runs.length ? `<select id="bmPast"><option value="">Earlier benchmarks…</option>${runs.map(r =>
         `<option value="${alEsc(r.id)}">v${alEsc(r.version || "?")} · ${r.models.map(m => `${m.label} ${m.pass_rate != null ? Math.round(m.pass_rate * 100) + "%" : "–"}`).join(" vs ")} · ${new Date(r.started * 1000).toLocaleString()}</option>`).join("")}</select>` : ""}
     </div>
-    <div id="bmOut">${bm.current ? alBenchHtml(bm.current) : ""}</div>
-    <h3 style="margin-top:22px">Routing: does Muse send requests to the right agent?</h3>
+    <div id="bmOut">${bm.current && (bm.current.suite || "system") === bm.suite ? alBenchHtml(bm.current) : ""}</div>
+    ${onStation ? "" : `<h3 style="margin-top:22px">Routing: does Muse send requests to the right agent?</h3>
     <p class="al-muted">Sixteen requests in everyday words go through Muse's decoder only, with no agent run: one model
     call each, so it takes minutes, not hours. Each is right when it reaches the agent a person would pick. Rehearsal
     uses plain keyword matching: the score to beat.</p>
     <div class="row"><button class="btn go" id="rcLive">Check routing with the default model</button>
       <button class="btn" id="rcRehearsal">Check keyword matching</button></div>
-    <div id="rcOut">${bm.route ? alRouteHtml(bm.route) : ""}</div>`;
+    <div id="rcOut">${bm.route ? alRouteHtml(bm.route) : ""}</div>`}`;
+  $("alPane").querySelectorAll("[data-bmsuite]").forEach(el => el.onclick = () => { bm.suite = el.dataset.bmsuite; alRenderBench(); });
+  if ($("bmPreview")) $("bmPreview").onclick = async () => {
+    $("bmPrev").innerHTML = `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Working out the answers from your data…</div>`;
+    const r = await fetch(API + "/api/benchmark/station/preview"), p = await r.json();
+    if (!r.ok){ $("bmPrev").innerHTML = `<div class="runfail">${alEsc((p.detail && p.detail.message) || "Could not read the data.")}</div>`; return; }
+    bm.preview = p; $("bmPrev").innerHTML = alBenchPreviewHtml(p);
+  };
   $("alPane").querySelectorAll("[data-bmprov]").forEach(el => el.onchange = () => {
     const i = +el.dataset.bmprov; bm.models[i] = {provider: el.value, model: modelList(el.value)[0] || ""}; alRenderBench(); });
   $("alPane").querySelectorAll("[data-bmmodel]").forEach(el => el.oninput = () => { bm.models[+el.dataset.bmmodel].model = el.value.trim(); });
   $("alPane").querySelectorAll("[data-bmdrop]").forEach(el => el.onclick = () => { bm.models.splice(+el.dataset.bmdrop, 1); alRenderBench(); });
   if ($("bmAdd")) $("bmAdd").onclick = () => { const p = d.ready[0] || {provider: "", models: []}; bm.models.push({provider: p.provider, model: (p.models || [])[0] || ""}); alRenderBench(); };
   $("alPane").querySelectorAll("[data-bmid]").forEach(el => el.onchange = () => {
-    bm.ids = el.checked ? [...new Set([...bm.ids, el.dataset.bmid])] : bm.ids.filter(x => x !== el.dataset.bmid); alRenderBench(); });
+    const key = onStation ? "sids" : "ids";
+    bm[key] = el.checked ? [...new Set([...bm[key], el.dataset.bmid])] : bm[key].filter(x => x !== el.dataset.bmid); alRenderBench(); });
   $("bmK").oninput = e => { bm.k = Math.max(1, Math.min(5, +e.target.value || 1)); };
   $("bmGo").onclick = alBenchStart;
   if ($("bmStop")) $("bmStop").onclick = () => fetch(API + `/api/benchmark/${bm.current.id}/stop`, {method: "POST"});
@@ -15008,9 +15036,9 @@ async function alRenderBench(){
     bm.route = d;
     if ($("rcOut")) $("rcOut").innerHTML = alRouteHtml(d);
   };
-  $("rcLive").onclick = () => routeGo("live");
-  $("rcRehearsal").onclick = () => routeGo("rehearsal");
-  if ($("bmClear")) $("bmClear").onclick = async () => { await fetch(API + "/api/benchmark/baseline", {method: "DELETE"}); alRenderBench(); };
+  if ($("rcLive")) $("rcLive").onclick = () => routeGo("live");
+  if ($("rcRehearsal")) $("rcRehearsal").onclick = () => routeGo("rehearsal");
+  if ($("bmClear")) $("bmClear").onclick = async () => { await fetch(API + "/api/benchmark/baseline?suite=" + bm.suite, {method: "DELETE"}); alRenderBench(); };
   if ($("bmPast")) $("bmPast").onchange = async e => {
     if (!e.target.value) return;
     bm.current = await (await fetch(API + "/api/benchmark/" + e.target.value)).json();
@@ -15025,7 +15053,7 @@ async function alBenchStart(){
   let r, d;
   try{
     r = await fetch(API + "/api/benchmark", {method: "POST", headers: {"content-type": "application/json"},
-      body: JSON.stringify({models: bm.models, k: bm.k, ids: bm.ids, mode: "live"})});
+      body: JSON.stringify({models: bm.models, k: bm.k, ids: bm.suite === "station" ? bm.sids : bm.ids, mode: "live", suite: bm.suite})});
     d = await r.json();
   } catch { $("bmOut").innerHTML = `<div class="runfail">The server did not answer.</div>`; return; }
   if (!r.ok){ $("bmOut").innerHTML = `<div class="runfail">${alEsc((d.detail && d.detail.message) || "The benchmark did not start.")}</div>`; return; }
@@ -15070,6 +15098,13 @@ function alRouteHtml(c){
       <td class="c"><span class="${x.passed ? "bm-ok" : "bm-bad"}">${x.passed ? "✓" : "✗"}</span><div class="al-muted">${x.seconds}s</div></td></tr>`).join("")}</table>`;
 }
 
+function alBenchPreviewHtml(p){
+  return `<p class="al-muted">${alEsc(p.site)} · business day ${alEsc(p.day)}: the questions the agent will get, and what its answer must state.</p>
+    <table class="bm-table"><tr><th>Question</th><th>Right answer</th></tr>
+    ${p.tasks.map(t => `<tr><td><b>${alEsc(t.id)}</b><div class="al-muted">${alEsc(t.task)}</div></td><td>${alEsc(t.expected)}</td></tr>`).join("")}
+    ${(p.skipped || []).map(x => `<tr><td><b>${alEsc(x.id)}</b></td><td class="al-muted">skipped: ${alEsc(x.why)}</td></tr>`).join("")}</table>`;
+}
+
 function alBenchHtml(b){
   const labels = b.models.map(m => m.label), pct = v => v == null ? "–" : Math.round(v * 100) + "%";
   const head = ["running", "stopping"].includes(b.status)
@@ -15087,8 +15122,10 @@ function alBenchHtml(b){
       <div class="al-muted" style="font-size:10.5px">${alEsc(ts[ts.length - 1].outcome)} · ${ts[ts.length - 1].seconds}s</div></td>`;
   };
   const table = `<table class="bm-table"><tr><th>Task</th>${labels.map(l => `<th>${alEsc(l)}</th>`).join("")}</tr>
-    ${b.tasks.map(t => `<tr><td><b>${alEsc(t.id)}</b><div class="al-muted">${alEsc(t.skill)}</div></td>${labels.map(l => cell(l, t.id)).join("")}</tr>`).join("")}</table>`;
-  return head + sums + table + `<p class="al-muted">Hover a mark for what failed. The trials' runs are in Run history.</p>`;
+    ${b.tasks.map(t => `<tr><td><b>${alEsc(t.id)}</b><div class="al-muted">${alEsc(t.skill)}</div>${t.expected ? `<div class="al-muted">right answer: ${alEsc(t.expected)}</div>` : ""}</td>${labels.map(l => cell(l, t.id)).join("")}</tr>`).join("")}
+    ${(b.skipped || []).map(x => `<tr><td><b>${alEsc(x.id)}</b><div class="al-muted">skipped: ${alEsc(x.why)}</div></td>${labels.map(() => `<td class="c al-muted">–</td>`).join("")}</tr>`).join("")}</table>`;
+  const where = b.suite === "station" ? `<p class="al-muted">${alEsc(b.site || "")} · business day ${alEsc(b.day || "")}</p>` : "";
+  return head + where + sums + table + `<p class="al-muted">Hover a mark for what failed. The trials' runs are in Run history.</p>`;
 }
 
 /* ---------- evolve: the design improves itself, under regularisers ----------
@@ -15286,7 +15323,7 @@ async function alRenderStudy(){
     <div class="field"><label for="alCases">Cases</label>
       <textarea id="alCases" class="al-cases" spellcheck="false">${alEsc(st.cases)}</textarea>
       <div class="help">A task on the first line, then one check per line: <code>contains:</code>, <code>excludes:</code>,
-      <code>regex:</code>, <code>tool:</code>, <code>result:</code> (a regex over what the tools returned), <code>max calls:</code>, <code>finished</code>, <code>judge:</code> with a
+      <code>regex:</code>, <code>tool:</code>, <code>result:</code> (a regex over what the tools returned), <code>number:</code> (a figure within a tolerance, such as <code>number: 2210.4 ±0.5%</code>), <code>max calls:</code>, <code>finished</code>, <code>judge:</code> with a
       criterion in plain words, or <code>eval:</code> and an evaluator from the library. <code>reference:</code> and
       <code>bad example:</code> give the judge an answer to compare against. A blank line starts the next case.</div></div>
     <details class="al-evlib"><summary>Evaluator library</summary><div id="alEvLib" class="al-muted">loading…</div></details>
@@ -16226,7 +16263,8 @@ async function stStation(){
     if (!r.ok){ const e = await r.json(); $("ssMsg").textContent = (e.detail && e.detail.message) || "Not saved."; return; }
     const t = await (await fetch(API + "/api/station/test", {method: "POST"})).json();
     $("ssMsg").className = "st-msg " + (t.ok ? "good" : "bad");
-    $("ssMsg").textContent = t.ok ? `Connected: ${t.tables} readable tables${t.sites.length ? `; sites: ${t.sites.join(", ")}` : ""} (${t.ms} ms)` : t.error;
+    $("ssMsg").textContent = t.ok ? `Connected: ${t.tables} readable tables${t.sites.length ? `; sites: ${t.sites.join(", ")}` : ""} (${t.ms} ms)`
+      + ((t.unfiltered || []).length ? `. Not limited to your store by the database: ${t.unfiltered.join(", ")}; queries on them must filter by your store, and the analyst's are refused until they do.` : "") : t.error;
   };
   const preset = async which => {
     const r = await fetch(API + "/api/station/preset", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({which})});

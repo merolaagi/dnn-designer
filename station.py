@@ -91,7 +91,10 @@ _STRINGS = re.compile(r"'(?:[^']|'')*'")
 _WRITES = re.compile(r"\b(insert|update|delete|merge|drop|alter|create|truncate|grant|revoke|copy)\b", re.I)
 
 
-def check_sql(sql: str) -> str:
+MINE = "site_id IN (SELECT id FROM sites WHERE tenant_id = current_setting('app.current_tenant_id', true))"
+
+
+def check_sql(sql: str, cfg: Optional[Dict[str, Any]] = None) -> str:
     """The query as it will run, or ValueError saying why it may not."""
     text = _COMMENTS.sub(" ", str(sql or "")).strip().rstrip(";").strip()
     bare = _STRINGS.sub("''", text)
@@ -104,7 +107,37 @@ def check_sql(sql: str) -> str:
     found = _WRITES.search(bare)
     if found:
         raise ValueError(f"“{found.group(0)}” is not allowed: this connection only reads.")
+    if not re.search(r"current_setting\s*\(\s*'app\.current_tenant_id'", text, re.I):
+        named = [t for t in unprotected(cfg) if re.search(rf"\b{t}\b", bare, re.I)]
+        if named:
+            # these tables hold every tenant's rows and the database does not filter them: without this
+            # filter a sum would include the other stores on the platform
+            where = ("WHERE tenant_id = current_setting('app.current_tenant_id', true)" if named[0] == "sites"
+                     else f"WHERE {MINE}")
+            raise ValueError(f"{named[0]} holds every store's rows on the platform, not only yours: add "
+                             f"{where} to the query (with AND if it already has a WHERE).")
     return text
+
+
+_UNPROTECTED: Dict[str, Any] = {"key": None, "at": 0.0, "names": []}
+
+
+def unprotected(cfg: Optional[Dict[str, Any]] = None) -> List[str]:
+    """Readable tables that row-level security does not limit to this login's tenant (cached ten minutes)."""
+    cfg = cfg or config()
+    key = (cfg.get("host"), cfg.get("port"), cfg.get("database"), cfg.get("user"))
+    if _UNPROTECTED["key"] == key and time.time() - _UNPROTECTED["at"] < 600:
+        return _UNPROTECTED["names"]
+    try:
+        out = _run("SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                   "WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity AND c.relname IN "
+                   "(SELECT table_name FROM information_schema.columns WHERE table_schema = 'public' "
+                   "AND column_name IN ('site_id', 'tenant_id')) ORDER BY 1", cfg)
+    except RuntimeError:
+        return []                                  # not reachable: the query that follows will say so
+    names = [r[0] for r in list(csv.reader(io.StringIO(out)))[1:] if r]
+    _UNPROTECTED.update(key=key, at=time.time(), names=names)
+    return names
 
 
 def _run(sql: str, cfg: Optional[Dict[str, Any]] = None) -> str:
@@ -128,7 +161,7 @@ def _run(sql: str, cfg: Optional[Dict[str, Any]] = None) -> str:
 
 def query(sql: str, limit: int = MAX_ROWS, cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Rows of a checked SELECT, at most `limit` of them."""
-    text = check_sql(sql)
+    text = check_sql(sql, cfg)
     limit = max(1, min(int(limit or MAX_ROWS), MAX_ROWS))
     out = _run(f"SELECT * FROM ({text}) AS q LIMIT {limit + 1}", cfg)
     rows = list(csv.reader(io.StringIO(out)))
@@ -176,7 +209,7 @@ def test(cfg=None) -> Dict[str, Any]:
                       "ORDER BY name", cfg=cfg)["rows"]
     except (RuntimeError, ValueError):
         pass
-    return {"ok": True, "tables": len(found), "sites": [r[0] for r in sites],
+    return {"ok": True, "tables": len(found), "sites": [r[0] for r in sites], "unfiltered": unprotected(cfg),
             "ms": round((time.time() - started) * 1000)}
 
 
@@ -247,6 +280,8 @@ GUIDE = (
     "- shift_reports, department_totals (per shift: dept_name, net_sales, cost_of_goods), cashier_stats, "
     "tender_totals; lottery_* for lottery; purchase_orders, items, inventory_levels for stock.\n"
     "- xml_files (received_at) and agent_pings show whether the store's POS data is arriving.\n"
+    "A few tables hold every store on the platform (the query tool says which, and gives the filter to add): "
+    "sum only this store's rows.\n"
     "Days of fuel supply for a tank = its latest close_volume divided by its average daily sales_volume over the "
     "last 7 business days. Compare a day with the same weekday a week earlier, not the day before.\n"
     "Always answer in the language the user writes in.")

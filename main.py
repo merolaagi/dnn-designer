@@ -765,6 +765,7 @@ class BenchmarkStart(BaseModel):
     k: int = 1
     ids: Optional[List[str]] = None
     mode: str = "live"
+    suite: str = "system"
 
 
 class BenchmarkBaseline(BaseModel):
@@ -776,7 +777,7 @@ def _bench_action(fn, *args):
         return fn(*args)
     except KeyError:
         raise HTTPException(404, detail={"message": "No such benchmark."})
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         raise HTTPException(400, detail={"message": str(exc)})
 
 
@@ -948,14 +949,24 @@ def benchmark_overview():
     ready = [{"provider": p["id"], "name": p["name"], "models": (p.get("models") or []) + [
                  m for m in (p.get("suggested") or []) if m not in (p.get("models") or [])]}
              for p in view["providers"] if p.get("ready")]
+    sv = station.view()
     return {"suite": [{k: t[k] for k in ("id", "agent", "skill", "task", "checks")} for t in benchmark.SUITE],
-            "runs": benchmark.listing(), "baseline": benchmark.baseline(), "ready": ready,
+            "station": {"suite": benchmark.STATION_SUITE, "configured": sv["configured"] and sv["has_password"]},
+            "runs": benchmark.listing(), "baseline": benchmark.baseline(),
+            "baselines": {s: benchmark.baseline(s) for s in benchmark.SUITES}, "ready": ready,
             "default": {"provider": view["defaults"]["provider"], "model": view["defaults"]["model"]}}
 
 
 @app.post("/api/benchmark")
 def benchmark_start(body: BenchmarkStart):
-    return _bench_action(benchmark.start, body.models, body.k, body.ids, body.mode)
+    return _bench_action(benchmark.start, body.models, body.k, body.ids, body.mode, True, body.suite)
+
+
+@app.get("/api/benchmark/station/preview")
+def benchmark_station_preview():
+    """The station questions as they would be asked now, with the answers worked out from the database."""
+    built = _bench_action(benchmark.station_cases)
+    return {**built, "tasks": [{k: t[k] for k in ("id", "skill", "task", "checks", "expected")} for t in built["tasks"]]}
 
 
 @app.get("/api/benchmark/{bench_id}")
@@ -974,8 +985,8 @@ def benchmark_set_baseline(bench_id: str, body: BenchmarkBaseline):
 
 
 @app.delete("/api/benchmark/baseline")
-def benchmark_clear_baseline():
-    return benchmark.clear_baseline()
+def benchmark_clear_baseline(suite: str = "system"):
+    return _bench_action(benchmark.clear_baseline, suite)
 
 
 class AgentLabEvolve(BaseModel):

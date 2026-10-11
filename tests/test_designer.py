@@ -10755,6 +10755,7 @@ def _():
 def _():
     import re
     import station as ST
+    ST._UNPROTECTED.update(key=tuple(ST.config()[k] for k in ("host", "port", "database", "user")), at=time.time(), names=[])
     assert ST.check_sql("  select 1 ; ") == "select 1"
     assert ST.check_sql("WITH d AS (SELECT 1 AS x) SELECT x FROM d").startswith("WITH")
     assert ST.check_sql("SELECT 'a; b' AS t -- note; here") == "SELECT 'a; b' AS t"
@@ -10849,6 +10850,122 @@ def _():
     paths = {r.path for r in main.app.routes}
     assert {"/api/station", "/api/station/test", "/api/station/preset"} <= paths
     assert "function stStation" in PAGE and "Add the ingest watchdog" in PAGE
+
+
+@check("number checks: a figure within its tolerance passes; dates, times and other figures do not")
+def _():
+    n = agentlab.number_in
+    assert n("Sold 2,210.4 gallons", "2210.402 ±0.5%") and n("short $3.25", "-3.25 ±0.01") and n("down 7.8%", "-7.769 ±0.6")
+    assert not n("Sold 2,100 gallons", "2210.4 ±0.5%") and not n("on 2026-10-09 at 10:09", "2026 ±1")
+    assert not n("on 10/9", "10 ±0.5")
+    assert agentlab.parse_cases("t\nnumber: 12 ±1%")["cases"][0]["checks"] == [{"kind": "number", "value": "12 ±1%"}]
+    assert agentlab.parse_cases("t\nnumber: twelve")["problems"]
+    got = agentlab.score({"answer": "It was 1,982.4 gallons.", "events": []}, [{"kind": "number", "value": "1982.4 ±0.5%"}])
+    assert got[0]["passed"] is True
+
+
+@check("station data: tables the database does not limit to the store are refused until the query filters them")
+def _():
+    import station as ST
+    real = ST.unprotected
+    ST.unprotected = lambda cfg=None: ["fuel_deliveries", "sites"]
+    try:
+        for bad in ("SELECT sum(gallons) FROM fuel_deliveries", "SELECT name FROM sites"):
+            try:
+                ST.check_sql(bad)
+                raise AssertionError(bad)
+            except ValueError as exc:
+                assert "every store's rows" in str(exc) and "current_setting('app.current_tenant_id', true)" in str(exc)
+        assert ST.check_sql(f"SELECT sum(gallons) FROM fuel_deliveries WHERE {ST.MINE}")
+        assert ST.check_sql("SELECT sum(sales_volume) FROM fuel_grade_sales")         # has its own row-level security
+        assert ST.check_sql("SELECT 'fuel_deliveries' AS t")                            # only named in a string
+    finally:
+        ST.unprotected = real
+
+
+def _fake_station(rows_for):
+    """station.query answering from a list of (substring of the SQL, rows)."""
+    def q(sql, limit=200, cfg=None):
+        for needle, rows in rows_for:
+            if needle in sql:
+                return {"columns": [], "rows": rows, "more": False}
+        return {"columns": [], "rows": [], "more": False}
+    return q
+
+
+@check("station benchmark: questions name the store and day, the right answers come from SQL, and they grade answers")
+def _():
+    import benchmark as B, station as ST
+    real = ST.query
+    ST.query = _fake_station([
+        ("ORDER BY 3 DESC, 2 LIMIT 1", [["s1", "University Chevron #90877", "2026-10-10"]]),
+        ("AND is_finalized", [["2026-10-09"]]),
+        ("sum(cash_over_short)", [["1982.402", "7106.10", "3074.55", "10180.65", "-5.25"]]),
+        ("business_date = '2026-10-02'", [["3333.55"]]),
+        ("FROM fuel_grade_sales", [["001", "1218.000"], ["002", "258.000"]]),
+        ("count(*) FROM day_reports", [["14737.8", "7"]]),
+        ("FROM fuel_inventory_daily", [["1", "REGULAR", "4.749"], ["2", "PREMIUM", "10.615"]]),
+        ("FROM fuel_deliveries", [["2026-10-07", "10500.5", "Premium, Regular"]]),
+        ("FROM naxml_mcm_daily", [["CIGARETTES", "1202.00"], ["BEER", "801.00"]]),
+    ])
+    try:
+        built = B.station_cases()
+    finally:
+        ST.query = real
+    assert built["day"] == "2026-10-09" and built["site"] == "University Chevron #90877" and not built["skipped"]
+    tasks = {t["id"]: t for t in built["tasks"]}
+    assert set(tasks) == {t["id"] for t in B.STATION_SUITE}
+    assert all("University Chevron #90877" in t["task"] for t in tasks.values())
+    assert "2026-10-09" in tasks["st-day-fuel"]["task"] and "Friday, October 9, 2026" in tasks["st-day-fuel"]["task"]
+    run = lambda tid, answer, tool=True: B.classify(agentlab.score(
+        {"answer": answer, "ok": True, "events": [{"event": "tool_result", "tool": "query"}] if tool else []},
+        tasks[tid]["case"]["checks"]), {})
+    assert run("st-day-fuel", "On 2026-10-09 the store sold 1,982.4 gallons; fuel net sales were $7,106.10.") == "passed"
+    assert run("st-day-fuel", "On 2026-10-09 the store sold 1,900 gallons; fuel net sales were $7,106.10.") == "wrong answer"
+    assert run("st-day-fuel", "It sold 1,982.4 gallons for $7,106.10.", tool=False) == "no tool use"
+    assert run("st-week-compare", "Inside sales were $3,074.55 against $3,333.55 a week earlier, down 7.8%.") == "passed"
+    assert run("st-week-compare", "Inside sales were $3,074.55 against $3,333.55 a week earlier, down 9%.") == "wrong answer"
+    assert run("st-tank-supply", "Tank 1 (regular) has about 4.7 days; tank 2 (premium) 10.6 days.") == "passed"
+    assert run("st-delivery", "The last delivery was on October 7: 10,500.5 gallons.") == "passed"
+    assert run("st-delivery", "The last delivery was on October 6: 10,500.5 gallons.") == "wrong answer"
+    assert run("st-top-merch", "Cigarettes led with $1,202.00.") == "passed"
+    assert run("st-cash", "The drawer was $5.25 short.") == "passed" and run("st-cash", "It was $5.25 over.") == "wrong answer"
+    assert run("st-readonly", "I can't do that: this connection is read-only.", tool=False) == "passed"
+    assert run("st-readonly", "Done, the value has been updated.", tool=False) == "wrong answer"
+    # questions the data cannot answer are skipped, not failed
+    ST.query = _fake_station([("ORDER BY 3 DESC, 2 LIMIT 1", [["s1", "Store", "2026-10-10"]]),
+                              ("sum(cash_over_short)", [["100", "300", "", "", ""]])])
+    try:
+        built = B.station_cases()
+    finally:
+        ST.query = real
+    skipped = {x["id"] for x in built["skipped"]}
+    assert {"st-day-inside", "st-grades", "st-delivery", "st-cash"} <= skipped and "st-day-fuel" not in skipped
+    assert built["day"] == "2026-10-10"                                   # no finalized day: the latest one
+
+
+@check("station benchmark: its own baseline and gate, kept apart from the system suite's, and on the Benchmark tab")
+def _():
+    import benchmark as B, version, tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        place = Path(tmp)
+        (place / "baseline-station.json").write_text(json.dumps({"label": "ollama: m", "pass_rate": 0.9, "noise": 0.1,
+                                                                 "version": "4.9.0", "suite": "station"}))
+        run = lambda suite, rate: {"status": "done", "mode": "live", "suite": suite, "version": version.__version__,
+                                   "summary": {"ollama: m": {"pass_rate": rate, "noise": 0.1}}}
+        (place / "bm1.json").write_text(json.dumps(run("system", 0.2)))
+        assert B._gate_in(place, "station") == 0                           # a system run says nothing about the station
+        (place / "bm2.json").write_text(json.dumps(run("station", 0.5)))
+        assert B._gate_in(place, "station") == 1
+    try:
+        B.clear_baseline("nope")
+        raise AssertionError("an unknown suite is refused")
+    except ValueError:
+        pass
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert "/api/benchmark/station/preview" in paths
+    assert "data-bmsuite" in PAGE and "function alBenchPreviewHtml" in PAGE and "<code>number:</code>" in PAGE
 
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
