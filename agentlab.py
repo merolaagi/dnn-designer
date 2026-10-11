@@ -1408,14 +1408,16 @@ TEMPLATES = {
              # two MCP blocks on the same server: searching and reading run freely, saving a draft waits for you
              "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
                        ("summarizer", 290, 470), ("router", 540, 260), ("mcp", 790, 110), ("mcp", 790, 290),
-                       ("output", 1040, 470)],
-             "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (6, 2), (7, 2), (5, 8)],
+                       ("reflector", 790, 470), ("output", 1040, 470)],
+             # the critic sends back any answer that claims mail the tools did not return
+             "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (6, 2), (7, 2), (5, 8), (8, 2), (8, 9)],
              "params": {1: {"text": "@mail_guide"},
                         3: {"max_steps": 16},
                         4: {"limit": 4000, "keep": 6},
                         6: {"transport": "stdio", "target": "@mail_command", "tools": "@mail_read_tools", "effects": READS},
                         7: {"transport": "stdio", "target": "@mail_command", "tools": "@mail_write_tools",
-                            "effects": CHANGES}}},
+                            "effects": CHANGES},
+                        8: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -6105,6 +6107,17 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         conv["updated"] = time.time()
         _conv_save(conv)
         return {"conversation": conv, "run": None}
+    if conv["agent"].get("kind") == "starting" and conv["mode"] == "live":
+        import muse
+        missing = muse.not_connected(conv["agent"]["key"])
+        if missing:
+            # the agent's data is not connected: say so, rather than let it answer from nothing
+            conv["turns"].append({"task": text, "at": time.time(), "mode": conv["mode"], "status": "done", "ok": True,
+                                  "answer": missing})
+            conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
+            conv["updated"] = time.time()
+            _conv_save(conv)
+            return {"conversation": conv, "run": None}
     graph = _agent_graph(conv["agent"])
     if conv["agent"].get("kind") == "role":
         import roster

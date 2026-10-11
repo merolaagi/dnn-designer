@@ -241,6 +241,23 @@ def _wait(run_id: str) -> Dict[str, Any]:
         time.sleep(1.0)
 
 
+def not_connected(agent: str) -> Optional[str]:
+    """What to tell the person when an agent's data source is not connected; None when it is."""
+    if agent == "mail":
+        import mail
+        if not mail.view()["configured"]:
+            return ("Your email is not connected yet, so I have not looked at any mail. To connect Gmail: on the Mac, "
+                    "Settings → Your email, enter your address and a Google app password (made at "
+                    "myaccount.google.com/apppasswords), then Save and test. Ask me again after that.")
+    if agent == "station":
+        import station
+        v = station.view()
+        if not (v["configured"] and v["has_password"]):
+            return ("Your store's data is not connected yet, so I have not read any figures. On the Mac: Settings → "
+                    "Your store's data, then Save and test. Ask me again after that.")
+    return None
+
+
 def _carry_out(s: Dict[str, Any], context: str) -> None:
     try:
         plan = decode(s["task"], s["mode"], context)
@@ -248,6 +265,11 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
         _save(s)
         if plan.get("question") and not plan["steps"]:
             s.update(status="done", answer=plan["question"], phase="asked")
+            return
+        missing = [w for w in (not_connected(st["agent"]) for st in plan["steps"]) if w]
+        if missing and s["mode"] == "live":
+            # an agent with nothing to read would answer anyway, from imagination: say what to connect instead
+            s.update(status="done", answer=missing[0], phase="needs a connection")
             return
         earlier: List[str] = []
         for i, step in enumerate(plan["steps"]):

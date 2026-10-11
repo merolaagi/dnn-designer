@@ -11355,7 +11355,17 @@ def _():
             ML._path().unlink(missing_ok=True)
         else:
             ML._path().write_text(saved)
+    # with no email connected, Muse says so instead of running an agent that would answer from nothing
+    real_decode = muse.decode
+    muse.decode = lambda text, mode, context="": {"understood": "check mail", "question": None, "by": "model",
+                                                  "steps": [{"agent": "mail", "role": "", "task": text, "why": ""}]}
+    try:
+        turn = muse.start_turn("Can you check my emails?", "live", background=False)
+    finally:
+        muse.decode = real_decode
+    assert turn["status"] == "done" and "not connected" in turn["answer"] and not turn["steps"]
     g = agentlab.template("mail")
+    assert any(n["type"] == "reflector" and n["params"]["gate"] == agentlab.GROUNDED_GATE for n in g["nodes"])
     assert not [p for p in agentlab.validate(g) if p["level"] == "error"]
     blocks = [n["params"] for n in g["nodes"] if n["type"] == "mcp"]
     assert [b["effects"] for b in blocks] == [agentlab.READS, agentlab.CHANGES]

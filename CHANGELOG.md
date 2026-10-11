@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.17.1
+
+- **An agent with nothing connected no longer answers from imagination.**
+  Asked to check email with no email connected, the local model ignored the
+  tool's "connect your email first" and said it had connected to Gmail. Now,
+  before running the Mail assistant or the Station analyst, Muse (and a direct
+  chat with either) checks that its data is connected. If it isn't, Muse
+  answers with how to connect it, and no agent runs.
+- The Mail assistant has the critic the Station analyst has. An answer that
+  states mail the tools didn't return is sent back. It's also told to report
+  a tool's error in its own words, and never to claim access it doesn't have.
+
 ## 4.17.0
 
 - **Your email.** The new Mail assistant searches your Gmail with Gmail's own
