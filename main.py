@@ -28,6 +28,7 @@ import packager
 import roster
 import evolve
 import benchmark
+import muse
 import providers
 import advisor
 import assistant
@@ -773,6 +774,35 @@ def _bench_action(fn, *args):
         return fn(*args)
     except KeyError:
         raise HTTPException(404, detail={"message": "No such benchmark."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+class RouteCheck(BaseModel):
+    mode: str = "live"
+
+
+@app.post("/api/muse/route-check")
+def muse_route_check(body: RouteCheck):
+    """Send the routing requests through Muse's decoder alone: does this model reach the right agent?"""
+    if body.mode == "live" and not agentlab.live_available():
+        raise HTTPException(400, detail={"message": "Live needs a model: choose one in Settings."})
+    return muse.start_route_check(body.mode)
+
+
+@app.get("/api/muse/route-check/{check_id}")
+def muse_route_check_view(check_id: str):
+    try:
+        return muse.route_check_view(check_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such routing check."})
+
+
+@app.post("/api/muse/decode")
+def muse_decode(body: AgentLabSay):
+    """Muse's plan for one request, without running it."""
+    try:
+        return muse.decode(body.text, body.mode or "live")
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
 

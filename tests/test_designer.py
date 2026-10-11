@@ -10591,6 +10591,77 @@ def _():
     assert "python3 benchmark.py gate" in (ROOT / "release.sh").read_text()
 
 
+@check("Muse decodes a request into steps for the right agents, repairs a bad plan once, and falls back honestly")
+def _():
+    import muse, evolve
+    plan = muse.decode("Train a network on fashion_mnist and package it", "rehearsal")
+    assert plan["steps"][0]["agent"] == "modelbuilder" and "keywords" in plan["by"]
+    real = evolve.ask
+    replies = []
+    evolve.ask = lambda system, prompt, max_tokens: replies.pop(0)
+    try:
+        replies[:] = [{"text": 'Here: {"understood": "a proof", "steps": [{"agent": "mathsearch", "task": "Count primes below 100.", '
+                               '"why": "it proves things"}], "question": null}', "tokens": 40}]
+        good = muse.decode("count primes", "live")
+        assert good["by"] == "model" and good["steps"] == [{"agent": "mathsearch", "role": "", "task": "Count primes below 100.",
+                                                            "why": "it proves things"}] and good["tokens"] == 40
+        replies[:] = [{"text": '{"steps": [{"agent": "wizard", "task": "x"}]}', "tokens": 5},
+                      {"text": '{"understood": "u", "steps": [{"agent": "reverse", "task": "Read the app."}]}', "tokens": 5}]
+        fixed = muse.decode("look inside my app", "live")
+        assert fixed["by"] == "model" and fixed["steps"][0]["agent"] == "reverse" and fixed["tokens"] == 10
+        replies[:] = [{"text": "no idea", "tokens": 1}, {"text": "still no", "tokens": 1}]
+        fallback = muse.decode("Train a classifier on mnist", "live")
+        assert fallback["steps"][0]["agent"] == "modelbuilder" and fallback["by"].startswith("keywords, because")
+        replies[:] = [{"text": '{"understood": "u", "steps": [], "question": "Which app?"}', "tokens": 3}]
+        asked = muse.decode("explain my app", "live")
+        assert asked["question"] == "Which app?" and asked["steps"] == []
+    finally:
+        evolve.ask = real
+    check = muse.route_check("rehearsal")
+    assert check["total"] == len(muse.ROUTING) >= 15 and 0 < check["passed"] < check["total"]
+
+
+@check("a Muse conversation runs each step as a real run, hands results forward, and joins the answers")
+def _():
+    import muse
+    real = muse.decode
+    muse.decode = lambda text, mode="live", context="": {
+        "understood": "two stages", "by": "model", "question": None, "seconds": 0.1, "tokens": 0,
+        "steps": [{"agent": "react", "role": "", "task": "Find facts about Lisbon cafes.", "why": "lookup"},
+                  {"agent": "mathsearch", "role": "", "task": "Estimate how many cafes Lisbon supports.", "why": "numbers"}]}
+    try:
+        conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+        assert conv["agent"]["name"] == "Muse"
+        out = agentlab.say(conv["id"], "How many cafes can Lisbon support?", "rehearsal")
+        turn_id = out["conversation"]["turns"][-1]["muse"]
+        for _i in range(120):
+            turn = agentlab.conversation(conv["id"])["turns"][-1]
+            if turn["status"] not in agentlab.LIVE_STATUSES:
+                break
+            time.sleep(0.5)
+        assert turn["status"] == "done", turn
+        assert [s["agent"] for s in turn["muse_steps"]] == ["react", "mathsearch"]
+        assert all(s["status"] == "done" and s["run"] for s in turn["muse_steps"])
+        second = agentlab.load_run(turn["muse_steps"][1]["run"])
+        assert "What the earlier steps found" in second["task"] and "[ReAct" in second["task"]
+        assert turn["answer"].count("**") == 4                      # both agents' answers, each under its name
+        assert muse.state(turn_id)["status"] == "done"
+        try:
+            agentlab.say(conv["id"], "", "rehearsal")
+            raise AssertionError("an empty message is refused")
+        except ValueError:
+            pass
+        agentlab.delete_conversation(conv["id"])
+    finally:
+        muse.decode = real
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/muse/route-check", "/api/muse/route-check/{check_id}", "/api/muse/decode"} <= paths
+    for needle in ('data-kind="muse"', "function tkFollowMuse", "function tkMusePlan", "function alRouteHtml",
+                   "Check routing with the default model"):
+        assert needle in PAGE, needle
+
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

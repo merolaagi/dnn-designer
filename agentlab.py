@@ -5928,7 +5928,8 @@ def _conv_save(conv: Dict[str, Any]) -> None:
 
 
 def new_conversation(agent: Dict[str, Any], mode: str = "rehearsal") -> Dict[str, Any]:
-    graph = _agent_graph(agent)
+    graph = ({"name": "Muse", "about": "Say what you need. Muse decides which agents should do it, and runs them."}
+             if agent.get("kind") == "muse" else _agent_graph(agent))
     if mode not in ("live", "rehearsal"):
         raise ValueError(f"Unknown mode {mode!r}.")
     now = time.time()
@@ -5968,7 +5969,8 @@ def conversation(conv_id: str) -> Dict[str, Any]:
     if not path.exists():
         raise KeyError(conv_id)
     conv = json.loads(path.read_text())
-    if any([_turn_from_run(t) for t in conv["turns"]]):
+    import muse
+    if any([muse.overlay(t) if t.get("muse") else _turn_from_run(t) for t in conv["turns"]]):
         _conv_save(conv)
     return conv
 
@@ -5981,6 +5983,9 @@ def conversations() -> List[Dict[str, Any]]:
         except (OSError, ValueError):
             continue
         last = conv["turns"][-1] if conv.get("turns") else None
+        if last and last.get("muse"):
+            import muse
+            muse.overlay(last)
         out.append({"id": conv["id"], "title": conv.get("title") or "New conversation",
                     "agent": conv["agent"]["name"], "mode": conv.get("mode"), "updated": conv.get("updated"),
                     "turns": len(conv.get("turns") or []), "status": (last or {}).get("status")})
@@ -5996,6 +6001,17 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
     if conv["turns"] and conv["turns"][-1].get("status") in LIVE_STATUSES:
         raise ValueError("The agent is still working on your last message. Wait for it, or stop it.")
     conv["mode"] = mode or conv.get("mode") or "rehearsal"
+    if conv["agent"].get("kind") == "muse":
+        import muse
+        if conv["mode"] == "live" and not live_available():
+            raise ValueError("Live needs a model: choose one in Settings.")
+        started = muse.start_turn(text, conv["mode"], muse.context_of(conv))
+        conv["turns"].append({"muse": started["id"], "task": text, "at": time.time(), "mode": conv["mode"],
+                              "status": "running"})
+        conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
+        conv["updated"] = time.time()
+        _conv_save(conv)
+        return {"conversation": conv, "run": None}
     graph = _agent_graph(conv["agent"])
     if conv["agent"].get("kind") == "role":
         import roster

@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.7.0
+
+- **Muse: one front door for every agent.** In Talk to agents, Muse takes a
+  request in your own words, decodes it into a plan (which agents, and a
+  complete instruction for each: Model builder, Math search, Reverse engineer,
+  a specialist from the roster chosen by role, or ReAct), then runs the steps
+  in turn, handing each the previous step's results, and joins their answers.
+  Each step is an ordinary run of that agent, so approvals, live steps,
+  stopping and Run history work as they do when you talk to the agent directly.
+  When something essential is missing (which app, which file), Muse asks one
+  question instead of guessing. A plan the model gets wrong is sent back once
+  with what was wrong; if it is still wrong, Muse falls back to keyword
+  matching and says so.
+- **Routing check.** The Benchmark tab sends sixteen everyday requests through
+  Muse's decoder alone (one model call each, minutes not hours) and counts how
+  many reach the agent a person would pick. Keyword matching, the score to
+  beat, gets 11 of 16.
+
 ## 4.6.0
 
 - **Benchmark the system.** A Benchmark tab in the Agent lab runs nine real

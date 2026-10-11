@@ -2539,6 +2539,11 @@ body[data-page="pageTalk"] #dockTab{display:none}
 .tk-card:hover{border-color:#2D7DD2;box-shadow:0 4px 14px rgba(45,125,210,.12)}
 .tk-card b{display:block;font-size:13px;margin-bottom:3px}
 .tk-card small{display:block;font-size:12px;color:var(--muted);line-height:1.45}
+.mu-card{border-color:#C9B8F0;background:linear-gradient(135deg,#FBF8FF,#fff)}
+.mu-plan{border:1px solid var(--paper-3);border-radius:10px;background:#fff;padding:9px 12px;margin-bottom:8px;font-size:12.5px}
+.mu-plan ol{margin:6px 0 0;padding-left:20px}.mu-plan li{margin:4px 0}
+.mu-task{color:var(--muted);font-size:12px;margin-top:2px;white-space:pre-wrap}
+.mu-lab{border:0;background:none;padding:0;cursor:pointer;font-size:11.5px}
 .tk-card small.clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .tk-card .div{display:inline-block;margin-top:6px;font-size:10.5px;color:var(--muted);background:var(--paper);border-radius:6px;padding:1px 6px}
 .tk-sp-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
@@ -14955,7 +14960,14 @@ async function alRenderBench(){
       ${(d.runs || []).length ? `<select id="bmPast"><option value="">Earlier benchmarks…</option>${d.runs.map(r =>
         `<option value="${alEsc(r.id)}">v${alEsc(r.version || "?")} · ${r.models.map(m => `${m.label} ${m.pass_rate != null ? Math.round(m.pass_rate * 100) + "%" : "–"}`).join(" vs ")} · ${new Date(r.started * 1000).toLocaleString()}</option>`).join("")}</select>` : ""}
     </div>
-    <div id="bmOut">${bm.current ? alBenchHtml(bm.current) : ""}</div>`;
+    <div id="bmOut">${bm.current ? alBenchHtml(bm.current) : ""}</div>
+    <h3 style="margin-top:22px">Routing: does Muse send requests to the right agent?</h3>
+    <p class="al-muted">Sixteen requests in everyday words go through Muse's decoder only, with no agent run: one model
+    call each, so it takes minutes, not hours. Each is right when it reaches the agent a person would pick. Rehearsal
+    uses plain keyword matching: the score to beat.</p>
+    <div class="row"><button class="btn go" id="rcLive">Check routing with the default model</button>
+      <button class="btn" id="rcRehearsal">Check keyword matching</button></div>
+    <div id="rcOut">${bm.route ? alRouteHtml(bm.route) : ""}</div>`;
   $("alPane").querySelectorAll("[data-bmprov]").forEach(el => el.onchange = () => {
     const i = +el.dataset.bmprov; bm.models[i] = {provider: el.value, model: modelList(el.value)[0] || ""}; alRenderBench(); });
   $("alPane").querySelectorAll("[data-bmmodel]").forEach(el => el.oninput = () => { bm.models[+el.dataset.bmmodel].model = el.value.trim(); });
@@ -14966,6 +14978,17 @@ async function alRenderBench(){
   $("bmK").oninput = e => { bm.k = Math.max(1, Math.min(5, +e.target.value || 1)); };
   $("bmGo").onclick = alBenchStart;
   if ($("bmStop")) $("bmStop").onclick = () => fetch(API + `/api/benchmark/${bm.current.id}/stop`, {method: "POST"});
+  const routeGo = async mode => {
+    $("rcOut").innerHTML = `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Decoding sixteen requests…</div>`;
+    const r = await fetch(API + "/api/muse/route-check", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({mode})});
+    let d = await r.json();
+    if (!r.ok){ $("rcOut").innerHTML = `<div class="runfail">${alEsc((d.detail && d.detail.message) || "Not started")}</div>`; return; }
+    while (d.status === "running"){ await alSleep(2000); d = await (await fetch(API + "/api/muse/route-check/" + d.id)).json(); }
+    bm.route = d;
+    if ($("rcOut")) $("rcOut").innerHTML = alRouteHtml(d);
+  };
+  $("rcLive").onclick = () => routeGo("live");
+  $("rcRehearsal").onclick = () => routeGo("rehearsal");
   if ($("bmClear")) $("bmClear").onclick = async () => { await fetch(API + "/api/benchmark/baseline", {method: "DELETE"}); alRenderBench(); };
   if ($("bmPast")) $("bmPast").onchange = async e => {
     if (!e.target.value) return;
@@ -15011,6 +15034,19 @@ function alBenchWire(){
     toast(r.ok ? `Baseline set: ${d.label}, ${Math.round(d.pass_rate * 100)}%` : ((d.detail && d.detail.message) || "Not set"));
     if (r.ok) alRenderBench();
   });
+}
+
+function alRouteHtml(c){
+  if (c.status === "error") return `<div class="runfail">${alEsc(c.error || "The check failed.")}</div>`;
+  const r = c.result;
+  if (!r) return "";
+  return `<div class="ev-status"><b>${r.passed} of ${r.total} reached the right agent</b> (${Math.round(r.rate * 100)}%) ·
+      ${r.mode === "live" ? "the default model" : "keyword matching"} · ${r.seconds} s in all</div>
+    <table class="bm-table"><tr><th>Request</th><th>Should go to</th><th>Muse chose</th><th></th></tr>
+    ${r.rows.map(x => `<tr><td>${alEsc(x.request)}${x.question ? `<div class="al-muted">asked: ${alEsc(x.question)}</div>` : ""}
+        ${x.by && x.by !== "model" && r.mode === "live" ? `<div class="al-muted">${alEsc(x.by)}</div>` : ""}</td>
+      <td>${alEsc(x.expected)}</td><td>${alEsc(x.chosen)}${x.role ? `<div class="al-muted">${alEsc(x.role)}</div>` : ""}</td>
+      <td class="c"><span class="${x.passed ? "bm-ok" : "bm-bad"}">${x.passed ? "✓" : "✗"}</span><div class="al-muted">${x.seconds}s</div></td></tr>`).join("")}</table>`;
 }
 
 function alBenchHtml(b){
@@ -16402,6 +16438,9 @@ function tkPicker(){
     <h2>Who do you want to talk to?</h2>
     <p>Pick an agent. Every message you send is a run of it: you watch it work, approve what it wants to do, and it
       remembers the conversation. Design your own in the Agent lab and save it to see it here.</p>
+    <h4>Just say what you need</h4><div class="tk-cards"><button class="tk-card mu-card" data-kind="muse" data-key="muse">
+      <b>✦ Muse</b><small>Describe the job in your own words. Muse works out which agents should do it (model builder,
+      math search, reverse engineer, a specialist…), writes each one its instructions, and runs them in turn.</small></button></div>
     ${saved.length ? `<h4>Your agents</h4><div class="tk-cards">${saved.map(card).join("")}</div>` : ""}
     <h4>Specialists</h4><div id="tkSpecialists"><div class="tk-sp-note">Loading…</div></div>
     <h4>Starting designs</h4><div class="tk-cards">${starting.map(card).join("")}</div></div></div>`;
@@ -16508,13 +16547,13 @@ function tkRender(){
   $("tkMain").innerHTML = `
     <div class="tk-top">
       <span class="tk-av">${TK_ICON}</span>
-      <div class="who"><b>${alEsc(c.agent.name)}</b><small>${c.agent.kind === "saved" ? "Your agent" : c.agent.kind === "role" ? "Specialist" : "Starting design"} · <span id="tkCount"></span></small></div>
+      <div class="who"><b>${alEsc(c.agent.name)}</b><small>${c.agent.kind === "saved" ? "Your agent" : c.agent.kind === "role" ? "Specialist" : c.agent.kind === "muse" ? "Front desk for every agent" : "Starting design"} · <span id="tkCount"></span></small></div>
       <span class="spacer" style="flex:1"></span>
       <div class="tk-seg" role="group" aria-label="Model">
         <button data-mode="rehearsal" class="${live ? "" : "on"}" title="A scripted stand-in model: free, to see the flow">Rehearsal</button>
         <button data-mode="live" class="${live ? "on" : ""}" title="The real model set on the agent's LLM cores">Live</button>
       </div>
-      <button class="tk-tb" id="tkLab" title="Open this agent in the Agent lab">Open in lab</button>
+      ${c.agent.kind === "muse" ? "" : `<button class="tk-tb" id="tkLab" title="Open this agent in the Agent lab">Open in lab</button>`}
       <button class="tk-tb danger" id="tkDel" title="Delete this conversation">Delete</button>
     </div>
     ${live ? "" : `<div class="tk-note">Rehearsal: a scripted stand-in plays the model, so answers are placeholders. Switch to Live for real answers.</div>`}
@@ -16533,7 +16572,7 @@ function tkRender(){
     if (!r.ok){ const d = await r.json(); toast((d.detail && d.detail.message) || "Not deleted"); return; }
     tkState.conv = null; try{ localStorage.removeItem("tk-conversation"); } catch {} tkPicker(); tkRefreshList();
   };
-  $("tkLab").onclick = () => tkOpenInLab(null);
+  if ($("tkLab")) $("tkLab").onclick = () => tkOpenInLab(null);
   const box = $("tkInput");
   box.addEventListener("input", () => { box.style.height = "auto"; box.style.height = Math.min(200, box.scrollHeight) + "px"; });
   box.addEventListener("keydown", ev => {
@@ -16559,7 +16598,25 @@ function tkDrawThread(){
   const sc = $("tkScroll"); if (sc) sc.scrollTop = sc.scrollHeight;
 }
 
+function tkMusePlan(t){
+  const p = t.plan;
+  if (!p) return `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Muse is reading your request…</div>`;
+  const rows = t.muse_steps || [];
+  const steps = (p.steps || []).map((s, i) => {
+    const r = rows[i] || {};
+    const mark = r.status === "done" ? "✓" : r.status && !["running", "waiting"].includes(r.status) ? "✗" : r.status ? "…" : "○";
+    return `<li><b>${mark} ${alEsc(r.name || s.role || s.agent)}</b> <span class="al-muted">${alEsc(s.why || "")}</span>
+      <div class="mu-task">${alEsc(s.task)}</div>
+      ${r.run ? `<button class="al-link mu-lab" data-lab="${alEsc(r.run)}">steps in the lab</button>` : ""}</li>`;
+  }).join("");
+  return `<div class="mu-plan"><div class="mu-head">Muse understood: <b>${alEsc(p.understood || t.task)}</b>
+      <span class="al-muted">· planned by ${alEsc(p.by || "?")}${p.seconds ? ` in ${p.seconds} s` : ""}</span></div>
+    ${steps ? `<ol>${steps}</ol>` : ""}</div>`;
+}
+
 function tkTurnHtml(t, i){
+  if (t.muse && ["running", "waiting"].includes(t.status)) return tkMusePlan(t)
+    + `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>${alEsc(t.phase || "Working")}…</div>`;
   if (["running", "waiting"].includes(t.status)) return `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>Working…</div>`;
   const meta = [t.steps ? `${t.steps} model call${t.steps === 1 ? "" : "s"}` : "", t.tools && t.tools.length ? `used ${t.tools.join(", ")}` : "",
     t.declined && t.declined.length ? `you declined ${t.declined.join(", ")}` : "",
@@ -16571,6 +16628,8 @@ function tkTurnHtml(t, i){
   const body = t.answer ? `${warn}<div class="tk-answer">${tkMd(answer)}</div>`
     : `<div class="tk-answer err">${alEsc(t.status === "interrupted" ? "The server stopped while this was running."
         : t.status === "stopped" ? "Stopped." : t.error || "No answer came back.")}</div>`;
+  if (t.muse) return tkMusePlan(t) + body + `<div class="tk-meta">${alEsc([t.seconds != null ? `${t.seconds} s` : "",
+    t.mode === "rehearsal" ? "rehearsal" : ""].filter(Boolean).join(" · "))}</div>`;
   return body + `<div class="tk-meta">${alEsc(meta)}
     ${t.run && t.status !== "gone" ? `<button data-lab="${alEsc(t.run)}">See every step in the lab</button>` : ""}
     ${["interrupted", "stopped", "error"].includes(t.status) ? `<button data-resume="${alEsc(t.run)}" title="Carry on from the last step that finished">Resume</button>` : ""}</div>`;
@@ -16649,7 +16708,48 @@ function tkStepText(ev){
   }
 }
 
+/* A Muse turn is several runs in a row: show the plan, and follow whichever step is running,
+   with its approvals, until the whole turn ends. */
+async function tkFollowMuse(turn){
+  const conv = tkState.conv, idx = conv.turns.indexOf(turn);
+  const me = tkState.following = {run: null, stop: false};
+  tkSendButton();
+  let t = turn, seen = 0, run = null;
+  while (tkState.following === me){
+    try{ const fresh = await (await fetch(API + "/api/agentlab/conversations/" + encodeURIComponent(conv.id))).json();
+         t = fresh.turns[idx] || t; } catch {}
+    if (!["running", "waiting"].includes(t.status)) break;
+    if (t.run !== run){ run = t.run; seen = 0; me.run = run; }
+    let view = null;
+    if (run){ try{ view = await (await fetch(API + `/api/agentlab/runs/${run}/live?since=0`)).json(); } catch {} }
+    const host = $("tkTurn" + idx);
+    if (host && tkState.conv === conv){
+      const p = view && view.pending;
+      const recent = view ? (view.events || []).map(tkStepText).filter(Boolean).slice(-6) : [];
+      host.innerHTML = tkMusePlan(t) + (recent.length ? `<ul class="tk-steps">${recent.map(s => `<li>${s}</li>`).join("")}</ul>` : "")
+        + (p ? `<div class="tk-approve"><b>It wants to run ${alEsc(p.tool)}. Go ahead?</b>
+            <pre>${alEsc(JSON.stringify(p.args, null, 2).slice(0, 3000))}</pre>
+            <div class="row"><button class="btn go" id="tkYes">Approve</button><button class="btn danger" id="tkNo">Deny</button></div></div>`
+          : `<div class="tk-live"><span class="tk-dots"><i></i><i></i><i></i></span>${alEsc(t.phase || "Working")}…</div>`);
+      if (p){
+        const answer = async yes => { host.querySelectorAll(".tk-approve button").forEach(b => b.disabled = true);
+          await fetch(API + `/api/agentlab/runs/${run}/answer`, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({approved: yes})}); };
+        $("tkYes").onclick = () => answer(true); $("tkNo").onclick = () => answer(false);
+      }
+      host.querySelectorAll("[data-lab]").forEach(b => b.onclick = () => tkOpenInLab(b.dataset.lab));
+    }
+    await alSleep(1500);
+  }
+  if (tkState.following !== me) return;
+  tkState.following = null;
+  try{ const fresh = await (await fetch(API + "/api/agentlab/conversations/" + encodeURIComponent(conv.id))).json();
+       if (tkState.conv && tkState.conv.id === conv.id) tkState.conv = fresh; } catch {}
+  if (tkState.conv && tkState.conv.id === conv.id) tkDrawThread();
+  tkRefreshList();
+}
+
 async function tkFollow(turn){
+  if (turn && turn.muse) return tkFollowMuse(turn);
   const conv = tkState.conv, idx = conv.turns.indexOf(turn);
   const me = tkState.following = {run: turn.run, stop: false};
   tkSendButton();
