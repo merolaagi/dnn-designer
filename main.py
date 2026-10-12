@@ -3187,6 +3187,14 @@ def _designer_op(op: str, args: Dict[str, Any]) -> Dict[str, Any]:
         folder = auth.sub("exports")
         (folder / built["filename"]).write_bytes(built["bytes"])
         info = built["info"]
+        try:
+            acc = (info.get("metrics") or {}).get("val_accuracy") or (info.get("metrics") or {}).get("accuracy")
+            files.record("model", f"Model: {info['name']}", url=f"/api/package/file/{built['filename']}", ext="zip",
+                         detail=(f"{info.get('learnables'):,} parameters" if info.get("learnables") else "")
+                         + (f" · accuracy {acc:.1%}" if isinstance(acc, (int, float)) else ""),
+                         key=f"model-{built['filename']}")
+        except Exception:  # noqa: BLE001 - the package is made either way
+            pass
         return {"packaged": True, "file": built["filename"], "download": f"/api/package/file/{built['filename']}",
                 "trained": info["trained"], "epochs": info["epochs"], "metrics": info["metrics"],
                 "learnables": info["learnables"], "self_test": info["self_test"],

@@ -273,6 +273,9 @@ def state(muse_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _save(s: Dict[str, Any]) -> None:
+    if s["id"] in _STOP and s.get("status") in ("running", "done"):
+        # you pressed Stop: that holds, even if a step was already finishing in the background
+        s.update(status="stopped", error="Stopped.", phase="stopped")
     (_dir() / f"{s['id']}.json").write_text(json.dumps(s, default=str))
 
 
@@ -299,9 +302,11 @@ def stop(muse_id: str) -> Dict[str, Any]:
             AL.stop_run(s["run"])
         except Exception:  # noqa: BLE001
             pass
+    # the chat is free at once; a step that is in the middle of something long (training) ends at its next check
+    s.update(status="stopped", error="Stopped.", phase="stopped", finished=time.time())
+    _save(s)
     if muse_id not in _ALIVE:
-        s.update(status="stopped", error="Stopped.", phase="stopped", finished=time.time())
-        _save(s)
+        _STOP.discard(muse_id)
     return {"ok": True}
 
 
@@ -405,8 +410,6 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
     finally:
         s["phase"] = s.get("phase") if s["status"] == "running" else "finished"
         s["finished"] = time.time()
-        if s["id"] in _STOP and s["status"] == "running":
-            s.update(status="stopped", error="Stopped.")
         _save(s)
         _ALIVE.discard(s["id"])
         _STOP.discard(s["id"])

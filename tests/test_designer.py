@@ -11757,6 +11757,11 @@ def _():
         conv["turns"].append({"muse": mid2, "task": "y", "at": time.time(), "mode": "live", "status": "running"})
         agentlab._conv_save(conv)
         assert agentlab.stop_turn(conv["id"])["ok"] and mid2 in muse._STOP
+        assert agentlab.conversation(conv["id"])["turns"][-1]["status"] == "stopped"      # free at once
+        late = muse.state(mid2)
+        late.update(status="done", answer="finished anyway")
+        muse._save(late)                                                                   # a step finishing late
+        assert muse.state(mid2)["status"] == "stopped"
         muse._ALIVE.discard(mid2)
         muse._STOP.discard(mid2)
         import main

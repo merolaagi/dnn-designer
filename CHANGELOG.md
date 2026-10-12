@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.21.3
+
+- **Stop frees the chat at once.** A step in the middle of something long,
+  such as training a network, used to keep the turn "running" until it
+  finished, so Stop seemed to do nothing. Now the turn shows as stopped
+  straight away, and the step ends at its next check. A result that arrives
+  after you pressed Stop doesn't overwrite it.
+- **Packaged models are listed in Files** with their size and accuracy, so
+  Saathi can download one again at any time.
+
 ## 4.21.2
 
 - **A turn cut off by a restart no longer stays "running" for ever.**
