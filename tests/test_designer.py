@@ -11769,6 +11769,48 @@ def _():
     finally:
         agentlab.delete_conversation(conv["id"]) if not agentlab.conversation(conv["id"])["turns"][-1].get("status") in agentlab.LIVE_STATUSES else None
 
+
+@check("support chat: browses and chats freely, agreements only through commit (approval), never types passwords")
+def _():
+    import support, browser_mcp as BM, muse, browser
+    g = agentlab.template("support")
+    eff = {n["params"]["effects"]: [x["name"] for x in n["params"]["tools"]] for n in g["nodes"] if n["type"] == "mcp"}
+    assert eff[agentlab.CHANGES] == ["commit"] and "type" in eff[agentlab.READS] and "commit" not in eff[agentlab.READS]
+    compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+    for agree in ("Yes, I accept that offer", "Go ahead and switch me", "Please cancel my service", "I agree to the terms",
+                  "Sign me up", "Let's do it"):
+        assert support.COMMIT.search(agree), agree
+    for ask in ("Can you lower my bill?", "What retention offers do you have?", "My name is Manish, the account holder.",
+                "I was charged $95 last month"):
+        assert not support.COMMIT.search(ask), ask
+    sent = []
+    real = browser.call
+    browser.call = lambda op, **kw: (sent.append((op, kw)), {"ok": True})[1]
+    try:
+        try:
+            BM.call("type", {"id": "1.1", "text": "Yes, I accept that offer", "submit": True})
+            raise AssertionError("an agreement went out without approval")
+        except ValueError:
+            pass
+        assert not sent
+        BM.call("commit", {"summary": "$20 off for 12 months", "id": "1.1", "text": "Yes, I accept that offer"})
+        assert sent[-1] == ("type", {"text": "Yes, I accept that offer", "id": "1.1", "submit": True})
+        assert "from_person" not in sent[-1][1]                                 # the agent never types as you
+    finally:
+        browser.call = real
+    text = BM.page_text({"title": "Sign in", "url": "https://x", "text": "Sign in", "asks_password": True,
+                         "elements": [{"id": "0.2", "kind": "field", "label": "Password", "password": True}]})
+    assert "Do not type it" in text and "(password)" in text
+    assert "Never type a password" in support.GUIDE and "honestly" in support.GUIDE
+    assert muse.rehearsal_plan("Chat with Xfinity support for me about the modem fee")["steps"][0]["agent"] == "support"
+    assert "support" in muse.AGENTS and muse.DOING["support"] == "Chatting with their support"
+    import main
+    assert {"/api/browser", "/api/browser/screen", "/api/browser/act"} <= {r.path for r in main.app.routes}
+    src = inspect.getsource(main.browser_act)
+    assert 'args["from_person"] = True' in src                                   # only you, from the phone
+    import browser_service as BS
+    assert "from_person" in inspect.getsource(BS.Browser.type) and "password" in inspect.getsource(BS.Browser.type)
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

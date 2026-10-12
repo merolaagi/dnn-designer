@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.22.0
+
+- **Support agent: chats with a company's support for you.** It works in a
+  real Chrome window on the Mac (`browser_service.py`, Playwright), with its
+  own profile in `data/browser-profile`, so a site you signed in to stays
+  signed in.
+  - It opens the site's chat (starting points for Xfinity, AT&T, T-Mobile,
+    Verizon and Spectrum, or any site with a chat window).
+  - It says who it writes for and what you want, negotiates, waits for
+    replies, and reports the offers, any reference number and the key lines
+    of the chat.
+- **Agreements wait for you.** Accepting an offer, changing or cancelling a
+  service goes only through `commit`, a CHANGES tool behind your approval.
+  Saathi shows "Agree to this?" with the summary and the exact message.
+  An agreeing message sent with the ordinary `type` tool is refused.
+- **It never types passwords, PINs or codes.** The browser refuses the
+  agent's typing in a password field. When a site needs you to sign in, the
+  agent stops and asks you to do it from Saathi → Hub → Browser, the live
+  view of that Chrome window, where only you may type into password fields.
+  Then tell it to continue.
+- If asked, it says honestly that it is an assistant writing for the account
+  holder.
+- Muse sends "chat with / contact … support" requests to it, after Bills
+  when the amounts are needed first.
+- `./serve.sh setup-browser` installs Playwright and its Chromium (once).
+  Your Google Chrome is used when it is installed. `./serve.sh` now restarts
+  the browser process too.
+- `GET /api/browser`, `GET /api/browser/screen`, `POST /api/browser/act`
+  power Saathi's Browser screen.
+
 ## 4.21.3
 
 - **Stop frees the chat at once.** A step in the middle of something long,

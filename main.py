@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import (Depends, FastAPI, File, Form, HTTPException, Request,
                      Response, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 import agents
@@ -37,6 +37,7 @@ import documents
 import report
 import mail
 import travel
+import browser
 import ideas
 import goals
 import feed
@@ -1195,6 +1196,50 @@ def travel_test():
 def travel_test_booking():
     """Check the Duffel token (it reads one airline; nothing is searched or bought)."""
     return travel.test_duffel()
+
+
+class BrowserAct(BaseModel):
+    op: str
+    url: Optional[str] = None
+    id: Optional[str] = None
+    text: Optional[str] = None
+    submit: Optional[bool] = None
+    key: Optional[str] = None
+    direction: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+
+def _browser(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    except browser.BrowserError as exc:
+        raise HTTPException(503, detail={"message": str(exc)})
+
+
+@app.get("/api/browser")
+def browser_status():
+    """Saathi's browser on this Mac: installed, running, and the page it is on."""
+    return browser.status()
+
+
+@app.get("/api/browser/screen")
+def browser_screen():
+    return Response(_browser(browser.screen), media_type="image/jpeg", headers={"cache-control": "no-store"})
+
+
+@app.post("/api/browser/act")
+def browser_act(body: BrowserAct):
+    """You, from the phone: open a page, tap, type (passwords too: only you may), press a key, scroll, go back."""
+    if body.op not in ("open", "click", "type", "press", "scroll", "back", "look"):
+        raise HTTPException(400, detail={"message": "Unknown action."})
+    args = {k: v for k, v in body.model_dump().items() if v is not None and k != "op"} if hasattr(body, "model_dump") \
+        else {k: v for k, v in body.dict().items() if v is not None and k != "op"}
+    if body.op == "type":
+        args["from_person"] = True
+    return _browser(browser.call, body.op, **args)
 
 
 class ProfileFact(BaseModel):

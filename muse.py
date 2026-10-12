@@ -48,13 +48,18 @@ AGENTS = {
     "bills": "Finds where the user overpays on a bill (internet, phone, power, insurance, subscriptions) from the "
              "bills in their email, compares current market prices, and writes how to negotiate it down (call "
              "script, and a draft email). Use it for any question about their bills or a provider overcharging.",
+    "support": "Chats with a company's customer support on its website for the user (Xfinity/Comcast, AT&T, "
+               "T-Mobile, Verizon, Spectrum, PG&E or any site with a chat): explains what they want, negotiates a "
+               "lower bill or a fix, and reports the offers and the transcript. It asks the user before agreeing to "
+               "anything. Use it when the user wants someone to chat with or contact a company for them. When the "
+               "request is to get a bill down by chatting, plan bills first (to find the amounts), then support.",
     "react": "General questions and small tasks that need a quick web search or lookup and no specialist.",
 }
 # what Saathi shows while an agent works, instead of the agent's name
 DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Working it out and checking it",
          "reverse": "Reading the app's files", "specialist": "Working on it", "station": "Looking at your store's data",
          "mail": "Reading your email", "travel": "Searching flights and hotels",
-         "bills": "Reading your bills", "react": "Searching the web"}
+         "bills": "Reading your bills", "support": "Chatting with their support", "react": "Searching the web"}
 MAX_STEPS = 3
 
 DECODER = """You are Muse, the front desk of an agent lab. Read the person's request and decide which agents
@@ -127,6 +132,9 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     elif re.search(r"\b(my|our)\s+(e-?mails?|inbox|mail|gmail)\b|\b(check|read|search|sort)\b.{0,20}\b(e-?mails?|inbox|mail)\b|"
                    r"\bdraft (a )?repl(y|ies)\b", t):
         agent = "mail"
+    elif re.search(r"\b(chat|talk|message|contact|speak)\b.{0,40}\b(support|agent|rep|xfinity|comcast|at&t|att|"
+                   r"t-?mobile|verizon|spectrum|pg&e|customer service|on my behalf)\b", t):
+        agent = "support"
     elif re.search(r"\b(bills?|overcharg\w*|negotiat\w*|xfinity|comcast|at&t|internet provider|isp|pg&e|"
                    r"phone plan|subscriptions?)\b", t) and not re.search(r"\bbills? of lading\b", t):
         agent = "bills"
@@ -339,6 +347,11 @@ def not_connected(agent: str) -> Optional[str]:
             return ("Your email is not connected yet, so I have not looked at any mail. Connect Gmail with an app "
                     "password: Google makes one for a single app, and you can take it back at any time. (On the Mac it "
                     "is under Settings → Your email.)")
+    if agent == "support":
+        import browser
+        if not browser.installed():
+            return ("The browser I chat with isn't installed on the Mac yet, so I haven't contacted anyone. On the Mac, in "
+                    "~/Sites/new_dnn, run: ./serve.sh setup-browser, then ./serve.sh. Then ask me again.")
     if agent == "bills":
         import mail
         if not mail.view()["configured"]:
@@ -471,6 +484,7 @@ ROUTING = [
     ("Find me a cheap flight from SFO to Kathmandu on November 12, back December 12.", "travel", None),
     ("What do one-way flights to New York cost next Friday?", "travel", None),
     ("Is Comcast overcharging me for internet? Help me get the bill down.", "bills", None),
+    ("Chat with Xfinity support for me and ask them to remove the modem rental fee.", "support", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "

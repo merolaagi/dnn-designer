@@ -1262,6 +1262,18 @@ def _mail_command() -> str:
     return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'mail_mcp.py'))}"
 
 
+def _browser_command() -> str:
+    import shlex
+    import sys
+    return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'browser_mcp.py'))}"
+
+
+def _browser_tools(names: List[str]) -> List[Dict[str, Any]]:
+    import browser_mcp
+    return [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
+            for t in browser_mcp.TOOLS if t["name"] in names]
+
+
 def _travel_command() -> str:
     import shlex
     import sys
@@ -1459,6 +1471,19 @@ TEMPLATES = {
                          8: {"transport": "stdio", "target": "@mail_command", "tools": "@mail_write_tools",
                              "effects": CHANGES},
                          9: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
+    "support": {"name": "Support chat: talks to a company's support on its website for you",
+                # browses and chats freely; anything that agrees to something is its own block, behind your approval
+                "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
+                          ("summarizer", 290, 470), ("router", 540, 260), ("mcp", 790, 110), ("mcp", 790, 290),
+                          ("output", 1040, 260)],
+                "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (6, 2), (7, 2), (5, 8)],
+                "params": {1: {"text": "@support_guide"},
+                           3: {"max_steps": 40},
+                           4: {"limit": 6000, "keep": 8},
+                           6: {"transport": "stdio", "target": "@browser_command", "tools": "@browser_read_tools",
+                               "effects": READS},
+                           7: {"transport": "stdio", "target": "@browser_command", "tools": "@browser_write_tools",
+                               "effects": CHANGES}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1483,6 +1508,9 @@ _LATE = {"@station_guide": lambda: __import__("station").GUIDE, "@station_comman
          "@mail_read_tools": lambda: _mail_tools(["search_mail", "read_mail"]),
          "@mail_write_tools": lambda: _mail_tools(["draft_reply"]),
          "@bills_guide": lambda: __import__("bills").GUIDE,
+         "@support_guide": lambda: __import__("support").GUIDE, "@browser_command": lambda: _browser_command(),
+         "@browser_read_tools": lambda: _browser_tools(__import__("browser_mcp").READ_TOOLS),
+         "@browser_write_tools": lambda: _browser_tools(__import__("browser_mcp").WRITE_TOOLS),
          "@travel_guide": lambda: __import__("travel").GUIDE, "@travel_command": lambda: _travel_command(),
          "@travel_read_tools": lambda: _travel_tools(["search_flights", "search_hotels", "bookable_flights"]),
          "@travel_write_tools": lambda: _travel_tools(["book_flight"])}

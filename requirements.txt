@@ -8,3 +8,4 @@ sympy>=1.12
 torchvision>=0.17
 pandas>=2.0
 onnx>=1.15
+playwright>=1.45  # Saathi's browser, for the Support agent (then: python3 -m playwright install chromium)
