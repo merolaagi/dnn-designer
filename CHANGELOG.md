@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.23.1
+
+- `./serve.sh install` has macOS (launchd, a LaunchAgent called
+  `com.saathi.dnn`) keep the server running. It starts when you log in to
+  the Mac, including after a restart, and starts again by itself within
+  about 10 seconds if it ever stops.
+  - Once installed, `./serve.sh` restarts it through launchd, so there is
+    only ever one copy.
+  - `./serve.sh status` says whether it is running and starting by itself.
+  - `./serve.sh uninstall` goes back to starting it by hand.
+
 ## 4.23.0
 
 - **Trips.** Your itinerary day by day: flights, hotel stays, trains, buses,
