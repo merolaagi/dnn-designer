@@ -1461,6 +1461,10 @@ def muse_decode(body: AgentLabSay):
 @app.get("/api/benchmark")
 def benchmark_overview():
     """The tasks, earlier runs, the baseline, and the models that are ready to run."""
+    try:
+        providers.ollama_status()          # a model pulled since Settings was last opened shows up at once
+    except Exception:  # noqa: BLE001 - Ollama not running: its models are simply not offered
+        pass
     view = providers.view()
     ready = [{"provider": p["id"], "name": p["name"], "models": (p.get("models") or []) + [
                  m for m in (p.get("suggested") or []) if m not in (p.get("models") or [])]}

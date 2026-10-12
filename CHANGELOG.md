@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.24.2
+
+- The Benchmark tab asks Ollama for its models each time it opens. A model
+  pulled since Settings → Models was last opened, such as
+  `muse-glimmer:30b-mlx`, is offered straight away.
+
 ## 4.24.1
 
 - **Meta's models as choices.** Muse Spark is a new provider, "Meta (Muse
