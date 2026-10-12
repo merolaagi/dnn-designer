@@ -11931,6 +11931,78 @@ def _():
     assert "muse-spark-1.3" in meta["suggested"]
     assert PV.OLLAMA_SUGGESTED[0]["name"] == "muse-glimmer:30b-mlx"
 
+
+@check("security: two-factor codes, lockouts, a sign-in log, and the public address switch; a paired phone is unaffected")
+def _():
+    import shutil
+    import auth, security as SE, main, schedules as SC
+    from fastapi.testclient import TestClient
+    # RFC 6238's own test vector: the 20-byte key "12345678901234567890" at 59 seconds
+    import base64
+    key = base64.b32encode(b"12345678901234567890").decode()
+    assert SE.code_now(key, 59) == "287082"
+    backup = None
+    if auth.DATA.exists():
+        backup = auth.DATA.with_suffix(".backup2")
+        shutil.move(auth.DATA, backup)
+    alerts = []
+    real_notify = SC.notify
+    SC.notify = lambda kind, title, text="", *a, **k: alerts.append((kind, title)) or {}
+    SE._FAILS.clear()
+    try:
+        owner = TestClient(main.app)
+        assert owner.post("/api/auth/register", json={"name": "owner", "password": "longenough1"}).status_code == 200
+        assert owner.get("/api/auth/me").headers.get("x-frame-options") == "DENY"
+        setup = owner.post("/api/auth/2fa/setup").json()
+        secret = setup["secret"].replace(" ", "")
+        assert setup["uri"].startswith("otpauth://totp/") and "secret=" + secret in setup["uri"]
+        assert owner.post("/api/auth/2fa/confirm", json={"code": "000000"}).status_code == 400
+        assert owner.post("/api/auth/2fa/confirm", json={"code": SE.code_now(secret)}).json()["on"] is True
+        pair = owner.post("/api/app/pair").json()
+        phone = TestClient(main.app)
+        tok = phone.post("/api/app/claim", json={"code": pair["code"], "device": "iPhone"}).json()["token"]
+        assert phone.get("/api/agentlab/conversations", headers={"Authorization": "Bearer " + tok}).status_code == 200
+        web = TestClient(main.app)
+        need = web.post("/api/auth/login", json={"name": "owner", "password": "longenough1"})
+        assert need.status_code == 401 and need.json()["detail"]["need_code"]
+        SE._FAILS.clear()
+        for k in range(SE.LIMIT):
+            assert web.post("/api/auth/login", json={"name": "owner", "password": "wrong-one"}).status_code == 401
+        blocked = web.post("/api/auth/login", json={"name": "owner", "password": "longenough1", "code": SE.code_now(secret)})
+        assert blocked.status_code == 429 and "Try again" in blocked.json()["detail"]["message"]
+        assert any(k == "security" and "locked" in t for k, t in alerts)
+        SE._FAILS.clear()
+        users = auth.users()
+        users["owner"]["totp_last"] = 0
+        auth._write(auth.USERS, users)
+        ok = web.post("/api/auth/login", json={"name": "owner", "password": "longenough1", "code": SE.code_now(secret)},
+                      headers={"cf-connecting-ip": "203.0.113.7", "cf-ray": "x"})
+        assert ok.status_code == 200
+        assert any(k == "security" and "203.0.113.7" in t for k, t in alerts)              # a new place: alert
+        replay = TestClient(main.app).post("/api/auth/login", json={"name": "owner", "password": "longenough1",
+                                                                    "code": SE.code_now(secret)})
+        assert replay.status_code == 401                                                    # a code works once
+        rows = owner.get("/api/auth/security").json()["signins"]
+        assert any(x["via"] == "cloudflare" and x["ok"] and x["ip"] == "203.0.113.7" for x in rows)
+        assert rows[0]["what"] == "wrong code" and any(x["what"].startswith("locked") for x in rows)
+        assert owner.post("/api/auth/public", json={"on": False}, headers={"cf-ray": "x"}).status_code == 400   # no self-lockout
+        assert owner.post("/api/auth/public", json={"on": False}).json()["public"] is False
+        assert TestClient(main.app).get("/api/app/hello", headers={"cf-ray": "x", "cf-connecting-ip": "1.2.3.4"}).status_code == 403
+        assert phone.get("/api/agentlab/conversations", headers={"Authorization": "Bearer " + tok,
+                                                                  "tailscale-user-login": "m@x"}).status_code == 200
+        owner.post("/api/auth/public", json={"on": True})
+        SE._FAILS.clear()
+        thief = TestClient(main.app)
+        for k in range(SE.CLAIM_LIMIT):
+            thief.post("/api/app/claim", json={"code": "00000000", "device": "x"})
+        assert thief.post("/api/app/claim", json={"code": "00000000", "device": "x"}).status_code == 429
+    finally:
+        SC.notify = real_notify
+        SE._FAILS.clear()
+        shutil.rmtree(auth.DATA, ignore_errors=True)
+        if backup is not None:
+            shutil.move(backup, auth.DATA)
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

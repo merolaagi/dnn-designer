@@ -1,5 +1,33 @@
 # Changelog
 
+## 4.25.0
+
+Tougher sign-in (Settings → Security). An account here can run code on this
+Mac, through agents' code and tool blocks, so its sign-in is guarded harder.
+
+- **Two-factor sign-in.** A 6-digit code from an authenticator app (TOTP,
+  RFC 6238) is asked for after the password, in the browser and on `/m`.
+  - Each code works once.
+  - Turning it off takes the password and a code.
+  - A paired phone (Saathi) is not affected: it signs in with its own token.
+- **Lockouts:**
+  - 5 wrong sign-ins in 15 minutes lock that name and that address out for
+    15 minutes;
+  - 10 wrong pairing codes in 10 minutes lock the address out.
+- **Sign-in log and alerts.** Every sign-in and phone pairing is logged with
+  the address and the way it came in: Cloudflare, Tailscale, this Mac or the
+  network. A sign-in from a new place, and every lockout, goes to the Inbox
+  and to your phone (a new `security` kind, always sent).
+- **The public address switch.** With it off, every request that came
+  through the Cloudflare tunnel (dnn.fueldeskpro.com) is refused before
+  sign-in. This Mac and Tailscale, which Saathi uses, still work. It can't be
+  switched off from the public address itself, so you can't lock yourself
+  out.
+- **Headers and cookies:**
+  - X-Frame-Options, nosniff and Referrer-Policy on every response, and HSTS
+    through Cloudflare;
+  - the session cookie is marked Secure over HTTPS.
+
 ## 4.24.3
 
 - The Benchmark tab's model field is now a list of every model the provider

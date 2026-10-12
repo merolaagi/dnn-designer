@@ -3380,6 +3380,8 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
     <input id="siName" placeholder="name" autocomplete="username" spellcheck="false">
     <input id="siPass" type="password" placeholder="password"
            autocomplete="current-password">
+    <input id="siCode" placeholder="6-digit code from your authenticator app" inputmode="numeric"
+           autocomplete="one-time-code" maxlength="7" style="display:none">
     <div id="siError"></div>
     <div class="sirow">
       <button class="btn go" id="siGo">Sign in</button>
@@ -10601,19 +10603,22 @@ function showSignIn(mode, locked){
 async function submitSignIn(){
   const name = $("siName").value.trim();
   const password = $("siPass").value;
+  const code = $("siCode").value.trim();
   const where = state.signInMode === "register" ? "register" : "login";
   let r, d;
   try{
     r = await fetch(API + "/api/auth/" + where, {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ name, password }),
+      body: JSON.stringify(code ? { name, password, code } : { name, password }),
     });
     d = await r.json();
   } catch { $("siError").textContent = "The server did not respond."; return; }
   if (!r.ok){
+    if (d.detail && d.detail.need_code){ $("siCode").style.display = ""; $("siCode").focus(); }
     $("siError").textContent = (d.detail && d.detail.message) || "That did not work.";
     return;
   }
+  $("siCode").value = ""; $("siCode").style.display = "none";
   $("signin").classList.remove("on");
   $("siPass").value = "";
   if (d.first){
@@ -10635,6 +10640,7 @@ $("siGo").addEventListener("click", submitSignIn);
 $("siSwitch").addEventListener("click", () =>
   showSignIn(state.signInMode === "register" ? "login" : "register"));
 $("siPass").addEventListener("keydown", e => { if (e.key === "Enter") submitSignIn(); });
+$("siCode").addEventListener("keydown", e => { if (e.key === "Enter") submitSignIn(); });
 $("siName").addEventListener("keydown", e => { if (e.key === "Enter") $("siPass").focus(); });
 $("siClose").addEventListener("click", () => $("signin").classList.remove("on"));
 
@@ -16213,6 +16219,11 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Security</h3><small>Two-factor sign-in, the public address (dnn.fueldeskpro.com), and who signed in</small></header>
+      <div class="st-body" id="stSecurity"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Your email</h3><small>The Mail assistant searches and reads your Gmail and saves replies as drafts;
         it never sends anything</small></header>
       <div class="st-body" id="stMail"><p class="st-msg">Loading…</p></div>
@@ -16284,6 +16295,7 @@ function stRender(){
   stApp();
   stMail();
   stTravel();
+  stSecurity();
 }
 
 async function stMail(){
@@ -16317,6 +16329,68 @@ async function stMail(){
   if ($("mlForget")) $("mlForget").onclick = async () => {
     await fetch(API + "/api/mail", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({forget: true})});
     stMail();
+  };
+}
+
+async function stSecurity(){
+  const host = $("stSecurity");
+  if (!host) return;
+  let d;
+  try{ const r = await fetch(API + "/api/auth/security"); if (!r.ok) throw 0; d = await r.json(); }
+  catch { host.innerHTML = `<p class="st-msg">Sign in to an account to see this.</p>`; return; }
+  const tf = d.two_factor, rows = d.signins || [];
+  host.innerHTML = `
+    <h4 style="margin:0 0 6px">Two-factor sign-in ${tf.on ? `<span class="st-msg good">on</span>` : `<span class="st-msg bad">off</span>`}</h4>
+    <div id="secTf">${tf.on
+      ? `<p class="st-msg">Signing in in a browser needs your password and a code from your authenticator app. Saathi on your phone is
+         not affected: it signs in with its own token.</p>
+         <div class="st-grid"><div class="st-field"><label for="secPw">Password</label><input id="secPw" type="password" autocomplete="current-password"></div>
+         <div class="st-field"><label for="secOff">A code from the app</label><input id="secOff" inputmode="numeric" maxlength="7"></div></div>
+         <div class="st-actions"><button class="btn danger" id="secDisable">Turn two-factor off</button><span class="st-msg" id="secMsg"></span></div>`
+      : `<p class="st-msg">Adds a 6-digit code from an authenticator app (the iPhone's Passwords app, Google Authenticator, 1Password) to
+         every browser sign-in, so a stolen password is not enough. Saathi on your phone is not affected.</p>
+         <div class="st-actions"><button class="btn go" id="secStart">Set up two-factor</button><span class="st-msg" id="secMsg"></span></div>
+         <div id="secSetup"></div>`}</div>
+    <h4 style="margin:18px 0 6px">The public address</h4>
+    <label class="st-check"><input type="checkbox" id="secPublic"${d.public ? " checked" : ""}> Allow sign-ins through the public
+      address (dnn.fueldeskpro.com, through Cloudflare)</label>
+    <p class="st-msg" style="line-height:1.55">Off is the safest: nothing from the internet reaches this Mac's Deep Network Designer, and you
+      still get in from this Mac and from anywhere over Tailscale (Saathi uses Tailscale). Keep it on only if you use the public address in a
+      browser; then also put Cloudflare Access in front of it, so Cloudflare checks your email before anything reaches this Mac.</p>
+    <h4 style="margin:18px 0 6px">Recent sign-ins</h4>
+    ${rows.length ? `<table class="bm-table"><tr><th>When</th><th>Account</th><th>From</th><th>Via</th><th></th></tr>${rows.map(x =>
+      `<tr><td>${new Date(x.t * 1000).toLocaleString()}</td><td>${alEsc(x.user || "")}</td><td class="mono">${alEsc(x.ip)}</td>
+       <td>${alEsc(x.via)}</td><td class="${x.ok ? "" : "bad"}">${alEsc(x.what || (x.ok ? "signed in" : "refused"))}</td></tr>`).join("")}</table>`
+      : `<p class="st-msg">None recorded yet.</p>`}`;
+  const msg = (ok, t) => { $("secMsg").className = "st-msg " + (ok ? "good" : "bad"); $("secMsg").textContent = t; };
+  const post = async (path, body) => {
+    const r = await fetch(API + path, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body || {})});
+    const j = await r.json();
+    if (!r.ok) throw new Error((j.detail && j.detail.message) || "That did not work.");
+    return j;
+  };
+  if ($("secStart")) $("secStart").onclick = async () => {
+    let s;
+    try { s = await post("/api/auth/2fa/setup"); } catch (e) { msg(false, e.message); return; }
+    $("secSetup").innerHTML = `<ol class="st-msg" style="line-height:1.7;margin:10px 0 0 18px">
+      <li>On your iPhone, open this link (AirDrop or message it to yourself), or in your authenticator app add an account by hand
+        with this key:<br><span class="mono" style="font-size:15px;user-select:all">${alEsc(s.secret)}</span>
+        <br><a class="al-link" href="${alEsc(s.uri)}">${alEsc(s.uri.slice(0, 60))}…</a></li>
+      <li>Type the 6-digit code it shows:</li></ol>
+      <div class="st-actions"><input id="secCode" inputmode="numeric" maxlength="7" placeholder="123456" style="width:120px">
+      <button class="btn go" id="secConfirm">Turn it on</button></div>`;
+    $("secConfirm").onclick = async () => {
+      try { await post("/api/auth/2fa/confirm", {code: $("secCode").value}); stSecurity(); toast("Two-factor sign-in is on"); }
+      catch (e) { msg(false, e.message); }
+    };
+  };
+  if ($("secDisable")) $("secDisable").onclick = async () => {
+    try { await post("/api/auth/2fa/disable", {password: $("secPw").value, code: $("secOff").value}); stSecurity(); }
+    catch (e) { msg(false, e.message); }
+  };
+  $("secPublic").onchange = async e => {
+    try { await post("/api/auth/public", {on: e.target.checked}); toast(e.target.checked ? "The public address is on" : "The public address is off"); }
+    catch (err) { e.target.checked = !e.target.checked; alert(err.message); }
   };
 }
 

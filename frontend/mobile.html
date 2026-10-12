@@ -194,12 +194,18 @@ function showLogin(msg){
     <p class="muted" style="margin:0">With the same name and password as the Deep Network Designer.</p>
     <label for="un">Name</label><input id="un" autocomplete="username" autocapitalize="none">
     <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
+    <div id="codeRow" class="hidden"><label for="otp">Code from your authenticator app</label>
+      <input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="7"></div>
     <div class="rowbtns"><button class="btn go" id="signin">Sign in</button></div><div class="err" id="lerr">${esc(msg || "")}</div></div>`;
   const go = async () => {
-    try{ await post("/api/auth/login", {name: $("un").value, password: $("pw").value}); route(); }
-    catch(e){ if (e.message !== "signin") $("lerr").textContent = e.message; }
+    try{ await post("/api/auth/login", {name: $("un").value, password: $("pw").value, code: $("otp").value || null}); route(); }
+    catch(e){
+      if (/code/i.test(e.message)) $("codeRow").classList.remove("hidden");
+      if (e.message !== "signin") $("lerr").textContent = e.message;
+    }
   };
   $("signin").onclick = go; $("pw").onkeydown = e => { if (e.key === "Enter") go(); };
+  $("otp").onkeydown = e => { if (e.key === "Enter") go(); };
 }
 
 /* ---------- routing ---------- */

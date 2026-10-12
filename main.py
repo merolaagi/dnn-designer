@@ -39,6 +39,7 @@ import mail
 import travel
 import browser
 import trips
+import security
 import ideas
 import goals
 import feed
@@ -4536,17 +4537,36 @@ async def gate(request: Request, call_next):
     wanted accounts is unaffected.
     """
     path = request.url.path
+    ip, way = security.origin(request)
+    if way == "cloudflare" and not security.public_on():
+        # the public address is turned off: nothing that came through the Cloudflare tunnel gets in
+        return JSONResponse({"detail": {"message": "This address is turned off. Use Tailscale."}}, status_code=403)
     if (auth.enabled() and path.startswith("/api/") and request.method != "OPTIONS"   # a CORS preflight carries no sign-in
             and not path.startswith(OPEN_PATHS)
             and not auth.request_user(request.cookies, request.headers)):
         return JSONResponse({"detail": {"message": "Sign in first.",
                                         "auth": True}}, status_code=401)
-    return await call_next(request)
+    response = await call_next(request)
+    # no other site may frame these pages, guess their types, or be told where they were
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    if way == "cloudflare":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
 
 
 class Credentials(BaseModel):
     name: str
     password: str
+    code: Optional[str] = None
+
+
+def _cookie(response: Response, request: Request, token: str) -> None:
+    https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https" \
+        or security.origin(request)[1] in ("cloudflare", "tailscale")
+    response.set_cookie(auth.SESSION_COOKIE, token, httponly=True, samesite="lax", secure=https,
+                        max_age=auth.SESSION_DAYS * 86400)
 
 
 class PasswordChange(BaseModel):
@@ -4602,11 +4622,20 @@ def app_pair(request: Request):
 
 
 @app.post("/api/app/claim")
-def app_claim(body: AppClaim):
+def app_claim(body: AppClaim, request: Request):
+    ip, way = security.origin(request)
+    key = [f"claim:{ip}"]
+    if security.locked(key, security.CLAIM_WINDOW, security.CLAIM_LIMIT):
+        raise HTTPException(429, detail={"message": "Too many wrong pairing codes. Wait 15 minutes."})
     try:
-        return auth.claim(body.code, body.device)
+        out = auth.claim(body.code, body.device)
     except ValueError as exc:
+        security.fail(key)
+        if security.locked(key, security.CLAIM_WINDOW, security.CLAIM_LIMIT):
+            security.log("", False, ip, way, "locked out after wrong pairing codes")
         raise HTTPException(400, detail={"message": str(exc)})
+    security.log(out.get("user", ""), True, ip, way, f"paired a phone: {body.device[:30]}")
+    return out
 
 
 @app.post("/api/app/push-token")
@@ -4651,15 +4680,88 @@ def auth_register(body: Credentials, response: Response):
 
 
 @app.post("/api/auth/login")
-def auth_login(body: Credentials, response: Response):
+def auth_login(body: Credentials, request: Request, response: Response):
     name = (body.name or "").strip().lower()
+    ip, way = security.origin(request)
+    keys = [f"ip:{ip}", f"name:{name}"]
+    wait = security.locked(keys)
+    if wait:
+        security.log(name, False, ip, way, "refused: locked out")
+        raise HTTPException(429, detail={"message": f"Too many wrong tries. Try again in {wait} minute"
+                                                    f"{'' if wait == 1 else 's'}."})
     if not auth.check(name, body.password):
+        security.fail(keys)
+        now_locked = security.locked(keys)
+        security.log(name, False, ip, way, "locked out after wrong passwords" if now_locked else "wrong password")
         raise HTTPException(401, detail={"message": "That name and password do "
                                                     "not match an account."})
-    token = auth.open_session(name)
-    response.set_cookie(auth.SESSION_COOKIE, token, httponly=True,
-                        samesite="lax", max_age=auth.SESSION_DAYS * 86400)
+    if security.status(name)["on"]:
+        if not body.code:
+            raise HTTPException(401, detail={"message": "Enter the 6-digit code from your authenticator app.",
+                                             "need_code": True})
+        if not security.verify(name, body.code):
+            security.fail(keys)
+            now_locked = security.locked(keys)
+            security.log(name, False, ip, way, "locked out after wrong codes" if now_locked else "wrong code")
+            raise HTTPException(401, detail={"message": "That code does not match. Use the newest one.",
+                                             "need_code": True})
+    security.clear(keys)
+    security.log(name, True, ip, way, "signed in")
+    _cookie(response, request, auth.open_session(name))
     return {"ok": True, "user": name}
+
+
+class TwoFactorCode(BaseModel):
+    code: str
+    password: Optional[str] = None
+
+
+class PublicSwitch(BaseModel):
+    on: bool
+
+
+def _me() -> str:
+    name = auth.current()
+    if not name:
+        raise HTTPException(401, detail={"message": "Sign in first."})
+    return name
+
+
+@app.get("/api/auth/security")
+def auth_security():
+    """Two-factor, the public address, and the latest sign-ins."""
+    name = _me()
+    return {"two_factor": security.status(name), "public": security.public_on(), "signins": security.recent(30)}
+
+
+@app.post("/api/auth/2fa/setup")
+def auth_2fa_setup():
+    return security.setup(_me())
+
+
+@app.post("/api/auth/2fa/confirm")
+def auth_2fa_confirm(body: TwoFactorCode):
+    try:
+        return security.confirm(_me(), body.code)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/auth/2fa/disable")
+def auth_2fa_disable(body: TwoFactorCode):
+    try:
+        return security.disable(_me(), body.password or "", body.code)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/auth/public")
+def auth_public(body: PublicSwitch, request: Request):
+    _me()
+    if not body.on and security.origin(request)[1] == "cloudflare":
+        raise HTTPException(400, detail={"message": "You are using the public address right now: turn it off from "
+                                                    "this Mac or over Tailscale, or you would lock yourself out."})
+    return security.set_public(body.on)
 
 
 @app.post("/api/auth/logout")
