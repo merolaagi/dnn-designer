@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.22.1
+
+- On the Mac, Saathi's Chrome window runs with Chrome's own sandbox on. The
+  "unsupported command-line flag: --no-sandbox" warning bar is gone, and the
+  window looks more like an ordinary browser to the sites it visits.
+
 ## 4.22.0
 
 - **Support agent: chats with a company's support for you.** It works in a

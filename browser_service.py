@@ -82,6 +82,9 @@ class Browser:
             try:
                 self.ctx = self.pw.chromium.launch_persistent_context(
                     str(profile), channel=channel, headless=headless, viewport=VIEW,
+                    # Chrome's own sandbox on (Playwright turns it off by default, which shows a warning bar and
+                    # makes the window look less like a normal browser to the sites it visits)
+                    chromium_sandbox=sys.platform == "darwin",
                     args=["--disable-blink-features=AutomationControlled"])
                 break
             except Exception as exc:  # noqa: BLE001
