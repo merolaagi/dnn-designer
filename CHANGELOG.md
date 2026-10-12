@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.24.3
+
+- The Benchmark tab's model field is now a list of every model the provider
+  has, plus "Another model…" to type one. The browser's suggestion box it
+  replaces showed only the names matching what was already typed, so a
+  pulled model such as `muse-glimmer:30b-mlx` could look missing.
+
 ## 4.24.2
 
 - The Benchmark tab asks Ollama for its models each time it opens. A model

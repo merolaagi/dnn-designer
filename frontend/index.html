@@ -14989,8 +14989,12 @@ async function alRenderBench(){
     <h4>Models</h4>
     ${bm.models.map((m, i) => `<div class="bm-model">
       <select data-bmprov="${i}" aria-label="Provider">${provOpts(m.provider)}</select>
-      <input data-bmmodel="${i}" list="bmList${i}" value="${alEsc(m.model)}" placeholder="model" aria-label="Model">
-      <datalist id="bmList${i}">${modelList(m.provider).map(x => `<option value="${alEsc(x)}">`).join("")}</datalist>
+      ${modelList(m.provider).length ? `<select data-bmpick="${i}" aria-label="Model">${
+        [...new Set([...(m.model && !modelList(m.provider).includes(m.model) ? [m.model] : []), ...modelList(m.provider)])]
+          .map(x => `<option value="${alEsc(x)}"${x === m.model ? " selected" : ""}>${alEsc(x)}</option>`).join("")}
+        <option value="">Another model…</option></select>` : ""}
+      <input data-bmmodel="${i}" value="${alEsc(m.model)}" placeholder="model name" aria-label="Model name"
+        style="${modelList(m.provider).length && (!m.model || modelList(m.provider).includes(m.model)) ? "display:none" : ""}">
       ${bm.models.length > 1 ? `<button class="btn" data-bmdrop="${i}" aria-label="Remove this model">×</button>` : ""}</div>`).join("")}
     ${bm.models.length < 3 ? `<button class="btn" id="bmAdd">Add a model to compare</button>` : ""}
     ${!d.ready.length ? `<div class="help bad">No provider is ready: add a key or start Ollama in Settings.</div>` : ""}
@@ -15022,6 +15026,12 @@ async function alRenderBench(){
   $("alPane").querySelectorAll("[data-bmprov]").forEach(el => el.onchange = () => {
     const i = +el.dataset.bmprov; bm.models[i] = {provider: el.value, model: modelList(el.value)[0] || ""}; alRenderBench(); });
   $("alPane").querySelectorAll("[data-bmmodel]").forEach(el => el.oninput = () => { bm.models[+el.dataset.bmmodel].model = el.value.trim(); });
+  // a list of the models the provider has (every model Ollama has pulled), and a box to type any other
+  $("alPane").querySelectorAll("[data-bmpick]").forEach(el => el.onchange = () => {
+    const i = +el.dataset.bmpick, box = $("alPane").querySelector(`[data-bmmodel="${i}"]`);
+    bm.models[i].model = el.value;
+    if (box) { box.value = el.value; box.style.display = el.value ? "none" : ""; if (!el.value) box.focus(); }
+  });
   $("alPane").querySelectorAll("[data-bmdrop]").forEach(el => el.onclick = () => { bm.models.splice(+el.dataset.bmdrop, 1); alRenderBench(); });
   if ($("bmAdd")) $("bmAdd").onclick = () => { const p = d.ready[0] || {provider: "", models: []}; bm.models.push({provider: p.provider, model: (p.models || [])[0] || ""}); alRenderBench(); };
   $("alPane").querySelectorAll("[data-bmid]").forEach(el => el.onchange = () => {
