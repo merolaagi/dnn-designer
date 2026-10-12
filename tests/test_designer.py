@@ -11803,7 +11803,7 @@ def _():
         browser.call = real
     text = BM.page_text({"title": "Sign in", "url": "https://x", "text": "Sign in", "asks_password": True,
                          "elements": [{"id": "0.2", "kind": "field", "label": "Password", "password": True}]})
-    assert "Do not type it" in text and "(password)" in text
+    assert "Do not type them" in text and "(only the person types here)" in text
     assert "Never type a password" in support.GUIDE and "honestly" in support.GUIDE
     assert muse.rehearsal_plan("Chat with Xfinity support for me about the modem fee")["steps"][0]["agent"] == "support"
     assert "support" in muse.AGENTS and muse.DOING["support"] == "Chatting with their support"
@@ -11884,6 +11884,43 @@ def _():
         assert "trips" in SC.CHECKS and "trips.from_booking" in inspect.getsource(TR.book_flight)
     finally:
         agentlab._dir, TP.geocode, TR._get, TR._path, SC.notify = real_dir, real_geo, real_get, real_tpath, real_notify
+
+
+@check("booking on websites: card details only from you, the pay button only through purchase (your approval)")
+def _():
+    import booking, browser_mcp as BM, browser, browser_service as BS, muse
+    g = agentlab.template("booking")
+    eff = {}
+    for n in g["nodes"]:
+        if n["type"] == "mcp":
+            eff.setdefault(n["params"]["effects"], []).extend(x["name"] for x in n["params"]["tools"])
+    assert eff[agentlab.CHANGES] == ["purchase"] and "purchase" not in eff[agentlab.READS]
+    assert {"traveller", "add_item", "click", "type"} <= set(eff[agentlab.READS])
+    compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+    for pay in ("Complete booking", "Pay now", "Confirm and pay", "Book now", "Place order", "Reserve now"):
+        assert BM.PAY.search(pay), pay
+    for ok in ("Show rooms", "See availability", "Next", "Continue to details"):
+        assert not BM.PAY.search(ok), ok
+    page = {"url": "x", "title": "Pay", "text": "Payment. Total $420.", "asks_password": True,
+            "elements": [{"id": "0.5", "kind": "button", "label": "Complete booking"}]}
+    calls = []
+    real = browser.call
+    browser.call = lambda op, **kw: (calls.append((op, kw)), page if op == "look" else {"ok": True})[1]
+    try:
+        try:
+            BM.call("click", {"id": "0.5"})
+            raise AssertionError("the pay button was clicked without approval")
+        except ValueError:
+            pass
+        assert not any(op == "click" for op, _ in calls)
+        BM.call("purchase", {"id": "0.5", "summary": "Hotel, 3 nights, $420"})
+        assert ("click", {"id": "0.5"}) in calls
+    finally:
+        browser.call = real
+    assert "cc-" in BS.SECRET_FN and "cvv" in BS.SECRET_FN and "card number" in inspect.getsource(BS.Browser.type)
+    assert "never type those" in booking.GUIDE and "add_item" in booking.GUIDE
+    assert muse.rehearsal_plan("Book the Hotel Yak & Yeti for Nov 14 to 17")["steps"][0]["agent"] == "booking"
+    assert muse.rehearsal_plan("Book the cheapest flight to KTM")["steps"][0]["agent"] == "travel"
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

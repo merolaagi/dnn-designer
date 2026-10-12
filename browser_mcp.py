@@ -4,6 +4,7 @@ The Agent lab starts it as `python3 browser_mcp.py`; it drives Saathi's browser 
 """
 
 import json
+import re
 import sys
 
 import browser
@@ -28,6 +29,14 @@ TOOLS = [
     {"name": "back", "description": "Go back one page.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "wait", "description": "Wait for a reply, 1 to 60 seconds, then look.",
      "inputSchema": {"type": "object", "properties": {"seconds": {"type": "integer"}}}},
+    {"name": "purchase", "description": "Click the button that books or pays (Book now, Complete booking, Pay, Reserve, "
+     "Place order, Confirm and pay). The person sees the summary and approves it first.",
+     "inputSchema": {"type": "object", "properties": {
+         "summary": {"type": "string", "description": "Exactly what is bought: what, dates, guests, total price with taxes, "
+                                                       "cancellation terms"},
+         "id": {"type": "string", "description": "The button's id from look"}}, "required": ["summary", "id"]}},
+    {"name": "traveller", "description": "The traveller's name, email and phone as saved on the Mac, for a booking form "
+     "(never card details).", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "commit", "description": "Send a message that agrees to something (accept an offer, change or cancel a "
      "service). The person sees the summary and approves it first.",
      "inputSchema": {"type": "object", "properties": {
@@ -37,17 +46,23 @@ TOOLS = [
 ]
 READ_TOOLS = ["open", "look", "click", "type", "press", "scroll", "back", "wait"]
 WRITE_TOOLS = ["commit"]
+BOOK_READ_TOOLS = READ_TOOLS + ["traveller"]
+BOOK_WRITE_TOOLS = ["purchase"]
+# a button that spends money: only purchase (your approval) clicks it
+PAY = re.compile(r"\b(book( now| it)?|complete (booking|purchase|order)|confirm (and pay|booking|purchase|reservation)|"
+                 r"pay( now)?|place (order|booking)|purchase|reserve( now)?|buy( now)?|checkout|submit (order|payment)|"
+                 r"finish booking)\b", re.I)
 
 
 def page_text(v):
     lines = [f"Page: {v['title']} ({v['url']})"]
     if v.get("asks_password"):
-        lines.append("THIS PAGE ASKS FOR A PASSWORD. Do not type it: stop and ask the person to sign in from "
-                     "Saathi → Hub → Browser, then to tell you to continue.")
+        lines.append("THIS PAGE ASKS FOR A PASSWORD, CARD DETAILS OR A CODE. Do not type them: stop and ask the person to "
+                     "enter them from Saathi → Hub → Browser, then to tell you to continue.")
     lines.append("Text:\n" + (v["text"] or "(no text)"))
     lines.append("Things to click or type into:")
     for e in v["elements"]:
-        lines.append(f"  [{e['id']}] {e['kind']}{' (password)' if e.get('password') else ''}"
+        lines.append(f"  [{e['id']}] {e['kind']}{' (only the person types here)' if e.get('password') else ''}"
                      f"{' (in focus)' if e.get('focused') else ''}: {e['label'] or '(no label)'}")
     return "\n".join(lines)
 
@@ -58,6 +73,13 @@ def call(name, args):
     if name == "look":
         return page_text(browser.call("look"))
     if name == "click":
+        here = browser.call("look")
+        target = next((e for e in here["elements"] if e["id"] == args.get("id")), None)
+        if target and target["kind"] == "button" and PAY.search(target.get("label") or "") and \
+                (here.get("asks_password") or re.search(r"\b(payment|pay now|card number|billing|purchase)\b",
+                                                        here.get("text") or "", re.I)):
+            raise ValueError(f"'{target['label']}' books or pays. Use purchase, with a summary of what is bought and the "
+                             "total, so the person can approve it.")
         browser.call("click", id=args.get("id"))
         return "Clicked. " + page_text(browser.call("look"))
     if name == "type":
@@ -79,6 +101,16 @@ def call(name, args):
     if name == "wait":
         browser.call("wait", seconds=args.get("seconds") or 10)
         return page_text(browser.call("look"))
+    if name == "traveller":
+        import travel
+        t = travel.config().get("traveler") or {}
+        keep = {k: t.get(k) for k in ("title", "given_name", "family_name", "email", "phone_number") if t.get(k)}
+        return json.dumps(keep) if keep else ("No traveller details are saved. Ask the person for the name, email and "
+                                              "phone for the booking, or to fill them in under Hub → Me → Travel.")
+    if name == "purchase":
+        browser.call("click", id=args.get("id"))
+        return ("Clicked, with the person's approval: " + str(args.get("summary") or "") + ". " +
+                page_text(browser.call("look")))
     if name == "commit":
         browser.call("type", text=str(args.get("text") or ""), id=args.get("id"), submit=True)
         return "Sent, with the person's approval: " + str(args.get("summary") or "") + ". Wait, then look for the reply."

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import sys
 import time
@@ -33,8 +34,21 @@ VIEW = {"width": 1100, "height": 900}
 TEXT_LIMIT = 6000
 
 # what counts as something to click or type into, in every frame (chat windows are often in an iframe)
+# a field only the person may type into: a password, or card details (number, security code, expiry)
+SECRET_FN = r"""
+(el) => {
+  if (!el) return false;
+  const type = (el.getAttribute('type') || '').toLowerCase(), ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+  if (type === 'password' || ac.startsWith('cc-') || ac === 'one-time-code') return true;
+  const words = [el.getAttribute('name'), el.id, el.getAttribute('aria-label'), el.getAttribute('placeholder'),
+                 el.getAttribute('data-elements-stable-field-name')].join(' ').toLowerCase();
+  return /card.?number|cardnumber|ccnum|cc-num|\bcvv|\bcvc|\bcsc\b|security.?code|expir|exp.?date|\bmm\s*\/\s*yy|\bpin\b|one.?time|otp|verification code/.test(words);
+}
+"""
+
 TAG_JS = r"""
 () => {
+  const secret = """ + SECRET_FN.strip() + r""";
   const seen = [];
   const vis = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
     return r.width > 2 && r.height > 2 && s.visibility !== 'hidden' && s.display !== 'none' && r.bottom > 0 && r.top < innerHeight * 3; };
@@ -51,7 +65,7 @@ TAG_JS = r"""
     const kind = tag === 'a' || el.getAttribute('role') === 'link' ? 'link'
       : (tag === 'input' && !['button', 'submit', 'checkbox', 'radio'].includes(type)) || tag === 'textarea' || el.isContentEditable || el.getAttribute('role') === 'textbox' ? 'field'
       : tag === 'select' ? 'choice' : 'button';
-    seen.push({n, kind, label: label(el), password: type === 'password', focused: document.activeElement === el});
+    seen.push({n, kind, label: label(el), password: secret(el), focused: document.activeElement === el});
     if (seen.length >= 120) break;
   }
   const text = (document.body ? document.body.innerText : '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
@@ -178,24 +192,30 @@ class Browser:
     def type(self, text: str, ident: Optional[str] = None, submit: bool = False, from_person: bool = False) -> Dict[str, Any]:
         self.start()
         text = str(text or "")
+        if not from_person and re.search(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)", text):
+            raise ValueError("That looks like a card number. Only the person types card details: ask them to enter "
+                             "them from Saathi (Hub → Browser).")
         if ident:
             el = self._locate(ident)
-            is_pw = el.evaluate("e => (e.getAttribute('type') || '').toLowerCase() === 'password'")
-            if is_pw and not from_person:
-                raise ValueError("That is a password field. Only the person types passwords: ask them to sign in "
-                                 "from Saathi (Hub → Browser).")
+            if el.evaluate(SECRET_FN) and not from_person:
+                raise ValueError("That is a password, card or security-code field. Only the person types those: ask "
+                                 "them to do it from Saathi (Hub → Browser).")
             el.click(timeout=8000)
             try:
                 el.fill(text, timeout=8000)
             except Exception:  # noqa: BLE001 - contenteditable chat boxes
                 self.page.keyboard.type(text, delay=15)
         else:
-            focused_pw = self.page.evaluate(
-                "() => { let d = document; let e = d.activeElement; while (e && e.tagName === 'IFRAME') "
-                "{ try { e = e.contentDocument.activeElement } catch (x) { break } } "
-                "return !!e && (e.getAttribute('type') || '').toLowerCase() === 'password'; }")
-            if focused_pw and not from_person:
-                raise ValueError("The box in focus is a password field. Only the person types passwords.")
+            if not from_person:
+                for frame in self._frames():
+                    try:
+                        if frame.evaluate("(f) => (" + SECRET_FN.strip() + ")(document.activeElement)", None):
+                            raise ValueError("The box in focus is a password, card or code field. Only the person "
+                                             "types those.")
+                    except ValueError:
+                        raise
+                    except Exception:  # noqa: BLE001
+                        continue
             self.page.keyboard.type(text, delay=15)
         if submit:
             self.page.keyboard.press("Enter")

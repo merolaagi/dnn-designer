@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.24.0
+
+- **Booking agent: books hotels, trains, buses, ferries, tours and tickets
+  on their websites**, in Saathi's Chrome window on the Mac. Flights stay
+  with Travel (Duffel).
+  - It searches with your dates and guests, picks what you asked for, and
+    fills the guest form from your saved traveller (name, email, phone).
+  - When it's booked, it adds the booking to your trip with the confirmation
+    number, so it is on the map and in the reminders.
+- **Money never moves without you:**
+  - Card numbers, security codes, expiry dates and one-time codes are typed
+    only by you, from Saathi → Hub → Browser. The browser refuses them from
+    the agent, by field and by anything that looks like a card number.
+  - The button that books or pays (Book now, Complete booking, Pay, Place
+    order, Confirm and pay…) can only be pressed through `purchase`, a
+    CHANGES tool. Saathi shows "Book and pay?" with what is bought, the total
+    and the cancellation terms, and waits for you.
+- Muse sends "book/reserve a hotel, room, train, bus, ferry, tour, tickets"
+  to Booking and "book a flight" to Travel.
+
 ## 4.23.1
 
 - `./serve.sh install` has macOS (launchd, a LaunchAgent called
