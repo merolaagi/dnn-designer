@@ -1,5 +1,30 @@
 # Changelog
 
+## 4.26.0
+
+- **Explainer agent: answers as a page you can play with.** Ask Saathi to
+  explain, show, plot, visualise or animate maths, an equation, a problem,
+  an algorithm or how something works. The page can have:
+  - equations typeset with KaTeX;
+  - worked solutions one step at a time (Next step, Back, Show all);
+  - curves with a slider for every parameter, drawn with math.js;
+  - node-and-arrow graphs like Neo4j, drawn with vis-network: drag the
+    nodes, and press Play to watch the steps light them up with a note
+    each;
+  - tables.
+- **It checks its work first.** The agent works the problem out with
+  `run_python`, sympy for algebra, before it shows anything.
+- **Pages are checked before they're drawn.** The agent writes a spec, never
+  HTML; `explain.py` checks it and draws it:
+  - curves may use only x, their sliders and known maths functions;
+  - arrows must join real nodes;
+  - all data is escaped into the page.
+- Pages are kept in the workspace, open at `/api/explain/{id}`, and are
+  listed under Files. Saathi opens them in its viewer ("Open the
+  explainer").
+- Muse sends explain, visualise and plot questions about maths, algorithms
+  and graphs to the Explainer.
+
 ## 4.25.0
 
 Tougher sign-in (Settings → Security). An account here can run code on this

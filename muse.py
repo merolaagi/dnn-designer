@@ -52,6 +52,10 @@ AGENTS = {
              "answers what is next or what a day holds, and explains how to get somewhere by train, bus or metro "
              "with live Google Maps transit directions. Use it for itinerary, 'my trip', 'how do I get to …', "
              "trains, buses, transfers and reminders about a trip. Searching or booking flights and hotels is travel.",
+    "explainer": "Explains something visually, as a page the user can play with: equations typeset, worked solutions "
+                 "step by step, plots with sliders for each parameter, and node-and-arrow graphs (like Neo4j) that "
+                 "animate an algorithm or a chain of ideas. Use it when the user asks to explain, show, visualise, "
+                 "graph, plot or animate maths, an equation, a problem, an algorithm or how something works.",
     "booking": "Books a hotel, a train, a bus, a ferry, a tour or a ticket on a website for the user (not flights), "
                "filling in the forms and stopping for the user's approval before it pays; puts the booking in their "
                "trip. Use it when the user asks to book or reserve any of those. To book a flight use travel.",
@@ -67,7 +71,7 @@ DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Worki
          "reverse": "Reading the app's files", "specialist": "Working on it", "station": "Looking at your store's data",
          "mail": "Reading your email", "travel": "Searching flights and hotels",
          "bills": "Reading your bills", "support": "Chatting with their support",
-         "trips": "Working on your trip", "booking": "Booking it", "react": "Searching the web"}
+         "trips": "Working on your trip", "booking": "Booking it", "explainer": "Drawing it for you", "react": "Searching the web"}
 MAX_STEPS = 3
 
 DECODER = """You are Muse, the front desk of an agent lab. Read the person's request and decide which agents
@@ -140,6 +144,10 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     elif re.search(r"\b(my|our)\s+(e-?mails?|inbox|mail|gmail)\b|\b(check|read|search|sort)\b.{0,20}\b(e-?mails?|inbox|mail)\b|"
                    r"\bdraft (a )?repl(y|ies)\b", t):
         agent = "mail"
+    elif re.search(r"\b(explain|visuali[sz]e|illustrate|animate|draw|plot|graph of|show me how)\b", t) and \
+            re.search(r"\b(equation|math|maths|formula|integral|derivative|function|graph|plot|algorithm|theorem|"
+                      r"proof|matrix|vector|probability|neural|network|nodes?|neo4j|works?|problem|solve)\b", t):
+        agent = "explainer"
     elif re.search(r"\b(book|reserve)\b.{0,40}\b(hotel|room|stay|airbnb|hostel|train|bus|ferry|tour|tickets?|"
                    r"table|car)\b", t) and not re.search(r"\b(flights?|fly|airline|plane)\b", t):
         agent = "booking"
@@ -511,6 +519,7 @@ ROUTING = [
     ("Chat with Xfinity support for me and ask them to remove the modem rental fee.", "support", None),
     ("How do I get from Kathmandu airport to my hotel in Thamel by bus?", "trips", None),
     ("Book the Hotel Yak & Yeti in Kathmandu for Nov 14 to 17 for me.", "booking", None),
+    ("Explain the quadratic formula with a graph I can play with.", "explainer", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "

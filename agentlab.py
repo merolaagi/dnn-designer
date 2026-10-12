@@ -1262,6 +1262,12 @@ def _mail_command() -> str:
     return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'mail_mcp.py'))}"
 
 
+def _explain_command() -> str:
+    import shlex
+    import sys
+    return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'explain_mcp.py'))}"
+
+
 def _trips_command() -> str:
     import shlex
     import sys
@@ -1522,6 +1528,16 @@ TEMPLATES = {
                                "effects": CHANGES},
                            8: {"transport": "stdio", "target": "@trips_command", "tools": "@booking_trip_tools",
                                "effects": READS}}},
+    "explainer": {"name": "Explainer: answers as a page with equations, plots and node graphs",
+                  # works it out with code first, then builds the page from a checked spec
+                  "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
+                            ("router", 540, 260), ("code_exec", 790, 110), ("mcp", 790, 290), ("output", 1040, 260)],
+                  "edges": [(0, 2), (1, 2), (3, 2), (2, 4), (4, 5), (4, 6), (5, 2), (6, 2), (4, 7)],
+                  "params": {1: {"text": "@explain_guide"},
+                             3: {"max_steps": 16},
+                             5: {"seconds": 30},
+                             6: {"transport": "stdio", "target": "@explain_command", "tools": "@explain_tools",
+                                 "effects": READS}}},
     "supervisor": {"name": "Supervisor with sub-agents",
                    "nodes": [("user_input", 40, 240), ("system_prompt", 280, 60), ("llm", 280, 240),
                              ("router", 520, 240), ("human", 760, 90), ("sub_agent", 1010, 60),
@@ -1548,6 +1564,9 @@ _LATE = {"@station_guide": lambda: __import__("station").GUIDE, "@station_comman
          "@bills_guide": lambda: __import__("bills").GUIDE,
          "@trips_guide": lambda: __import__("trips").GUIDE, "@trips_command": lambda: _trips_command(),
          "@trips_tools": lambda: _trips_tools(),
+         "@explain_guide": lambda: __import__("explain").GUIDE, "@explain_command": lambda: _explain_command(),
+         "@explain_tools": lambda: [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
+                                    for t in __import__("explain_mcp").TOOLS],
          "@booking_guide": lambda: __import__("booking").GUIDE,
          "@booking_read_tools": lambda: _browser_tools(__import__("browser_mcp").BOOK_READ_TOOLS),
          "@booking_write_tools": lambda: _browser_tools(__import__("browser_mcp").BOOK_WRITE_TOOLS),

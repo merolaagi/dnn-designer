@@ -9,6 +9,7 @@ worse than no designer.
 
 import json
 import os
+import re
 import inspect
 import time
 import sys
@@ -12002,6 +12003,60 @@ def _():
         shutil.rmtree(auth.DATA, ignore_errors=True)
         if backup is not None:
             shutil.move(backup, auth.DATA)
+
+
+@check("explainer: a checked spec becomes a page with equations, plots with sliders and an animated node graph")
+def _():
+    import explain as EX, explain_mcp as EM, muse, tempfile
+    real = agentlab._dir
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    try:
+        spec = {"title": "Quadratic", "summary": "Roots of $ax^2+bx+c$.", "sections": [
+            {"kind": "math", "latex": "x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}"},
+            {"kind": "plot", "functions": [{"expr": "a*x^2 + b*x + c"}],
+             "params": [{"name": "a", "min": -3, "max": 3, "value": 1}, {"name": "b", "min": -5, "max": 5, "value": -2},
+                        {"name": "c", "min": -5, "max": 5, "value": -3}], "x": [-5, 5]},
+            {"kind": "steps", "items": [{"title": "Discriminant", "latex": "b^2-4ac=16"}]},
+            {"kind": "graph", "nodes": [{"id": "A"}, {"id": "B"}], "edges": [{"from": "A", "to": "B", "label": "4"}],
+             "steps": [{"highlight": ["A"], "note": "start"}, {"highlight": ["A", "B", "nope"], "note": "done"}]},
+            {"kind": "table", "columns": ["x", "y"], "rows": [[1, 2]]}]}
+        page = EX.clean(spec)
+        assert page["sections"][3]["steps"][1]["highlight"] == ["A", "B"]                    # unknown ids dropped
+        for bad in ({"title": "xx", "sections": [{"kind": "plot", "functions": [{"expr": "fetch(1)"}]}]},
+                    {"title": "xx", "sections": [{"kind": "plot", "functions": [{"expr": "a*x"}]}]},
+                    {"title": "xx", "sections": [{"kind": "graph", "nodes": [{"id": "A"}], "edges": [{"from": "A", "to": "Z"}]}]},
+                    {"title": "xx", "sections": [{"kind": "script", "src": "x"}]},
+                    {"title": "xx", "sections": [{"kind": "plot", "functions": [{"expr": "x"}], "params": [{"name": "sin"}]}]}):
+            try:
+                EX.clean(bad)
+                raise AssertionError(f"took {bad}")
+            except ValueError:
+                pass
+        evil = EX.clean({"title": "</script><script>alert(1)</script>", "sections": [{"kind": "text", "md": "</script><b>x"}]})
+        html_ = EX.render(evil)
+        assert "<script>alert(1)" not in html_ and html_.count("</script>") == html_.count("<script")
+        out = EM.call("make_explainer", {"spec": json.dumps(spec), "question": "explain it"})
+        eid = re.search(r"/api/explain/(ex[0-9a-f]{10})", out).group(1)
+        assert EX.load(eid)["question"] == "explain it"
+        import main, files as FL
+        from fastapi.testclient import TestClient
+        r = TestClient(main.app).get(f"/api/explain/{eid}")
+        if r.status_code == 200:                                       # when accounts exist, the test client is not signed in
+            assert "vis-network" in r.text and "katex" in r.text
+        assert any(f["kind"] == "explainer" and f["url"] == f"/api/explain/{eid}" for f in FL.listing())
+        try:
+            EX.load("../../etc")
+            raise AssertionError("a path was loaded")
+        except KeyError:
+            pass
+        g = agentlab.template("explainer")
+        assert {n["type"] for n in g["nodes"]} >= {"code_exec", "mcp"}
+        compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+        assert muse.rehearsal_plan("Explain the quadratic formula with a graph I can play with")["steps"][0]["agent"] == "explainer"
+        assert muse.rehearsal_plan("Show me how Dijkstra's algorithm works with nodes")["steps"][0]["agent"] == "explainer"
+    finally:
+        agentlab._dir = real
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

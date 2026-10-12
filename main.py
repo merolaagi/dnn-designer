@@ -40,6 +40,7 @@ import travel
 import browser
 import trips
 import security
+import explain
 import ideas
 import goals
 import feed
@@ -1237,6 +1238,16 @@ def _trip(fn, *args):
         raise HTTPException(404, detail={"message": "That trip or item is not there."})
     except ValueError as exc:
         raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/explain/{eid}")
+def explain_page(eid: str):
+    """An explainer page (equations, plots with sliders, node graphs), drawn from its checked spec."""
+    try:
+        page = explain.load(eid)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That explainer is gone."})
+    return HTMLResponse(explain.render(page), headers={"cache-control": "no-store"})
 
 
 @app.get("/api/trips")
