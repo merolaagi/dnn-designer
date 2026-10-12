@@ -229,7 +229,12 @@ def _feed(s: Dict[str, Any]) -> None:
     feed.check(s)
 
 
-CHECKS = {"ingest_watchdog": _ingest_watchdog, "feed": _feed}
+def _trips(s: Dict[str, Any]) -> None:
+    import trips
+    trips.check(s)
+
+
+CHECKS = {"ingest_watchdog": _ingest_watchdog, "feed": _feed, "trips": _trips}
 
 
 def _fire(s: Dict[str, Any], now: Optional[float] = None) -> None:

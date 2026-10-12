@@ -31,11 +31,12 @@ KINDS = {
     "error": "A schedule or check failed",
     "stopped": "A scheduled run was stopped",
     "skipped": "A schedule was skipped (its last run still going)",
+    "trip": "Trip reminders: check-in, leaving for the airport, the day's plan",
 }
-DEFAULTS = {"server": "https://ntfy.sh", "topic": "", "kinds": ["alert", "recovered", "approval", "done", "error"],
+DEFAULTS = {"server": "https://ntfy.sh", "topic": "", "kinds": ["alert", "recovered", "approval", "done", "error", "trip"],
             "details": False, "public_url": "", "token": ""}
-PRIORITY = {"alert": 5, "approval": 4, "error": 4, "recovered": 3, "done": 3, "stopped": 3, "skipped": 2}
-TAGS = {"alert": ["rotating_light"], "recovered": ["white_check_mark"], "approval": ["raised_hand"],
+PRIORITY = {"trip": 4, "alert": 5, "approval": 4, "error": 4, "recovered": 3, "done": 3, "stopped": 3, "skipped": 2}
+TAGS = {"trip": ["airplane"], "alert": ["rotating_light"], "recovered": ["white_check_mark"], "approval": ["raised_hand"],
         "done": ["sunrise"], "error": ["warning"], "stopped": ["stop_sign"], "skipped": ["fast_forward"]}
 _STATUS: Dict[str, Any] = {"last_sent": None, "last_error": None}
 
@@ -176,7 +177,8 @@ def send(row: Dict[str, Any], attachment: Optional[Dict[str, Any]] = None) -> bo
     """Push one inbox row if it is a kind you chose, in the background: to the ntfy topic if one is set,
     and to the phones paired with this account. True if it was sent on its way."""
     c = config()
-    if row.get("kind") not in c["kinds"] or os.environ.get("AGENTLAB_NO_PUSH"):
+    wanted = row.get("kind") in c["kinds"] or (row.get("kind") == "trip" and "done" in c["kinds"])  # saved before trips
+    if not wanted or os.environ.get("AGENTLAB_NO_PUSH"):
         return False
     try:
         import auth

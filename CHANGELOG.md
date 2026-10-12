@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.23.0
+
+- **Trips.** Your itinerary day by day: flights, hotel stays, trains, buses,
+  transfers, things to do, meals and notes, in the local time of each place.
+  - A flight booked through Saathi goes straight into the trip for those
+    dates, or starts one.
+  - The Trips agent fills a trip from the confirmations in your email.
+  - You can add a stop yourself.
+- **Map.** Every place is put on the map: OpenStreetMap's geocoder, each
+  place looked up once and then kept. Each item links to Apple Maps and
+  Google Maps directions by public transport.
+- **"How do I get there?"** uses Google Maps transit directions through
+  SerpApi, the same key as flight prices. You get which train or bus (by line
+  name), which stop, when it leaves, how many stops, where to change, how
+  long and what it costs.
+- **Reminders** go to your Inbox and phone:
+  - check in online 24 hours before a flight;
+  - leave for the airport 3 hours before;
+  - on check-in day, the hotel's address and check-in time;
+  - an hour before anything else;
+  - each morning of a trip, that day's plan.
+
+  The `trips` check runs every hour, set up with your first trip. On the
+  phone they are a new "trip" kind, on whenever "done" is on.
+- Muse sends itinerary, "my trip", "how do I get to…", "by train/bus" and
+  airport-transfer questions to Trips. Searching and booking stay with
+  Travel.
+- API: `/api/trips`, `/api/trips/{id}`, `/api/trips/{id}/items`,
+  `/api/trips/directions`.
+
 ## 4.22.1
 
 - On the Mac, Saathi's Chrome window runs with Chrome's own sandbox on. The

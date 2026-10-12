@@ -426,6 +426,11 @@ def book_flight(offer_id: str, c: Optional[Dict[str, Any]] = None) -> Dict[str, 
             "airline": (order.get("owner") or {}).get("name"),
             "mode": "live" if c["duffel_token"].startswith("duffel_live_") else "test"}
     try:
+        import trips
+        done["trip"] = trips.from_booking(order, offer)
+    except Exception:  # noqa: BLE001 - the ticket is bought either way
+        pass
+    try:
         import files
         files.record("booking", f"Flight booked: {done['airline']} {done['booking_reference']}",
                      detail=f"{done['currency']} {done['price']} · order {done['order_id']} · {done['mode']}")

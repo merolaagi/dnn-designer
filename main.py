@@ -38,6 +38,7 @@ import report
 import mail
 import travel
 import browser
+import trips
 import ideas
 import goals
 import feed
@@ -1196,6 +1197,92 @@ def travel_test():
 def travel_test_booking():
     """Check the Duffel token (it reads one airline; nothing is searched or bought)."""
     return travel.test_duffel()
+
+
+class TripIn(BaseModel):
+    title: Optional[str] = None
+    destination: Optional[str] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+
+class TripItemIn(BaseModel):
+    kind: Optional[str] = None
+    title: Optional[str] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+    place: Optional[str] = None
+    address: Optional[str] = None
+    to_place: Optional[str] = None
+    confirmation: Optional[str] = None
+    details: Optional[str] = None
+
+
+class DirectionsIn(BaseModel):
+    start: str
+    end: str
+    mode: str = "transit"
+    depart: str = ""
+
+
+def _dump(body) -> Dict[str, Any]:
+    return body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True)
+
+
+def _trip(fn, *args):
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That trip or item is not there."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/trips")
+def trips_list():
+    return {"trips": trips.listing()}
+
+
+@app.post("/api/trips")
+def trips_create(body: TripIn):
+    return _trip(trips.create, body.title or "", body.destination or "", body.start or "", body.end or "")
+
+
+@app.get("/api/trips/{tid}")
+def trips_get(tid: str):
+    """A trip day by day, each item with its map position and Apple Maps / Google Maps links."""
+    return _trip(trips.get, tid)
+
+
+@app.patch("/api/trips/{tid}")
+def trips_update(tid: str, body: TripIn):
+    return _trip(trips.update, tid, _dump(body))
+
+
+@app.delete("/api/trips/{tid}")
+def trips_remove(tid: str):
+    return _trip(trips.remove, tid)
+
+
+@app.post("/api/trips/{tid}/items")
+def trips_add_item(tid: str, body: TripItemIn):
+    return _trip(trips.add_item, tid, _dump(body))
+
+
+@app.patch("/api/trips/{tid}/items/{iid}")
+def trips_update_item(tid: str, iid: str, body: TripItemIn):
+    return _trip(trips.update_item, tid, iid, _dump(body))
+
+
+@app.delete("/api/trips/{tid}/items/{iid}")
+def trips_remove_item(tid: str, iid: str):
+    return _trip(trips.remove_item, tid, iid)
+
+
+@app.post("/api/trips/directions")
+def trips_directions(body: DirectionsIn):
+    """Live Google Maps directions (transit lines, stops and times), through SerpApi."""
+    return _trip(trips.directions, body.start, body.end, body.mode, body.depart)
 
 
 class BrowserAct(BaseModel):

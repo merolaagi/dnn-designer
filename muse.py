@@ -48,6 +48,10 @@ AGENTS = {
     "bills": "Finds where the user overpays on a bill (internet, phone, power, insurance, subscriptions) from the "
              "bills in their email, compares current market prices, and writes how to negotiate it down (call "
              "script, and a draft email). Use it for any question about their bills or a provider overcharging.",
+    "trips": "Keeps the user's trips: builds the itinerary from bookings in their email and what Saathi booked, "
+             "answers what is next or what a day holds, and explains how to get somewhere by train, bus or metro "
+             "with live Google Maps transit directions. Use it for itinerary, 'my trip', 'how do I get to …', "
+             "trains, buses, transfers and reminders about a trip. Searching or booking flights and hotels is travel.",
     "support": "Chats with a company's customer support on its website for the user (Xfinity/Comcast, AT&T, "
                "T-Mobile, Verizon, Spectrum, PG&E or any site with a chat): explains what they want, negotiates a "
                "lower bill or a fix, and reports the offers and the transcript. It asks the user before agreeing to "
@@ -59,7 +63,8 @@ AGENTS = {
 DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Working it out and checking it",
          "reverse": "Reading the app's files", "specialist": "Working on it", "station": "Looking at your store's data",
          "mail": "Reading your email", "travel": "Searching flights and hotels",
-         "bills": "Reading your bills", "support": "Chatting with their support", "react": "Searching the web"}
+         "bills": "Reading your bills", "support": "Chatting with their support",
+         "trips": "Working on your trip", "react": "Searching the web"}
 MAX_STEPS = 3
 
 DECODER = """You are Muse, the front desk of an agent lab. Read the person's request and decide which agents
@@ -132,6 +137,9 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     elif re.search(r"\b(my|our)\s+(e-?mails?|inbox|mail|gmail)\b|\b(check|read|search|sort)\b.{0,20}\b(e-?mails?|inbox|mail)\b|"
                    r"\bdraft (a )?repl(y|ies)\b", t):
         agent = "mail"
+    elif re.search(r"\b(itinerary|my trip|trip plan|how (do|can|should) i get (to|from)|directions|by (train|bus|metro|subway)|"
+                   r"(train|bus|metro) station|take the (train|bus|metro)|airport transfer|what'?s next on my trip)\b", t) and not re.search(r"\b(book|cheap|fare|price)", t):
+        agent = "trips"
     elif re.search(r"\b(chat|talk|message|contact|speak)\b.{0,40}\b(support|agent|rep|xfinity|comcast|at&t|att|"
                    r"t-?mobile|verizon|spectrum|pg&e|customer service|on my behalf)\b", t):
         agent = "support"
@@ -347,6 +355,11 @@ def not_connected(agent: str) -> Optional[str]:
             return ("Your email is not connected yet, so I have not looked at any mail. Connect Gmail with an app "
                     "password: Google makes one for a single app, and you can take it back at any time. (On the Mac it "
                     "is under Settings → Your email.)")
+    if agent == "trips":
+        import travel
+        if not travel.view()["configured"]:
+            return ("Directions and maps use the same SerpApi key as flight prices, which isn't set yet, so I haven't looked "
+                    "anything up. Add it under Hub → Me → Travel, then ask me again.")
     if agent == "support":
         import browser
         if not browser.installed():
@@ -485,6 +498,7 @@ ROUTING = [
     ("What do one-way flights to New York cost next Friday?", "travel", None),
     ("Is Comcast overcharging me for internet? Help me get the bill down.", "bills", None),
     ("Chat with Xfinity support for me and ask them to remove the modem rental fee.", "support", None),
+    ("How do I get from Kathmandu airport to my hotel in Thamel by bus?", "trips", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "

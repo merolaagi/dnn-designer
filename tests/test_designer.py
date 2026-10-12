@@ -66,6 +66,9 @@ def check(name):
         except AssertionError as exc:
             FAILED.append((name, str(exc)))
             print(f"  FAIL  {name}: {exc}")
+            if os.environ.get("TRACE"):
+                import traceback
+                traceback.print_exc()
         except Exception as exc:  # noqa: BLE001
             FAILED.append((name, f"{type(exc).__name__}: {exc}"))
             print(f"  ERROR {name}: {type(exc).__name__}: {exc}")
@@ -11810,6 +11813,77 @@ def _():
     assert 'args["from_person"] = True' in src                                   # only you, from the phone
     import browser_service as BS
     assert "from_person" in inspect.getsource(BS.Browser.type) and "password" in inspect.getsource(BS.Browser.type)
+
+
+@check("trips: itinerary by day with map links, transit directions, reminders and the morning plan, booked flights go in")
+def _():
+    import trips as TP, trips_mcp as TM, travel as TR, schedules as SC, tempfile, datetime as dt
+    real_dir, real_geo, real_get, real_tpath, real_notify = agentlab._dir, TP.geocode, TR._get, TR._path, SC.notify
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    TR._path = lambda: tmp / "travel.json"
+    TP.geocode = lambda text: {"lat": 27.7154, "lon": 85.3123, "name": text} if "Thamel" in text or "Yak" in text else None
+    sent = []
+    SC.notify = lambda kind, title, text="", *a, **k: sent.append((kind, title, text)) or {}
+    try:
+        t = TP.create("Kathmandu, November", "Kathmandu", "2099-11-12", "2099-12-12")
+        assert any(x["agent"] == {"kind": "check", "key": "trips"} for x in SC.listing())        # reminders set up once
+        TP.add_item(t["id"], {"kind": "flight", "title": "QR 738 SFO → DOH", "start": "2099-11-12T23:55", "place": "SFO airport",
+                              "confirmation": "QX7P2A"})
+        h = TP.add_item(t["id"], {"kind": "hotel", "title": "Hotel Yak & Yeti", "start": "2099-11-14T14:00",
+                                  "end": "2099-11-17T12:00", "address": "Durbar Marg, Thamel, Kathmandu"})
+        again = TP.add_item(t["id"], {"kind": "hotel", "title": "hotel yak & yeti", "start": "2099-11-14T14:00"})
+        assert again["id"] == h["id"]                                                              # no duplicates
+        try:
+            TP.add_item(t["id"], {"kind": "spaceship", "title": "x"})
+            raise AssertionError("an unknown kind was taken")
+        except ValueError:
+            pass
+        g = TP.get(t["id"])
+        assert [d["date"] for d in g["days"]] == ["2099-11-12", "2099-11-14"]
+        hotel = g["days"][1]["items"][0]
+        assert hotel["lat"] == 27.7154 and "dirflg=r" in hotel["links"]["apple"] and "travelmode=transit" in hotel["links"]["google"]
+        flight_at = dt.datetime(2099, 11, 12, 23, 55)
+        titles = [r["title"] for r in TP.due(flight_at - dt.timedelta(hours=24) + dt.timedelta(minutes=5))]
+        assert titles == ["Check in online: QR 738 SFO → DOH"]
+        assert [r["title"] for r in TP.due(flight_at - dt.timedelta(hours=3))] == ["Leave for the airport: QR 738 SFO → DOH"]
+        assert TP.due(flight_at - dt.timedelta(hours=30)) == []
+        s_ = {"id": "x"}
+        TP.check(s_, flight_at - dt.timedelta(hours=3))
+        leave = [x for x in sent if "Leave for the airport" in x[1]]
+        assert len(leave) == 1 and leave[0][0] == "trip" and "QX7P2A" in leave[0][2]
+        n = len(sent)
+        TP.check(s_, flight_at - dt.timedelta(hours=2, minutes=30))
+        assert len([x for x in sent[n:] if "Leave" in x[1]]) == 0                                 # sent once
+        TP.check(s_, dt.datetime(2099, 11, 14, 7, 30))
+        assert any(x[1] == "Kathmandu, November: today" and "2:00 PM Hotel Yak & Yeti" in x[2] for x in sent)
+        TR.save({"serpapi_key": "c" * 64})
+        TR._get = lambda params: {"directions": [{"travel_mode": "Transit", "start_time": "3:10 PM", "end_time": "4:05 PM",
+            "duration": 3300, "cost": 50, "currency": "NPR", "trips": [
+                {"travel_mode": "Walking", "duration": 300, "details": [{"title": "Walk to Gaushala bus stop"}]},
+                {"travel_mode": "Bus", "title": "Sajha 1", "duration": 2400, "start_stop": {"name": "Gaushala", "time": "3:15 PM"},
+                 "end_stop": {"name": "Jamal", "time": "3:55 PM"}, "stops": [{}, {}, {}], "service_run_by": {"name": "Sajha Yatayat"}}]}]}
+        r = TP.directions("Tribhuvan International Airport", "Thamel, Kathmandu", "transit", "2099-11-14T15:00")
+        text = TP.directions_text(r)
+        assert "Sajha 1 from Gaushala at 3:15 PM to Jamal (3:55 PM), 3 stops, run by Sajha Yatayat" in text
+        assert "costs 50 NPR" in text and "maps.apple.com" in text
+        order = {"booking_reference": "AB12CD"}
+        offer = {"slices": [{"destination": {"city_name": "Kathmandu", "iata_code": "KTM"}, "segments": [
+            {"departing_at": "2099-11-20T10:00:00", "arriving_at": "2099-11-20T11:00:00", "origin": {"iata_code": "KTM", "name": "Tribhuvan"},
+             "destination": {"iata_code": "PKR", "name": "Pokhara"}, "marketing_carrier": {"name": "Buddha Air", "iata_code": "U4"},
+             "marketing_carrier_flight_number": "601"}]}]}
+        assert TP.from_booking(order, offer) == t["id"]                                           # inside the trip's dates
+        assert any(i["title"] == "Buddha Air U4601 KTM → PKR" and i["confirmation"] == "AB12CD" for i in TP.get(t["id"])["items"])
+        out = TM.call("show_trip", {"trip": t["id"]})
+        assert "2099-11-14:" in out and "Hotel Yak & Yeti" in out and "conf QX7P2A" in out
+        assert TM.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": "show_trip", "arguments": {"trip": "nope"}}})["result"]["isError"]
+        import muse, main
+        assert muse.rehearsal_plan("How do I get from the airport to my hotel by bus?")["steps"][0]["agent"] == "trips"
+        assert {"/api/trips", "/api/trips/{tid}", "/api/trips/{tid}/items", "/api/trips/directions"} <= {x.path for x in main.app.routes}
+        assert "trips" in SC.CHECKS and "trips.from_booking" in inspect.getsource(TR.book_flight)
+    finally:
+        agentlab._dir, TP.geocode, TR._get, TR._path, SC.notify = real_dir, real_geo, real_get, real_tpath, real_notify
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
