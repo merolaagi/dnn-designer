@@ -11922,6 +11922,15 @@ def _():
     assert muse.rehearsal_plan("Book the Hotel Yak & Yeti for Nov 14 to 17")["steps"][0]["agent"] == "booking"
     assert muse.rehearsal_plan("Book the cheapest flight to KTM")["steps"][0]["agent"] == "travel"
 
+
+@check("Meta's models are choices: Muse Spark through Meta's API, Muse Glimmer on this Mac through Ollama")
+def _():
+    import providers as PV
+    meta = PV.CATALOG["meta"]
+    assert meta["base_url"] == "https://api.meta.ai/v1" and meta["kind"] == PV.OPENAI and meta["key_env"] == "MODEL_API_KEY"
+    assert "muse-spark-1.3" in meta["suggested"]
+    assert PV.OLLAMA_SUGGESTED[0]["name"] == "muse-glimmer:30b-mlx"
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

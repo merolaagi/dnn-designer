@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.24.1
+
+- **Meta's models as choices.** Muse Spark is a new provider, "Meta (Muse
+  Spark)": `https://api.meta.ai/v1`, OpenAI-compatible, with its key in
+  `MODEL_API_KEY`. Suggested models are `muse-spark-1.3`, `muse-spark-1.2`
+  and the cheaper `muse-spark-1.3-contributor`, on which Meta may train.
+- Muse Glimmer (30B, open weights, Apache 2.0) heads the suggested Ollama
+  models as `muse-glimmer:30b-mlx`, built for Apple silicon. It is a 19 GB
+  download and needs a Mac with 32 GB of memory or more.
+- Compare either with your current model on the Benchmark tab, which runs
+  the same tasks on up to three models side by side.
+
 ## 4.24.0
 
 - **Booking agent: books hotels, trains, buses, ferries, tours and tickets

@@ -49,6 +49,10 @@ CATALOG: Dict[str, Dict[str, Any]] = {
              "key_env": "GROQ_API_KEY", "keys_at": "https://console.groq.com/keys"},
     "openrouter": {"name": "OpenRouter", "kind": OPENAI, "base_url": "https://openrouter.ai/api/v1",
                    "key_env": "OPENROUTER_API_KEY", "keys_at": "https://openrouter.ai/keys"},
+    "meta": {"name": "Meta (Muse Spark)", "kind": OPENAI, "base_url": "https://api.meta.ai/v1",
+             "key_env": "MODEL_API_KEY", "keys_at": "https://dev.meta.ai",
+             # the contributor tier costs a fraction, but Meta may train on what you send it
+             "suggested": ["muse-spark-1.3", "muse-spark-1.2", "muse-spark-1.3-contributor"]},
     "together": {"name": "Together AI", "kind": OPENAI, "base_url": "https://api.together.xyz/v1",
                  "key_env": "TOGETHER_API_KEY", "keys_at": "https://api.together.ai/settings/api-keys"},
     "ollama": {"name": "Ollama (on this computer)", "kind": OPENAI, "base_url": "http://localhost:11434/v1",
@@ -61,6 +65,8 @@ CATALOG: Dict[str, Dict[str, Any]] = {
 
 # Models worth pulling into Ollama for agents. Agents call tools, so these all support tool calling.
 OLLAMA_SUGGESTED = [
+    {"name": "muse-glimmer:30b-mlx", "note": "Meta Muse Glimmer, 30B, open weights (Apache 2.0), built for agents; "
+                                             "MLX for Apple silicon, a 19 GB download (a Mac with 32 GB or more)"},
     {"name": "llama3.1:8b", "note": "Meta Llama 3.1, 8B: a solid all-rounder with tool calling"},
     {"name": "llama3.2:3b", "note": "Meta Llama 3.2, 3B: small and quick"},
     {"name": "qwen2.5:7b", "note": "Qwen 2.5, 7B: strong at tools and structured answers"},
