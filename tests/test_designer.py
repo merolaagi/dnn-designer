@@ -11735,6 +11735,30 @@ def _():
     assert "You are talking with" in inspect.getsource(muse.decode)
 
 
+@check("Muse answers like a chat reply: no thinking out loud, and only dots while it works")
+def _():
+    import muse, uuid as _u
+    assert muse.tidy("<think>first I should check</think>\n\nParis.") == "Paris."
+    assert muse.tidy("so the user wants x </think>It is 42.") == "It is 42."
+    assert muse.tidy("Thought: search\nAction: web\nObservation: ok\nFinal Answer: Opens at 9am.") == "Opens at 9am."
+    assert muse.tidy("Three cafes:\n- A\n- B") == "Three cafes:\n- A\n- B"          # a real list is left alone
+    assert "Let me" in muse.REPLY_STYLE and "reasoning" in muse.REPLY_STYLE
+    assert "REPLY_STYLE" in inspect.getsource(muse._carry_out)
+    mid = "mu" + _u.uuid4().hex[:10]
+    muse._save({"id": mid, "task": "x", "mode": "live", "status": "running", "phase": "step 1 of 2: ReAct",
+                "doing": "Searching the web", "plan": {"understood": "Manish, you'd like...", "steps": []},
+                "steps": [], "run": None, "answer": None, "error": None, "started": time.time()})
+    muse._ALIVE.add(mid)
+    try:
+        turn = {"muse": mid}
+        muse.overlay(turn)
+        assert turn["phase"] == turn["doing"] == muse.QUIET and turn["plan"]["understood"] == ""
+    finally:
+        muse._ALIVE.discard(mid)
+    page = (ROOT / "frontend" / "mobile.html").read_text()
+    assert "t.plan.understood" not in page and 'aria-label="Muse is working"' in page
+
+
 @check("a Muse turn cut off by a restart says so instead of 'running' for ever; Stop works at any stage")
 def _():
     import muse, uuid as _u

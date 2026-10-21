@@ -249,13 +249,10 @@ async function newConv(){
 }
 function turnHtml(t, i, last){
   const live = ["running", "waiting"].includes(t.status);
-  const steps = (t.muse_steps || []).map(s => `<li><b>${esc(s.name)}</b> · ${esc(s.status === "done" ? "done" : s.status || "")}</li>`).join("");
-  const plan = t.plan && t.plan.understood ? `<div class="muted" style="margin-bottom:4px">${esc(t.plan.understood)}</div>` : "";
   const ask = last && S.pending[t.run] ? approvalHtml(S.pending[t.run]) : "";
   let body;
-  if (live) body = `${plan}<div class="phase"><span class="dots"><i></i><i></i><i></i></span>${esc(t.phase || "Working")}</div>
-      ${steps ? `<ul class="steps">${steps}</ul>` : ""}${ask}<div class="rowbtns"><button class="btn bad" data-stop="${esc(t.run || "")}"${t.run ? "" : " disabled"}>Stop</button></div>`;
-  else if (t.status === "done") body = `${md(t.answer)}${(t.muse_steps || []).length > 1 ? `<ul class="steps">${steps}</ul>` : ""}<div class="rowbtns" style="margin-top:6px"><a class="icon-btn" style="padding:4px 0" href="/api/agentlab/conversations/${esc(S.conv)}/turns/${i}/pdf">Save as PDF</a></div>`;
+  if (live) body = `<div class="phase" aria-label="Muse is working"><span class="dots"><i></i><i></i><i></i></span></div>${ask}<div class="rowbtns"><button class="btn bad" data-stop="${esc(t.run || "")}"${t.run ? "" : " disabled"}>Stop</button></div>`;
+  else if (t.status === "done") body = `${md(t.answer)}<div class="rowbtns" style="margin-top:6px"><a class="icon-btn" style="padding:4px 0" href="/api/agentlab/conversations/${esc(S.conv)}/turns/${i}/pdf">Save as PDF</a></div>`;
   else body = `<div class="err">${esc(t.error || ("It " + (t.status || "stopped") + "."))}</div>`;
   const long = (t.task || "").length > 360;
   const mine = long ? `<div class="bubble me"><span>${esc(t.task.slice(0, 280))}…</span><button class="icon-btn" data-more="${i}"

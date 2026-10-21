@@ -74,6 +74,36 @@ DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Worki
          "trips": "Working on your trip", "booking": "Booking it", "explainer": "Drawing it for you", "react": "Searching the web"}
 MAX_STEPS = 3
 
+# how the last agent of a turn is told to answer: the reply lands in a chat on a phone
+REPLY_STYLE = ("How to reply: this is sent to the person as a chat message on their phone. Lead with the answer itself, "
+               "in a few short sentences of plain, warm prose, the way a capable friend would text back. Do not show "
+               "your reasoning, your plan or the steps you took, and do not open with 'Let me' or 'I will'. Use a short "
+               "list only when the answer really is a list. Stay under about 120 words unless the request asks for "
+               "detail, a document or code.")
+# what a running turn shows instead of the plan and the agent's progress: a typing indicator
+QUIET = "…"
+
+_THINK = re.compile(r"<(think|thinking|reasoning)>.*?</\1>\s*", re.S | re.I)
+_OPEN_THINK = re.compile(r"^\s*<(think|thinking|reasoning)>.*", re.S | re.I)
+_TRACE = re.compile(r"^\s*(Thought|Action|Action Input|Observation)\s*:.*$", re.M)
+_FINAL = re.compile(r"^\s*(\*\*)?Final Answer(\*\*)?\s*:\s*", re.I | re.M)
+
+
+def tidy(text: Optional[str]) -> Optional[str]:
+    """An answer without the model's thinking out loud: reasoning tags, ReAct traces and a 'Final Answer:' label."""
+    if not text:
+        return text
+    out = _THINK.sub("", str(text))
+    if "</think>" in out.lower():                 # an answer that began mid-thought: keep what follows the close
+        out = re.split(r"</think>", out, flags=re.I)[-1]
+    out = _OPEN_THINK.sub("", out)                # thinking that never closed is all thinking
+    final = list(_FINAL.finditer(out))
+    if final:
+        out = out[final[-1].end():]
+    out = _TRACE.sub("", out)
+    out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out or re.sub(r"</?(think|thinking|reasoning)>", "", str(text), flags=re.I).strip()
+
 DECODER = """You are Muse, the front desk of an agent lab. Read the person's request and decide which agents
 should do the work. Do not do the work yourself.
 
@@ -426,6 +456,8 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
             task = profile.with_profile(step["task"])
             if earlier:
                 task += "\n\nWhat the earlier steps found (use it):\n" + "\n\n".join(earlier)
+            if i == len(plan["steps"]) - 1:
+                task += "\n\n" + REPLY_STYLE
             memory = None
             if step["agent"] == "specialist" and step.get("role"):
                 import roster
@@ -438,13 +470,13 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
                      doing=DOING.get(step["agent"], "Working on it"))
             _save(s)
             done = _wait(view["id"])
-            row.update(status=done.get("status"), answer=done.get("answer"), error=done.get("error"))
+            row.update(status=done.get("status"), answer=tidy(done.get("answer")), error=done.get("error"))
             _save(s)
             if done.get("status") != "done":
                 s.update(status=done.get("status") if done.get("status") in ("stopped", "error") else "error",
                          error=done.get("error") or f"{row['name']} did not finish ({done.get('status')}).")
                 return
-            earlier.append(f"[{row['name']}] {AL._one_line(done.get('answer') or '', 3000)}")
+            earlier.append(f"[{row['name']}] {AL._one_line(row['answer'] or '', 3000)}")
         if len(s["steps"]) == 1:
             s["answer"] = s["steps"][0]["answer"]
         else:
@@ -473,9 +505,11 @@ def overlay(turn: Dict[str, Any]) -> bool:
                 pass
         s.update(status="error", error=CUT_OFF, phase="cut off", finished=time.time())
         _save(s)
+    running = s["status"] == "running"
+    plan = dict(s["plan"], understood="") if s.get("plan") else s.get("plan")   # the plan is not said out loud
     keep = {"status": s["status"], "run": s.get("run"), "answer": s.get("answer"), "error": s.get("error"),
-            "plan": s.get("plan"), "muse_steps": s.get("steps"), "phase": s.get("phase"), "connect": s.get("connect"),
-            "doing": s.get("doing")}
+            "plan": plan, "muse_steps": s.get("steps"), "phase": QUIET if running else s.get("phase"),
+            "connect": s.get("connect"), "doing": QUIET if running else s.get("doing")}
     if s.get("finished") and s.get("started"):
         keep["seconds"] = round(s["finished"] - s["started"], 1)
     changed = any(turn.get(k) != v for k, v in keep.items())

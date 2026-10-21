@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.27.0
+
+- **Muse replies like a chat, not a report.** The last agent of every turn is
+  told how to answer: lead with the answer, a few short sentences of plain
+  prose, no reasoning or plan shown, no "Let me…", under about 120 words
+  unless you ask for detail, a document or code.
+- **No thinking out loud.** Answers are cleaned before they reach the phone:
+  `<think>` blocks, a reply that starts mid-thought, and ReAct
+  Thought / Action / Observation lines are removed, and a "Final Answer:"
+  label is dropped. A real list in an answer is left alone.
+- **Just "…" while it works.** A running turn no longer shows the plan
+  ("Manish, you'd like…") or the step names. Saathi and the /m page show a
+  typing indicator and the Stop button, then the answer.
+
 ## 4.26.0
 
 - **Explainer agent: answers as a page you can play with.** Ask Saathi to
