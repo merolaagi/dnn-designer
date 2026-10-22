@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.29.0
+
+- **Shopping agent: Saathi is your personal shopper.** Ask for anything to
+  buy ("best noise-cancelling headphones under $300", "any deals on a 65
+  inch TV?", "is the Dyson V15 a good deal at $550?"). It works with no
+  store-by-store connection: it uses Google Shopping through the SerpApi key
+  you already have, which covers thousands of stores (Walmart, Best Buy,
+  Target, Amazon sellers, brand stores).
+  - Each result shows the price, the old price and the discount, the store,
+    the rating and review count, and delivery.
+  - It puts one product's stores side by side, with the star breakdown and
+    what reviewers say.
+  - For bigger buys it also reads real opinions on Reddit and review sites.
+    It flags thin or suspicious reviews and prices that look too good.
+  - It answers with one pick and two or three alternatives, each with a
+    link.
+- **Your shopping preferences.** It follows the brands you like and the ones
+  you avoid, your sizes, your budget, the stores you trust and your musts
+  (free shipping, free returns, new). Tell Saathi a lasting preference and it
+  saves it, or set them under Settings → Shopping.
+- **Price watches.** Ask "tell me when it drops under $300". It checks every
+  morning at 7:40, and your phone gets a push ("Price drop") when the price
+  reaches your target or falls 10% or more below the last price. Cases,
+  cables, used and refurbished listings don't count as the price. The
+  watches are listed under Settings → Shopping, where you can stop one.
+- **Buying.** Say "buy it for me" and the Booking agent checks out in
+  Saathi's browser. It ships to the address saved under Settings → Shopping.
+  You type the card details yourself, and the button that pays waits for
+  your approval.
+- New push kind "deal". It is on for anyone who has "done" on.
+
 ## 4.28.3
 
 - **"Sent to the agents" on a radar card is now a link.** Clicking it opens

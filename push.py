@@ -32,12 +32,13 @@ KINDS = {
     "stopped": "A scheduled run was stopped",
     "skipped": "A schedule was skipped (its last run still going)",
     "trip": "Trip reminders: check-in, leaving for the airport, the day's plan",
+    "deal": "Price watches: something you are watching got cheaper",
     "security": "A sign-in from a new place, or sign-ins locked out",
 }
-DEFAULTS = {"server": "https://ntfy.sh", "topic": "", "kinds": ["alert", "recovered", "approval", "done", "error", "trip"],
+DEFAULTS = {"server": "https://ntfy.sh", "topic": "", "kinds": ["alert", "recovered", "approval", "done", "error", "trip", "deal"],
             "details": False, "public_url": "", "token": ""}
-PRIORITY = {"security": 5, "trip": 4, "alert": 5, "approval": 4, "error": 4, "recovered": 3, "done": 3, "stopped": 3, "skipped": 2}
-TAGS = {"security": ["lock"], "trip": ["airplane"], "alert": ["rotating_light"], "recovered": ["white_check_mark"], "approval": ["raised_hand"],
+PRIORITY = {"deal": 4, "security": 5, "trip": 4, "alert": 5, "approval": 4, "error": 4, "recovered": 3, "done": 3, "stopped": 3, "skipped": 2}
+TAGS = {"deal": ["shopping_cart"], "security": ["lock"], "trip": ["airplane"], "alert": ["rotating_light"], "recovered": ["white_check_mark"], "approval": ["raised_hand"],
         "done": ["sunrise"], "error": ["warning"], "stopped": ["stop_sign"], "skipped": ["fast_forward"]}
 _STATUS: Dict[str, Any] = {"last_sent": None, "last_error": None}
 
@@ -178,7 +179,7 @@ def send(row: Dict[str, Any], attachment: Optional[Dict[str, Any]] = None) -> bo
     """Push one inbox row if it is a kind you chose, in the background: to the ntfy topic if one is set,
     and to the phones paired with this account. True if it was sent on its way."""
     c = config()
-    wanted = row.get("kind") in c["kinds"] or (row.get("kind") == "trip" and "done" in c["kinds"]) \
+    wanted = row.get("kind") in c["kinds"] or (row.get("kind") in ("trip", "deal") and "done" in c["kinds"]) \
         or row.get("kind") == "security"                  # always: it may mean someone else is signing in
     if not wanted or os.environ.get("AGENTLAB_NO_PUSH"):
         return False

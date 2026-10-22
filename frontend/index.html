@@ -16373,6 +16373,11 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Shopping</h3><small>The Shopping agent searches Google Shopping across thousands of stores with your SerpApi key, follows these preferences, and watches prices for you</small></header>
+      <div class="st-body" id="stShop"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Reading invoices and BOLs</h3><small>Photograph a vendor invoice or a fuel BOL on the phone page; a vision
         model in Ollama reads it here, then it is checked and matched against your store's records</small></header>
       <div class="st-body" id="stDocs"><p class="st-msg">Loading…</p></div>
@@ -16433,6 +16438,7 @@ function stRender(){
   stApp();
   stMail();
   stTravel();
+  stShop();
   stSecurity();
 }
 
@@ -16592,6 +16598,35 @@ async function stTravel(){
   };
   if ($("trForget")) $("trForget").onclick = async () => { await save({forget: true}); stTravel(); };
   if ($("trForgetDuffel")) $("trForgetDuffel").onclick = async () => { await save({forget_duffel: true}); stTravel(); };
+}
+
+async function stShop(){
+  const host = $("stShop");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/shopping")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  const p = d.prefs || {};
+  const field = (k) => `<div class="st-field"><label for="sp_${k}">${alEsc(d.fields[k])}</label><input id="sp_${k}" data-spfield="${k}" value="${alEsc(p[k] || "")}" autocomplete="off"></div>`;
+  host.innerHTML = `${d.configured ? "" : `<p class="st-msg bad">Add the SerpApi key under Flights and hotels first: shopping uses the same key.</p>`}
+    <div class="st-grid">${Object.keys(d.fields).map(field).join("")}</div>
+    <div class="st-actions"><button class="btn go" id="spSave">Save preferences</button><span class="st-msg" id="spMsg"></span></div>
+    <h4 style="margin:18px 0 6px">Price watches</h4>
+    ${d.watches.length ? `<table class="bm-table"><tr><th>Watching</th><th>Target</th><th>Now</th><th>Lowest</th><th></th></tr>
+      ${d.watches.map(w => `<tr><td>${alEsc(w.label)}</td><td>${w.target ? "$" + w.target : "any big drop"}</td>
+        <td>${w.last != null ? "$" + w.last + (w.store ? " at " + alEsc(w.store) : "") : "not checked yet"}</td>
+        <td>${w.low != null ? "$" + w.low : ""}</td><td><button class="btn danger" data-spunwatch="${alEsc(w.id)}">Stop</button></td></tr>`).join("")}</table>`
+      : `<p class="st-msg">None yet. Ask Saathi "tell me when the Sony WH-1000XM6 drops under $300".</p>`}`;
+  $("spSave").onclick = async () => {
+    const body = {};
+    host.querySelectorAll("[data-spfield]").forEach(i => body[i.dataset.spfield] = i.value);
+    const r = await fetch(API + "/api/shopping", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({prefs: body})});
+    $("spMsg").className = "st-msg " + (r.ok ? "good" : "bad");
+    $("spMsg").textContent = r.ok ? "Saved" : (((await r.json()).detail || {}).message || "Not saved.");
+  };
+  host.querySelectorAll("[data-spunwatch]").forEach(b => b.onclick = async () => {
+    await fetch(API + "/api/shopping/watches/" + encodeURIComponent(b.dataset.spunwatch), {method: "DELETE"});
+    stShop();
+  });
 }
 
 async function stApp(){

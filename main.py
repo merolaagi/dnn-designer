@@ -1258,6 +1258,36 @@ def travel_test_booking():
     return travel.test_duffel()
 
 
+class ShoppingIn(BaseModel):
+    prefs: Dict[str, Any] = {}
+
+
+@app.get("/api/shopping")
+def shopping_view():
+    """Your shopping preferences and price watches (Settings → Shopping)."""
+    import shop
+    return {"configured": shop.configured(), "fields": shop.PREFS, "prefs": shop.prefs(), "watches": shop.watches()}
+
+
+@app.post("/api/shopping")
+def shopping_save(body: ShoppingIn):
+    import shop
+    try:
+        return {"prefs": shop.set_prefs(body.prefs)}
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.delete("/api/shopping/watches/{wid}")
+def shopping_unwatch(wid: str):
+    import shop
+    try:
+        shop.remove_watch(wid)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "There is no such price watch."})
+    return {"ok": True}
+
+
 class TripIn(BaseModel):
     title: Optional[str] = None
     destination: Optional[str] = None

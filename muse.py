@@ -56,9 +56,16 @@ AGENTS = {
                  "step by step, plots with sliders for each parameter, and node-and-arrow graphs (like Neo4j) that "
                  "animate an algorithm or a chain of ideas. Use it when the user asks to explain, show, visualise, "
                  "graph, plot or animate maths, an equation, a problem, an algorithm or how something works.",
+    "shopping": "The user's personal shopper: finds the best product and price across thousands of stores (Google "
+                "Shopping: Walmart, Best Buy, Target, Amazon sellers, brand stores), sales, discounts and deals, "
+                "compares stores, reads real reviews, follows the user's shopping preferences, and watches a price to "
+                "tell them when it drops. Use it for anything to buy: products, gifts, clothes, gadgets, home things, "
+                "'is this a good deal', 'best X under $Y', coupons and sales. Flights and hotels are travel.",
     "booking": "Books a hotel, a train, a bus, a ferry, a tour or a ticket on a website for the user (not flights), "
-               "filling in the forms and stopping for the user's approval before it pays; puts the booking in their "
-               "trip. Use it when the user asks to book or reserve any of those. To book a flight use travel.",
+               "and buys a product from a web shop's checkout, filling in the forms and stopping for the user's "
+               "approval before it pays; puts a travel booking in their trip. Use it when the user asks to book, "
+               "reserve, buy or order something for them. To book a flight use travel. To find what to buy, plan "
+               "shopping first, then booking.",
     "support": "Chats with a company's customer support on its website for the user (Xfinity/Comcast, AT&T, "
                "T-Mobile, Verizon, Spectrum, PG&E or any site with a chat): explains what they want, negotiates a "
                "lower bill or a fix, and reports the offers and the transcript. It asks the user before agreeing to "
@@ -71,7 +78,8 @@ DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Worki
          "reverse": "Reading the app's files", "specialist": "Working on it", "station": "Looking at your store's data",
          "mail": "Reading your email", "travel": "Searching flights and hotels",
          "bills": "Reading your bills", "support": "Chatting with their support",
-         "trips": "Working on your trip", "booking": "Booking it", "explainer": "Drawing it for you", "react": "Searching the web"}
+         "trips": "Working on your trip", "booking": "Booking it", "explainer": "Drawing it for you", "shopping": "Looking through the stores",
+         "react": "Searching the web"}
 MAX_STEPS = 3
 
 # how the last agent of a turn is told to answer: the reply lands in a chat on a phone
@@ -193,6 +201,14 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     elif re.search(r"\b(flights?|fly|flying|airfares?|airline|plane tickets?|round[- ]trip|one[- ]way|hotels?|"
                    r"vacation|trip to)\b", t):
         agent = "travel"
+    elif re.search(r"\b(buy|order|purchase|check ?out)\b.{0,40}\b(for me|on my behalf)\b|\b(add|put)\b.{0,30}\b(cart|basket)\b", t):
+        agent = "booking"
+    elif re.search(r"\b(deals?|on sale|sales?|discounts?|coupons?|promo codes?|cheapest|best price|price drops?|"
+                   r"watch the price|cheaper|bargain|shopping|shop for|gift|where (can|do|should) i buy|"
+                   r"should i buy|worth buying|good deal|recommend (a|an|some)|best .{1,40} under \$?\d+)\b", t) or \
+            re.search(r"\b(buy|purchase|get)\b.{0,30}\b(laptop|phone|headphones?|earbuds|tv|monitor|shoes|jacket|"
+                      r"watch|camera|vacuum|mattress|chair|desk|tablet|ipad|iphone|console|blender|appliance)s?\b", t):
+        agent = "shopping"
     elif re.search(r"\b(train|network|neural|classifier|dataset|mnist|cifar|package|parameters?)\b", t):
         agent = "modelbuilder"
     elif re.search(r"\b(app|asar|electron|binary|reverse|decompile|\.app|apk|plist)\b", t):
@@ -404,6 +420,11 @@ def not_connected(agent: str) -> Optional[str]:
         if not browser.installed():
             return ("The browser I book in isn't installed on the Mac yet, so I haven't booked anything. On the Mac, in "
                     "~/Sites/new_dnn, run: ./serve.sh setup-browser, then ./serve.sh. Then ask me again.")
+    if agent == "shopping":
+        import shop
+        if not shop.configured():
+            return ("Shopping uses the same SerpApi key as flight prices, which isn't set yet, so I haven't looked at any "
+                    "stores. Add it under Hub → Me → Travel, then ask me again.")
     if agent == "trips":
         import travel
         if not travel.view()["configured"]:
@@ -445,7 +466,8 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
         missing = [(st["agent"], w) for st, w in ((st, not_connected(st["agent"])) for st in plan["steps"]) if w]
         if missing and s["mode"] == "live":
             # an agent with nothing to read would answer anyway, from imagination: ask for the connection instead
-            s.update(status="done", answer=missing[0][1], phase="needs a connection", connect=missing[0][0])
+            s.update(status="done", answer=missing[0][1], phase="needs a connection",
+                     connect={"shopping": "travel", "trips": "travel"}.get(missing[0][0], missing[0][0]))  # the same key
             return
         earlier: List[str] = []
         for i, step in enumerate(plan["steps"]):
@@ -554,6 +576,8 @@ ROUTING = [
     ("How do I get from Kathmandu airport to my hotel in Thamel by bus?", "trips", None),
     ("Book the Hotel Yak & Yeti in Kathmandu for Nov 14 to 17 for me.", "booking", None),
     ("Explain the quadratic formula with a graph I can play with.", "explainer", None),
+    ("Find me the best noise-cancelling headphones under $300, with good reviews.", "shopping", None),
+    ("Is there a sale on the Dyson V15 anywhere? Tell me when it drops under $500.", "shopping", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),
     ("Research what convenience-store owners want from back-office software, then train a model on my survey "

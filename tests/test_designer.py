@@ -60,6 +60,8 @@ PASSED, FAILED = [], []
 
 def check(name):
     def wrap(fn):
+        if os.environ.get("ONLY") and os.environ["ONLY"] not in name:
+            return fn
         try:
             fn()
             PASSED.append(name)
@@ -12197,6 +12199,114 @@ def _():
         assert muse.rehearsal_plan("Show me how Dijkstra's algorithm works with nodes")["steps"][0]["agent"] == "explainer"
     finally:
         agentlab._dir = real
+
+
+@check("shopping: Google Shopping results, offers and reviews, preferences, and price watches that push a drop")
+def _():
+    import shop, shop_mcp as SM, travel, schedules, muse, tempfile
+    real, real_get, real_cfg, real_notify = agentlab._dir, travel._get, travel.config, schedules.notify
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    calls, sent = [], []
+    price = {"now": 349.0}
+
+    def fake_get(params):
+        calls.append(params)
+        if params["engine"] == "google_shopping":
+            return {"shopping_results": [
+                {"title": "Sony WH-1000XM6 Wireless Noise Canceling Headphones", "source": "Best Buy", "extracted_price": price["now"],
+                 "extracted_old_price": 449.0, "rating": 4.7, "reviews": 2310, "delivery": "Free delivery", "tag": "SALE",
+                 "product_link": "https://www.google.com/shopping/product/1", "immersive_product_page_token": "tok-sony-xm6-abc"},
+                {"title": "Case for Sony WH-1000XM6", "source": "Amazon.com - Seller", "extracted_price": 19.99, "rating": 4.2, "reviews": 88},
+                {"title": "Sony WH-1000XM6 Wireless Noise Canceling Headphones", "source": "eBay", "extracted_price": 210.0,
+                 "second_hand_condition": "used"},
+                {"title": "No price here", "source": "x"}],
+                "search_metadata": {"google_shopping_url": "https://www.google.com/search?tbm=shop&q=sony"}}
+        if params["engine"] == "google_immersive_product":
+            return {"product_results": {"title": "Sony WH-1000XM6", "rating": 4.7, "reviews": 2310,
+                                        "ratings": [{"stars": 5, "amount": 1900}, {"stars": 1, "amount": 60}],
+                                        "stores": [{"name": "Walmart", "extracted_price": 359.0, "link": "https://walmart.com/x"},
+                                                   {"name": "Best Buy", "extracted_price": 349.0, "extracted_original_price": 449.0,
+                                                    "details_and_offers": ["Free delivery", "Free 15-day returns"], "link": "https://bestbuy.com/x"}],
+                                        "user_reviews": [{"rating": 5, "title": "Best ANC", "text": "Quiet on flights.", "source": "Best Buy"}]}}
+        raise AssertionError(params)
+
+    travel._get = fake_get
+    travel.config = lambda: {**real_cfg(), "serpapi_key": "k"}
+    schedules.notify = lambda kind, title, text="", schedule=None, conv=None, attachment=None: sent.append((kind, title, text))
+    try:
+        r = shop.search("Sony WH-1000XM6", max_price=400, on_sale=True, sort="price_low")
+        assert calls[-1]["on_sale"] == "true" and calls[-1]["max_price"] == 400 and calls[-1]["sort_by"] == 1
+        assert [i["price"] for i in r["items"]] == [19.99, 210.0, 349.0]           # priceless rows dropped, cheapest first
+        text = shop.search_text(r)
+        assert "$349 (was $449, 22% off) · Best Buy" in text and "rated 4.7 from 2,310 reviews" in text and "offers id: tok-sony-xm6-abc" in text
+        o = shop.offers_text(shop.offers("tok-sony-xm6-abc"))
+        assert o.index("Best Buy: $349") < o.index("Walmart: $359") and "Free 15-day returns" in o and "Quiet on flights" in o
+        # preferences: saved, shown, and the address only reaches checkout
+        shop.set_prefs({"likes": "Sony, Apple", "must": "free returns", "ship_to": "Manish, 2 Main St, Berkeley CA"})
+        out = SM.call("shopping_preferences", {})
+        assert "Sony, Apple" in out and "free returns" in out and "Main St" not in out and "shipping address is saved" in out
+        assert SM.handle({"id": 1, "method": "tools/call", "params": {"name": "set_shopping_preference",
+                                                                      "arguments": {"field": "ship_to", "value": "x"}}})["result"]["isError"]
+        for bad in ({"colour": "red"}, {"likes": "x" * 500}):
+            try:
+                shop.set_prefs(bad)
+                raise AssertionError(f"took {bad}")
+            except ValueError:
+                pass
+        import browser_mcp
+        assert "Main St" in browser_mcp.call("traveller", {})
+        # a price watch: the case and the used one are not the price; a drop to the target pushes once
+        w = shop.add_watch("Sony WH-1000XM6 headphones", target=300, label="Sony XM6")
+        assert any(x["agent"] == {"kind": "check", "key": "shopping"} for x in schedules.listing())
+        sch = {"id": "s1"}
+        shop.check(sch)
+        assert not sent and shop.watches()[0]["last"] == 349.0 and "1 watched" in sch["last_detail"]
+        price["now"] = 299.0
+        shop.check(sch)
+        assert len(sent) == 1 and sent[0][0] == "deal" and "$299 at Best Buy" in sent[0][2] and "target" in sent[0][2]
+        shop.check(sch)
+        assert len(sent) == 1                                                       # the same price is not news twice
+        price["now"] = 260.0
+        shop.check(sch)
+        assert len(sent) == 2 and shop.watches()[0]["low"] == 260.0
+        assert "Sony XM6" in shop.watches_text() and "lowest seen $260" in shop.watches_text()
+        shop.remove_watch(w["id"])
+        assert not shop.watches()
+        # a 10% drop with no target is news too
+        w2 = shop.add_watch("Sony WH-1000XM6")
+        shop.check(sch)
+        price["now"] = 220.0
+        shop.check(sch)
+        assert sent[-1][0] == "deal" and "down from $260" in sent[-1][2]
+        # reading pages: public web only
+        for bad in ("file:///etc/passwd", "http://127.0.0.1:8770/api/app/hello", "http://localhost/", "ftp://x.com"):
+            try:
+                shop.read_page(bad)
+                raise AssertionError(f"read {bad}")
+            except ValueError:
+                pass
+        # the agent, the check, the push kind, the routing
+        g = agentlab.template("shopping")
+        assert {n["type"] for n in g["nodes"]} >= {"mcp", "web_search", "reflector"}
+        compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+        assert "shopping" in schedules.CHECKS
+        import push
+        assert "deal" in push.KINDS and "deal" in push.DEFAULTS["kinds"]
+        for q in ("Find me the best noise-cancelling headphones under $300, with good reviews",
+                  "Any deals on a 65 inch TV this week?", "Is the Dyson V15 a good deal at $550?",
+                  "Tell me when the Sony WH-1000XM6 price drops"):
+            assert muse.rehearsal_plan(q)["steps"][0]["agent"] == "shopping", q
+        assert muse.rehearsal_plan("Buy the Best Buy one for me")["steps"][0]["agent"] == "booking"
+        assert muse.rehearsal_plan("Find me a cheap flight to Denver")["steps"][0]["agent"] == "travel"
+        assert muse.rehearsal_plan("Train a network on MNIST")["steps"][0]["agent"] == "modelbuilder"
+        import main
+        from fastapi.testclient import TestClient
+        v = TestClient(main.app).get("/api/shopping")
+        if v.status_code == 200:
+            assert "likes" in v.json()["fields"] and v.json()["watches"]
+    finally:
+        agentlab._dir, travel._get, travel.config, schedules.notify = real, real_get, real_cfg, real_notify
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

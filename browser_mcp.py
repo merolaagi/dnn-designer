@@ -35,8 +35,8 @@ TOOLS = [
          "summary": {"type": "string", "description": "Exactly what is bought: what, dates, guests, total price with taxes, "
                                                        "cancellation terms"},
          "id": {"type": "string", "description": "The button's id from look"}}, "required": ["summary", "id"]}},
-    {"name": "traveller", "description": "The traveller's name, email and phone as saved on the Mac, for a booking form "
-     "(never card details).", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "traveller", "description": "The person's name, email and phone as saved on the Mac, and the shipping "
+     "address if one is saved, for a booking or checkout form (never card details).", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "commit", "description": "Send a message that agrees to something (accept an offer, change or cancel a "
      "service). The person sees the summary and approves it first.",
      "inputSchema": {"type": "object", "properties": {
@@ -105,6 +105,12 @@ def call(name, args):
         import travel
         t = travel.config().get("traveler") or {}
         keep = {k: t.get(k) for k in ("title", "given_name", "family_name", "email", "phone_number") if t.get(k)}
+        try:
+            import shop
+            if shop.prefs().get("ship_to"):
+                keep["ship_to"] = shop.prefs()["ship_to"]
+        except Exception:  # noqa: BLE001
+            pass
         return json.dumps(keep) if keep else ("No traveller details are saved. Ask the person for the name, email and "
                                               "phone for the booking, or to fill them in under Hub → Me → Travel.")
     if name == "purchase":
