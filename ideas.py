@@ -153,7 +153,16 @@ def _profile_ideas() -> List[Dict[str, Any]]:
                   {"type": "open", "target": "me"}, "You")]
 
 
-SOURCES = (_store_ideas, _document_ideas, _mail_ideas, _goal_ideas, _routine_ideas, _profile_ideas)
+def _radar_ideas() -> List[Dict[str, Any]]:
+    import radar
+    d = radar._load()
+    verbs = {"model": "Build and test", "maths": "Check", "explain": "Explain"}
+    return [_idea(f"radar-{it['id']}", "telescope-outline", f"{verbs[it['act']]}: {it['headline']}",
+                  it.get("why") or it.get("what") or "", {"type": "ask", "task": radar.task_for(it)}, "Radar")
+            for it in radar._actionable(d)[:3]]
+
+
+SOURCES = (_store_ideas, _document_ideas, _mail_ideas, _goal_ideas, _routine_ideas, _profile_ideas, _radar_ideas)
 
 
 def listing(fresh: bool = False) -> List[Dict[str, Any]]:

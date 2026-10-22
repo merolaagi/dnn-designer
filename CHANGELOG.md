@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.28.0
+
+- **Radar: what is new in AI, and what the lab could build from it.** Once a
+  day, or when you press Refresh, Radar reads:
+  - arXiv, newest first, in five fields: AI, maths, science, biology and
+    neuroscience (outside AI, only work that uses or studies learning
+    machines);
+  - bioRxiv/medRxiv preprints through Europe PMC, for AI in biology and
+    neuroscience;
+  - GitHub repositories made this week that are already drawing stars;
+  - Hacker News AI stories people voted up, and a web search for AI news.
+- **Each finding is shown once.** Anything shown in the last 45 days is left
+  out, so every build is new.
+- **The model picks up to ten findings worth your time.** Each pick says
+  what is new, why it matters to this lab, and what to do with it:
+  - build and test a small model against a plain baseline;
+  - check a maths claim with code;
+  - or explain it as an interactive page.
+- **Formulate hands a finding to Muse.** Muse plans the work across the
+  agents you already have (researcher, model builder, maths, explainer) in
+  a conversation of its own, titled "Radar: …". Tests are kept small enough
+  to train in minutes, and the answer has to say whether the idea helped.
+- **Every morning, if you turn it on.** The schedule ("Morning radar", 5:00)
+  builds the radar, formulates the top pick (or none, or up to three), and
+  writes the headlines to your inbox.
+- Unformulated picks also show up in Ideas. Without a model, findings are
+  still listed newest first, with no picks.
+- API: `GET /api/radar`, `POST /api/radar/refresh`, `PUT /api/radar/settings`,
+  `POST /api/radar/{id}/formulate`, `POST /api/radar/{id}/asked`,
+  `POST /api/radar/daily`.
+
 ## 4.27.0
 
 - **Muse replies like a chat, not a report.** The last agent of every turn is

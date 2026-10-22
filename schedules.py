@@ -234,7 +234,12 @@ def _trips(s: Dict[str, Any]) -> None:
     trips.check(s)
 
 
-CHECKS = {"ingest_watchdog": _ingest_watchdog, "feed": _feed, "trips": _trips}
+def _radar(s: Dict[str, Any]) -> None:
+    import radar
+    radar.check(s)
+
+
+CHECKS = {"ingest_watchdog": _ingest_watchdog, "feed": _feed, "trips": _trips, "radar": _radar}
 
 
 def _fire(s: Dict[str, Any], now: Optional[float] = None) -> None:

@@ -11735,6 +11735,93 @@ def _():
     assert "You are talking with" in inspect.getsource(muse.decode)
 
 
+@check("radar: reads papers, code and news, shows each finding once, and hands the best to Muse")
+def _():
+    import radar, evolve, ideas, schedules
+    canned = [
+        {"title": "Hamiltonian attention", "url": "https://arxiv.org/abs/2610.00001", "summary": "Attention that conserves energy.",
+         "source": "arXiv", "field": "science", "date": "2026-10-20"},
+        {"title": "Spiking cortex model", "url": "https://arxiv.org/abs/2610.00002", "summary": "A cortex-like spiking net.",
+         "source": "arXiv", "field": "neuroscience", "date": "2026-10-20"},
+        {"title": "Spiking cortex model", "url": "https://arxiv.org/abs/2610.00002", "summary": "duplicate",
+         "source": "arXiv", "field": "neuroscience", "date": "2026-10-20"},
+        {"title": "cool/repo", "url": "https://github.com/cool/repo", "summary": "A repo (300 stars)", "source": "GitHub",
+         "field": "ai", "date": "2026-10-19"},
+    ]
+    failing = lambda: (_ for _ in ()).throw(OSError("offline"))
+    real_sources, real_ask, real_pause = radar._sources, evolve.ask, radar.ARXIV_PAUSE
+    radar._sources = lambda fields: [("arXiv", lambda: list(canned), True), ("Hacker News", failing, False)]
+    radar.ARXIV_PAUSE = 0
+    evolve.ask = lambda system, prompt, n: {"tokens": 1, "text": json.dumps({"picks": [
+        {"n": 1, "field": "science", "headline": "Attention that conserves energy", "what": "New layer.",
+         "why": "We have Hamiltonian layers.", "act": "model",
+         "task": "Build a Hamiltonian attention layer, train it against plain attention on synthetic pendulum data."},
+        {"n": 2, "field": "neuroscience", "headline": "Spiking cortex", "what": "Spikes.", "why": "Neuro.", "act": "model", "task": ""},
+        {"n": 2, "field": "neuroscience", "headline": "again", "act": "none"},
+        {"n": 99, "headline": "out of range", "act": "none"}]})}
+    path = radar._path()
+    saved = path.read_text() if path.exists() else None
+    try:
+        path.unlink(missing_ok=True)
+        r = radar.build(live=True)
+        assert [i["headline"] for i in r["items"]] == ["Attention that conserves energy", "Spiking cortex"]
+        assert r["items"][1]["act"] == "none"                  # an action with no instruction is no action
+        assert "Hacker News" in (r["error"] or "")            # a source that failed is named, the rest still shown
+        assert "plain attention" in r["items"][0]["brief"] and "baseline" in r["items"][0]["brief"]
+        again = radar.build(live=False)
+        assert not any(i["url"] == canned[0]["url"] for i in again["items"])   # shown once, then it stays away
+        path.unlink(missing_ok=True)
+        plain = radar.build(live=False)                        # no model: listed, no picks, nothing to formulate
+        assert plain["items"] and all(i["act"] == "none" for i in plain["items"])
+        path.unlink(missing_ok=True)
+        r = radar.build(live=True)
+        ideas.forget_cache()
+        assert any(i["topic"] == "Radar" and i["action"]["type"] == "ask" for i in ideas.listing(fresh=True))
+        top = r["items"][0]
+        out = radar.formulate(top["id"], "rehearsal")
+        conv = agentlab.conversation(out["conv"])
+        assert conv["agent"]["kind"] == "muse" and conv["title"].startswith("Radar:")
+        assert "plain attention" in conv["turns"][0]["task"]
+        assert radar.formulate(top["id"], "rehearsal")["again"]          # never twice
+        assert radar.view()["items"][0]["done"] and not radar._actionable(radar._load())
+        try:
+            radar.settings(fields=["astrology"])
+            raise AssertionError("an unknown field is refused")
+        except ValueError:
+            pass
+        assert radar.settings(fields=["ai", "biology"], auto=2)["fields"] == ["ai", "biology"]
+        s = {}
+        notes = []
+        real_notify = schedules.notify
+        schedules.notify = lambda *a, **k: notes.append(a) or {}
+        try:
+            path.unlink(missing_ok=True)
+            radar.check(s)
+        finally:
+            schedules.notify = real_notify
+        assert s["last_status"] == "ok" and notes and notes[0][1].startswith("Radar:")
+        assert "radar" in schedules.CHECKS
+        for c in agentlab.conversations():
+            if c["title"].startswith("Radar:"):
+                cv = agentlab.conversation(c["id"])
+                for _i in range(60):
+                    if cv["turns"][-1].get("status") not in agentlab.LIVE_STATUSES:
+                        break
+                    time.sleep(0.5)
+                    cv = agentlab.conversation(c["id"])
+                agentlab.delete_conversation(c["id"])
+    finally:
+        radar._sources, evolve.ask, radar.ARXIV_PAUSE = real_sources, real_ask, real_pause
+        if saved is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(saved)
+    import main
+    paths = {r.path for r in main.app.routes}
+    assert {"/api/radar", "/api/radar/refresh", "/api/radar/settings", "/api/radar/{item_id}/formulate",
+            "/api/radar/{item_id}/asked", "/api/radar/daily"} <= paths
+
+
 @check("Muse answers like a chat reply: no thinking out loud, and only dots while it works")
 def _():
     import muse, uuid as _u

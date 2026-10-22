@@ -44,6 +44,7 @@ import explain
 import ideas
 import goals
 import feed
+import radar
 import files
 import providers
 import advisor
@@ -1117,6 +1118,62 @@ def feed_daily(body: GoalFollow):
             return x
     return _sched_action(schedules.create, "Morning feed", {"kind": "check", "key": "feed"},
                          "Search the web for the topics you follow.", "day", body.at or "05:30")
+
+
+class RadarSettings(BaseModel):
+    fields: Optional[List[str]] = None
+    auto: Optional[int] = None
+
+
+@app.get("/api/radar")
+def radar_view():
+    r = radar.view()
+    if not r["items"] and not r["building"] and not r.get("built"):
+        r = radar.build_soon()                        # the first look builds it
+    return r
+
+
+@app.post("/api/radar/refresh")
+def radar_refresh():
+    return radar.build_soon()
+
+
+@app.put("/api/radar/settings")
+def radar_settings(body: RadarSettings):
+    try:
+        return radar.settings(body.fields, body.auto)
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/radar/{item_id}/formulate")
+def radar_formulate(item_id: str):
+    """Hand a finding to Muse, which plans the work across your agents, in a conversation of its own."""
+    try:
+        return radar.formulate(item_id, _mode())
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That finding is no longer on the radar."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/radar/{item_id}/asked")
+def radar_asked(item_id: str):
+    try:
+        return radar.mark(item_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That finding is no longer on the radar."})
+
+
+@app.post("/api/radar/daily")
+def radar_daily(body: GoalFollow):
+    """Read the radar every morning, formulate the top picks, and write to the inbox."""
+    for x in schedules.listing():
+        if x["agent"] == {"kind": "check", "key": "radar"}:
+            return x
+    return _sched_action(schedules.create, "Morning radar", {"kind": "check", "key": "radar"},
+                         "Read what is new in AI, maths, science, biology and neuroscience, and formulate the top picks.",
+                         "day", body.at or "05:00")
 
 
 @app.get("/api/files")
