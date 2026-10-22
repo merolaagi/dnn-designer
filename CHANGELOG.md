@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.28.1
+
+- **AI radar has its own page in the desktop app.** It's under Executions in
+  the left rail, next to Scouts, and on the launch pad as "What's new in AI".
+  - Findings are cards: field, source and date, what is new, and why it
+    matters here.
+  - Filter the cards by field.
+  - Refresh reads everything again.
+  - "Fields and mornings" chooses what to watch, how many picks to
+    formulate each morning, and turns on the 5:00 run.
+- **Build and test** (or Check it, Explain it) hands the finding to Muse and
+  opens its "Radar: …" conversation in Talk to agents.
+- "Handed to the agents" lists every finding sent on, with a link to its
+  conversation.
+
 ## 4.28.0
 
 - **Radar: what is new in AI, and what the lab could build from it.** Once a

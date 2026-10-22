@@ -11820,6 +11820,9 @@ def _():
     paths = {r.path for r in main.app.routes}
     assert {"/api/radar", "/api/radar/refresh", "/api/radar/settings", "/api/radar/{item_id}/formulate",
             "/api/radar/{item_id}/asked", "/api/radar/daily"} <= paths
+    page = (ROOT / "frontend" / "index.html").read_text()
+    assert 'data-page="pageRadar"' in page and "pageRadar: renderRadarPage" in page and 'id="radarMain"' in page
+    assert "/api/radar/${b.dataset.formulate}/formulate" in page and "radarTalk(out.conv)" in page
 
 
 @check("Muse answers like a chat reply: no thinking out loud, and only dots while it works")

@@ -258,7 +258,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
-#pageAgents, #pagePad, #pageDomains, #pageScouts,
+#pageAgents, #pagePad, #pageDomains, #pageScouts, #pageRadar,
 #pageCodebase, #pageMaths, #pageWorkbench, #pagePhysics,
 #pageAgentLab{background:var(--paper)}
 #pageTalk{background:var(--paper)}
@@ -1593,6 +1593,27 @@ table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
 }
 .scoutcard b{font-size:14px;font-weight:600}
 .scoutcard p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.6;flex:1}
+.rdbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
+.rdbar .note{font-size:12px;color:var(--muted);margin-right:auto}
+.rdchip{padding:5px 11px;border-radius:14px;border:1px solid var(--paper-3);background:#fff;font-size:12px;cursor:pointer}
+.rdchip.on{background:var(--text);color:#fff;border-color:var(--text)}
+.rdset{background:#fff;border:1px solid var(--paper-3);border-radius:12px;padding:14px 16px;margin:0 0 14px;
+  display:flex;flex-direction:column;gap:10px}
+.rdset .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.rdset .row > span{font-size:12px;color:var(--muted);min-width:150px}
+.rdcard .meta{font-size:11px;color:var(--muted);font-weight:600}
+.rdcard a.head{font-size:14.5px;font-weight:600;color:var(--text);text-decoration:none;line-height:1.4}
+.rdcard a.head:hover{text-decoration:underline}
+.rdcard .what{margin:0;font-size:12.5px;line-height:1.6}
+.rdcard .why{margin:0;font-size:12px;color:var(--muted);line-height:1.55}
+.rdcard .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.rdcard a.btn{text-decoration:none}
+.rdcard .done{font-size:12px;color:#2E7D4F;font-weight:600}
+.rdpast{margin-top:22px}
+.rdpast h4{margin:0 0 8px;font-size:13px;font-weight:600}
+.rdpast button{display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--paper-3);
+  padding:8px 2px;font-size:12.5px;cursor:pointer;color:var(--text)}
+.rdpast button small{color:var(--muted);margin-left:8px}
 .scoutgoal{
   width:100%;padding:8px 11px;border:1px solid var(--paper-3);border-radius:8px;
   font-size:12px;
@@ -3034,6 +3055,7 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
     <button data-page="pagePhysics"><i>&#8706;</i>Physics-informed</button>
     <button data-page="pageCodebase"><i>&#9783;</i>Read a codebase</button>
     <button data-page="pageScouts"><i>&#9906;</i>Scouts</button>
+    <button data-page="pageRadar"><i>&#9737;</i>AI radar</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
     <button data-page="pageRuns"><i>&#8635;</i>Run history</button>
     <button data-page="pageChat"><i>&#9998;</i>Chat</button>
@@ -3313,6 +3335,10 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
 
 <section class="page" id="pageCodebase">
   <div class="scroll" id="codeMain"></div>
+</section>
+
+<section class="page" id="pageRadar">
+  <div class="scroll" id="radarMain"></div>
 </section>
 
 <section class="page" id="pageScouts">
@@ -6143,6 +6169,7 @@ const PAGE_SETUP = {
   pagePad: renderLaunchPad,
   pageDomains: renderDomainsPage,
   pageScouts: renderScoutsPage,
+  pageRadar: renderRadarPage,
   pageCodebase: renderCodebasePage,
   pageMaths: renderMathsPage,
   pageWorkbench: renderWorkbenchPage,
@@ -8288,6 +8315,110 @@ function codebaseOverview(s){
    same reason: an imported class can be opened on the canvas, because it has
    already been built once to earn its place on the list. */
 
+/* ============================ AI radar ============================ */
+
+const RADAR_ACTS = {model: "Build and test", maths: "Check it", explain: "Explain it"};
+let radarTimer = null;
+
+function radarTalk(conv){
+  if (!conv) return;
+  try{ localStorage.setItem("tk-conversation", conv); } catch {}
+  const nav = document.querySelector('#rail button[data-page="pageTalk"]');
+  if (nav) nav.click();
+  setTimeout(() => tkOpen(conv), 400);
+}
+
+async function radarCall(path, method, body){
+  const r = await fetch(API + path, {method: method || "GET", headers: {"content-type": "application/json"},
+                                     body: body ? JSON.stringify(body) : undefined});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((d.detail && d.detail.message) || d.detail || "The server said no.");
+  return d;
+}
+
+async function renderRadarPage(field){
+  const host = $("radarMain");
+  if (!host.querySelector(".scoutwrap")) host.innerHTML = `<div class="scoutwrap">
+    <div class="scouthead">
+      <h3>AI radar</h3>
+      <p>What is new in AI, and in maths, science, biology and neuroscience where AI is used or studied:
+      arXiv, bioRxiv and medRxiv preprints, new GitHub repositories, and the news. Each finding is shown
+      once. The model picks the ones worth your time and says what the lab could do with each; the button
+      hands it to Muse, which plans the work across your agents in a conversation of its own.</p>
+    </div>
+    <div id="radarBody"><span class="waiting">loading…</span></div>
+  </div>`;
+  let d;
+  try{ d = await radarCall("/api/radar"); }
+  catch(e){ $("radarBody").innerHTML = `<div class="runfail">${alEsc(e.message || "The server did not answer.")}</div>`; return; }
+  clearTimeout(radarTimer);
+  if (d.building) radarTimer = setTimeout(() => {
+    if (document.body.dataset.page === "pageRadar") renderRadarPage(field);
+  }, 5000);
+  const labels = d.all_fields || {};
+  const want = field === undefined ? (host.dataset.field || "") : field;
+  host.dataset.field = want;
+  const shown = want ? d.items.filter(i => i.field === want) : d.items;
+  const daily = `<button class="btn" id="radarDaily">Read it every morning at 5</button>`;
+  $("radarBody").innerHTML = `
+    <div class="rdbar">
+      <span class="note">${d.building ? "Reading papers, code and news… this takes a minute or two."
+        : d.built ? "Updated " + ago(d.built) : "Not read yet."}${d.error ? " · " + alEsc(d.error) : ""}</span>
+      <button class="btn" id="radarRefresh"${d.building ? " disabled" : ""}>Refresh</button>
+      <button class="btn" id="radarFields">Fields and mornings</button>
+    </div>
+    <div class="rdset" id="radarSet" hidden>
+      <div class="row"><span>Fields to watch</span>${Object.keys(labels).map(k =>
+        `<button class="rdchip${d.fields.includes(k) ? " on" : ""}" data-fieldset="${k}">${alEsc(labels[k])}</button>`).join("")}</div>
+      <div class="row"><span>Each morning, formulate</span>${[0, 1, 2, 3].map(n =>
+        `<button class="rdchip${d.auto === n ? " on" : ""}" data-auto="${n}">${n === 0 ? "none" : n === 1 ? "the top pick" : "the top " + n}</button>`).join("")}</div>
+      <div class="row"><span></span>${daily}<span class="note" id="radarSetNote"></span></div>
+    </div>
+    ${d.fields.length > 1 && d.items.length ? `<div class="rdbar">
+      <button class="rdchip${!want ? " on" : ""}" data-show="">All</button>
+      ${d.fields.map(k => `<button class="rdchip${want === k ? " on" : ""}" data-show="${k}">${alEsc(labels[k] || k)}</button>`).join("")}
+    </div>` : ""}
+    <div class="scoutpick">${shown.length ? shown.map(it => `
+      <div class="scoutcard rdcard">
+        <span class="meta">${alEsc(labels[it.field] || it.field)} · ${alEsc(it.source)}${it.date ? " · " + alEsc(it.date) : ""}</span>
+        <a class="head" href="${alEsc(it.url)}" target="_blank" rel="noopener">${alEsc(it.headline)}</a>
+        ${it.what ? `<p class="what">${alEsc(it.what)}</p>` : ""}
+        ${it.why ? `<p class="why">${alEsc(it.why)}</p>` : ""}
+        <div class="acts">
+          ${RADAR_ACTS[it.act] ? (it.done ? `<span class="done">Sent to the agents</span>`
+            : `<button class="btn go" data-formulate="${it.id}">${RADAR_ACTS[it.act]}</button>`) : ""}
+          <a class="btn" href="${alEsc(it.url)}" target="_blank" rel="noopener">Read</a>
+        </div>
+      </div>`).join("") : `<div class="waiting">${d.building ? "Reading…" : "Nothing new yet. Press Refresh."}</div>`}</div>
+    ${(d.formulated || []).length ? `<div class="rdpast"><h4>Handed to the agents</h4>
+      ${d.formulated.slice().reverse().map(f => `<button data-conv="${alEsc(f.conv || "")}"${f.conv ? "" : " disabled"}>
+        ${alEsc((f.item || {}).headline || "")}<small>${ago(f.at)}${f.conv ? " · open the conversation" : " · sent from Saathi"}</small></button>`).join("")}
+    </div>` : ""}`;
+  $("radarRefresh").onclick = async () => { try{ await radarCall("/api/radar/refresh", "POST"); } catch(e){} renderRadarPage(); };
+  $("radarFields").onclick = () => { $("radarSet").hidden = !$("radarSet").hidden; };
+  const set = async change => {
+    try{ await radarCall("/api/radar/settings", "PUT", change); await renderRadarPage(); $("radarSet").hidden = false; }
+    catch(e){ $("radarSetNote").textContent = e.message; }
+  };
+  $("radarBody").querySelectorAll("[data-fieldset]").forEach(b => b.onclick = () => {
+    const k = b.dataset.fieldset;
+    set({fields: d.fields.includes(k) ? d.fields.filter(x => x !== k) : [...d.fields, k]});
+  });
+  $("radarBody").querySelectorAll("[data-auto]").forEach(b => b.onclick = () => set({auto: +b.dataset.auto}));
+  $("radarDaily").onclick = async () => {
+    try{ await radarCall("/api/radar/daily", "POST", {at: "05:00"});
+         $("radarSetNote").textContent = "Done: it runs at 5 each morning and writes to the inbox."; }
+    catch(e){ $("radarSetNote").textContent = e.message; }
+  };
+  $("radarBody").querySelectorAll("[data-show]").forEach(b => b.onclick = () => renderRadarPage(b.dataset.show));
+  $("radarBody").querySelectorAll("[data-formulate]").forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = "Sending…";
+    try{ const out = await radarCall(`/api/radar/${b.dataset.formulate}/formulate`, "POST"); radarTalk(out.conv); }
+    catch(e){ b.disabled = false; b.textContent = e.message; }
+  });
+  $("radarBody").querySelectorAll("[data-conv]").forEach(b => b.onclick = () => radarTalk(b.dataset.conv));
+}
+
 async function renderScoutsPage(){
   const host = $("scoutMain");
   host.innerHTML = `<div class="scoutwrap">
@@ -9041,6 +9172,11 @@ const ROUTES = [
     body: "A structural theorem becomes an implicit layer you can place. You "
         + "write the residual; the Jacobian is differentiated from it.",
     go: () => showPage("pagePaper") },
+
+  { key: "radar", title: "What's new in AI", icon: "\u2609",
+    body: "Papers, preprints, code and news from AI, maths, science, biology "
+        + "and neuroscience, and one click to have your agents test an idea.",
+    go: () => showPage("pageRadar") },
 
   { key: "extend", title: "Write your own layer", icon: "\u2732",
     body: "Blocks are Python files. Edit one, save, and it reloads into the "
