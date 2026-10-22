@@ -11735,6 +11735,31 @@ def _():
     assert "You are talking with" in inspect.getsource(muse.decode)
 
 
+@check("a Muse step opens in the lab from its own run, not from Muse (which is not a design)")
+def _():
+    page = (ROOT / "frontend" / "index.html").read_text()
+    body = page[page.index("async function tkOpenInLab("):]
+    body = body[:body.index("\n}\n")]
+    assert body.index("/api/agentlab/runs/") < body.index('c.agent.kind === "saved"')
+    assert "rec.graph" in body
+    import muse
+    conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+    try:
+        out = agentlab.say(conv["id"], "Explain the quadratic formula with a graph I can play with.", "rehearsal")
+        for _i in range(120):
+            turn = agentlab.conversation(conv["id"])["turns"][-1]
+            if turn["status"] not in agentlab.LIVE_STATUSES:
+                break
+            time.sleep(0.5)
+        run = turn["muse_steps"][0]["run"]
+        import main
+        from starlette.testclient import TestClient
+        rec = TestClient(main.app).get(f"/api/agentlab/runs/{run}").json()
+        assert rec["graph"]["nodes"], "the step's run carries the graph the lab opens"
+    finally:
+        agentlab.delete_conversation(conv["id"])
+
+
 @check("radar: reads papers, code and news, shows each finding once, and hands the best to Muse")
 def _():
     import radar, evolve, ideas, schedules

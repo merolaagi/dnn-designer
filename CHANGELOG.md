@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.28.2
+
+- **"Steps in the lab" works for Muse conversations.** It used to say "That
+  agent is no longer saved", because it looked up the conversation's agent,
+  and Muse isn't a design. It now opens the graph that the step's own run
+  used (the Explainer, the model builder, a specialist), with that run's
+  steps beside it. If the run itself has been cleared out (only the newest
+  200 are kept), it says that instead.
+
 ## 4.28.1
 
 - **AI radar has its own page in the desktop app.** It's under Executions in
