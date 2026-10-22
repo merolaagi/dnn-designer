@@ -11809,6 +11809,7 @@ def _():
         assert "plain attention" in conv["turns"][0]["task"]
         assert radar.formulate(top["id"], "rehearsal")["again"]          # never twice
         assert radar.view()["items"][0]["done"] and not radar._actionable(radar._load())
+        assert radar.view()["items"][0]["conv"] == out["conv"]               # the card links to its conversation
         try:
             radar.settings(fields=["astrology"])
             raise AssertionError("an unknown field is refused")

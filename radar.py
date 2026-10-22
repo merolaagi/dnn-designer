@@ -229,8 +229,9 @@ def _id(url: str) -> str:
 
 def view() -> Dict[str, Any]:
     d = _load()
-    done = {(f.get("item") or {}).get("id") for f in d["formulated"]}
-    items = [{**i, "brief": task_for(i) if i.get("act") in WHAT_TO_DO else "", "done": i["id"] in done} for i in d["items"]]
+    conv_of = {(f.get("item") or {}).get("id"): f.get("conv") for f in d["formulated"]}
+    items = [{**i, "brief": task_for(i) if i.get("act") in WHAT_TO_DO else "", "done": i["id"] in conv_of,
+              "conv": conv_of.get(i["id"])} for i in d["items"]]
     return {"fields": d["fields"], "auto": d["auto"], "items": items, "built": d["built"], "error": d["error"],
             "formulated": d["formulated"][-30:], "all_fields": {k: v["label"] for k, v in FIELDS.items()},
             "building": bool(_BUILDING.get(str(AL._dir())))}

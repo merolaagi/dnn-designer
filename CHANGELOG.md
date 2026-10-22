@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.28.3
+
+- **"Sent to the agents" on a radar card is now a link.** Clicking it opens
+  the finding's "Radar: …" conversation in Talk to agents. A finding sent
+  from Saathi says so instead, because its work is in that Saathi chat.
+
 ## 4.28.2
 
 - **"Steps in the lab" works for Muse conversations.** It used to say "That

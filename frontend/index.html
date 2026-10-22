@@ -8385,7 +8385,9 @@ async function renderRadarPage(field){
         ${it.what ? `<p class="what">${alEsc(it.what)}</p>` : ""}
         ${it.why ? `<p class="why">${alEsc(it.why)}</p>` : ""}
         <div class="acts">
-          ${RADAR_ACTS[it.act] ? (it.done ? `<span class="done">Sent to the agents</span>`
+          ${RADAR_ACTS[it.act] ? (it.done ? (it.conv
+              ? `<button class="btn" data-conv="${alEsc(it.conv)}">Sent to the agents · open the conversation</button>`
+              : `<span class="done">Sent to the agents from Saathi: it is in that chat</span>`)
             : `<button class="btn go" data-formulate="${it.id}">${RADAR_ACTS[it.act]}</button>`) : ""}
           <a class="btn" href="${alEsc(it.url)}" target="_blank" rel="noopener">Read</a>
         </div>
