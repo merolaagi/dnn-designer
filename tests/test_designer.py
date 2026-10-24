@@ -12386,6 +12386,27 @@ def _():
                   "https://fb.watch/xyz123/ is this true?", "summarise https://youtu.be/dQw4w9WgXcQ"):
             assert muse.rehearsal_plan(q)["steps"][0]["agent"] == "video", q
         assert muse.rehearsal_plan("Explain the quadratic formula with a graph")["steps"][0]["agent"] == "explainer"
+        # Muse watches the video itself before the agent answers, and a failed fetch is said plainly
+        real_decode, real_desc, real_recent = muse.decode, V.describe, V.recent
+        IU.find_spec = lambda name, *a: object() if name == "yt_dlp" else real_find(name, *a)
+        muse.decode = lambda text, mode, context="": {"understood": "x", "question": None, "by": "model",
+                                                      "steps": [{"agent": "react", "role": "", "task": "describe it", "why": ""}]}
+        watched = []
+        fake = {"id": "vd0123456789", "url": "https://fb.watch/abc/", "duration": 30, "site": "Facebook", "title": "Dal bhat",
+                "transcript": [{"start": 2, "end": 4, "text": "Today we cook dal bhat"}], "scenes": [], "notes": []}
+        V.recent = lambda url: None
+        V.describe = lambda url, q="": watched.append(url) or fake
+        try:
+            turn = muse.start_turn("what is in this video https://fb.watch/abc/", "rehearsal", background=False)
+            assert watched == ["https://fb.watch/abc/"], watched
+            assert turn["steps"] and turn["steps"][0]["agent"] == "video", turn
+            def broke(url, q=""):
+                raise V.VideoError("I couldn't fetch the video: it needs a sign-in.")
+            V.describe = broke
+            turn = muse.start_turn("https://fb.watch/zzz/ what is this", "rehearsal", background=False)
+            assert turn["answer"].startswith("I couldn't fetch the video") and not turn["steps"]
+        finally:
+            muse.decode, V.describe, V.recent = real_decode, real_desc, real_recent
         IU.find_spec = lambda name, *a: None if name == "yt_dlp" else real_find(name, *a)
         assert "setup-video" in V.missing() and "setup-video" in muse.not_connected("video")
     finally:

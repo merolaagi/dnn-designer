@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.31.1
+
+- **A video link is always watched before the reply.** Saathi used to answer
+  "I'm fetching that Reel for you now…" and then stop, because the model
+  wrote that instead of calling the tool. Now Muse fetches the video, writes
+  down what is said and reads the stills itself, before the Video agent
+  writes a word. The agent only answers from what was watched.
+  - A follow-up question about the same link in the next 24 hours uses what
+    was already watched.
+  - If the fetch fails (a sign-in is needed, the video was removed), you get
+    the plain reason and what to do, not a guess.
+  - A message with a video link goes to the Video agent even when the
+    planner picked a general agent.
+
 ## 4.31.0
 
 - **One cart for every store.** Say "add it to my cart" after Saathi finds

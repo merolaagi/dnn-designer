@@ -475,6 +475,11 @@ def not_connected(agent: str) -> Optional[str]:
 def _carry_out(s: Dict[str, Any], context: str) -> None:
     try:
         plan = decode(s["task"], s["mode"], context)
+        import video
+        if video.links(s["task"]) and plan.get("steps") and not any(st["agent"] == "video" for st in plan["steps"]) \
+                and all(st["agent"] in ("react", "specialist") for st in plan["steps"]):
+            # a video link goes to the agent that can watch it, whatever the planner picked
+            plan["steps"] = [{"agent": "video", "role": "", "task": s["task"], "why": "the request has a video link"}]
         s.update(plan=plan, phase="planned")
         _save(s)
         if plan.get("question") and not plan["steps"]:
@@ -495,6 +500,24 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
             task = profile.with_profile(step["task"])
             if earlier:
                 task += "\n\nWhat the earlier steps found (use it):\n" + "\n\n".join(earlier)
+            if step["agent"] == "video":
+                # watch it here, before the agent runs: a model left to call the tool itself can answer
+                # "I'm fetching it now" and stop, and the person is left waiting for nothing
+                import video
+                link = (video.links(step["task"]) or video.links(s["task"]) or [None])[0]
+                if link:
+                    s.update(phase="watching the video", doing=DOING["video"])
+                    _save(s)
+                    try:
+                        seen = video.recent(link) or video.describe(link, s["task"])
+                    except (video.VideoError, ValueError) as exc:
+                        s.update(status="done", answer=str(exc), phase="could not fetch the video")
+                        return
+                    if s["id"] in _STOP:
+                        s.update(status="stopped", error="Stopped.")
+                        return
+                    task += ("\n\nThe video has already been watched for you (do not call watch_video again; answer "
+                             "from this):\n" + video.report_text(seen))
             if i == len(plan["steps"]) - 1:
                 task += "\n\n" + REPLY_STYLE
             memory = None

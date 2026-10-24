@@ -315,6 +315,19 @@ def describe(url: str, question: str = "") -> Dict[str, Any]:
     return r
 
 
+def recent(url: str, hours: float = 24) -> Optional[Dict[str, Any]]:
+    """The same link watched in the last day, so a follow-up question does not fetch it again."""
+    best = None
+    for path in _dir().glob("vd*.json"):
+        try:
+            r = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if r.get("url") == url and time.time() - (r.get("t") or 0) < hours * 3600 and (best is None or r["t"] > best["t"]):
+            best = r
+    return best
+
+
 def load(vid: str) -> Dict[str, Any]:
     if not _ID.fullmatch(str(vid or "")):
         raise KeyError(vid)
@@ -369,7 +382,9 @@ a{{color:inherit}}li{{margin:0 0 8px}}p{{margin:0 0 6px}}b{{font-variant-numeric
 
 
 GUIDE = (
-    "You watch videos for the person: a link to Facebook (a video, a Reel, an fb.watch link), Instagram, YouTube, "
+    "You watch videos for the person. Usually the video has already been watched and its transcript and scene "
+    "notes are in your task: then answer from them straight away. Never reply that you are fetching or will watch "
+    "it: either call the tool now, or answer. A link to Facebook (a video, a Reel, an fb.watch link), Instagram, YouTube, "
     "TikTok, X or similar. Tool: watch_video(url, question) fetches the video on their Mac, writes down what is "
     "said (Whisper) and what is on screen every few seconds (a vision model), and returns all of it with times. It "
     "takes from half a minute to a few minutes. Call it once per link.\n"
