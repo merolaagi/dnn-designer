@@ -8,6 +8,7 @@
 #   ./serve.sh status          is it running, which version, is it set to start by itself
 #   ./serve.sh log             follow its log (Ctrl-C stops following, not the server)
 #   ./serve.sh setup-browser   install the browser the Support agent chats in (once)
+#   ./serve.sh setup-video     install what the Video agent watches with: yt-dlp, ffmpeg, Whisper (once)
 #
 # Once installed, macOS (launchd) keeps it running: after a restart of the Mac, after a crash, after you
 # log out and in. ./serve.sh then restarts it through launchd, so there is only ever one copy.
@@ -101,6 +102,31 @@ case "${1:-}" in
     echo "==> installing its Chromium (used when Google Chrome is not there)"
     "$PY" -m playwright install chromium || exit 1
     echo "==> the browser is ready"
+    exit 0
+    ;;
+  setup-video)
+    pipi() { "$PY" -m pip install --quiet --upgrade "$@" || "$PY" -m pip install --quiet --upgrade --break-system-packages "$@"; }
+    echo "==> installing yt-dlp (fetches the video) for $PY"
+    pipi yt-dlp || exit 1
+    if command -v ffmpeg >/dev/null 2>&1; then
+      echo "==> ffmpeg is already there"
+    elif command -v brew >/dev/null 2>&1; then
+      echo "==> installing ffmpeg with Homebrew"
+      brew install ffmpeg || pipi imageio-ffmpeg || exit 1
+    else
+      echo "==> installing ffmpeg (a copy for Python)"
+      pipi imageio-ffmpeg || exit 1
+    fi
+    if [ "$(uname -m)" = "arm64" ] && [ "$(uname -s)" = "Darwin" ]; then
+      echo "==> installing mlx-whisper (writes down what is said, on the Mac's GPU)"
+      pipi mlx-whisper || exit 1
+      echo "==> downloading the Whisper model (about 1.6 GB, once)"
+      "$PY" -c 'import json, pathlib; c = pathlib.Path("data/video.json"); m = (json.loads(c.read_text()) if c.exists() else {}).get("whisper", "mlx-community/whisper-large-v3-turbo"); from huggingface_hub import snapshot_download; snapshot_download(m)' || exit 1
+    else
+      echo "==> installing faster-whisper (writes down what is said)"
+      pipi faster-whisper || exit 1
+    fi
+    echo "==> the Video agent is ready (it uses the vision model under Settings → Reading invoices for the pictures)"
     exit 0
     ;;
   install)

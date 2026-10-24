@@ -12308,6 +12308,91 @@ def _():
     finally:
         agentlab._dir, travel._get, travel.config, schedules.notify = real, real_get, real_cfg, real_notify
 
+
+@check("video: a link is fetched, its sound written down and its stills described, then saved under Files")
+def _():
+    import video as V, video_mcp as VM, muse, tempfile, subprocess, shutil as SH, providers, browser, importlib.util as IU
+    real_dir, real_fetch, real_tr, real_req, real_call, real_inst = (agentlab._dir, V.fetch, V.transcribe, providers._request,
+                                                                     browser.call, browser.installed)
+    real_find = IU.find_spec
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    try:
+        assert V.links("look https://www.facebook.com/reel/1234567890123456?mibextid=x, and https://fb.watch/abcDEF/.") == \
+            ["https://www.facebook.com/reel/1234567890123456?mibextid=x", "https://fb.watch/abcDEF/"]
+        assert V.links("https://youtu.be/dQw4w9WgXcQ") and not V.links("https://example.com/watch")
+        # the sign-in comes from Saathi's browser, only for the video sites, as a cookies file
+        browser.installed = lambda: True
+        browser.call = lambda op, **a: {"cookies": [{"name": "c_user", "value": "1", "domain": ".facebook.com", "path": "/",
+                                                     "expires": 1900000000, "secure": True}]}
+        cf = V._cookie_file(tmp)
+        line = cf.read_text().splitlines()[1].split("\t")
+        assert line == [".facebook.com", "TRUE", "/", "TRUE", "1900000000", "c_user", "1"] and oct(cf.stat().st_mode)[-3:] == "600"
+        import browser_service as BS
+        assert "video_cookies" in BS.OPS and BS.VIDEO_SITES == ("facebook.com", "instagram.com")
+        ff = V.ffmpeg()
+        if ff:
+            clip = tmp / "clip.mp4"
+            subprocess.run([ff, "-nostdin", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=10:duration=12",
+                            "-f", "lavfi", "-i", "sine=frequency=440:duration=12", "-shortest", "-pix_fmt", "yuv420p", str(clip)],
+                           check=True, timeout=120)
+
+            def fake_fetch(url, folder, max_minutes):
+                SH.copy(clip, folder / "video.mp4")
+                return {"path": folder / "video.mp4", "signed_in": False,
+                        "info": {"title": "A <b>test</b> reel", "uploader": "Someone", "upload_date": "20261020", "view_count": 1200,
+                                 "extractor_key": "Facebook", "description": "Caption here"}}
+            V.fetch = fake_fetch
+            V.transcribe = lambda wav: {"language": "ne", "segments": [{"start": 1.0, "end": 3.0, "text": "Namaste, sathi"},
+                                                                       {"start": 7.5, "end": 9.0, "text": "<script>x</script>"}]}
+            seen = []
+
+            def fake_request(url, body, headers, timeout):
+                assert url.endswith("/api/chat") and body["messages"][0]["images"]
+                seen.append(body["messages"][0]["content"])
+                return {"message": {"content": f"Colour bars and a counter. Text: {len(seen)}"}}
+            providers._request = fake_request
+            IU.find_spec = lambda name, *a: object() if name == "yt_dlp" else real_find(name, *a)
+            assert V.missing() is None
+            r = V.describe("What is this? https://www.facebook.com/reel/1234567890123456", "is it real?")
+            assert r["duration"] == 12 or abs(r["duration"] - 12) < 0.5
+            assert len(r["scenes"]) == 4 and r["scenes"][0]["at"] == 1.5 and "0:01" in seen[0]   # 12 s → a still every 3 s
+            assert r["language"] == "ne" and r["question"] == "is it real?"
+            assert not (tmp / "videos" / (r["id"] + "-work")).exists()                                 # the video is gone
+            text = V.report_text(r)
+            assert "Title: A <b>test</b> reel" in text and "[0:01] Namaste, sathi" in text and "Posted: 2026-10-20" in text \
+                and "Views: 1,200" in text and "[0:01] Colour bars" in text and f"/api/video/{r['id']}" in text
+            page = V.render(V.load(r["id"]))
+            assert "<script>x" not in page and "&lt;script&gt;" in page and "&lt;b&gt;test" in page
+            import files as FL
+            assert any(f["kind"] == "video" and f["url"] == f"/api/video/{r['id']}" for f in FL.listing())
+            assert VM.call("saved_video", {"id": r["id"]}).startswith("Video watched")
+            import main
+            from fastapi.testclient import TestClient
+            pg = TestClient(main.app).get(f"/api/video/{r['id']}")
+            if pg.status_code == 200:
+                assert "Namaste" in pg.text
+        for bad in ("../../etc", "vd123", "vd" + "0" * 10 + "/x"):
+            try:
+                V.load(bad)
+                raise AssertionError(f"loaded {bad}")
+            except KeyError:
+                pass
+        # the agent and the routing
+        g = agentlab.template("video")
+        assert {n["type"] for n in g["nodes"]} >= {"mcp", "web_search"}
+        compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+        for q in ("What is this video about? https://www.facebook.com/share/v/1AbCdEf/",
+                  "https://fb.watch/xyz123/ is this true?", "summarise https://youtu.be/dQw4w9WgXcQ"):
+            assert muse.rehearsal_plan(q)["steps"][0]["agent"] == "video", q
+        assert muse.rehearsal_plan("Explain the quadratic formula with a graph")["steps"][0]["agent"] == "explainer"
+        IU.find_spec = lambda name, *a: None if name == "yt_dlp" else real_find(name, *a)
+        assert "setup-video" in V.missing() and "setup-video" in muse.not_connected("video")
+    finally:
+        IU.find_spec = real_find
+        agentlab._dir, V.fetch, V.transcribe, providers._request, browser.call, browser.installed = \
+            real_dir, real_fetch, real_tr, real_req, real_call, real_inst
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

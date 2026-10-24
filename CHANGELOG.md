@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.30.0
+
+- **Video agent: paste a video link and Saathi says what's in it.** It works
+  with Facebook (videos, Reels, fb.watch and share links), Instagram,
+  YouTube, TikTok, X, Vimeo and Reddit. Everything runs on the Mac:
+  - **Fetch:** yt-dlp downloads the video at 720p at most. Public videos
+    need nothing. A friends-only or group video uses your Facebook or
+    Instagram sign-in from Saathi's browser. Only those two sites' cookies
+    are read, into a file that is deleted straight after.
+  - **Listen:** Whisper writes down what is said, in any language (on the
+    Mac's GPU through mlx-whisper).
+  - **Watch:** ffmpeg takes a still every few seconds, up to 16, and the
+    vision model you already use for invoices says what each one shows,
+    with any text on screen.
+  - **Answer:** what the video is, a summary, the key moments with times,
+    and an answer to your question ("is it true?", "what did he say about
+    the price?"). It checks claims on the web, and gives the English
+    meaning of anything said in another language.
+- The video, the sound and the stills are deleted afterwards. The
+  transcript and the scene notes are kept under Files ("Video: …"), and
+  Saathi opens them in its viewer.
+- **Install once:** `./serve.sh setup-video`. It installs yt-dlp, ffmpeg
+  (Homebrew, or a copy for Python) and mlx-whisper, and downloads the
+  Whisper model (about 1.6 GB). Until then, Muse says what to run.
+- Saathi 0.7.3 opens these pages in its viewer and shows them under Files.
+
 ## 4.29.0
 
 - **Shopping agent: Saathi is your personal shopper.** Ask for anything to

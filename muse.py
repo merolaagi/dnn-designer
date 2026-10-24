@@ -56,6 +56,9 @@ AGENTS = {
                  "step by step, plots with sliders for each parameter, and node-and-arrow graphs (like Neo4j) that "
                  "animate an algorithm or a chain of ideas. Use it when the user asks to explain, show, visualise, "
                  "graph, plot or animate maths, an equation, a problem, an algorithm or how something works.",
+    "video": "Watches a video from a link the user gives (Facebook video, Reel or fb.watch, Instagram, YouTube, TikTok, "
+             "X): what is said and what is on screen, and answers about it (summary, key moments, is it true, what did "
+             "they say about X). Use it whenever the request has a video link or asks about a video at a link.",
     "shopping": "The user's personal shopper: finds the best product and price across thousands of stores (Google "
                 "Shopping: Walmart, Best Buy, Target, Amazon sellers, brand stores), sales, discounts and deals, "
                 "compares stores, reads real reviews, follows the user's shopping preferences, and watches a price to "
@@ -79,6 +82,7 @@ DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Worki
          "mail": "Reading your email", "travel": "Searching flights and hotels",
          "bills": "Reading your bills", "support": "Chatting with their support",
          "trips": "Working on your trip", "booking": "Booking it", "explainer": "Drawing it for you", "shopping": "Looking through the stores",
+         "video": "Watching the video",
          "react": "Searching the web"}
 MAX_STEPS = 3
 
@@ -176,7 +180,10 @@ def _catalog_text(request: str):
 def rehearsal_plan(request: str) -> Dict[str, Any]:
     """The rehearsal's decoder: keywords, so Muse can be tried with no model at all."""
     t = request.lower()
-    if re.search(r"\b(my|our)\b.*\b(sales|gallons|margin|margins|tanks?|shifts?|lottery|deliver(y|ies)|store|"
+    import video
+    if video.links(request) and not re.search(r"\b(book|buy|order)\b", t):
+        agent = "video"
+    elif re.search(r"\b(my|our)\b.*\b(sales|gallons|margin|margins|tanks?|shifts?|lottery|deliver(y|ies)|store|"
                  r"station|cash|inventory)\b", t) or re.search(r"\b(yesterday|last week)\b.*\b(sales|gallons|margin)", t):
         agent = "station"
     elif re.search(r"\b(my|our)\s+(e-?mails?|inbox|mail|gmail)\b|\b(check|read|search|sort)\b.{0,20}\b(e-?mails?|inbox|mail)\b|"
@@ -420,6 +427,11 @@ def not_connected(agent: str) -> Optional[str]:
         if not browser.installed():
             return ("The browser I book in isn't installed on the Mac yet, so I haven't booked anything. On the Mac, in "
                     "~/Sites/new_dnn, run: ./serve.sh setup-browser, then ./serve.sh. Then ask me again.")
+    if agent == "video":
+        import video
+        lack = video.missing()
+        if lack:
+            return lack
     if agent == "shopping":
         import shop
         if not shop.configured():
@@ -577,6 +589,7 @@ ROUTING = [
     ("Book the Hotel Yak & Yeti in Kathmandu for Nov 14 to 17 for me.", "booking", None),
     ("Explain the quadratic formula with a graph I can play with.", "explainer", None),
     ("Find me the best noise-cancelling headphones under $300, with good reviews.", "shopping", None),
+    ("What is this video about? https://www.facebook.com/reel/1234567890123456", "video", None),
     ("Is there a sale on the Dyson V15 anywhere? Tell me when it drops under $500.", "shopping", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),

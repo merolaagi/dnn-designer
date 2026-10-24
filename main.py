@@ -1258,6 +1258,22 @@ def travel_test_booking():
     return travel.test_duffel()
 
 
+@app.get("/api/video/{vid}", response_class=HTMLResponse)
+def video_page(vid: str):
+    """A watched video: what is on screen and everything said, with times (Files → Video)."""
+    import video
+    try:
+        return HTMLResponse(video.render(video.load(vid)))
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That video is not saved."})
+
+
+@app.get("/api/video-status")
+def video_status():
+    import video
+    return video.status()
+
+
 class ShoppingIn(BaseModel):
     prefs: Dict[str, Any] = {}
 

@@ -263,8 +263,18 @@ class Browser:
         return {"ok": True}
 
 
+    def video_cookies(self) -> Dict[str, Any]:
+        """Your sign-in cookies for the video sites only (Facebook, Instagram), so the Video agent can fetch a
+        friends-only or group video you can see. Never any other site's."""
+        self.start()
+        keep = [c for c in self.ctx.cookies() if any(str(c.get("domain", "")).lstrip(".").endswith(d) for d in VIDEO_SITES)]
+        return {"cookies": [{k: c.get(k) for k in ("name", "value", "domain", "path", "expires", "secure", "httpOnly")}
+                            for c in keep]}
+
+
+VIDEO_SITES = ("facebook.com", "instagram.com")
 BROWSER = Browser()
-OPS = {"status", "open", "look", "click", "type", "press", "scroll", "back", "wait", "close"}
+OPS = {"status", "open", "look", "click", "type", "press", "scroll", "back", "wait", "close", "video_cookies"}
 
 
 def token() -> str:

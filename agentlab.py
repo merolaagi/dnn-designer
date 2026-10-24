@@ -1268,6 +1268,12 @@ def _explain_command() -> str:
     return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'explain_mcp.py'))}"
 
 
+def _video_command() -> str:
+    import shlex
+    import sys
+    return f"{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve().parent / 'video_mcp.py'))}"
+
+
 def _shop_command() -> str:
     import shlex
     import sys
@@ -1519,6 +1525,16 @@ TEMPLATES = {
                          6: {"transport": "stdio", "target": "@trips_command", "tools": "@trips_tools", "effects": READS},
                          7: {"transport": "stdio", "target": "@mail_command", "tools": "@mail_read_tools", "effects": READS},
                          9: {"gate": GROUNDED_GATE, "max_revisions": 2}}},
+    "video": {"name": "Video: watches a video from a link and tells you what is in it",
+              # fetch, Whisper and a vision model on the Mac; the web to check what the video claims
+              "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
+                        ("summarizer", 290, 470), ("router", 540, 260), ("mcp", 790, 110), ("web_search", 790, 330),
+                        ("output", 1040, 260)],
+              "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (6, 2), (7, 2), (5, 8)],
+              "params": {1: {"text": "@video_guide"},
+                         3: {"max_steps": 12},
+                         4: {"limit": 9000, "keep": 4},
+                         6: {"transport": "stdio", "target": "@video_command", "tools": "@video_tools", "effects": READS}}},
     "shopping": {"name": "Shopping: finds the best buy across stores, with reviews, and watches prices",
                  # Google Shopping through SerpApi + the web for real reviews; buying is the Booking agent's job
                  "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
@@ -1580,6 +1596,9 @@ _LATE = {"@station_guide": lambda: __import__("station").GUIDE, "@station_comman
          "@mail_read_tools": lambda: _mail_tools(["search_mail", "read_mail"]),
          "@mail_write_tools": lambda: _mail_tools(["draft_reply"]),
          "@bills_guide": lambda: __import__("bills").GUIDE,
+         "@video_guide": lambda: __import__("video").GUIDE, "@video_command": lambda: _video_command(),
+         "@video_tools": lambda: [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
+                                  for t in __import__("video_mcp").TOOLS],
          "@shop_guide": lambda: __import__("shop").GUIDE, "@shop_command": lambda: _shop_command(),
          "@shop_tools": lambda: [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
                                  for t in __import__("shop_mcp").TOOLS],
