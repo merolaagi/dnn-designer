@@ -1551,8 +1551,9 @@ TEMPLATES = {
                 # browses freely; the click that pays is its own block, behind your approval; bookings go in the trip
                 "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
                           ("summarizer", 290, 470), ("router", 540, 260), ("mcp", 790, 60), ("mcp", 790, 230),
-                          ("mcp", 790, 400), ("output", 1040, 260)],
-                "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (5, 8), (6, 2), (7, 2), (8, 2), (5, 9)],
+                          ("mcp", 790, 400), ("output", 1040, 260), ("mcp", 790, 570)],
+                "edges": [(0, 2), (1, 2), (3, 2), (4, 2), (2, 5), (5, 6), (5, 7), (5, 8), (6, 2), (7, 2), (8, 2), (5, 9),
+                          (5, 10), (10, 2)],
                 "params": {1: {"text": "@booking_guide"},
                            3: {"max_steps": 50},
                            4: {"limit": 6000, "keep": 8},
@@ -1561,7 +1562,9 @@ TEMPLATES = {
                            7: {"transport": "stdio", "target": "@browser_command", "tools": "@booking_write_tools",
                                "effects": CHANGES},
                            8: {"transport": "stdio", "target": "@trips_command", "tools": "@booking_trip_tools",
-                               "effects": READS}}},
+                               "effects": READS},
+                           10: {"transport": "stdio", "target": "@shop_command", "tools": "@booking_cart_tools",
+                                "effects": READS}}},
     "explainer": {"name": "Explainer: answers as a page with equations, plots and node graphs",
                   # works it out with code first, then builds the page from a checked spec
                   "nodes": [("user_input", 40, 260), ("system_prompt", 290, 40), ("llm", 290, 260), ("loop", 40, 470),
@@ -1599,6 +1602,8 @@ _LATE = {"@station_guide": lambda: __import__("station").GUIDE, "@station_comman
          "@video_guide": lambda: __import__("video").GUIDE, "@video_command": lambda: _video_command(),
          "@video_tools": lambda: [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
                                   for t in __import__("video_mcp").TOOLS],
+         "@booking_cart_tools": lambda: [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
+                                         for t in __import__("shop_mcp").TOOLS if t["name"] in ("show_cart", "mark_ordered")],
          "@shop_guide": lambda: __import__("shop").GUIDE, "@shop_command": lambda: _shop_command(),
          "@shop_tools": lambda: [{"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
                                  for t in __import__("shop_mcp").TOOLS],

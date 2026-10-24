@@ -62,10 +62,12 @@ AGENTS = {
     "shopping": "The user's personal shopper: finds the best product and price across thousands of stores (Google "
                 "Shopping: Walmart, Best Buy, Target, Amazon sellers, brand stores), sales, discounts and deals, "
                 "compares stores, reads real reviews, follows the user's shopping preferences, and watches a price to "
-                "tell them when it drops. Use it for anything to buy: products, gifts, clothes, gadgets, home things, "
+                "tell them when it drops, and keeps their cart (one cart across every store: add, show, change, remove). "
+                "Use it for anything to buy: products, gifts, clothes, gadgets, home things, the cart, "
                 "'is this a good deal', 'best X under $Y', coupons and sales. Flights and hotels are travel.",
     "booking": "Books a hotel, a train, a bus, a ferry, a tour or a ticket on a website for the user (not flights), "
-               "and buys a product from a web shop's checkout, filling in the forms and stopping for the user's "
+               "and buys a product from a web shop's checkout, including checking out the user's cart one store at a "
+               "time, filling in the forms and stopping for the user's "
                "approval before it pays; puts a travel booking in their trip. Use it when the user asks to book, "
                "reserve, buy or order something for them. To book a flight use travel. To find what to buy, plan "
                "shopping first, then booking.",
@@ -208,7 +210,10 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
     elif re.search(r"\b(flights?|fly|flying|airfares?|airline|plane tickets?|round[- ]trip|one[- ]way|hotels?|"
                    r"vacation|trip to)\b", t):
         agent = "travel"
-    elif re.search(r"\b(buy|order|purchase|check ?out)\b.{0,40}\b(for me|on my behalf)\b|\b(add|put)\b.{0,30}\b(cart|basket)\b", t):
+    elif re.search(r"\b(add|put|move)\b.{0,60}\b(cart|basket)\b|\b(my|the) (cart|basket)\b", t) and \
+            not re.search(r"\bcheck ?out\b", t):
+        agent = "shopping"
+    elif re.search(r"\b(buy|order|purchase|check ?out)\b.{0,40}\b(for me|on my behalf)\b|\bcheck ?out\b.{0,60}\b(cart|items?|order)\b", t):
         agent = "booking"
     elif re.search(r"\b(deals?|on sale|sales?|discounts?|coupons?|promo codes?|cheapest|best price|price drops?|"
                    r"watch the price|cheaper|bargain|shopping|shop for|gift|where (can|do|should) i buy|"
@@ -590,6 +595,8 @@ ROUTING = [
     ("Explain the quadratic formula with a graph I can play with.", "explainer", None),
     ("Find me the best noise-cancelling headphones under $300, with good reviews.", "shopping", None),
     ("What is this video about? https://www.facebook.com/reel/1234567890123456", "video", None),
+    ("Add the Best Buy Sony headphones to my cart.", "shopping", None),
+    ("Check out the Target items in my cart for me.", "booking", None),
     ("Is there a sale on the Dyson V15 anywhere? Tell me when it drops under $500.", "shopping", None),
     ("What's the weather usually like in Lisbon in March?", "react", None),
     ("Who won the most recent Fields Medal?", "react", None),

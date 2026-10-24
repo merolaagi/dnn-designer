@@ -1294,6 +1294,40 @@ def shopping_save(body: ShoppingIn):
         raise HTTPException(400, detail={"message": str(exc)})
 
 
+@app.get("/api/shopping/cart")
+def shopping_cart():
+    """The cart by store, and what was ordered from it (Saathi → Hub → Cart)."""
+    import shop
+    items = shop.cart()
+    return {"stores": shop.groups(items), "ordered": [c for c in items if c["status"] == "ordered"][::-1][:20]}
+
+
+class CartChange(BaseModel):
+    qty: Optional[int] = None
+    options: Optional[str] = None
+
+
+@app.patch("/api/shopping/cart/{cid}")
+def shopping_cart_change(cid: str, body: CartChange):
+    import shop
+    try:
+        return shop.cart_update(cid, body.model_dump())
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That is not in the cart any more."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.delete("/api/shopping/cart/{cid}")
+def shopping_cart_remove(cid: str):
+    import shop
+    try:
+        shop.cart_remove(cid)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That is not in the cart any more."})
+    return {"ok": True}
+
+
 @app.delete("/api/shopping/watches/{wid}")
 def shopping_unwatch(wid: str):
     import shop

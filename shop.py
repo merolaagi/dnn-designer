@@ -37,6 +37,8 @@ PREFS = {
 }
 MAX_PREF = 400
 MAX_WATCHES = 30
+MAX_CART = 60
+MOVE = 0.05                     # a cart item's price moving this much (or cheaper elsewhere by this much) is news
 ACCESSORY = ("case", "cover", "cable", "charger", "adapter", "stand", "mount", "protector", "skin", "sleeve", "strap",
              "replacement", "ear pad", "earpad", "cushion", "refurbished", "renewed", "parts", "decal", "holder")
 DROP = 0.10                     # a push when the price falls this much below the last price seen
@@ -59,7 +61,7 @@ def _load() -> Dict[str, Any]:
     except (OSError, ValueError):
         data = {}
     return {"prefs": {k: str(v) for k, v in (data.get("prefs") or {}).items() if k in PREFS},
-            "watches": list(data.get("watches") or [])}
+            "watches": list(data.get("watches") or []), "cart": list(data.get("cart") or [])}
 
 
 def _store(data: Dict[str, Any]) -> None:
@@ -366,8 +368,8 @@ def news(w: Dict[str, Any], found: Optional[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
-def check(s: Dict[str, Any], search_fn=None) -> None:
-    """The scheduled look (each day): search every watch, record the price, push the good news."""
+def check(s: Dict[str, Any], search_fn=None, cart_search=None) -> None:
+    """The scheduled look (each day): search every watch and everything in the cart, record the prices, push the news."""
     import schedules
     search_fn = search_fn or (lambda w: search(w["query"], max_price=w.get("max_price"), sort="price_low", limit=20))
     told, looked, errors = 0, 0, []
@@ -396,8 +398,10 @@ def check(s: Dict[str, Any], search_fn=None) -> None:
                             x["alerted"] = found["price"]
                     x["checked"] = time.time()
             _store(data)
-    s["last_status"] = "error" if errors and not looked else "ok"
+    in_cart = check_cart(cart_search) if any(c["status"] == "in cart" for c in cart()) else {"looked": 0, "told": 0}
+    s["last_status"] = "error" if errors and not looked and not in_cart["looked"] else "ok"
     s["last_detail"] = (f"{looked} watched, {told} price drop(s)" if looked else "no watches") + \
+        (f"; {in_cart['looked']} in the cart, {in_cart['told']} change(s)" if in_cart["looked"] else "") + \
         (f"; {len(errors)} failed: {errors[0]}" if errors else "")
 
 
@@ -407,9 +411,212 @@ def ensure_check() -> None:
         return
     try:
         schedules.create("Price watches", {"kind": "check", "key": "shopping"},
-                         "Check the price of everything you are watching, and tell you about drops.", "day", "07:40")
+                         "Check the price of everything you are watching and everything in your cart, and tell you about drops.", "day", "07:40")
     except Exception:  # noqa: BLE001
         pass
+
+
+# --------------------------------------------------------------------------
+# the cart: one cart across every store, kept on the Mac
+# --------------------------------------------------------------------------
+
+def cart() -> List[Dict[str, Any]]:
+    return _load()["cart"]
+
+
+def _store_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(name or "").lower().replace(".com", "")).strip()
+
+
+def _domain(link: str) -> str:
+    import urllib.parse
+    host = (urllib.parse.urlparse(str(link or "")).hostname or "").lower()
+    return "" if not host or host.endswith(("google.com", "googleusercontent.com")) else host
+
+
+def cart_add(title: str, store: str, price: float, link: str = "", qty: int = 1, options: str = "",
+             store_link: str = "", token: str = "") -> Dict[str, Any]:
+    title = re.sub(r"\s+", " ", str(title or "")).strip()
+    store = re.sub(r"\s+", " ", str(store or "")).strip()
+    if len(title) < 2 or len(store) < 2:
+        raise ValueError("Say what it is and which store it is from (as the search showed them).")
+    try:
+        price = float(price)
+    except (TypeError, ValueError):
+        raise ValueError("Give its price, as the search showed it.") from None
+    if price <= 0:
+        raise ValueError("Give its price, as the search showed it.")
+    qty = max(1, min(99, int(qty or 1)))
+    with _LOCK:
+        data = _load()
+        for c in data["cart"]:
+            if c["status"] == "in cart" and c["title"].lower() == title.lower() and _store_key(c["store"]) == _store_key(store) \
+                    and (c.get("options") or "") == (options or ""):
+                c["qty"] = min(99, c["qty"] + qty)
+                _store(data)
+                return c
+        if sum(1 for c in data["cart"] if c["status"] == "in cart") >= MAX_CART:
+            raise ValueError(f"The cart holds {MAX_CART} things: take some out first.")
+        item = {"id": "ci" + uuid.uuid4().hex[:8], "title": title[:200], "store": store[:80], "price": price, "qty": qty,
+                "options": str(options or "")[:120], "link": str(link or "")[:600], "store_link": str(store_link or "")[:600],
+                "token": str(token or "")[:400], "added": time.time(), "status": "in cart", "checked": None,
+                "first_price": price, "cheaper": None, "missing": 0, "alerted": None}
+        data["cart"].append(item)
+        _store(data)
+    ensure_check()
+    return item
+
+
+def cart_update(cid: str, change: Dict[str, Any]) -> Dict[str, Any]:
+    with _LOCK:
+        data = _load()
+        for c in data["cart"]:
+            if c["id"] == cid:
+                if change.get("qty") is not None:
+                    q = int(change["qty"])
+                    if q < 1:
+                        raise ValueError("To take it out, remove it.")
+                    c["qty"] = min(99, q)
+                if change.get("options") is not None:
+                    c["options"] = str(change["options"])[:120]
+                if change.get("store_link"):
+                    c["store_link"] = str(change["store_link"])[:600]
+                _store(data)
+                return c
+    raise KeyError(cid)
+
+
+def cart_remove(cid: str) -> None:
+    with _LOCK:
+        data = _load()
+        keep = [c for c in data["cart"] if c["id"] != cid]
+        if len(keep) == len(data["cart"]):
+            raise KeyError(cid)
+        data["cart"] = keep
+        _store(data)
+
+
+def mark_ordered(ids: List[str], order_number: str = "", delivery: str = "", total: Optional[float] = None) -> List[Dict[str, Any]]:
+    """After the Booking agent paid (with your approval): those items move from the cart to Ordered."""
+    with _LOCK:
+        data = _load()
+        done = []
+        for c in data["cart"]:
+            if c["id"] in ids and c["status"] == "in cart":
+                c.update(status="ordered", ordered=time.time(), order_number=str(order_number or "")[:80],
+                         delivery=str(delivery or "")[:80], order_total=total)
+                done.append(c)
+        if not done:
+            raise KeyError(",".join(ids))
+        data["cart"] = [c for c in data["cart"] if c["status"] == "in cart"] + \
+            [c for c in data["cart"] if c["status"] == "ordered"][-40:]              # keep the last 40 orders
+        _store(data)
+        return done
+
+
+_UCP: Dict[str, Any] = {}
+
+
+def ucp(domain: str) -> bool:
+    """Does the store publish Google's Universal Commerce Protocol (/.well-known/ucp)? Remembered for a day."""
+    import urllib.request
+    if not domain:
+        return False
+    hit = _UCP.get(domain)
+    if hit and time.time() - hit[1] < 86400:
+        return hit[0]
+    ok = False
+    try:
+        if _public(domain):
+            req = urllib.request.Request(f"https://{domain}/.well-known/ucp", headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=8) as reply:
+                ok = reply.status == 200 and isinstance(json.loads(reply.read(200_000).decode() or "{}"), dict)
+    except Exception:  # noqa: BLE001
+        ok = False
+    _UCP[domain] = (ok, time.time())
+    return ok
+
+
+def groups(items: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """The cart by store, with each store's subtotal (before tax and shipping)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    for c in (cart() if items is None else items):
+        if c["status"] != "in cart":
+            continue
+        g = out.setdefault(_store_key(c["store"]), {"store": c["store"], "items": [], "subtotal": 0.0})
+        g["items"].append(c)
+        g["subtotal"] = round(g["subtotal"] + c["price"] * c["qty"], 2)
+    return sorted(out.values(), key=lambda g: -g["subtotal"])
+
+
+def cart_text(store: str = "", checking_out: bool = False) -> str:
+    gs = groups()
+    if store:
+        gs = [g for g in gs if _store_key(store) in _store_key(g["store"]) or _store_key(g["store"]) in _store_key(store)]
+        if not gs:
+            return f"Nothing in the cart is from {store}. " + (("In the cart: " + ", ".join(g["store"] for g in groups())) if groups() else "The cart is empty.")
+    if not gs:
+        return "The cart is empty."
+    lines = []
+    for g in gs:
+        dom = next((_domain(c.get("store_link")) for c in g["items"] if _domain(c.get("store_link"))), "")
+        lines.append(f"{g['store']}: {len(g['items'])} item(s), ${_num(g['subtotal'])} before tax and shipping"
+                     + (f" · store site {dom}" if dom else "")
+                     + (" · it publishes UCP (agent checkout)" if checking_out and dom and ucp(dom) else ""))
+        for c in g["items"]:
+            lines.append(f"  [{c['id']}] {c['qty']} × {c['title']}" + (f" ({c['options']})" if c.get("options") else "")
+                         + f" · ${_num(c['price'])} each"
+                         + (f" (was ${_num(c['first_price'])} when added)" if c.get("first_price") and abs(c["first_price"] - c["price"]) >= 0.01 else "")
+                         + (f" · cheaper at {c['cheaper']['store']}: ${_num(c['cheaper']['price'])}" if c.get("cheaper") else "")
+                         + (" · not found at that store on the last check" if c.get("missing") else "")
+                         + (f" · {c['store_link'] or c['link']}" if (c.get("store_link") or c.get("link")) else ""))
+    if not store and len(gs) > 1:
+        lines.append(f"All stores: ${_num(sum(g['subtotal'] for g in gs))} before tax and shipping.")
+    return "\n".join(lines)
+
+
+def _query_of(title: str) -> str:
+    return " ".join(_words(title)[:8])
+
+
+def check_cart(search_fn=None) -> Dict[str, int]:
+    """Re-check the price of everything in the cart: at its own store, and whether it is cheaper elsewhere."""
+    import schedules
+    search_fn = search_fn or (lambda q: search(q, sort="price_low", limit=20))
+    looked, told = 0, 0
+    for c in [c for c in cart() if c["status"] == "in cart"]:
+        try:
+            items = search_fn(_query_of(c["title"]))["items"]
+        except Exception:  # noqa: BLE001
+            continue
+        looked += 1
+        probe = {"query": _query_of(c["title"])}
+        need = set(_words(probe["query"]))
+        same = [i for i in items if _store_key(i["store"]) == _store_key(c["store"]) and need <= set(_words(i["title"]))]
+        here = min(same, key=lambda i: i["price"]) if same else None
+        best = best_match(probe, items)
+        news_ = []
+        new_price = here["price"] if here else c["price"]
+        if here and abs(here["price"] - c["price"]) >= c["price"] * MOVE:
+            news_.append(f"now ${_num(here['price'])} at {c['store']} (was ${_num(c['price'])})")
+        cheaper = None
+        if best and _store_key(best["store"]) != _store_key(c["store"]) and best["price"] <= new_price * (1 - MOVE):
+            cheaper = {"store": best["store"], "price": best["price"], "link": best.get("link")}
+            news_.append(f"${_num(best['price'])} at {best['store']}")
+        key = f"{new_price}|{cheaper and cheaper['store']}|{cheaper and cheaper['price']}"
+        if news_ and c.get("alerted") != key:
+            schedules.notify("deal", f"Your cart: {c['title']}"[:200], "; ".join(news_) + "." +
+                             (f" {cheaper['link']}" if cheaper and cheaper.get("link") else ""))
+            told += 1
+        with _LOCK:
+            data = _load()
+            for x in data["cart"]:
+                if x["id"] == c["id"]:
+                    x.update(price=new_price, cheaper=cheaper, checked=time.time(), missing=0 if here else (x.get("missing") or 0) + 1)
+                    if news_:
+                        x["alerted"] = key
+            _store(data)
+    return {"looked": looked, "told": told}
 
 
 def watches_text() -> str:
@@ -447,7 +654,13 @@ GUIDE = (
     "5. Answer with your pick first and why (in a sentence), then two or three alternatives (cheaper, or better), "
     "each with the price, the store, the sale if any, the rating and how many reviews, and the link. Say when the "
     "prices were searched. Prices change: never promise a price.\n"
-    "6. If they want to know when it gets cheaper, use watch_price with the product's exact name (brand and model) "
+    "6. The cart: when they say to add something to their cart, use add_to_cart with the exact title, store and "
+    "price from your search (and the size, colour or other options they chose, and the store's own link from "
+    "product_offers when you have it). One cart holds things from every store; show_cart shows it by store with "
+    "each store's subtotal; change_cart_item and remove_from_cart change it. Everything in it is re-checked each "
+    "morning, and their phone is told if a price moves or it is cheaper elsewhere. To buy, they say 'check out the "
+    "<store> items' (the Booking agent does that).\n"
+    "7. If they want to know when it gets cheaper, use watch_price with the product's exact name (brand and model) "
     "and their target; their phone gets a push when it drops. If they want to buy it, say you found it and they "
     "can ask 'buy it for me' (the Booking agent checks out in their browser, and they approve before paying).\n"
     "Every price, rating and review count comes from a tool result; never invent them."

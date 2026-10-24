@@ -1,5 +1,32 @@
 # Changelog
 
+## 4.31.0
+
+- **One cart for every store.** Say "add it to my cart" after Saathi finds
+  something, and it goes in your cart on the Mac. Each item keeps its store,
+  price, quantity, options (size, colour) and link, and Best Buy, Target,
+  Walmart and any other store can share the one cart.
+  - "What's in my cart?", "make it two", "take out the case": the Shopping
+    agent shows and changes it. The cart is grouped by store, with each
+    store's subtotal.
+  - **Re-checked every morning**, with the price watches. Your phone gets a
+    push when an item's price at its store moves 5% or more, or when it is 5%
+    or more cheaper at another store. It also notes when an item wasn't found
+    at its store, which may mean it's sold out.
+  - **Checking out happens one store at a time.** "Check out the Target items"
+    sends the Booking agent to that store's own cart in Saathi's browser. It
+    adds exactly those items, checks the store's cart holds nothing else, and
+    ships to your saved address. It stops if an item is sold out or costs
+    more than in your cart. You type the card details yourself and approve
+    the payment. The items then move to Ordered, with the order number and
+    the delivery date.
+  - **Ready for Google's Universal Commerce Protocol.** At checkout it notes
+    when a store publishes UCP (`/.well-known/ucp`), so those stores can be
+    checked out directly once independent agents are allowed to.
+- Saathi 0.7.4 has a Cart screen under Hub. Each store shows its total and a
+  "Check out" button, quantities have − and + buttons, and price changes and
+  cheaper stores are shown on each item.
+
 ## 4.30.0
 
 - **Video agent: paste a video link and Saathi says what's in it.** It works

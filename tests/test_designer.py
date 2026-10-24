@@ -12393,6 +12393,81 @@ def _():
         agentlab._dir, V.fetch, V.transcribe, providers._request, browser.call, browser.installed = \
             real_dir, real_fetch, real_tr, real_req, real_call, real_inst
 
+
+@check("cart: one cart across stores, re-checked each morning, checked out a store at a time by Booking")
+def _():
+    import shop, shop_mcp as SM, schedules, muse, tempfile
+    real_dir, real_notify, real_ucp = agentlab._dir, schedules.notify, shop.ucp
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    sent = []
+    schedules.notify = lambda kind, title, text="", schedule=None, conv=None, attachment=None: sent.append((kind, title, text))
+    shop.ucp = lambda domain: domain == "www.target.com"
+    try:
+        a = shop.cart_add("Sony WH-1000XM6 Wireless Headphones", "Best Buy", 349.0, qty=1, options="Black")
+        b = shop.cart_add("Stanley Quencher 40oz Tumbler", "Target", 45.0, qty=2, store_link="https://www.target.com/p/x")
+        again = shop.cart_add("Sony WH-1000XM6 Wireless Headphones", "Best Buy", 349.0, options="Black")
+        assert again["id"] == a["id"] and again["qty"] == 2                                  # the same thing adds up
+        assert any(x["agent"] == {"kind": "check", "key": "shopping"} for x in schedules.listing())
+        gs = shop.groups()
+        assert [g["store"] for g in gs] == ["Best Buy", "Target"] and gs[0]["subtotal"] == 698.0 and gs[1]["subtotal"] == 90.0
+        text = shop.cart_text()
+        assert "2 × Sony WH-1000XM6 Wireless Headphones (Black) · $349 each" in text and "All stores: $788" in text
+        t2 = SM.call("show_cart", {"store": "target"})
+        assert "Stanley" in t2 and "Sony" not in t2 and "publishes UCP" in t2 and "www.target.com" in t2
+        assert "Nothing in the cart is from Walmart" in shop.cart_text("Walmart")
+        for bad in ({"title": "", "store": "x", "price": 3}, {"title": "Thing", "store": "Shop", "price": 0},
+                    {"title": "Thing", "store": "Shop", "price": "abc"}):
+            try:
+                shop.cart_add(**bad)
+                raise AssertionError(f"took {bad}")
+            except ValueError:
+                pass
+        shop.cart_update(b["id"], {"qty": 3})
+        assert shop.groups()[1]["subtotal"] == 135.0
+        # the morning check: its own store's price, and a cheaper store
+        prices = {"Best Buy": 349.0, "Walmart": 349.0, "Target": 45.0}
+
+        def fake(q):
+            rows = [{"title": "Sony WH-1000XM6 Wireless Headphones", "store": "Best Buy", "price": prices["Best Buy"], "link": "bb"},
+                    {"title": "Sony WH-1000XM6 Wireless Headphones Black", "store": "Walmart", "price": prices["Walmart"], "link": "wm"},
+                    {"title": "Case for Sony WH-1000XM6 Wireless Headphones", "store": "Amazon", "price": 20.0},
+                    {"title": "Stanley Quencher 40oz Tumbler", "store": "Target", "price": prices["Target"]}]
+            return {"items": [dict(r, condition="") for r in rows]}
+        shop.check({"id": "s"}, search_fn=lambda w: {"items": []}, cart_search=fake)
+        assert not sent                                                           # nothing moved
+        prices["Walmart"] = 299.0
+        shop.check({"id": "s"}, search_fn=lambda w: {"items": []}, cart_search=fake)
+        assert len(sent) == 1 and "$299 at Walmart" in sent[0][2] and sent[0][0] == "deal"
+        shop.check({"id": "s"}, search_fn=lambda w: {"items": []}, cart_search=fake)
+        assert len(sent) == 1                                                     # told once
+        assert "cheaper at Walmart: $299" in shop.cart_text()
+        prices["Target"] = 39.0
+        sch = {"id": "s"}
+        shop.check(sch, search_fn=lambda w: {"items": []}, cart_search=fake)
+        assert "now $39 at Target (was $45)" in sent[-1][2] and "2 in the cart" in sch["last_detail"]
+        assert "(was $45 when added)" in shop.cart_text()
+        # Booking marks a store's items ordered after paying
+        assert "mark_ordered" in [t["name"] for t in agentlab._LATE["@booking_cart_tools"]()]
+        out = SM.call("mark_ordered", {"ids": [b["id"]], "order_number": "T-123", "delivery": "Oct 28", "total": 124.31})
+        assert "Moved 1" in out and "Stanley" not in shop.cart_text() and [c["order_number"] for c in shop.cart() if c["status"] == "ordered"] == ["T-123"]
+        assert SM.handle({"id": 1, "method": "tools/call", "params": {"name": "mark_ordered", "arguments": {"ids": ["nope"]}}})["result"]["isError"]
+        g = agentlab.template("booking")
+        assert sum(1 for n in g["nodes"] if n["type"] == "mcp") == 4
+        compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+        assert muse.rehearsal_plan("Add the Best Buy Sony headphones to my cart")["steps"][0]["agent"] == "shopping"
+        assert muse.rehearsal_plan("What's in my cart?")["steps"][0]["agent"] == "shopping"
+        assert muse.rehearsal_plan("Check out the Target items in my cart for me")["steps"][0]["agent"] == "booking"
+        shop.cart_remove(a["id"])
+        assert shop.cart_text() == "The cart is empty."
+        import main
+        from fastapi.testclient import TestClient
+        r = TestClient(main.app).get("/api/shopping/cart")
+        if r.status_code == 200:
+            assert r.json()["stores"] == [] and r.json()["ordered"][0]["order_number"] == "T-123"
+    finally:
+        agentlab._dir, schedules.notify, shop.ucp = real_dir, real_notify, real_ucp
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

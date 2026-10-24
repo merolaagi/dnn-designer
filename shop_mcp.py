@@ -32,6 +32,29 @@ TOOLS = [
      "Write the whole field (it replaces what was there), keeping what was already saved.",
      "inputSchema": {"type": "object", "properties": {"field": {"type": "string"}, "value": {"type": "string"}},
                      "required": ["field", "value"]}},
+    {"name": "add_to_cart", "description": "Put something in the person's cart (one cart for every store). Use the "
+     "title, store and price exactly as search_products or product_offers showed them.",
+     "inputSchema": {"type": "object", "properties": {
+         "title": {"type": "string"}, "store": {"type": "string"}, "price": {"type": "number", "description": "Each, in USD"},
+         "qty": {"type": "integer"}, "options": {"type": "string", "description": "Size, colour, model or other choice"},
+         "link": {"type": "string", "description": "The result's link"},
+         "store_link": {"type": "string", "description": "The product on the store's own site (from product_offers), if known"},
+         "offers_id": {"type": "string"}},
+         "required": ["title", "store", "price"]}},
+    {"name": "show_cart", "description": "The cart by store: each item with its id, quantity, options, price (and any "
+     "cheaper store), and each store's subtotal.",
+     "inputSchema": {"type": "object", "properties": {"store": {"type": "string", "description": "Only this store's items"}}}},
+    {"name": "change_cart_item", "description": "Change an item's quantity or options.",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "qty": {"type": "integer"},
+                                                     "options": {"type": "string"}}, "required": ["id"]}},
+    {"name": "remove_from_cart", "description": "Take an item out of the cart.",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+    {"name": "mark_ordered", "description": "After a checkout was paid: move those items from the cart to Ordered, with "
+     "the order number and delivery date the store showed.",
+     "inputSchema": {"type": "object", "properties": {
+         "ids": {"type": "array", "items": {"type": "string"}}, "order_number": {"type": "string"},
+         "delivery": {"type": "string"}, "total": {"type": "number", "description": "What was paid, with tax and shipping"}},
+         "required": ["ids"]}},
     {"name": "watch_price", "description": "Watch a product's price: checked every morning; the person's phone gets a "
      "push when it reaches the target or drops well below the last price.",
      "inputSchema": {"type": "object", "properties": {
@@ -63,6 +86,21 @@ def call(name, a):
             raise ValueError("The shipping address is set by the person on the Mac (Settings → Shopping), not here.")
         shop.set_prefs({field: a.get("value") or ""})
         return "Saved. Now:\n" + shop.prefs_text()
+    if name == "add_to_cart":
+        c = shop.cart_add(a.get("title") or "", a.get("store") or "", a.get("price"), a.get("link") or "", a.get("qty") or 1,
+                          a.get("options") or "", a.get("store_link") or "", a.get("offers_id") or "")
+        return f"In the cart [{c['id']}]: {c['qty']} × {c['title']} from {c['store']}.\n\n" + shop.cart_text()
+    if name == "show_cart":
+        return shop.cart_text(a.get("store") or "", checking_out=bool(a.get("store")))
+    if name == "change_cart_item":
+        shop.cart_update(a.get("id") or "", {"qty": a.get("qty"), "options": a.get("options")})
+        return "Changed.\n\n" + shop.cart_text()
+    if name == "remove_from_cart":
+        shop.cart_remove(a.get("id") or "")
+        return "Taken out.\n\n" + shop.cart_text()
+    if name == "mark_ordered":
+        done = shop.mark_ordered(list(a.get("ids") or []), a.get("order_number") or "", a.get("delivery") or "", a.get("total"))
+        return f"Moved {len(done)} item(s) to Ordered" + (f" (order {a['order_number']})" if a.get("order_number") else "") + "."
     if name == "watch_price":
         w = shop.add_watch(a.get("query") or "", a.get("target"), a.get("label") or "")
         return (f"Watching [{w['id']}] {w['label']}" + (f" for ${w['target']:,.2f} or less" if w.get("target") else "")
@@ -88,7 +126,7 @@ def handle(msg):
         try:
             text, error = call(params.get("name"), params.get("arguments") or {}), False
         except KeyError:
-            text, error = "There is no price watch with that id: list_watches first.", True
+            text, error = "There is no price watch or cart item with that id: list_watches or show_cart first.", True
         except (ValueError, RuntimeError) as exc:
             text, error = str(exc), True
         result = {"content": [{"type": "text", "text": text}], "isError": error}
