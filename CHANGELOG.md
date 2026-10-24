@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.31.2
+
+- **Facebook and other video links fetch again.** 4.30.0 gave yt-dlp a
+  length filter it doesn't accept, so every video failed with "Invalid filter
+  part". The filter now uses yt-dlp's own form ("duration <=? …"), so a video
+  that doesn't report its length still goes. A test checks yt-dlp accepts it,
+  and the real download command was run against a sample clip.
+
 ## 4.31.1
 
 - **A video link is always watched before the reply.** Saathi used to answer

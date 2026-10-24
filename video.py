@@ -132,12 +132,17 @@ def _cookie_file(folder: Path) -> Optional[Path]:
     return path
 
 
+def length_filter(max_minutes: int) -> str:
+    """yt-dlp's filter: skip a video over three times the limit; one that does not say its length still goes."""
+    return f"duration <=? {int(max_minutes) * 60 * 3}"
+
+
 def fetch(url: str, folder: Path, max_minutes: int) -> Dict[str, Any]:
     """Download the video (720p at most) and its details. Tries without your sign-in first."""
     ff = ffmpeg()
     base = [sys.executable, "-m", "yt_dlp", "--no-playlist", "--no-progress", "--no-warnings", "--write-info-json",
             "-f", "b[height<=720][ext=mp4]/b[height<=720]/bv*[height<=720]+ba/b", "--max-filesize", "1500M",
-            "--match-filter", f"!duration | duration <= {max_minutes * 60 * 3}",
+            "--match-filter", length_filter(max_minutes),
             "-o", str(folder / "video.%(ext)s")] + (["--ffmpeg-location", ff] if ff else [])
     tried_cookies = False
     for attempt in (0, 1):

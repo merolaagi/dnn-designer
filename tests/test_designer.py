@@ -12321,6 +12321,11 @@ def _():
         assert V.links("look https://www.facebook.com/reel/1234567890123456?mibextid=x, and https://fb.watch/abcDEF/.") == \
             ["https://www.facebook.com/reel/1234567890123456?mibextid=x", "https://fb.watch/abcDEF/"]
         assert V.links("https://youtu.be/dQw4w9WgXcQ") and not V.links("https://example.com/watch")
+        if real_find("yt_dlp"):                                     # the filter yt-dlp is given must parse (4.30.0 sent one it refused)
+            from yt_dlp.utils import match_filter_func
+            keep = match_filter_func(V.length_filter(60))
+            assert keep({"duration": 600}, incomplete=False) is None and keep({}, incomplete=False) is None
+            assert keep({"duration": 99999}, incomplete=False)
         # the sign-in comes from Saathi's browser, only for the video sites, as a cookies file
         browser.installed = lambda: True
         browser.call = lambda op, **a: {"cookies": [{"name": "c_user", "value": "1", "domain": ".facebook.com", "path": "/",
