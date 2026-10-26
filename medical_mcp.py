@@ -1,4 +1,4 @@
-"""An MCP server (stdio) for the Medical agent: the literature, drug labels and MediConsult. Started as `python3 medical_mcp.py`."""
+"""An MCP server (stdio) for the Medical agent: the literature, drug labels and your library. Started as `python3 medical_mcp.py`."""
 
 import json
 import sys
@@ -20,12 +20,9 @@ TOOLS = [
     {"name": "drug_label", "description": "What the FDA label says for a medicine (generic or brand name): uses, dosing as "
      "the label states it, use in children, boxed warning, do-not-use, warnings, interactions, pregnancy, side effects.",
      "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
-    {"name": "ask_mediconsult", "description": "Ask the person's own MediConsult AI (when connected): its answer from its "
-     "own library of guidelines and papers, with its sources. One source among the others, not the last word.",
-     "inputSchema": {"type": "object", "properties": {
-         "question": {"type": "string"},
-         "specialty": {"type": "string", "description": "e.g. cardiology, endocrinology, neurology, pediatrics; optional"}},
-         "required": ["question"]}},
+    {"name": "search_library", "description": "Search the person's own medical library (guidelines, protocols and papers "
+     "they added, and a few starter guideline summaries): the passages that best answer the query, with their titles.",
+     "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
 ]
 
 
@@ -37,10 +34,9 @@ def call(name, a):
         return medical.articles_text([medical.article(a.get("pmid") or "")])
     if name == "drug_label":
         return medical.label_text(medical.drug_label(a.get("name") or ""))
-    if name == "ask_mediconsult":
-        mc = medical.mediconsult(a.get("question") or "", a.get("specialty") or "")
-        return mc["answer"] + ("\n\nIts sources: " + "; ".join(f"{c['title']} ({c.get('year') or ''}) {c.get('url') or ''}"
-                                                              for c in mc["citations"]) if mc["citations"] else "")
+    if name == "search_library":
+        rows = medical.search_library(a.get("query") or "")
+        return medical.articles_text(rows) if rows else "Nothing in the library matches."
     raise ValueError(f"There is no tool {name}.")
 
 

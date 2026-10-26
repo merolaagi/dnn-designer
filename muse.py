@@ -57,7 +57,7 @@ AGENTS = {
                  "animate an algorithm or a chain of ideas. Use it when the user asks to explain, show, visualise, "
                  "graph, plot or animate maths, an equation, a problem, an algorithm or how something works.",
     "medical": "Answers health and medical questions from the medical literature (PubMed, Europe PMC), FDA drug labels "
-               "and the user's MediConsult: symptoms and what they might mean, conditions, treatments and what the "
+               "and the user's own medical library: symptoms and what they might mean, conditions, treatments and what the "
                "evidence says, medicines, doses as the label states them, side effects and interactions, tests, when to "
                "see a doctor. Use it for any question about health, illness, a medicine or a medical topic.",
     "video": "Watches a video from a link the user gives (Facebook video, Reel or fb.watch, Instagram, YouTube, TikTok, "

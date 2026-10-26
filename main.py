@@ -1236,9 +1236,25 @@ class TravelConfig(BaseModel):
 
 class MedicalConfig(BaseModel):
     audience: Optional[str] = None
-    mediconsult_url: Optional[str] = None
-    mediconsult_email: Optional[str] = None
-    mediconsult_password: Optional[str] = None
+
+
+class MedicalDoc(BaseModel):
+    title: str = ""
+    text: str
+    source: str = ""
+    year: str = ""
+    kind: str = ""
+    url: str = ""
+
+
+def _medical_action(fn, *args):
+    import medical
+    try:
+        return fn(*args)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That document is not in the library."})
+    except (ValueError, medical.MedicalError) as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
 
 
 @app.get("/api/medical")
@@ -1250,20 +1266,32 @@ def medical_view():
 @app.post("/api/medical")
 def medical_save(body: MedicalConfig):
     import medical
-    try:
-        return medical.save(body.model_dump())
-    except ValueError as exc:
-        raise HTTPException(400, detail={"message": str(exc)})
+    return _medical_action(medical.save, body.model_dump())
 
 
-@app.post("/api/medical/test")
-def medical_test():
-    """Sign in to MediConsult with the saved account (nothing is asked)."""
+@app.post("/api/medical/library")
+def medical_add(body: MedicalDoc):
+    """Add a guideline, protocol or paper to your medical library, from its text."""
     import medical
-    try:
-        return medical.test_mediconsult()
-    except medical.MedicalError as exc:
-        return {"ok": False, "error": str(exc)}
+    return _medical_action(medical.add_document, body.title, body.text, body.source, body.year, body.kind, body.url)
+
+
+@app.post("/api/medical/library/upload")
+async def medical_upload(file: UploadFile = File(...), title: str = Form(""), source: str = Form(""), year: str = Form("")):
+    """Add a PDF, text, Markdown or HTML document to your medical library."""
+    import medical
+    data = await file.read()
+    if len(data) > 40 * 1024 * 1024:
+        raise HTTPException(400, detail={"message": "That file is over 40 MB."})
+    text = _medical_action(medical.text_of, data, file.filename or "")
+    name = title or re.sub(r"[_-]+", " ", Path(file.filename or "Document").stem)
+    return _medical_action(medical.add_document, name, text, source, year, "document", "")
+
+
+@app.delete("/api/medical/library/{doc_id}")
+def medical_remove(doc_id: str):
+    import medical
+    return _medical_action(medical.remove_document, doc_id)
 
 
 @app.get("/api/travel")

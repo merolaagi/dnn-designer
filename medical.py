@@ -7,15 +7,23 @@ Where the evidence comes from, all free and public:
     Europe PMC     the same literature plus preprints, and which articles have free full text
     openFDA        the FDA drug label: uses, dosing as the label states it, warnings, interactions,
                    use in children, pregnancy
-    MediConsult    your own MediConsult AI, when it is running and connected (Settings → Medical):
-                   its answer from its own library is one more source, named as such
+    your library   guidelines, protocols and papers you add (Settings → Medical), searched here on
+                   the Mac: by meaning with an Ollama embedding model when one is installed, by
+                   keywords otherwise. Every account starts with three guideline summaries carried
+                   over from MediConsult AI, which this replaces: nothing else needs to run.
+
+The question is also read for the patient it is about: age, conditions, medicines, allergies ("my
+mom is 72, on warfarin, allergic to penicillin"). Each medicine's label is checked against the
+others and against the allergies, and anything found is put at the top of the answer as a safety
+check, the way MediConsult's safety alerts were.
 
 Before any of that, a request is screened for an emergency happening now ("I have crushing chest
 pain", "my dad can't breathe"). An emergency is answered at once, with what to do and who to call,
 and nothing is looked up: a minute of searching is a minute lost.
 
 Each answer is written for whoever is asking: plain words for most people, or, for an account set
-to clinician, the terms, doses and evidence grades a clinician wants. Either way it cites only what
+to clinician, MediConsult's structure: clinical assessment, evidence summary, recommendations
+with their strength, considerations, follow-up. Either way it cites only what
 was found, says how strong the evidence is, and says when to see someone. It never gives a child's
 medicine dose from memory: only what the product's label says, or a pointer to the label, a
 pharmacist or the child's doctor.
@@ -23,8 +31,11 @@ pharmacist or the child's doctor.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import re
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -50,8 +61,10 @@ How you work:
 1. The literature has usually been searched for you already (it is below the question). If it is thin or
    off the point, call search_literature again with better terms (the condition, the treatment, the
    population), or with kind "guideline" or "review" for the strongest evidence. Use read_article for the
-   full abstract of one that matters. For a medicine, call drug_label for what the FDA label says. If
-   MediConsult answered, weigh it as one more source and name it as "MediConsult (your library)".
+   full abstract of one that matters. For a medicine, call drug_label for what the FDA label says.
+   search_library searches the person's own library (guidelines and protocols they added); cite what
+   comes from it like any other source, and say when a library item is only a summary.
+   If there are safety checks (an interaction or an allergy found on a label), put them first.
 2. Answer the question asked, first, in plain words (or clinical terms if the person is a clinician).
    Then what the evidence says and how strong it is: a guideline or a systematic review counts for more
    than one small study, and say which it is. Give numbers when the sources give them.
@@ -125,16 +138,12 @@ def _load() -> Dict[str, Any]:
     except (OSError, ValueError):
         d = {}
     d.setdefault("audience", "public")
-    d.setdefault("mediconsult_url", "")
-    d.setdefault("mediconsult_email", "")
-    d.setdefault("mediconsult_password", "")
-    return d
+    return {"audience": d["audience"] if d["audience"] in AUDIENCES else "public"}
 
 
 def view() -> Dict[str, Any]:
-    d = _load()
-    return {"audience": d["audience"], "mediconsult_url": d["mediconsult_url"], "mediconsult_email": d["mediconsult_email"],
-            "has_password": bool(d["mediconsult_password"]), "mediconsult": bool(d["mediconsult_url"])}
+    return {"audience": _load()["audience"], "library": library_listing(), "embeddings": embed_model() or None,
+            "pdf": _pdf_reader() is not None}
 
 
 def save(change: Dict[str, Any]) -> Dict[str, Any]:
@@ -143,24 +152,20 @@ def save(change: Dict[str, Any]) -> Dict[str, Any]:
         if change["audience"] not in AUDIENCES:
             raise ValueError("Answers are written for the public or for a clinician.")
         d["audience"] = change["audience"]
-    if change.get("mediconsult_url") is not None:
-        url = str(change["mediconsult_url"]).strip().rstrip("/")
-        if url and not re.match(r"^https?://[^\s/]+(:\d+)?(/.*)?$", url):
-            raise ValueError("MediConsult's address looks like http://127.0.0.1:8010 (its backend, not the web page).")
-        d["mediconsult_url"] = url
-    if change.get("mediconsult_email") is not None:
-        d["mediconsult_email"] = str(change["mediconsult_email"]).strip()
-    if change.get("mediconsult_password"):
-        d["mediconsult_password"] = str(change["mediconsult_password"])
     _path().write_text(json.dumps(d, indent=1))
-    _TOKEN.clear()
     return view()
+
+
+CLINICIAN_FORMAT = ("The person asking is a clinician. Use clinical terms, doses as the sources give them, and grades of "
+                    "evidence, in this order (short headings): Clinical assessment; Evidence summary; Recommendations "
+                    "(each with the strength of its evidence); Considerations (patient factors, contraindications, "
+                    "alternatives); Follow-up (monitoring, referral, work-up); Sources. Clinical judgment comes first; say "
+                    "so once, briefly.")
 
 
 def with_audience(task: str) -> str:
     who = _load()["audience"]
-    return task + ("\n\nThe person asking is a clinician: use clinical terms, doses as the sources give them, and grades "
-                   "of evidence." if who == "clinician" else
+    return task + ("\n\n" + CLINICIAN_FORMAT if who == "clinician" else
                    "\n\nThe person asking is not a clinician: plain words, explain any medical term you must use.")
 
 
@@ -321,66 +326,291 @@ def drug_label(name: str) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
-# MediConsult, when it is connected
+# your library: guidelines, protocols and papers you add, searched on this Mac
 # --------------------------------------------------------------------------
 
-_TOKEN: Dict[str, Any] = {}
+STARTER = Path(__file__).resolve().parent / "medical_library.json"
+CHUNK, OVERLAP = 1200, 200
+EMBED_MODELS = ("nomic-embed-text", "mxbai-embed-large", "bge-m3", "snowflake-arctic-embed", "all-minilm")
+MAX_DOC = 400_000                    # characters kept from one document
+_LIB_LOCK = threading.Lock()
 
 
-def _mc_call(path: str, body: Dict[str, Any], token: Optional[str] = None, timeout: float = 30) -> Dict[str, Any]:
-    d = _load()
-    headers = {"content-type": "application/json", "User-Agent": USER_AGENT}
-    if token:
-        headers["authorization"] = "Bearer " + token
-    req = urllib.request.Request(d["mediconsult_url"] + path, data=json.dumps(body).encode(), headers=headers)
+def _lib_path() -> Path:
+    return AL._dir() / "medical_library.json"
+
+
+def _lib() -> Dict[str, Any]:
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as reply:
-            return json.loads(reply.read() or b"{}")
-    except urllib.error.HTTPError as exc:
+        return json.loads(_lib_path().read_text())
+    except (OSError, ValueError):
+        pass
+    # a new account starts with the starter library
+    lib = {"docs": []}
+    try:
+        for d in json.loads(STARTER.read_text())["documents"]:
+            lib["docs"].append(_make_doc(d["title"], d["text"], d.get("source", ""), d.get("year", ""), d.get("kind", ""),
+                                         d.get("url", ""), d.get("note", ""), starter=True))
+    except (OSError, ValueError, KeyError):
+        pass
+    _lib_store(lib)
+    return lib
+
+
+def _lib_store(lib: Dict[str, Any]) -> None:
+    _lib_path().write_text(json.dumps(lib))
+
+
+def _chunks(text: str) -> List[str]:
+    text = re.sub(r"[ \t]+", " ", text).strip()
+    if len(text) <= CHUNK:
+        return [text] if text else []
+    out, i = [], 0
+    while i < len(text):
+        end = min(len(text), i + CHUNK)
+        cut = text.rfind(". ", i + CHUNK // 2, end) if end < len(text) else end
+        end = cut + 1 if cut > i else end
+        out.append(text[i:end].strip())
+        if end >= len(text):
+            break
+        i = max(end - OVERLAP, i + 1)
+    return [c for c in out if c]
+
+
+def _make_doc(title: str, text: str, source: str = "", year: str = "", kind: str = "", url: str = "", note: str = "",
+              starter: bool = False) -> Dict[str, Any]:
+    text = str(text or "")[:MAX_DOC]
+    return {"id": "ml" + hashlib.sha1((title + text[:2000]).encode()).hexdigest()[:10], "title": _clean(title, 300) or "Untitled",
+            "source": _clean(source, 160), "year": _clean(year, 12), "kind": _clean(kind, 40) or "document",
+            "url": url if re.match(r"^https?://", url or "") else "", "note": _clean(note, 300), "starter": starter,
+            "added": time.time(), "chars": len(text), "chunks": [{"text": c} for c in _chunks(text)]}
+
+
+def library_listing() -> List[Dict[str, Any]]:
+    return [{k: d[k] for k in ("id", "title", "source", "year", "kind", "url", "note", "starter", "added", "chars")}
+            | {"pieces": len(d["chunks"]), "by_meaning": all("vec" in c for c in d["chunks"])} for d in _lib()["docs"]]
+
+
+def _pdf_reader():
+    try:
+        import pypdf
+        return pypdf
+    except ImportError:
+        return None
+
+
+def text_of(data: bytes, filename: str) -> str:
+    """The text of an uploaded document: PDF, plain text, Markdown or HTML."""
+    name = (filename or "").lower()
+    if name.endswith(".pdf") or data[:5] == b"%PDF-":
+        pdf = _pdf_reader()
+        if pdf is None:
+            raise MedicalError("Reading PDFs needs pypdf on the Mac: in ~/Sites/new_dnn run "
+                               ".venv/bin/python -m pip install pypdf, then ./serve.sh.")
+        import io
         try:
-            why = json.loads(exc.read() or b"{}").get("detail")
-        except ValueError:
-            why = None
-        raise MedicalError(f"MediConsult said {exc.code}: {why or exc.reason}") from None
-    except (urllib.error.URLError, OSError) as exc:
-        raise MedicalError(f"MediConsult is not answering at {d['mediconsult_url']} ({getattr(exc, 'reason', exc)}). "
-                           "Is its Docker stack running?") from None
+            reader = pdf.PdfReader(io.BytesIO(data))
+            text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        except Exception as exc:  # noqa: BLE001
+            raise MedicalError(f"That PDF would not open ({type(exc).__name__}).") from None
+        if len(text.strip()) < 200:
+            raise MedicalError("That PDF has almost no text in it (a scan?), so there is nothing to search.")
+        return text
+    text = data.decode("utf-8", "replace")
+    if name.endswith((".html", ".htm")) or "<html" in text[:500].lower():
+        text = re.sub(r"(?is)<(script|style).*?</\1>", " ", text)
+        text = re.sub(r"<[^>]+>", " ", text)
+    return text
 
 
-def _mc_token() -> str:
-    d = _load()
-    key = d["mediconsult_url"] + d["mediconsult_email"]
-    if _TOKEN.get("key") == key and time.time() < _TOKEN.get("until", 0):
-        return _TOKEN["token"]
-    if not (d["mediconsult_email"] and d["mediconsult_password"]):
-        raise MedicalError("MediConsult needs the email and password of one of its accounts (Settings → Medical).")
-    out = _mc_call("/api/v1/auth/login", {"email": d["mediconsult_email"], "password": d["mediconsult_password"]})
-    if not out.get("access_token"):
-        raise MedicalError("MediConsult did not sign in.")
-    _TOKEN.update(key=key, token=out["access_token"], until=time.time() + max(60, int(out.get("expires_in") or 1800) - 60))
-    return out["access_token"]
+def add_document(title: str, text: str, source: str = "", year: str = "", kind: str = "", url: str = "") -> Dict[str, Any]:
+    if len((text or "").strip()) < 80:
+        raise MedicalError("Paste the document's text, or upload it: there is too little to search.")
+    doc = _make_doc(title or (text.strip().split("\n")[0][:120]), text, source, year, kind, url)
+    model = embed_model()
+    if model:
+        try:
+            for c, v in zip(doc["chunks"], embed([c["text"] for c in doc["chunks"]], model)):
+                c["vec"] = v
+            doc["model"] = model
+        except Exception:  # noqa: BLE001 - keywords still find it
+            for c in doc["chunks"]:
+                c.pop("vec", None)
+    with _LIB_LOCK:
+        lib = _lib()
+        lib["docs"] = [d for d in lib["docs"] if d["id"] != doc["id"]] + [doc]
+        _lib_store(lib)
+    return view()
 
 
-def mediconsult(question: str, specialty: str = "") -> Dict[str, Any]:
-    """Ask your MediConsult AI. Its answer comes from its own library, and says so."""
-    if not _load()["mediconsult_url"]:
-        raise MedicalError("MediConsult is not connected (Settings → Medical).")
-    q = question.strip()
-    if len(q) < 10:
-        q = q + " (please explain)"
-    body = {"query": q[:5000], "include_clinical_trials": True, "include_drug_interactions": True}
-    if specialty:
-        body["specialty"] = specialty
-    out = _mc_call("/api/v1/consult/", body, token=_mc_token(), timeout=180)
-    return {"source": "MediConsult (your library)", "answer": _clean(out.get("response"), 6000),
-            "citations": [{"title": c.get("title"), "year": c.get("year"), "url": c.get("url"), "pmid": c.get("pmid")}
-                          for c in (out.get("citations") or [])][:6], "model": out.get("model")}
+def remove_document(doc_id: str) -> Dict[str, Any]:
+    with _LIB_LOCK:
+        lib = _lib()
+        keep = [d for d in lib["docs"] if d["id"] != doc_id]
+        if len(keep) == len(lib["docs"]):
+            raise KeyError(doc_id)
+        lib["docs"] = keep
+        _lib_store(lib)
+    return view()
 
 
-def test_mediconsult() -> Dict[str, Any]:
-    _TOKEN.clear()
-    _mc_token()
-    return {"ok": True, "message": "MediConsult signed in."}
+def embed_model() -> str:
+    """An embedding model installed in Ollama, or '' (the library is then searched by keywords)."""
+    try:
+        import providers as P
+        names = [m["name"] for m in P.ollama_status().get("models") or [] if m.get("name")]
+    except Exception:  # noqa: BLE001
+        return ""
+    for want in EMBED_MODELS:
+        for n in names:
+            if n.split(":")[0] == want:
+                return n
+    return ""
+
+
+def embed(texts: List[str], model: str) -> List[List[float]]:
+    import providers as P
+    root = P._ollama_root()
+    out: List[List[float]] = []
+    for i in range(0, len(texts), 32):
+        reply = P._request(root + "/api/embed", {"model": model, "input": texts[i:i + 32]}, {}, 120)
+        out += reply.get("embeddings") or []
+    if len(out) != len(texts):
+        raise MedicalError("The embedding model did not answer for every piece.")
+    return out
+
+
+def _words(text: str) -> List[str]:
+    return [w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOP and len(w) > 1]
+
+
+def search_library(query: str, count: int = 4) -> List[Dict[str, Any]]:
+    """The pieces of your library that best answer the query: by meaning and keywords together when an
+    embedding model is installed, by keywords (BM25) otherwise."""
+    lib = _lib()
+    pieces = [(d, c) for d in lib["docs"] for c in d["chunks"]]
+    if not pieces:
+        return []
+    q = _words(query)
+    toks = [_words(c["text"] + " " + d["title"]) for d, c in pieces]
+    n, avg = len(toks), sum(len(t) for t in toks) / max(1, len(toks))
+    df: Dict[str, int] = {}
+    for t in toks:
+        for w in set(t):
+            df[w] = df.get(w, 0) + 1
+    bm, hits = [], []
+    for t in toks:
+        tf: Dict[str, int] = {}
+        for w in t:
+            tf[w] = tf.get(w, 0) + 1
+        score = 0.0
+        hits.append(sum(1 for w in set(q) if w in tf))
+        for w in set(q):
+            if w in tf:
+                idf = math.log(1 + (n - df[w] + 0.5) / (df[w] + 0.5))
+                score += idf * tf[w] * 2.2 / (tf[w] + 1.2 * (0.25 + 0.75 * len(t) / avg))
+        bm.append(score)
+    top = max(bm) or 1.0
+    scores = [b / top for b in bm]
+    model = embed_model() if any("vec" in c for _, c in pieces) else ""
+    if model:
+        try:
+            qv = embed([query], model)[0]
+            qn = math.sqrt(sum(x * x for x in qv)) or 1.0
+            for i, (_, c) in enumerate(pieces):
+                v = c.get("vec")
+                if v and len(v) == len(qv):
+                    cos = sum(a * b for a, b in zip(qv, v)) / (qn * (math.sqrt(sum(x * x for x in v)) or 1.0))
+                    scores[i] = 0.4 * scores[i] + 0.6 * max(0.0, cos)
+        except Exception:  # noqa: BLE001 - keywords alone, then
+            pass
+    need = max(1, math.ceil(len(set(q)) / 2))          # one stray shared word ("treatment") is not a match
+    ranked = sorted(range(n), key=lambda i: -scores[i])
+    out, used = [], set()
+    for i in ranked:
+        d, c = pieces[i]
+        strong = (model and scores[i] > 0.5) or (hits[i] >= need and scores[i] >= 0.3)
+        if not strong or d["id"] in used:
+            continue
+        used.add(d["id"])
+        out.append({"source": "Your library", "pmid": "", "title": d["title"], "journal": d.get("source") or "your library",
+                    "year": d.get("year") or "", "types": [d.get("kind")] if d.get("kind") else [], "url": d.get("url") or "",
+                    "abstract": c["text"][:1800], "note": d.get("note") or "", "score": round(scores[i], 3)})
+        if len(out) >= count:
+            break
+    return out
+
+
+# --------------------------------------------------------------------------
+# the patient the question is about, and what their medicines' labels say about each other
+# --------------------------------------------------------------------------
+
+ALLERGY_CLASS = {"penicillin": ["penicillin", "amoxicillin", "ampicillin", "beta-lactam", "cephalosporin"],
+                 "sulfa": ["sulfonamide", "sulfa", "sulfamethoxazole"], "nsaid": ["nsaid", "ibuprofen", "naproxen", "aspirin"],
+                 "aspirin": ["aspirin", "salicylate", "nsaid"], "codeine": ["codeine", "opioid"], "morphine": ["morphine", "opioid"]}
+
+
+def patient_of(text: str) -> Dict[str, Any]:
+    """Age, sex, conditions, medicines and allergies, as the question states them. Nothing is guessed."""
+    t = " " + (text or "").lower() + " "
+    age = None
+    m = re.search(r"\b(\d{1,3})[- ]?(?:years?[- ]old|yrs?[- ]old|y/?o|yo)\b|\b(?:aged?|is|she's|he's|i'm|i am)\s+(\d{1,3})\b(?!\s*(?:mg|kg|lb|%|minutes|hours|days|weeks))", t)
+    if m:
+        v = int(m.group(1) or m.group(2))
+        age = v if 0 < v < 120 else None
+    months = re.search(r"\b(\d{1,2})[- ]?months?[- ]old\b", t)
+    if months and age is None:
+        age = round(int(months.group(1)) / 12, 1)
+    sex = "female" if re.search(r"\b(she|her|woman|female|mother|mom|mum|wife|daughter|sister|grandmother|pregnant)\b", t) \
+        else "male" if re.search(r"\b(he|him|his|man|male|father|dad|husband|son|brother|grandfather)\b", t) else None
+    allergies = re.findall(r"allerg(?:ic|y|ies) to ([a-z][a-z -]{2,30}?)(?=[,.;]| and | but |$)", t)
+    allergies += re.findall(r"\b([a-z]{4,20}) allerg(?:y|ic)\b", t)
+    conditions = []
+    for c in re.findall(r"\b(?:has|have|had|with|diagnosed with|history of|h/o)\s+([a-z0-9][a-z0-9' -]{3,60}?)(?=[,.;?]| but | on | taking | is | and (?:is|takes|takes|on)\b|$)", t):
+        conditions += [x.strip() for x in re.split(r"\s+and\s+", c) if len(x.strip()) > 3]
+    meds = _drug_names(text or "")
+    meds += [w for w in re.findall(r"\b(?:on|taking|takes|prescribed)\s+([a-z][a-z-]{3,})", t) if w not in meds]
+    junk = {"medication", "medications", "medicine", "meds", "pills", "something", "them", "this", "that", "it", "insurance",
+            "time", "vacation", "call", "duty"}
+    allergens = {w for a in allergies for w in a.split()}
+    return {"age": age, "sex": sex, "conditions": [c.strip() for c in conditions if c.strip() not in junk][:6],
+            "medicines": [x for x in dict.fromkeys(meds) if x not in junk and x not in allergens][:6],
+            "allergies": [a.strip() for a in dict.fromkeys(allergies) if a.strip() not in junk][:4]}
+
+
+def safety_checks(patient: Dict[str, Any], labels: List[Dict[str, Any]]) -> List[str]:
+    """What the labels say about these medicines together, these allergies and this age. Only label text is quoted."""
+    alerts = []
+    meds = patient.get("medicines") or []
+    for lab in labels:
+        parts = lab["parts"]
+        name = lab.get("generic") or lab["name"]
+        inter = (parts.get("Interactions") or "").lower()
+        for other in meds:
+            other_lab = next((l for l in labels if other in (l.get("generic") or "").lower() or other in l["name"].lower()), None)
+            other_names = {other} | ({(other_lab.get("generic") or "").lower()} if other_lab else set())
+            if lab is other_lab or other.lower() in name.lower():
+                continue
+            hit = next((w for w in other_names if w and w in inter), None)
+            if hit:
+                i = inter.index(hit)
+                alerts.append(f"Interaction: the {name} label mentions {other}: \"…{_clean(inter[max(0, i - 160):i + 220], 400)}…\" "
+                              f"({lab['source']})")
+        avoid = " ".join(parts.get(k, "") for k in ("Do not use", "Boxed warning", "Warnings")).lower()
+        for allergen in patient.get("allergies") or []:
+            words = ALLERGY_CLASS.get(allergen.split()[0], [allergen.split()[0]])
+            hit = next((w for w in words if w in avoid or w in name.lower()), None)
+            if hit:
+                alerts.append(f"Allergy: they are allergic to {allergen}, and the {name} label says: "
+                              f"\"…{_clean(avoid[max(0, avoid.find(hit) - 120):avoid.find(hit) + 200], 340)}…\" ({lab['source']})"
+                              if hit in avoid else f"Allergy: they are allergic to {allergen}, and {name} is in that family.")
+        if parts.get("Boxed warning"):
+            alerts.append(f"Boxed warning on {name}: {_clean(parts['Boxed warning'], 300)} ({lab['source']})")
+        age = patient.get("age")
+        if age is not None and age < 12 and parts.get("Children"):
+            alerts.append(f"Child aged {age}: the {name} label on children says: {_clean(parts['Children'], 300)} "
+                          "Dose only by the label for the child's age and weight.")
+    return list(dict.fromkeys(alerts))[:6]
 
 
 # --------------------------------------------------------------------------
@@ -400,26 +630,28 @@ def _drug_names(text: str) -> List[str]:
     names += [w for w in re.findall(r"[a-z]+", t) if w in common]
     stop = {"this", "that", "with", "much", "many", "what", "medicine", "medication", "pills", "daily", "care", "them",
             "more", "less", "some", "child", "baby", "kids", "while"}
-    return list(dict.fromkeys(n for n in names if n not in stop))[:2]
+    return list(dict.fromkeys(n for n in names if n not in stop))[:5]
 
 
 def gather(question: str) -> Dict[str, Any]:
-    """The literature, any medicine's label, and MediConsult's answer, fetched before the agent runs."""
-    found: Dict[str, Any] = {"articles": [], "labels": [], "mediconsult": None, "problems": []}
+    """Your library, the literature, the labels of any medicine named, and the safety checks, fetched before the
+    agent runs."""
+    found: Dict[str, Any] = {"library": [], "articles": [], "labels": [], "patient": patient_of(question),
+                             "alerts": [], "problems": []}
+    try:
+        found["library"] = search_library(question)
+    except Exception as exc:  # noqa: BLE001
+        found["problems"].append(f"your library: {type(exc).__name__}")
     try:
         found["articles"] = literature(question)
     except MedicalError as exc:
         found["problems"].append(str(exc))
-    for name in _drug_names(question):
+    for name in found["patient"]["medicines"][:4]:
         try:
             found["labels"].append(drug_label(name))
         except Exception:  # noqa: BLE001 - not every word that looks like a medicine is one
             continue
-    if _load()["mediconsult_url"]:
-        try:
-            found["mediconsult"] = mediconsult(question)
-        except MedicalError as exc:
-            found["problems"].append(str(exc))
+    found["alerts"] = safety_checks(found["patient"], found["labels"])
     return found
 
 
@@ -428,8 +660,10 @@ def articles_text(rows: List[Dict[str, Any]], start: int = 1) -> str:
     for i, r in enumerate(rows, start):
         kind = ", ".join(r.get("types") or [])
         out.append(f"[{i}] {r['title']} ({r.get('journal') or r['source']}, {r.get('year') or 'n.d.'})"
-                   + (f" [{kind}]" if kind else "") + f" {r['url']}"
+                   + (f" [{kind}]" if kind else "") + (" [your library]" if r["source"] == "Your library" else "")
+                   + (f" {r['url']}" if r.get("url") else "")
                    + ("  · free full text" if r.get("free_full_text") else "")
+                   + (f"\n    Note: {r['note']}" if r.get("note") else "")
                    + f"\n    {r.get('abstract') or '(no abstract)'}")
     return "\n".join(out)
 
@@ -441,18 +675,23 @@ def label_text(lab: Dict[str, Any]) -> str:
 
 def gathered_text(found: Dict[str, Any]) -> str:
     parts = []
-    if found["articles"]:
-        parts.append("The literature (cite these by number):\n" + articles_text(found["articles"]))
-    for lab in found["labels"]:
+    if found.get("alerts"):
+        parts.append("Safety checks from the labels (put these first in the answer):\n" + "\n".join("- " + a for a in found["alerts"]))
+    pt = found.get("patient") or {}
+    said = [f"age {pt['age']}" if pt.get("age") is not None else "", pt.get("sex") or "",
+            ("conditions: " + ", ".join(pt["conditions"])) if pt.get("conditions") else "",
+            ("medicines: " + ", ".join(pt["medicines"])) if pt.get("medicines") else "",
+            ("allergies: " + ", ".join(pt["allergies"])) if pt.get("allergies") else ""]
+    if any(said):
+        parts.append("The patient, as the question describes them: " + "; ".join(x for x in said if x))
+    rows = (found.get("library") or []) + (found.get("articles") or [])
+    if rows:
+        parts.append("Sources (cite these by number):\n" + articles_text(rows))
+    for lab in found.get("labels") or []:
         parts.append(label_text(lab))
-    mc = found.get("mediconsult")
-    if mc:
-        parts.append("MediConsult (your library) answered:\n" + mc["answer"]
-                     + ("\n  Its sources: " + "; ".join(f"{c['title']} ({c.get('year') or ''}) {c.get('url') or ''}"
-                                                        for c in mc["citations"]) if mc["citations"] else ""))
-    if found["problems"]:
+    if found.get("problems"):
         parts.append("Could not reach: " + "; ".join(found["problems"]))
-    if not (found["articles"] or found["labels"] or mc):
+    if not (rows or found.get("labels")):
         parts.append("Nothing was found yet: search again with different terms before answering, and if there is still "
                      "nothing, say the evidence could not be reached rather than answering from memory.")
     return "\n\n".join(parts)

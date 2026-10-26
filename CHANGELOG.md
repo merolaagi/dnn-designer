@@ -1,5 +1,49 @@
 # Changelog
 
+## 4.33.0
+
+- **MediConsult is built in; its server is no longer needed.** The Medical
+  agent now does what MediConsult did, inside DNN, with nothing else
+  running. DNN already had what MediConsult's Docker stack provided
+  (accounts, history, sign-in security), so none of that was carried over.
+  The MediConsult connection is gone from Settings, and its Docker stack can
+  be shut down for good.
+- **Your medical library.** Guidelines, protocols and papers you add in
+  Settings → Medical are searched with every medical question, on the Mac,
+  and cited as "your library".
+  - Paste a document's text, or upload a PDF, text, Markdown or HTML file.
+    PDFs need `pypdf` installed once in the server's Python.
+  - Documents are split into overlapping pieces and searched by keywords
+    (BM25).
+  - With an Ollama embedding model installed (`ollama pull
+    nomic-embed-text`), they are searched by meaning too. Only documents
+    added after the model is installed are searched both ways.
+  - A match needs at least half of the question's terms, so one shared word
+    ("treatment") doesn't pull in an unrelated guideline.
+  - Every account starts with three guideline summaries carried over from
+    MediConsult's sample library (ADA 2024, KDIGO 2022 diabetes in CKD, the
+    2023 ACC/AHA atrial fibrillation guideline). They are linked by DOI and
+    marked as summaries, not the guidelines' own text. MediConsult's two
+    other samples had citations that did not check out, so they were left
+    out.
+- **Patient context and safety checks.** The question is read for the
+  patient it describes: age, sex, conditions, medicines and allergies ("my
+  mom is 72, on warfarin, allergic to penicillin"). Nothing is guessed. Each
+  medicine's FDA label is fetched, and anything the labels say goes at the
+  top of the answer, quoted from the label:
+  - an interaction with another of their medicines;
+  - a contraindication for one of their allergies, including penicillin,
+    sulfa and NSAID families;
+  - a boxed warning;
+  - what the label says about use in a child under 12.
+- **Clinician answers use MediConsult's structure:** Clinical assessment,
+  Evidence summary, Recommendations (each with the strength of its
+  evidence), Considerations, Follow-up, Sources.
+- The `ask_mediconsult` tool is replaced by `search_library`.
+- API: `POST /api/medical/library` (text), `POST /api/medical/library/upload`
+  (a file), `DELETE /api/medical/library/{id}`. `/api/medical/test` is
+  removed.
+
 ## 4.32.0
 
 - **Medical agent: health questions answered from the evidence, with the

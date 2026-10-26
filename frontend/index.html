@@ -1593,6 +1593,9 @@ table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
 }
 .scoutcard b{font-size:14px;font-weight:600}
 .scoutcard p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.6;flex:1}
+.md-lib{display:flex;flex-direction:column;gap:6px}
+.md-doc{display:flex;align-items:center;gap:10px;justify-content:space-between;border:1px solid var(--paper-3);border-radius:8px;padding:8px 10px;background:#fff}
+.md-doc small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
 .rdbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
 .rdbar .note{font-size:12px;color:var(--muted);margin-right:auto}
 .rdchip{padding:5px 11px;border-radius:14px;border:1px solid var(--paper-3);background:#fff;font-size:12px;cursor:pointer}
@@ -16373,7 +16376,7 @@ function stRender(){
     </section>
 
     <section class="st-card">
-      <header><h3>Medical</h3><small>The Medical agent answers health questions from PubMed, Europe PMC and FDA drug labels, with its sources; your MediConsult AI is one more source when it is running</small></header>
+      <header><h3>Medical</h3><small>The Medical agent answers health questions from PubMed, Europe PMC, FDA drug labels and your own library, with its sources</small></header>
       <div class="st-body" id="stMedical"><p class="st-msg">Loading…</p></div>
     </section>
 
@@ -16549,34 +16552,64 @@ async function stMedical(){
   if (!host) return;
   let d;
   try{ d = await (await fetch(API + "/api/medical")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  const lib = d.library || [];
   host.innerHTML = `<div class="st-grid">
       <div class="st-field"><label for="mdWho">Answers are written for</label><select id="mdWho">
         <option value="public"${d.audience === "public" ? " selected" : ""}>Anyone: plain words</option>
-        <option value="clinician"${d.audience === "clinician" ? " selected" : ""}>A clinician: clinical terms, doses, evidence grades</option></select></div>
+        <option value="clinician"${d.audience === "clinician" ? " selected" : ""}>A clinician: assessment, evidence, recommendations, follow-up</option></select></div>
     </div>
-    <h4 style="margin:18px 0 6px">MediConsult (optional)</h4>
-    <div class="st-grid">
-      <div class="st-field"><label for="mdUrl">MediConsult backend address</label><input id="mdUrl" value="${alEsc(d.mediconsult_url || "")}" placeholder="http://127.0.0.1:8010" autocomplete="off"></div>
-      <div class="st-field"><label for="mdEmail">MediConsult account email</label><input id="mdEmail" value="${alEsc(d.mediconsult_email || "")}" placeholder="the account you sign in to MediConsult with" autocomplete="off"></div>
-      <div class="st-field"><label for="mdPass">Password</label><input id="mdPass" type="password" value="" placeholder="${d.has_password ? "saved: leave blank to keep it" : ""}" autocomplete="off"></div>
+    <div class="st-actions"><button class="btn go" id="mdSave">Save</button><span class="st-msg" id="mdMsg"></span></div>
+    <h4 style="margin:18px 0 6px">Your medical library</h4>
+    <div class="st-msg" style="line-height:1.55;margin-bottom:8px">Guidelines, protocols and papers you add are searched with every
+      medical question, on this Mac, and cited as "your library". ${d.embeddings ? `They are searched by meaning with <b>${alEsc(d.embeddings)}</b> and by keywords.`
+      : `They are searched by keywords. For search by meaning too, install an embedding model in Ollama (<code>ollama pull nomic-embed-text</code>); documents added after that are searched both ways.`}</div>
+    <div class="md-lib">${lib.length ? lib.map(x => `<div class="md-doc">
+        <div><b>${x.url ? `<a class="al-link" href="${alEsc(x.url)}" target="_blank" rel="noopener">${alEsc(x.title)}</a>` : alEsc(x.title)}</b>
+        <small>${[x.source, x.year, x.starter ? "starter summary" : "", x.pieces + (x.pieces === 1 ? " piece" : " pieces"), x.by_meaning ? "by meaning" : ""].filter(Boolean).map(alEsc).join(" · ")}</small></div>
+        <button class="btn danger" data-mdrm="${alEsc(x.id)}">Remove</button></div>`).join("") : `<div class="st-msg">Empty. Add a guideline below.</div>`}</div>
+    <div class="st-grid" style="margin-top:10px">
+      <div class="st-field"><label for="mdTitle">Title</label><input id="mdTitle" placeholder="e.g. 2024 GOLD COPD report" autocomplete="off"></div>
+      <div class="st-field"><label for="mdSource">Source</label><input id="mdSource" placeholder="e.g. GOLD, or our clinic protocol" autocomplete="off"></div>
+      <div class="st-field"><label for="mdYear">Year</label><input id="mdYear" placeholder="2024" autocomplete="off"></div>
     </div>
-    <div class="st-actions"><button class="btn go" id="mdSave">Save${d.mediconsult_url ? " and test" : ""}</button><span class="st-msg" id="mdMsg"></span></div>
-    <div class="st-msg" style="margin-top:8px;line-height:1.55">PubMed, Europe PMC and FDA labels need nothing set up. The address is
-      MediConsult's backend (the API port in its docker-compose file, not its web page); leave it empty to answer without it.
-      An emergency described in a question (chest pain now, can't breathe, a crisis) is answered at once with what to do and who to call.</div>`;
-  const msg = (ok, text) => { $("mdMsg").className = "st-msg " + (ok ? "good" : "bad"); $("mdMsg").textContent = text; };
-  $("mdSave").onclick = async () => {
-    msg(true, "Saving…");
-    const body = {audience: $("mdWho").value, mediconsult_url: $("mdUrl").value.trim(), mediconsult_email: $("mdEmail").value.trim()};
-    if ($("mdPass").value) body.mediconsult_password = $("mdPass").value;
-    const r = await fetch(API + "/api/medical", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
-    const v = await r.json();
-    if (!r.ok){ msg(false, (v.detail && v.detail.message) || "Not saved."); return; }
-    if (!v.mediconsult_url){ msg(true, "Saved. Answers come from PubMed, Europe PMC and FDA labels."); stMedical(); return; }
-    msg(true, "Testing MediConsult…");
-    const t = await (await fetch(API + "/api/medical/test", {method: "POST"})).json();
-    msg(t.ok, t.ok ? "Saved, and MediConsult signed in." : t.error);
+    <div class="st-field" style="margin-top:8px"><label for="mdText">Paste its text</label>
+      <textarea id="mdText" rows="5" style="width:100%;font:inherit;padding:8px;border:1px solid var(--paper-3);border-radius:8px" placeholder="Paste the guideline or paper here, or upload a file instead"></textarea></div>
+    <div class="st-actions"><button class="btn go" id="mdAdd">Add to the library</button>
+      <label class="btn" style="cursor:pointer">Upload a file<input id="mdFile" type="file" accept=".pdf,.txt,.md,.html,.htm" hidden></label>
+      <span class="st-msg" id="mdLibMsg"></span></div>
+    ${d.pdf ? "" : `<div class="st-msg" style="margin-top:6px">To upload PDFs, install pypdf once: in ~/Sites/new_dnn run <code>.venv/bin/python -m pip install pypdf</code>, then ./serve.sh.</div>`}
+    <div class="st-msg" style="margin-top:10px;line-height:1.55">PubMed, Europe PMC and FDA labels need nothing set up. An emergency
+      described in a question (chest pain now, can't breathe, a crisis) is answered at once with what to do and who to call.</div>`;
+  const say = (id, ok, text) => { $(id).className = "st-msg " + (ok ? "good" : "bad"); $(id).textContent = text; };
+  const done = async (r, id, okText) => {
+    const v = await r.json().catch(() => ({}));
+    if (!r.ok){ say(id, false, (v.detail && v.detail.message) || "Not saved."); return false; }
+    await stMedical(); say(id, true, okText); return true;
   };
+  $("mdSave").onclick = async () => {
+    const r = await fetch(API + "/api/medical", {method: "POST", headers: {"content-type": "application/json"},
+                                                 body: JSON.stringify({audience: $("mdWho").value})});
+    done(r, "mdMsg", "Saved.");
+  };
+  $("mdAdd").onclick = async () => {
+    say("mdLibMsg", true, "Adding…");
+    const r = await fetch(API + "/api/medical/library", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({title: $("mdTitle").value, source: $("mdSource").value, year: $("mdYear").value, text: $("mdText").value})});
+    done(r, "mdLibMsg", "Added to the library.");
+  };
+  $("mdFile").onchange = async () => {
+    const f = $("mdFile").files[0];
+    if (!f) return;
+    say("mdLibMsg", true, "Reading " + f.name + "…");
+    const fd = new FormData();
+    fd.append("file", f); fd.append("title", $("mdTitle").value); fd.append("source", $("mdSource").value); fd.append("year", $("mdYear").value);
+    const r = await fetch(API + "/api/medical/library/upload", {method: "POST", body: fd});
+    done(r, "mdLibMsg", "Added " + f.name + " to the library.");
+  };
+  host.querySelectorAll("[data-mdrm]").forEach(b => b.onclick = async () => {
+    const r = await fetch(API + "/api/medical/library/" + encodeURIComponent(b.dataset.mdrm), {method: "DELETE"});
+    done(r, "mdLibMsg", "Removed.");
+  });
 }
 
 async function stTravel(){

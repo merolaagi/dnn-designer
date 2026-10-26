@@ -12309,12 +12309,13 @@ def _():
         agentlab._dir, travel._get, travel.config, schedules.notify = real, real_get, real_cfg, real_notify
 
 
-@check("medical: emergencies answered at once; the literature, labels and MediConsult fetched first; sources only")
+@check("medical: emergencies at once; your library, the literature and labels first; safety checks; sources only")
 def _():
-    import medical as MD, medical_mcp as MM, muse, tempfile, threading, http.server
-    real_dir, real_get = agentlab._dir, MD._get
+    import medical as MD, medical_mcp as MM, muse, tempfile
+    real_dir, real_get, real_embed_model, real_embed = agentlab._dir, MD._get, MD.embed_model, MD.embed
     tmp = Path(tempfile.mkdtemp())
     agentlab._dir = lambda: tmp
+    MD.embed_model = lambda: ""
     try:
         # an emergency happening now is answered at once; asking about one is not having one
         for now in ("I have crushing chest pain and my left arm hurts", "my dad can't breathe", "I want to kill myself",
@@ -12324,10 +12325,48 @@ def _():
                        "What causes chest pain after eating", "Is ibuprofen safe with lisinopril?"):
             assert MD.emergency(asking) is None, asking
         assert "988" in MD.emergency("i am feeling suicidal") and "911" in MD.emergency("my dad can't breathe")
-        # a question becomes search terms; the medicines in it are looked up on their labels
+        # a question becomes search terms; the patient it describes is read, and nothing is guessed
         assert MD.terms("Is it safe to take ibuprofen with lisinopril?") == "ibuprofen lisinopril"
-        assert MD._drug_names("My mom is on warfarin, can she take aspirin?") == ["warfarin", "aspirin"]
+        pt = MD.patient_of("My mom is 72, on warfarin and metformin, allergic to penicillin. Can she take amoxicillin?")
+        assert pt["age"] == 72 and pt["sex"] == "female" and pt["allergies"] == ["penicillin"]
+        assert pt["medicines"] == ["warfarin", "amoxicillin", "metformin"]            # the allergen is not a medicine
+        assert MD.patient_of("I'm 45 and have type 2 diabetes and hypertension")["conditions"] == ["type 2 diabetes", "hypertension"]
+        assert MD.patient_of("What is migraine?") == {"age": None, "sex": None, "conditions": [], "medicines": [], "allergies": []}
+        # the starter library (three guideline summaries from MediConsult), searched by keywords without an embedding model
+        lib = MD.library_listing()
+        assert len(lib) == 3 and all(d["starter"] and d["url"].startswith("https://doi.org/") for d in lib)
+        assert [r["title"][:5] for r in MD.search_library("anticoagulation for atrial fibrillation CHA2DS2-VASc")] == ["2023 "]
+        assert MD.search_library("best treatment for a sprained ankle") == []          # one shared word is not a match
+        assert MD.search_library("SGLT2 inhibitor in CKD")[0]["title"].startswith("KDIGO")
+        try:
+            MD.add_document("x", "too short")
+            raise AssertionError("an empty document is refused")
+        except MD.MedicalError:
+            pass
+        text = ("Clinic protocol for community-acquired pneumonia in adults. Outpatients without comorbidities: amoxicillin "
+                "1 g three times daily for five days. Penicillin allergy: doxycycline 100 mg twice daily. ") * 30
+        MD.add_document("Our CAP protocol", text, "University clinic", "2026")
+        mine = [d for d in MD.library_listing() if d["title"] == "Our CAP protocol"][0]
+        assert mine["pieces"] > 1 and not mine["starter"] and not mine["by_meaning"]
+        assert MD.search_library("pneumonia antibiotic with a penicillin allergy")[0]["title"] == "Our CAP protocol"
+        MD.remove_document(mine["id"])
+        assert all(d["title"] != "Our CAP protocol" for d in MD.library_listing())
+        # with an embedding model, pieces carry vectors and meaning counts with keywords
+        MD.embed_model = lambda: "nomic-embed-text:latest"
+        MD.embed = lambda texts, model: [[1.0, 0.0] if re.search(r"pneumonia|lung", t.lower()) else [0.0, 1.0] for t in texts]
+        MD.add_document("Our CAP protocol", text, "University clinic", "2026")
+        assert [d for d in MD.library_listing() if d["title"] == "Our CAP protocol"][0]["by_meaning"]
+        assert MD.search_library("lung infection outpatient")[0]["title"] == "Our CAP protocol"   # no shared word, same meaning
+        MD.embed_model, MD.embed = (lambda: ""), real_embed
+        assert MD.text_of(b"<html><script>x()</script><p>Hello there</p></html>", "a.html").split() == ["Hello", "there"]
+        try:
+            MD.text_of(b"%PDF-1.4 not really a pdf", "a.pdf")
+            raise AssertionError("a broken PDF is refused")
+        except MD.MedicalError:
+            pass
+        # the literature, labels and safety checks, from canned replies of PubMed and openFDA
         calls = []
+        import urllib.error
 
         def fake_get(url, timeout=30):
             calls.append(url)
@@ -12345,79 +12384,38 @@ def _():
 <Abstract><AbstractText>Diuretic plus ACE inhibitor plus NSAID.</AbstractText></Abstract></Article></MedlineCitation></PubmedArticle>
 </PubmedArticleSet>"""
             if "api.fda.gov" in url:
-                if "lisinopril" in url:
-                    return json.dumps({"results": [{"openfda": {"brand_name": ["Zestril"], "generic_name": ["LISINOPRIL"]},
-                                                    "drug_interactions": ["NSAIDs may reduce the effect and harm the kidney."],
-                                                    "pediatric_use": ["Not for children under 6."]}]}).encode()
+                if "warfarin" in url.lower():
+                    return json.dumps({"results": [{"openfda": {"brand_name": ["Coumadin"], "generic_name": ["WARFARIN"]},
+                        "drug_interactions": ["Drugs that may increase the INR include antibiotics such as amoxicillin."],
+                        "boxed_warning": ["Warfarin can cause major or fatal bleeding."]}]}).encode()
+                if "amoxicillin" in url.lower():
+                    return json.dumps({"results": [{"openfda": {"brand_name": ["Amoxil"], "generic_name": ["AMOXICILLIN"]},
+                        "contraindications": ["Serious hypersensitivity to amoxicillin or other beta-lactams (e.g., penicillins)."]}]}).encode()
                 raise urllib.error.HTTPError(url, 404, "nf", {}, None)
-            raise AssertionError(url)
-        import urllib.error
+            raise urllib.error.URLError("offline")
         MD._get = fake_get
         MD.PAUSE = 0
         rows = MD.literature("Is it safe to take ibuprofen with lisinopril?")
-        assert [r["pmid"] for r in rows] == ["111", "222"]                 # PubMed's own order of relevance
-        assert rows[1]["types"] == ["Systematic Review"] and rows[1]["abstract"].startswith("RESULTS: Acute")
+        assert [r["pmid"] for r in rows] == ["111", "222"] and rows[1]["types"] == ["Systematic Review"]
         assert "term=ibuprofen%20lisinopril" in calls[0]
-        found = MD.gather("Is it safe to take ibuprofen with lisinopril?")
-        assert [l["generic"] for l in found["labels"]] == ["LISINOPRIL"]  # ibuprofen had no label here; skipped quietly
+        found = MD.gather("My mom is 72, on warfarin, allergic to penicillin. Can she take amoxicillin for her chest infection?")
+        assert sorted(l["generic"] for l in found["labels"]) == ["AMOXICILLIN", "WARFARIN"]
+        kinds = [a.split(":")[0] for a in found["alerts"]]
+        assert "Interaction" in kinds and "Allergy" in kinds and "Boxed warning on WARFARIN" in kinds
         text = MD.gathered_text(found)
-        assert "[1] Triple whammy (BMJ, 2021)" in text and "[Systematic Review]" in text and "Interactions: NSAIDs" in text
-        assert "pubmed.ncbi.nlm.nih.gov/222/" in text and "MediConsult" not in text
-        assert "Interactions" in MM.call("drug_label", {"name": "lisinopril"})
+        assert text.startswith("Safety checks from the labels") and "age 72; female" in text and "allergies: penicillin" in text
+        assert "[1] Triple whammy (BMJ, 2021)" in text and "pubmed.ncbi.nlm.nih.gov/222/" in text
+        found = MD.gather("Metformin dose in chronic kidney disease with eGFR 35")
+        text = MD.gathered_text(found)
+        assert "[your library]" in text and "Note: A short summary" in text and text.index("[your library]") < text.index("Triple whammy")
+        assert "Boxed warning" in MM.call("drug_label", {"name": "warfarin"})
+        assert MM.call("search_library", {"query": "atrial fibrillation anticoagulation"}).startswith("[1] 2023")
         assert MM.call("search_literature", {"query": "ibuprofen lisinopril", "kind": "review"}).startswith("[1]")
         assert any("Systematic Review[pt]" in urllib.parse.unquote(c) for c in calls if "esearch" in c)
-        # MediConsult, when it is running: signs in once, asks, and is named as one more source
-        seen = {"login": 0, "consult": []}
-
-        class H(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *a):
-                pass
-
-            def do_POST(self):
-                body = json.loads(self.rfile.read(int(self.headers["content-length"])))
-                if self.path == "/api/v1/auth/login":
-                    seen["login"] += 1
-                    ok = body == {"email": "dr@x.org", "password": "pw"}
-                    out = {"access_token": "tok", "expires_in": 1800} if ok else {"detail": "Incorrect email or password"}
-                    code = 200 if ok else 401
-                elif self.path == "/api/v1/consult/":
-                    assert self.headers["authorization"] == "Bearer tok"
-                    seen["consult"].append(body["query"])
-                    out, code = {"response": "Avoid the combination when possible.", "citations": [
-                        {"title": "KDIGO 2022", "year": "2022", "url": "https://pubmed.ncbi.nlm.nih.gov/36272764/"}]}, 200
-                else:
-                    out, code = {"detail": "Not Found"}, 404
-                data = json.dumps(out).encode()
-                self.send_response(code); self.send_header("content-type", "application/json")
-                self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)
-        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        try:
-            try:
-                MD.save({"mediconsult_url": "not a url"})
-                raise AssertionError("a bad address is refused")
-            except ValueError:
-                pass
-            MD.save({"mediconsult_url": f"http://127.0.0.1:{srv.server_port}/", "mediconsult_email": "dr@x.org",
-                     "mediconsult_password": "wrong"})
-            try:
-                MD.test_mediconsult()
-                raise AssertionError("a wrong password is reported")
-            except MD.MedicalError as exc:
-                assert "401" in str(exc)
-            v = MD.save({"mediconsult_password": "pw"})
-            assert v["has_password"] and "mediconsult_password" not in v          # the password never comes back
-            assert MD.test_mediconsult()["ok"]
-            found = MD.gather("Is it safe to take ibuprofen with lisinopril?")
-            MD.gather("And with a diuretic too?")
-            assert seen["login"] == 2 and len(seen["consult"]) == 2               # the test signed in; both questions reuse it
-            assert "MediConsult (your library) answered:\nAvoid the combination" in MD.gathered_text(found)
-        finally:
-            srv.shutdown()
-        MD.save({"mediconsult_url": f"http://127.0.0.1:1"})
-        assert any("not answering" in p for p in MD.gather("ibuprofen lisinopril")["problems"])
-        MD.save({"mediconsult_url": "", "audience": "clinician"})
-        assert "clinician" in MD.with_audience("q") and MD.view()["mediconsult"] is False
+        assert "ask_mediconsult" not in [t["name"] for t in MM.TOOLS] and "search_library" in [t["name"] for t in MM.TOOLS]
+        # who answers are written for
+        MD.save({"audience": "clinician"})
+        assert "Clinical assessment" in MD.with_audience("q") and "Follow-up" in MD.with_audience("q")
         try:
             MD.save({"audience": "everyone"})
             raise AssertionError("an unknown audience is refused")
@@ -12426,34 +12424,43 @@ def _():
         # the agent, the routing, and Muse
         g = agentlab.template("medical")
         assert {n["type"] for n in g["nodes"]} >= {"mcp", "web_search", "reflector"}
-        assert "Cite only sources you were given" in agentlab.template("medical")["nodes"][1]["params"]["text"]
+        assert "Cite only sources you were given" in g["nodes"][1]["params"]["text"]
         compile(agentlab.codegen(g)["source"], "agent.py", "exec")
         for q in ("Is it safe to take ibuprofen with lisinopril?", "What are the side effects of metformin?",
                   "I've had a dry cough for three weeks. Should I see a doctor?"):
             assert muse.rehearsal_plan(q)["steps"][0]["agent"] == "medical", q
-        assert "medical" in muse.AGENTS and muse.DOING["medical"]
         real_decode, real_gather = muse.decode, MD.gather
         planned = []
         muse.decode = lambda text, mode, context="": planned.append(text) or {"understood": "x", "question": None, "by": "model",
             "steps": [{"agent": "medical", "role": "", "task": text, "why": "health"}], "seconds": 0, "tokens": 0}
-        MD.gather = lambda q: {"articles": [{"source": "PubMed", "pmid": "9", "title": "A trial", "journal": "NEJM", "year": "2024",
-                                             "types": [], "abstract": "It worked.", "url": "https://pubmed.ncbi.nlm.nih.gov/9/"}],
-                               "labels": [], "mediconsult": None, "problems": []}
+        MD.gather = lambda q: {"library": [], "articles": [{"source": "PubMed", "pmid": "9", "title": "A trial", "journal": "NEJM",
+                               "year": "2024", "types": [], "abstract": "It worked.", "url": "https://pubmed.ncbi.nlm.nih.gov/9/"}],
+                               "labels": [], "patient": MD.patient_of(q), "alerts": [], "problems": []}
         try:
             s = muse.start_turn("my dad can't breathe", "rehearsal", background=False)
             assert s["status"] == "done" and "911" in s["answer"] and not planned        # no planning, no search
             s = muse.start_turn("Does the new trial support it?", "rehearsal", background=False)
             assert s["status"] == "done", s
             task = agentlab.load_run(s["steps"][0]["run"])["task"]
-            assert "Already found for you" in task and "[1] A trial (NEJM, 2024)" in task and "clinician" in task
+            assert "Already found for you" in task and "[1] A trial (NEJM, 2024)" in task and "Clinical assessment" in task
         finally:
             muse.decode, MD.gather = real_decode, real_gather
         import main
-        assert {"/api/medical", "/api/medical/test"} <= {r.path for r in main.app.routes}
+        from fastapi.testclient import TestClient
+        client = TestClient(main.app)
+        paths = {r.path for r in main.app.routes}
+        assert {"/api/medical", "/api/medical/library", "/api/medical/library/upload", "/api/medical/library/{doc_id}"} <= paths
+        assert "/api/medical/test" not in paths
+        up = client.post("/api/medical/library/upload", files={"file": ("our_cap_protocol.md", text.encode(), "text/markdown")})
+        if up.status_code == 200:
+            added = [d for d in up.json()["library"] if d["title"] == "our cap protocol"]
+            assert added and client.delete(f"/api/medical/library/{added[0]['id']}").status_code == 200
+            assert client.delete("/api/medical/library/ml0000000000").status_code == 404
         page = (ROOT / "frontend" / "index.html").read_text()
-        assert 'id="stMedical"' in page and "stMedical();" in page
+        assert 'id="stMedical"' in page and "stMedical();" in page and "/api/medical/library/upload" in page
+        assert "MediConsult backend" not in page
     finally:
-        agentlab._dir, MD._get = real_dir, real_get
+        agentlab._dir, MD._get, MD.embed_model, MD.embed = real_dir, real_get, real_embed_model, real_embed
         MD.PAUSE = 0.35
 
 

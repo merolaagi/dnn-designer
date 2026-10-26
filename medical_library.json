@@ -1,0 +1,38 @@
+{
+ "about": "The starter library every account's medical library begins with: three guideline summaries carried over from MediConsult AI's sample loader (its two others had citations that did not check out, so they were left behind). Remove them or add your own in Settings -> Medical.",
+ "documents": [
+  {
+   "title": "Standards of Care in Diabetes—2024",
+   "source": "American Diabetes Association",
+   "kind": "guideline",
+   "year": "2024",
+   "journal": "Diabetes Care",
+   "url": "https://doi.org/10.2337/dc24-S001",
+   "evidence": "Grade A",
+   "text": "The American Diabetes Association (ADA) Standards of Care in Diabetes 2024 provides comprehensive guidelines for diabetes management. For patients with Type 2 Diabetes and chronic kidney disease (CKD), treatment should be individualized based on kidney function. For CKD stage 3 (eGFR 30-59 mL/min/1.73m²), metformin can be continued with dose adjustment. SGLT2 inhibitors are recommended for patients with eGFR ≥20 mL/min/1.73m² for cardiovascular and renal protection. GLP-1 receptor agonists are also recommended for cardiovascular benefit. Avoid sulfonylureas in elderly patients due to hypoglycemia risk. Monitor for diabetic kidney disease progression with annual urine albumin-to-creatinine ratio and eGFR. Target A1C <7% for most adults, but individualize based on patient factors including age, comorbidities, and life expectancy.",
+   "note": "A short summary carried over from MediConsult's sample library, not the guideline's own text: check the guideline itself before relying on a detail."
+  },
+  {
+   "title": "KDIGO 2022 Clinical Practice Guideline for Diabetes Management in Chronic Kidney Disease",
+   "source": "KDIGO",
+   "kind": "guideline",
+   "year": "2022",
+   "journal": "Kidney International",
+   "url": "https://doi.org/10.1016/j.kint.2022.06.008",
+   "evidence": "Grade A",
+   "text": "The Kidney Disease: Improving Global Outcomes (KDIGO) 2022 guideline provides recommendations for diabetes management in CKD. For patients with diabetes and CKD stages 3-4, comprehensive diabetes management should include lifestyle modifications, optimal glycemic control, blood pressure management, and lipid management. SGLT2 inhibitors should be used in patients with type 2 diabetes and CKD with eGFR ≥20 mL/min/1.73m² to reduce kidney disease progression and cardiovascular events. Metformin can be safely used with dose reduction in patients with eGFR 30-44 mL/min/1.73m². GLP-1 receptor agonists are recommended for patients with type 2 diabetes and CKD to improve glycemic control and reduce cardiovascular risk. Blood pressure target should be <120/80 mmHg if tolerated. Use ACE inhibitors or ARBs for albuminuric diabetic kidney disease.",
+   "note": "A short summary carried over from MediConsult's sample library, not the guideline's own text: check the guideline itself before relying on a detail."
+  },
+  {
+   "title": "2023 ACC/AHA/ACCP/HRS Guideline for the Diagnosis and Management of Atrial Fibrillation",
+   "source": "ACC/AHA/ACCP/HRS",
+   "kind": "guideline",
+   "year": "2023",
+   "journal": "Circulation",
+   "url": "https://doi.org/10.1161/CIR.0000000000001193",
+   "evidence": "Grade A",
+   "text": "The 2023 ACC/AHA/ACCP/HRS guideline provides comprehensive recommendations for atrial fibrillation (AF) management. For patients with AF and heart failure with reduced ejection fraction (HFrEF), rhythm control strategy may be preferred over rate control. Catheter ablation is recommended for symptomatic AF in patients with HFrEF. For anticoagulation, use CHA2DS2-VASc score for stroke risk stratification. Direct oral anticoagulants (DOACs) are preferred over warfarin. For rate control, beta-blockers are first-line in patients with HFrEF. Target heart rate <110 bpm for lenient control, <80 bpm for strict control. For rhythm control, amiodarone is effective but requires monitoring for toxicity. Dofetilide is an alternative. Avoid class IC antiarrhythmics in structural heart disease. Consider left atrial appendage closure for patients with contraindications to anticoagulation.",
+   "note": "A short summary carried over from MediConsult's sample library, not the guideline's own text: check the guideline itself before relying on a detail."
+  }
+ ]
+}
