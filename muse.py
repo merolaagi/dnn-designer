@@ -56,6 +56,10 @@ AGENTS = {
                  "step by step, plots with sliders for each parameter, and node-and-arrow graphs (like Neo4j) that "
                  "animate an algorithm or a chain of ideas. Use it when the user asks to explain, show, visualise, "
                  "graph, plot or animate maths, an equation, a problem, an algorithm or how something works.",
+    "medical": "Answers health and medical questions from the medical literature (PubMed, Europe PMC), FDA drug labels "
+               "and the user's MediConsult: symptoms and what they might mean, conditions, treatments and what the "
+               "evidence says, medicines, doses as the label states them, side effects and interactions, tests, when to "
+               "see a doctor. Use it for any question about health, illness, a medicine or a medical topic.",
     "video": "Watches a video from a link the user gives (Facebook video, Reel or fb.watch, Instagram, YouTube, TikTok, "
              "X): what is said and what is on screen, and answers about it (summary, key moments, is it true, what did "
              "they say about X). Use it whenever the request has a video link or asks about a video at a link.",
@@ -84,7 +88,7 @@ DOING = {"modelbuilder": "Building and training the model", "mathsearch": "Worki
          "mail": "Reading your email", "travel": "Searching flights and hotels",
          "bills": "Reading your bills", "support": "Chatting with their support",
          "trips": "Working on your trip", "booking": "Booking it", "explainer": "Drawing it for you", "shopping": "Looking through the stores",
-         "video": "Watching the video",
+         "video": "Watching the video", "medical": "Reading the medical literature",
          "react": "Searching the web"}
 MAX_STEPS = 3
 
@@ -179,6 +183,15 @@ def _catalog_text(request: str):
     return agents, roles_text, roles
 
 
+MEDICAL_WORDS = re.compile(
+    r"\b(symptoms?|diagnos\w*|treatments?|medications?|medicines?|drugs? (for|interaction)|doses?|dosage|dosing|side effects?|"
+    r"diseases?|infections?|fever|cough|rash|headaches?|migraines?|blood pressure|hypertension|diabetes|cholesterol|"
+    r"cancer|tumou?r|asthma|copd|pregnan\w*|vaccines?|vaccinations?|allerg\w*|antibiotics?|doctor|physician|clinical|"
+    r"guidelines? for|prognosis|surgery|mg\b|ibuprofen|tylenol|acetaminophen|paracetamol|metformin|insulin|statins?|"
+    r"heart (attack|failure|disease)|stroke|kidney|liver|thyroid|anxiety|depression|insomnia|is it safe to take|"
+    r"should i see a doctor)\b")
+
+
 def rehearsal_plan(request: str) -> Dict[str, Any]:
     """The rehearsal's decoder: keywords, so Muse can be tried with no model at all."""
     t = request.lower()
@@ -221,6 +234,8 @@ def rehearsal_plan(request: str) -> Dict[str, Any]:
             re.search(r"\b(buy|purchase|get)\b.{0,30}\b(laptop|phone|headphones?|earbuds|tv|monitor|shoes|jacket|"
                       r"watch|camera|vacuum|mattress|chair|desk|tablet|ipad|iphone|console|blender|appliance)s?\b", t):
         agent = "shopping"
+    elif MEDICAL_WORDS.search(t):
+        agent = "medical"
     elif re.search(r"\b(train|network|neural|classifier|dataset|mnist|cifar|package|parameters?)\b", t):
         agent = "modelbuilder"
     elif re.search(r"\b(app|asar|electron|binary|reverse|decompile|\.app|apk|plist)\b", t):
@@ -474,6 +489,12 @@ def not_connected(agent: str) -> Optional[str]:
 
 def _carry_out(s: Dict[str, Any], context: str) -> None:
     try:
+        import medical
+        now = medical.emergency(s["task"])
+        if now:
+            # an emergency happening now is answered at once, before any planning: every minute counts
+            s.update(status="done", answer=now, phase="emergency")
+            return
         plan = decode(s["task"], s["mode"], context)
         import video
         if video.links(s["task"]) and plan.get("steps") and not any(st["agent"] == "video" for st in plan["steps"]) \
@@ -500,6 +521,17 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
             task = profile.with_profile(step["task"])
             if earlier:
                 task += "\n\nWhat the earlier steps found (use it):\n" + "\n\n".join(earlier)
+            if step["agent"] == "medical":
+                import medical
+                s.update(phase="reading the medical literature", doing=DOING["medical"])
+                _save(s)
+                # the literature is fetched here, so the answer stands on sources even if the model never calls a tool
+                found = medical.gather(step["task"])
+                if s["id"] in _STOP:
+                    s.update(status="stopped", error="Stopped.")
+                    return
+                task = medical.with_audience(task) + "\n\nAlready found for you (search again only if this does not " \
+                    "answer it):\n" + medical.gathered_text(found)
             if step["agent"] == "video":
                 # watch it here, before the agent runs: a model left to call the tool itself can answer
                 # "I'm fetching it now" and stop, and the person is left waiting for nothing
@@ -618,6 +650,9 @@ ROUTING = [
     ("Explain the quadratic formula with a graph I can play with.", "explainer", None),
     ("Find me the best noise-cancelling headphones under $300, with good reviews.", "shopping", None),
     ("What is this video about? https://www.facebook.com/reel/1234567890123456", "video", None),
+    ("Is it safe to take ibuprofen with lisinopril?", "medical", None),
+    ("What does the evidence say about SGLT2 inhibitors for chronic kidney disease?", "medical", None),
+    ("I've had a dry cough for three weeks. Should I see a doctor?", "medical", None),
     ("Add the Best Buy Sony headphones to my cart.", "shopping", None),
     ("Check out the Target items in my cart for me.", "booking", None),
     ("Is there a sale on the Dyson V15 anywhere? Tell me when it drops under $500.", "shopping", None),

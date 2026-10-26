@@ -1234,6 +1234,38 @@ class TravelConfig(BaseModel):
     traveler: Optional[Dict[str, Any]] = None
 
 
+class MedicalConfig(BaseModel):
+    audience: Optional[str] = None
+    mediconsult_url: Optional[str] = None
+    mediconsult_email: Optional[str] = None
+    mediconsult_password: Optional[str] = None
+
+
+@app.get("/api/medical")
+def medical_view():
+    import medical
+    return medical.view()
+
+
+@app.post("/api/medical")
+def medical_save(body: MedicalConfig):
+    import medical
+    try:
+        return medical.save(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/medical/test")
+def medical_test():
+    """Sign in to MediConsult with the saved account (nothing is asked)."""
+    import medical
+    try:
+        return medical.test_mediconsult()
+    except medical.MedicalError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @app.get("/api/travel")
 def travel_view():
     return travel.view()

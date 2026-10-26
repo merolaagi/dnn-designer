@@ -1,5 +1,50 @@
 # Changelog
 
+## 4.32.0
+
+- **Medical agent: health questions answered from the evidence, with the
+  sources.** Ask Saathi about symptoms, a condition, a treatment, a medicine,
+  a dose, a side effect or an interaction. Muse sends it to the Medical
+  agent, which reads:
+  - PubMed: guidelines, systematic reviews and trials, with abstracts;
+  - Europe PMC: the same literature plus preprints, and which articles have
+    free full text;
+  - the FDA drug label (openFDA) for any medicine named: uses, dosing as
+    the label states it, children, warnings, interactions, pregnancy;
+  - your MediConsult AI, when it is running and connected, named as one
+    more source.
+
+  None of the public sources needs a key.
+- **The literature is fetched before the agent starts.** The answer stands
+  on sources even if the model never calls a tool. The agent can search
+  again (guidelines only, reviews only, the last N years) and read an
+  article in full.
+- **The answer:**
+  - it answers the question first, then says what the evidence shows and
+    how strong it is;
+  - it cites every claim by number and lists the sources with their links;
+  - it says when to see a doctor;
+  - the review step checks that every claim traces to a source before the
+    answer leaves.
+- **Children's medicines:** the agent never gives a dose from memory. It
+  gives only what the label says for the child's age and weight, or points
+  to the label, a pharmacist or the child's doctor.
+- **Emergencies are answered at once.** When a message describes an
+  emergency happening now (chest pain, can't breathe, stroke signs,
+  collapse, overdose, heavy bleeding, throat swelling, a crisis), Muse
+  replies at once, before any planning or searching, with what to do and
+  who to call (911, Poison Control, 988). Asking about one ("what are the
+  signs of a stroke") still gets the full, researched answer.
+- **Settings → Medical:**
+  - write answers for anyone, in plain words, or for a clinician, with
+    terms, doses and evidence grades (each account sets its own);
+  - MediConsult's backend address and account: it signs in once and
+    reuses the token. If MediConsult isn't running, answers still come
+    from the public sources, and the answer says MediConsult couldn't be
+    reached.
+- New: `medical.py`, `medical_mcp.py`, the "medical" agent template.
+  API: `GET/POST /api/medical`, `POST /api/medical/test`.
+
 ## 4.31.2
 
 - **Facebook and other video links fetch again.** 4.30.0 gave yt-dlp a

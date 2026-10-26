@@ -16373,6 +16373,11 @@ function stRender(){
     </section>
 
     <section class="st-card">
+      <header><h3>Medical</h3><small>The Medical agent answers health questions from PubMed, Europe PMC and FDA drug labels, with its sources; your MediConsult AI is one more source when it is running</small></header>
+      <div class="st-body" id="stMedical"><p class="st-msg">Loading…</p></div>
+    </section>
+
+    <section class="st-card">
       <header><h3>Shopping</h3><small>The Shopping agent searches Google Shopping across thousands of stores with your SerpApi key, follows these preferences, and watches prices for you</small></header>
       <div class="st-body" id="stShop"><p class="st-msg">Loading…</p></div>
     </section>
@@ -16438,6 +16443,7 @@ function stRender(){
   stApp();
   stMail();
   stTravel();
+  stMedical();
   stShop();
   stSecurity();
 }
@@ -16535,6 +16541,41 @@ async function stSecurity(){
   $("secPublic").onchange = async e => {
     try { await post("/api/auth/public", {on: e.target.checked}); toast(e.target.checked ? "The public address is on" : "The public address is off"); }
     catch (err) { e.target.checked = !e.target.checked; alert(err.message); }
+  };
+}
+
+async function stMedical(){
+  const host = $("stMedical");
+  if (!host) return;
+  let d;
+  try{ d = await (await fetch(API + "/api/medical")).json(); } catch { host.innerHTML = `<p class="st-msg bad">Could not load.</p>`; return; }
+  host.innerHTML = `<div class="st-grid">
+      <div class="st-field"><label for="mdWho">Answers are written for</label><select id="mdWho">
+        <option value="public"${d.audience === "public" ? " selected" : ""}>Anyone: plain words</option>
+        <option value="clinician"${d.audience === "clinician" ? " selected" : ""}>A clinician: clinical terms, doses, evidence grades</option></select></div>
+    </div>
+    <h4 style="margin:18px 0 6px">MediConsult (optional)</h4>
+    <div class="st-grid">
+      <div class="st-field"><label for="mdUrl">MediConsult backend address</label><input id="mdUrl" value="${alEsc(d.mediconsult_url || "")}" placeholder="http://127.0.0.1:8010" autocomplete="off"></div>
+      <div class="st-field"><label for="mdEmail">MediConsult account email</label><input id="mdEmail" value="${alEsc(d.mediconsult_email || "")}" placeholder="the account you sign in to MediConsult with" autocomplete="off"></div>
+      <div class="st-field"><label for="mdPass">Password</label><input id="mdPass" type="password" value="" placeholder="${d.has_password ? "saved: leave blank to keep it" : ""}" autocomplete="off"></div>
+    </div>
+    <div class="st-actions"><button class="btn go" id="mdSave">Save${d.mediconsult_url ? " and test" : ""}</button><span class="st-msg" id="mdMsg"></span></div>
+    <div class="st-msg" style="margin-top:8px;line-height:1.55">PubMed, Europe PMC and FDA labels need nothing set up. The address is
+      MediConsult's backend (the API port in its docker-compose file, not its web page); leave it empty to answer without it.
+      An emergency described in a question (chest pain now, can't breathe, a crisis) is answered at once with what to do and who to call.</div>`;
+  const msg = (ok, text) => { $("mdMsg").className = "st-msg " + (ok ? "good" : "bad"); $("mdMsg").textContent = text; };
+  $("mdSave").onclick = async () => {
+    msg(true, "Saving…");
+    const body = {audience: $("mdWho").value, mediconsult_url: $("mdUrl").value.trim(), mediconsult_email: $("mdEmail").value.trim()};
+    if ($("mdPass").value) body.mediconsult_password = $("mdPass").value;
+    const r = await fetch(API + "/api/medical", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+    const v = await r.json();
+    if (!r.ok){ msg(false, (v.detail && v.detail.message) || "Not saved."); return; }
+    if (!v.mediconsult_url){ msg(true, "Saved. Answers come from PubMed, Europe PMC and FDA labels."); stMedical(); return; }
+    msg(true, "Testing MediConsult…");
+    const t = await (await fetch(API + "/api/medical/test", {method: "POST"})).json();
+    msg(t.ok, t.ok ? "Saved, and MediConsult signed in." : t.error);
   };
 }
 

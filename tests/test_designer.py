@@ -12309,6 +12309,154 @@ def _():
         agentlab._dir, travel._get, travel.config, schedules.notify = real, real_get, real_cfg, real_notify
 
 
+@check("medical: emergencies answered at once; the literature, labels and MediConsult fetched first; sources only")
+def _():
+    import medical as MD, medical_mcp as MM, muse, tempfile, threading, http.server
+    real_dir, real_get = agentlab._dir, MD._get
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    try:
+        # an emergency happening now is answered at once; asking about one is not having one
+        for now in ("I have crushing chest pain and my left arm hurts", "my dad can't breathe", "I want to kill myself",
+                    "my son took too many tylenol pills", "My daughter's throat is swelling after a bee sting"):
+            assert MD.emergency(now), now
+        for asking in ("how do I know if someone is having a stroke", "what are the warning signs of suicide in teens",
+                       "What causes chest pain after eating", "Is ibuprofen safe with lisinopril?"):
+            assert MD.emergency(asking) is None, asking
+        assert "988" in MD.emergency("i am feeling suicidal") and "911" in MD.emergency("my dad can't breathe")
+        # a question becomes search terms; the medicines in it are looked up on their labels
+        assert MD.terms("Is it safe to take ibuprofen with lisinopril?") == "ibuprofen lisinopril"
+        assert MD._drug_names("My mom is on warfarin, can she take aspirin?") == ["warfarin", "aspirin"]
+        calls = []
+
+        def fake_get(url, timeout=30):
+            calls.append(url)
+            if "esearch.fcgi" in url:
+                return json.dumps({"esearchresult": {"idlist": ["111", "222"]}}).encode()
+            if "efetch.fcgi" in url:
+                return b"""<PubmedArticleSet>
+<PubmedArticle><MedlineCitation><PMID>222</PMID><Article><Journal><JournalIssue><PubDate><Year>2023</Year></PubDate></JournalIssue>
+<ISOAbbreviation>Hypertension</ISOAbbreviation></Journal><ArticleTitle>NSAIDs and ACE inhibitors: a <i>review</i></ArticleTitle>
+<Abstract><AbstractText Label="RESULTS">Acute kidney injury risk rose.</AbstractText></Abstract>
+<PublicationTypeList><PublicationType>Journal Article</PublicationType><PublicationType>Systematic Review</PublicationType></PublicationTypeList>
+</Article></MedlineCitation></PubmedArticle>
+<PubmedArticle><MedlineCitation><PMID>111</PMID><Article><Journal><JournalIssue><PubDate><Year>2021</Year></PubDate></JournalIssue>
+<ISOAbbreviation>BMJ</ISOAbbreviation></Journal><ArticleTitle>Triple whammy</ArticleTitle>
+<Abstract><AbstractText>Diuretic plus ACE inhibitor plus NSAID.</AbstractText></Abstract></Article></MedlineCitation></PubmedArticle>
+</PubmedArticleSet>"""
+            if "api.fda.gov" in url:
+                if "lisinopril" in url:
+                    return json.dumps({"results": [{"openfda": {"brand_name": ["Zestril"], "generic_name": ["LISINOPRIL"]},
+                                                    "drug_interactions": ["NSAIDs may reduce the effect and harm the kidney."],
+                                                    "pediatric_use": ["Not for children under 6."]}]}).encode()
+                raise urllib.error.HTTPError(url, 404, "nf", {}, None)
+            raise AssertionError(url)
+        import urllib.error
+        MD._get = fake_get
+        MD.PAUSE = 0
+        rows = MD.literature("Is it safe to take ibuprofen with lisinopril?")
+        assert [r["pmid"] for r in rows] == ["111", "222"]                 # PubMed's own order of relevance
+        assert rows[1]["types"] == ["Systematic Review"] and rows[1]["abstract"].startswith("RESULTS: Acute")
+        assert "term=ibuprofen%20lisinopril" in calls[0]
+        found = MD.gather("Is it safe to take ibuprofen with lisinopril?")
+        assert [l["generic"] for l in found["labels"]] == ["LISINOPRIL"]  # ibuprofen had no label here; skipped quietly
+        text = MD.gathered_text(found)
+        assert "[1] Triple whammy (BMJ, 2021)" in text and "[Systematic Review]" in text and "Interactions: NSAIDs" in text
+        assert "pubmed.ncbi.nlm.nih.gov/222/" in text and "MediConsult" not in text
+        assert "Interactions" in MM.call("drug_label", {"name": "lisinopril"})
+        assert MM.call("search_literature", {"query": "ibuprofen lisinopril", "kind": "review"}).startswith("[1]")
+        assert any("Systematic Review[pt]" in urllib.parse.unquote(c) for c in calls if "esearch" in c)
+        # MediConsult, when it is running: signs in once, asks, and is named as one more source
+        seen = {"login": 0, "consult": []}
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+                if self.path == "/api/v1/auth/login":
+                    seen["login"] += 1
+                    ok = body == {"email": "dr@x.org", "password": "pw"}
+                    out = {"access_token": "tok", "expires_in": 1800} if ok else {"detail": "Incorrect email or password"}
+                    code = 200 if ok else 401
+                elif self.path == "/api/v1/consult/":
+                    assert self.headers["authorization"] == "Bearer tok"
+                    seen["consult"].append(body["query"])
+                    out, code = {"response": "Avoid the combination when possible.", "citations": [
+                        {"title": "KDIGO 2022", "year": "2022", "url": "https://pubmed.ncbi.nlm.nih.gov/36272764/"}]}, 200
+                else:
+                    out, code = {"detail": "Not Found"}, 404
+                data = json.dumps(out).encode()
+                self.send_response(code); self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            try:
+                MD.save({"mediconsult_url": "not a url"})
+                raise AssertionError("a bad address is refused")
+            except ValueError:
+                pass
+            MD.save({"mediconsult_url": f"http://127.0.0.1:{srv.server_port}/", "mediconsult_email": "dr@x.org",
+                     "mediconsult_password": "wrong"})
+            try:
+                MD.test_mediconsult()
+                raise AssertionError("a wrong password is reported")
+            except MD.MedicalError as exc:
+                assert "401" in str(exc)
+            v = MD.save({"mediconsult_password": "pw"})
+            assert v["has_password"] and "mediconsult_password" not in v          # the password never comes back
+            assert MD.test_mediconsult()["ok"]
+            found = MD.gather("Is it safe to take ibuprofen with lisinopril?")
+            MD.gather("And with a diuretic too?")
+            assert seen["login"] == 2 and len(seen["consult"]) == 2               # the test signed in; both questions reuse it
+            assert "MediConsult (your library) answered:\nAvoid the combination" in MD.gathered_text(found)
+        finally:
+            srv.shutdown()
+        MD.save({"mediconsult_url": f"http://127.0.0.1:1"})
+        assert any("not answering" in p for p in MD.gather("ibuprofen lisinopril")["problems"])
+        MD.save({"mediconsult_url": "", "audience": "clinician"})
+        assert "clinician" in MD.with_audience("q") and MD.view()["mediconsult"] is False
+        try:
+            MD.save({"audience": "everyone"})
+            raise AssertionError("an unknown audience is refused")
+        except ValueError:
+            pass
+        # the agent, the routing, and Muse
+        g = agentlab.template("medical")
+        assert {n["type"] for n in g["nodes"]} >= {"mcp", "web_search", "reflector"}
+        assert "Cite only sources you were given" in agentlab.template("medical")["nodes"][1]["params"]["text"]
+        compile(agentlab.codegen(g)["source"], "agent.py", "exec")
+        for q in ("Is it safe to take ibuprofen with lisinopril?", "What are the side effects of metformin?",
+                  "I've had a dry cough for three weeks. Should I see a doctor?"):
+            assert muse.rehearsal_plan(q)["steps"][0]["agent"] == "medical", q
+        assert "medical" in muse.AGENTS and muse.DOING["medical"]
+        real_decode, real_gather = muse.decode, MD.gather
+        planned = []
+        muse.decode = lambda text, mode, context="": planned.append(text) or {"understood": "x", "question": None, "by": "model",
+            "steps": [{"agent": "medical", "role": "", "task": text, "why": "health"}], "seconds": 0, "tokens": 0}
+        MD.gather = lambda q: {"articles": [{"source": "PubMed", "pmid": "9", "title": "A trial", "journal": "NEJM", "year": "2024",
+                                             "types": [], "abstract": "It worked.", "url": "https://pubmed.ncbi.nlm.nih.gov/9/"}],
+                               "labels": [], "mediconsult": None, "problems": []}
+        try:
+            s = muse.start_turn("my dad can't breathe", "rehearsal", background=False)
+            assert s["status"] == "done" and "911" in s["answer"] and not planned        # no planning, no search
+            s = muse.start_turn("Does the new trial support it?", "rehearsal", background=False)
+            assert s["status"] == "done", s
+            task = agentlab.load_run(s["steps"][0]["run"])["task"]
+            assert "Already found for you" in task and "[1] A trial (NEJM, 2024)" in task and "clinician" in task
+        finally:
+            muse.decode, MD.gather = real_decode, real_gather
+        import main
+        assert {"/api/medical", "/api/medical/test"} <= {r.path for r in main.app.routes}
+        page = (ROOT / "frontend" / "index.html").read_text()
+        assert 'id="stMedical"' in page and "stMedical();" in page
+    finally:
+        agentlab._dir, MD._get = real_dir, real_get
+        MD.PAUSE = 0.35
+
+
 @check("video: a link is fetched, its sound written down and its stills described, then saved under Files")
 def _():
     import video as V, video_mcp as VM, muse, tempfile, subprocess, shutil as SH, providers, browser, importlib.util as IU
