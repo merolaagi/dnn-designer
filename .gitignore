@@ -47,3 +47,6 @@ saved/*.json
 .DS_Store
 Thumbs.db
 exports/
+
+# versioned designs (saved/Name/v1.json) are yours too
+saved/*/
