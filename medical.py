@@ -80,7 +80,8 @@ How you work:
    medicine: the dose on the prescription label, and the pharmacist for questions.
 6. If at any point it sounds like an emergency now, open with what to do (call 911, or 988 for a crisis)
    before anything else.
-Keep it short: the answer, the evidence, what to do, the sources."""
+Match the length to the question: a symptom question gets a short answer; a question about the evidence gets
+the trials, their effect sizes, the guideline grades, the risks and the gaps, each cited."""
 
 # an emergency happening now, said in the first person or about someone with them: answered at once
 _NOW = r"(i|i'm|im|i am|i've|ive|my\s+\w+(\s+\w+)?|he|she|they|we|someone|somebody|a friend|my (son|daughter|baby|child|kid|wife|husband|mom|mum|dad|father|mother|friend|partner))"

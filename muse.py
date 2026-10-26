@@ -98,6 +98,18 @@ REPLY_STYLE = ("How to reply: this is sent to the person as a chat message on th
                "your reasoning, your plan or the steps you took, and do not open with 'Let me' or 'I will'. Use a short "
                "list only when the answer really is a list. Stay under about 120 words unless the request asks for "
                "detail, a document or code.")
+# a medical answer is judged by its evidence, so it is not cut to a text message's length
+MEDICAL_REPLY_STYLE = (
+    "How to reply: this is read on a phone, so open with the bottom line in one or two plain sentences, then give the "
+    "evidence in full, the way a good consultant writes it up. Use short bold headings and bullets where they help, "
+    "for example: the key trials or studies (name, year, who was in them, and the effect size the source gives: hazard "
+    "ratio, relative and absolute risk, number needed to treat); why it works, in a line, if that helps; what the "
+    "guidelines recommend and how strongly; the risks and side effects, with numbers where the sources give them; and "
+    "where the evidence is still thin. For a simple question (a symptom, whether to see a doctor) keep it short: the "
+    "answer, why, and when to get help. Put any safety checks first. Cite every claim with its source number, like [2], "
+    "and end with the sources as a numbered list with links. Never state a number, trial or guideline grade that is not "
+    "in the sources you were given: if you know of a trial but it is not among them, search for it first. Do not show "
+    "your reasoning or the steps you took, and do not open with 'Let me' or 'I will'.")
 # what a running turn shows instead of the plan and the agent's progress: a typing indicator
 QUIET = "…"
 
@@ -551,7 +563,7 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
                     task += ("\n\nThe video has already been watched for you (do not call watch_video again; answer "
                              "from this):\n" + video.report_text(seen))
             if i == len(plan["steps"]) - 1:
-                task += "\n\n" + REPLY_STYLE
+                task += "\n\n" + (MEDICAL_REPLY_STYLE if step["agent"] == "medical" else REPLY_STYLE)
             memory = None
             if step["agent"] == "specialist" and step.get("role"):
                 import roster

@@ -12443,6 +12443,8 @@ def _():
             assert s["status"] == "done", s
             task = agentlab.load_run(s["steps"][0]["run"])["task"]
             assert "Already found for you" in task and "[1] A trial (NEJM, 2024)" in task and "Clinical assessment" in task
+            assert muse.MEDICAL_REPLY_STYLE in task and muse.REPLY_STYLE not in task        # not cut to 120 words
+            assert "number needed to treat" in muse.MEDICAL_REPLY_STYLE and "search for it first" in muse.MEDICAL_REPLY_STYLE
         finally:
             muse.decode, MD.gather = real_decode, real_gather
         import main

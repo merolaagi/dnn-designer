@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.33.1
+
+- **Medical answers are no longer cut to a text message's length.** Since
+  4.27.0, the last agent of every Muse turn was told to stay under about 120
+  words, which suits "what's in my inbox" and leaves out what a medical
+  answer is for. The Medical agent now has its own reply style:
+  - the bottom line first, in a sentence or two;
+  - then the evidence in full: the key trials (name, year, population,
+    effect size, hazard ratio, absolute risk, number needed to treat), why
+    it works, the guideline recommendation and its grade, the risks with
+    numbers, and where the evidence is thin;
+  - every claim cited by number, and a linked source list at the end.
+
+  A simple symptom question still gets a short answer. A number, trial or
+  grade that isn't in the sources is not stated: the agent searches for it
+  first.
+
 ## 4.33.0
 
 - **MediConsult is built in; its server is no longer needed.** The Medical
