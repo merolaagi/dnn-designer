@@ -10475,6 +10475,7 @@ def _():
     replies = [[json.dumps({"message": {"content": "", "tool_calls": [{"function": {"name": "open_binary",
                 "arguments": {"path": "/x"}}}]}, "done": True, "done_reason": "stop"}).encode()],
                [b'{"message": {"content": "Hel"}, "done": false}\n', b'{"message": {"content": "lo"}, "done": true}'],
+               [b'{"message": {"content": ""}, "done": true, "done_reason": "length"}'],
                [b'{"message": {"content": ""}, "done": true, "done_reason": "length"}']]
 
     class Reply:
@@ -10511,6 +10512,7 @@ def _():
         raise AssertionError("a reply cut off before any answer should say why")
     except RuntimeError as exc:
         assert "Max tokens per step" in str(exc)
+    assert sent[3][1]["options"]["num_predict"] == 32768             # tried once more, with four times the room
 
 
 @check("benchmark: every task parses, its checks pass on a right answer and fail on a wrong one")
@@ -12733,6 +12735,29 @@ def _():
         assert turn["answer"].startswith("I couldn't look at the photo") and "Ollama isn't running" in turn["answer"]
     finally:
         agentlab._dir, providers._request, providers.load = real_dir, real_req, real_load
+
+
+@check("a step cut off by the output-token limit is tried once more with four times the room")
+def _():
+    src = agentlab.OLLAMA_CODE
+    ns = {}
+    exec("import json, re, urllib.request\nfrom contextlib import contextmanager\n" + src, ns)
+    sizes = []
+
+    def once(base_url, system, messages, tools, model, temperature, max_tokens, think=False, num_ctx=None, on_text=None):
+        sizes.append(max_tokens)
+        if max_tokens < 20000:
+            raise RuntimeError(f"The model used all {max_tokens} of its output tokens before answering. Raise Max tokens per step in Settings.")
+        return {"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": {}}
+    ns["_ollama_once"] = once
+    out = ns["call_ollama"]("http://x", "s", [], None, "m", 0.3, 8192)
+    assert out["content"][0]["text"] == "ok" and sizes == [8192, 32768], sizes
+    sizes.clear()
+    try:
+        ns["call_ollama"]("http://x", "s", [], None, "m", 0.3, 2048)
+        raise AssertionError("no error after the second try")
+    except RuntimeError:
+        assert sizes == [2048, 8192]
 
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:

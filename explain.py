@@ -322,6 +322,9 @@ GUIDE = (
     "   - {kind: 'table', title, columns, rows}.\n"
     "   Use a plot whenever a function or a parameter is involved, a graph whenever things connect, and steps for "
     "any calculation.\n"
+    "   Keep the spec lean: when there are many things to explain (twelve tests on a cheat sheet), give each a short "
+    "text or table row (what it is for, when to use it, an example), and draw only the few that a picture helps "
+    "most; a spec over about 6000 characters is too long to write in one go.\n"
     "3. Call make_explainer with the spec and the question. If it says what to fix, fix the spec and call it again.\n"
     "4. Answer briefly: what it shows, the result, and the link it returned, exactly as given, on its own line."
 )

@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.34.2
+
+- **A step cut off by the output limit is tried again with more room.**
+  Explaining a whole cheat sheet (twelve tests) made the local model write
+  an answer longer than the 8192 output tokens a step may use. The step then
+  failed with "Raise Max tokens per step in Settings". Now a step through
+  Ollama that is cut off before it has written anything is tried once more
+  with four times the room (up to 32768). It only stops with that message if
+  the second try is cut off too.
+- **The Explainer keeps its pages lean** when there are many things to
+  explain. Each one gets a short text or a table row (what it's for, when to
+  use it, an example), and only the few that a picture helps most get a
+  drawing.
+
 ## 4.34.1
 
 - **A photo is read in any chat, not only a Muse one.** A chat opened from

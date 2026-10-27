@@ -360,6 +360,19 @@ def ask_app(path, request, wait):
 
 OLLAMA_CODE = r'''def call_ollama(base_url, system, messages, tools, model, temperature, max_tokens, think=False, num_ctx=None,
                 on_text=None):
+    """One step through Ollama. A step that runs out of output tokens before it has written anything (a long
+    answer or a big tool call, cut off) is tried once more with four times the room, up to 32768."""
+    try:
+        return _ollama_once(base_url, system, messages, tools, model, temperature, max_tokens, think, num_ctx, on_text)
+    except RuntimeError as exc:
+        roomier = min(32768, int(max_tokens) * 4)
+        if "of its output tokens" not in str(exc) or roomier <= int(max_tokens):
+            raise
+        return _ollama_once(base_url, system, messages, tools, model, temperature, roomier, think, num_ctx, on_text)
+
+
+def _ollama_once(base_url, system, messages, tools, model, temperature, max_tokens, think=False, num_ctx=None,
+                 on_text=None):
     """The same call through Ollama's own API (/api/chat), which can switch a model's thinking off and sets
     the context window per call; translated both ways, so the rest of the file sees the Messages API's shape."""
     chat, names = [{"role": "system", "content": system}], {}
