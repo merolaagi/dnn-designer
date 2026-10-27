@@ -425,9 +425,11 @@ def stop(muse_id: str) -> Dict[str, Any]:
     return {"ok": True}
 
 
-def start_turn(text: str, mode: str, context: str = "", background: bool = True) -> Dict[str, Any]:
+def start_turn(text: str, mode: str, context: str = "", background: bool = True,
+               images: Optional[List[str]] = None) -> Dict[str, Any]:
     s = {"id": "mu" + uuid.uuid4().hex[:10], "task": text, "mode": mode, "status": "running", "phase": "decoding",
-         "plan": None, "steps": [], "run": None, "answer": None, "error": None, "started": time.time()}
+         "plan": None, "steps": [], "run": None, "answer": None, "error": None, "started": time.time(),
+         "images": list(images or [])[:4]}
     _save(s)
     _ALIVE.add(s["id"])
     if background:
@@ -507,7 +509,23 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
             # an emergency happening now is answered at once, before any planning: every minute counts
             s.update(status="done", answer=now, phase="emergency")
             return
-        plan = decode(s["task"], s["mode"], context)
+        seen = ""
+        if s.get("images"):
+            # look at the photos first: the planner and every agent get what is in them, in words
+            import photos
+            s.update(phase="looking at your photo", doing="Looking at your photo")
+            _save(s)
+            try:
+                seen = photos.note([photos.read(pid, s["task"]) for pid in s["images"]])
+            except (photos.PhotoError, KeyError) as exc:
+                s.update(status="done", answer=str(exc) if isinstance(exc, photos.PhotoError) else "That photo is no longer on the Mac.",
+                         phase="could not read the photo")
+                return
+            if s["id"] in _STOP:
+                s.update(status="stopped", error="Stopped.")
+                return
+            s["seen"] = seen
+        plan = decode(s["task"] + ("\n\n" + seen if seen else ""), s["mode"], context)
         import video
         if video.links(s["task"]) and plan.get("steps") and not any(st["agent"] == "video" for st in plan["steps"]) \
                 and all(st["agent"] in ("react", "specialist") for st in plan["steps"]):
@@ -531,6 +549,8 @@ def _carry_out(s: Dict[str, Any], context: str) -> None:
                 return
             import muse_profile as profile
             task = profile.with_profile(step["task"])
+            if seen:
+                task += "\n\nWhat they asked, in their words: " + s["task"] + "\n\n" + seen
             if earlier:
                 task += "\n\nWhat the earlier steps found (use it):\n" + "\n\n".join(earlier)
             if step["agent"] == "medical":

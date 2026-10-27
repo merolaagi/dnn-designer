@@ -12651,6 +12651,84 @@ def _():
     finally:
         agentlab._dir, schedules.notify, shop.ucp = real_dir, real_notify, real_ucp
 
+
+@check("photos in a chat: read by a vision model first, then the agents answer about what is in them")
+def _():
+    import photos, muse, providers, tempfile, io
+    real_dir, real_req, real_load = agentlab._dir, providers._request, providers.load
+    tmp = Path(tempfile.mkdtemp())
+    agentlab._dir = lambda: tmp
+    calls = []
+    try:
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", (60, 40), (200, 30, 30)).save(buf, "PNG")
+        ph = photos.save(buf.getvalue(), "image/png")
+        assert photos.path_of(ph["id"]).read_bytes()[:2] == b"\xff\xd8"                  # kept as a JPEG
+        for bad in ("../x", "ph123", "dc0123456789"):
+            try:
+                photos.path_of(bad)
+                raise AssertionError(bad)
+            except KeyError:
+                pass
+        try:
+            photos.save(b"%PDF", "application/pdf")
+            raise AssertionError("took a pdf")
+        except ValueError:
+            pass
+
+        def fake(url, body, headers, timeout):
+            calls.append((url, body))
+            if url.endswith("/v1/messages"):
+                assert body["messages"][0]["content"][0]["type"] == "image"
+                return {"content": [{"type": "text", "text": "12 Statistical Tests Every Analyst Should Know: 1 One-Sample t-Test ..."}]}
+            assert body["messages"][0]["images"]
+            return {"message": {"content": "A cheat sheet titled 12 Statistical Tests"}}
+        providers._request = fake
+        # Ollama's vision model when Claude is not the default
+        providers.load = lambda: {**real_load(), "defaults": {**real_load()["defaults"], "provider": "ollama"}}
+        r = photos.read(ph["id"], "explain these")
+        assert r["text"].startswith("A cheat sheet") and calls[-1][0].endswith("/api/chat")
+        # Claude when it is the default and has a key
+        providers.load = lambda: {**real_load(), "defaults": {**real_load()["defaults"], "provider": "anthropic", "model": "claude-sonnet-5-5"},
+                                  "keys": {**(real_load().get("keys") or {}), "anthropic": "sk-test"}}
+        real_key = providers.key_for
+        providers.key_for = lambda pid, data=None: "sk-test" if pid == "anthropic" else real_key(pid, data)
+        try:
+            r = photos.read(ph["id"], "explain these")
+        finally:
+            providers.key_for = real_key
+        assert r["model"] == "claude-sonnet-5-5" and "One-Sample t-Test" in r["text"]
+        # a chat message with the photo: Muse reads it first and the step's task carries the reading
+        providers.load = lambda: {**real_load(), "defaults": {**real_load()["defaults"], "provider": "ollama"}}
+        real_decode = muse.decode
+        seen_tasks = []
+        muse.decode = lambda text, mode, context="": seen_tasks.append(text) or {"understood": "x", "question": None, "by": "model",
+                                                                                "steps": [{"agent": "react", "role": "", "task": "explain it", "why": ""}]}
+        try:
+            turn = muse.start_turn("Explain these tests to me", "rehearsal", images=[ph["id"]], background=False)
+        finally:
+            muse.decode = real_decode
+        assert "A cheat sheet titled 12 Statistical Tests" in seen_tasks[0]
+        # through a conversation, as Saathi sends it: a photo with no words still asks
+        conv = agentlab.new_conversation({"kind": "muse", "key": "muse"}, "rehearsal")
+        out = agentlab.say(conv["id"], "", "rehearsal", None, [ph["id"]])
+        last = out["conversation"]["turns"][-1]
+        assert last["images"] == [ph["id"]] and last["task"].startswith("What is this")
+        try:
+            agentlab.say(conv["id"], "hi", "rehearsal", None, ["ph0000000000"])
+        except ValueError as exc:
+            assert "attach it again" in str(exc)
+        assert turn["status"] == "done" and turn.get("seen") and turn["steps"], turn
+        # when the vision model fails, the person is told why, plainly
+        def broken(url, body, headers, timeout):
+            raise OSError("Connection refused")
+        providers._request = broken
+        turn = muse.start_turn("what is this", "rehearsal", images=[ph["id"]], background=False)
+        assert turn["answer"].startswith("I couldn't look at the photo") and "Ollama isn't running" in turn["answer"]
+    finally:
+        agentlab._dir, providers._request, providers.load = real_dir, real_req, real_load
+
 print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
 if FAILED:
     for name, why in FAILED:

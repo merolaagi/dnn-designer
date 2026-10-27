@@ -6289,10 +6289,20 @@ def _keep_of(text: str) -> Dict[str, Any]:
     return {"keep": found} if found else {}
 
 
-def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optional[Path] = None) -> Dict[str, Any]:
-    """Send a message: start the agent's next turn and return the run to follow."""
+def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optional[Path] = None,
+        images: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Send a message (and any photos sent with it): start the agent's next turn and return the run to follow."""
     conv = conversation(conv_id)
     text = str(text or "").strip()
+    images = [str(i) for i in (images or [])][:4]
+    if images:
+        import photos
+        for pid in images:
+            try:
+                photos.path_of(pid)                      # only a photo sent from this account
+            except KeyError:
+                raise ValueError("That photo is no longer on the Mac: attach it again.") from None
+        text = text or "What is this? Explain it to me."
     if not text:
         raise ValueError("Write a message first.")
     if conv["turns"] and conv["turns"][-1].get("status") in LIVE_STATUSES:
@@ -6300,7 +6310,7 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
     conv["mode"] = mode or conv.get("mode") or "rehearsal"
     import muse_profile as profile
     import schedules
-    planned = schedules.command(text, conv["mode"])
+    planned = None if images else schedules.command(text, conv["mode"])
     if planned is not None:
         # "every day at 7am …" sets up a schedule; "stop the … schedule" ends one. No agent runs now.
         conv["turns"].append({"task": text, "at": time.time(), "mode": conv["mode"], "status": "done", "ok": True,
@@ -6309,8 +6319,8 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         conv["updated"] = time.time()
         _conv_save(conv)
         return {"conversation": conv, "run": None}
-    reply, which = profile.command(text), "profile"
-    if reply is None:
+    reply, which = (None if images else profile.command(text)), "profile"
+    if reply is None and not images:
         import goals
         reply, which = goals.command(text), "goal"
     if reply is not None:
@@ -6325,9 +6335,9 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         import muse
         if conv["mode"] == "live" and not live_available():
             raise ValueError("Live needs a model: choose one in Settings.")
-        started = muse.start_turn(text, conv["mode"], muse.context_of(conv))
+        started = muse.start_turn(text, conv["mode"], muse.context_of(conv), images=images)
         conv["turns"].append({"muse": started["id"], "task": text, "at": time.time(), "mode": conv["mode"],
-                              "status": "running", **_keep_of(text)})
+                              "status": "running", **({"images": images} if images else {}), **_keep_of(text)})
         conv["title"] = conv.get("title") or (text[:60] + ("…" if len(text) > 60 else ""))
         conv["updated"] = time.time()
         _conv_save(conv)

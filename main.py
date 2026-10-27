@@ -420,8 +420,9 @@ class AgentLabConversation(BaseModel):
 
 
 class AgentLabSay(BaseModel):
-    text: str
+    text: str = ""
     mode: Optional[str] = None
+    images: Optional[List[str]] = None
 
 
 def _conv_action(fn, *args):
@@ -450,7 +451,26 @@ def agentlab_conversation(conv_id: str):
 
 @app.post("/api/agentlab/conversations/{conv_id}/say")
 def agentlab_conversation_say(conv_id: str, body: AgentLabSay):
-    return _conv_action(agentlab.say, conv_id, body.text, body.mode, auth.sub("agentlab"))
+    return _conv_action(agentlab.say, conv_id, body.text, body.mode, auth.sub("agentlab"), body.images)
+
+
+@app.post("/api/photos")
+async def photos_upload(file: UploadFile = File(...)):
+    """A photo to send with the next chat message (Saathi's + → Attach a photo)."""
+    import photos
+    try:
+        return photos.save(await file.read(), file.content_type or "")
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/photos/{pid}")
+def photos_get(pid: str):
+    import photos
+    try:
+        return FileResponse(photos.path_of(pid), media_type="image/jpeg")
+    except KeyError:
+        raise HTTPException(404, detail={"message": "That photo is gone."})
 
 
 @app.post("/api/agentlab/conversations/{conv_id}/stop")

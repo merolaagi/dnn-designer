@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.34.0
+
+- **Send a photo in a chat and ask about it.** A screenshot, a cheat sheet,
+  a page of notes, a chart, a sign, a plant: Saathi looks at it, then
+  answers. "Explain these tests to me" with a picture of a statistics cheat
+  sheet goes to the right agent (the Explainer can teach them one by one),
+  with everything on the picture in front of it.
+  - **Looking at the photo.** Before Muse plans, a vision model reads the
+    photo completely: every word, word for word, and each diagram, chart or
+    table and what it shows. Claude does it when Claude is your default model
+    (fast and sharp); otherwise the vision model in Ollama does it (the one
+    under Settings → Reading invoices).
+  - **The reading goes along.** The planner and every agent get that reading
+    with your message.
+  - **Sending a photo with no words** asks "What is this? Explain it to me."
+  - **If the photo can't be read** (Ollama off, model missing), you're told
+    why, plainly.
+  - **Where photos are kept.** In your account's workspace (`photos/`),
+    served at `/api/photos/{id}` to your own signed-in phone only.
+- Invoices and BOLs still go to their own reader, which checks the totals.
+- Saathi 0.8.3: + → Choose a photo or Take a photo attaches it to your
+  message, with a preview above the box. The photo shows in your message
+  bubble. "Read an invoice or BOL" is still in the same menu.
+
 ## 4.33.1
 
 - **Medical answers are no longer cut to a text message's length.** Since
