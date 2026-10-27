@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.34.1
+
+- **A photo is read in any chat, not only a Muse one.** A chat opened from
+  an invoice with "Ask the Station analyst" is that agent's chat, and a photo
+  sent there was dropped: the analyst only got the words and answered "I
+  don't see a picture". A message with a photo now always goes through Muse,
+  whatever agent the chat is with. Muse reads the photo, then hands it to
+  the agent that fits.
+
 ## 4.34.0
 
 - **Send a photo in a chat and ask about it.** A screenshot, a cheat sheet,

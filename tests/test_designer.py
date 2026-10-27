@@ -12715,6 +12715,11 @@ def _():
         out = agentlab.say(conv["id"], "", "rehearsal", None, [ph["id"]])
         last = out["conversation"]["turns"][-1]
         assert last["images"] == [ph["id"]] and last["task"].startswith("What is this")
+        # a chat with another agent (the Station analyst, opened from an invoice) still reads the photo
+        other = agentlab.new_conversation({"kind": "starting", "key": "station"}, "rehearsal")
+        out = agentlab.say(other["id"], "Can you explain the statistical test in the pic", "rehearsal", None, [ph["id"]])
+        last = out["conversation"]["turns"][-1]
+        assert last.get("muse") and last["images"] == [ph["id"]], last
         try:
             agentlab.say(conv["id"], "hi", "rehearsal", None, ["ph0000000000"])
         except ValueError as exc:

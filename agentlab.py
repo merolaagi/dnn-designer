@@ -6331,7 +6331,9 @@ def say(conv_id: str, text: str, mode: Optional[str] = None, memory_dir: Optiona
         conv["updated"] = time.time()
         _conv_save(conv)
         return {"conversation": conv, "run": None}
-    if conv["agent"].get("kind") == "muse":
+    if conv["agent"].get("kind") == "muse" or images:
+        # a photo always goes through Muse, whichever agent this chat is with: Muse reads the photo first,
+        # then gives it to the agent that fits (a chat opened from an invoice goes on with a cheat sheet)
         import muse
         if conv["mode"] == "live" and not live_available():
             raise ValueError("Live needs a model: choose one in Settings.")
