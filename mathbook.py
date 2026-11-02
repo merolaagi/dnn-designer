@@ -1186,7 +1186,8 @@ def _dale(p, ins, out):
             ("guarantee, any weights", "every column of W_eff has one sign: a neuron never both excites and inhibits"),
             ("parameters", f"{_fmt(d)}·{_fmt(u)} + {_fmt(u)} = " + _fmt(_count("DaleLinear", p, ins, out))),
         ],
-        "freedom": ["Not measured on its own yet: the biology arm measures the Hebbian layer."],
+        "freedom": ["The E/I split must be known: the first ⌈frac·n⌉ inputs are taken as excitatory."]
+                   + _measured("dale"),
     }
 
 

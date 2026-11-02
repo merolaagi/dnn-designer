@@ -419,7 +419,7 @@ P("fusion-two-tower", "Combine sensors and context", "Multi-input",
 
 # ---------------------------------------------------------------- laws (law-built layers that earned a project)
 # Only laws confirmed as data savers by laws.py get a project here (laws.STATUS == "confirmed"): Hamiltonian,
-# Deep Sets and working memory. Lagrangian waits for its rerun; convex and Lipschitz are measured as
+# Deep Sets, working memory and Dale's law. Lagrangian waits for its rerun; convex and Lipschitz are measured as
 # guarantees, not data savers; Hebbian and Dale have not shown a gap.
 
 P("law-hamiltonian-pendulum", "Pendulum by Hamiltonian", "Laws",
@@ -457,6 +457,25 @@ P("law-deepsets-regression", "Set regression by Deep Sets", "Laws",
   ["laws", "mathematics", "deep sets", "permutation", "invariance", "set", "regression"], difficulty="intermediate",
   data="A CSV with 12 feature columns (6 points × 2) and a target; the Input reshapes them to [6, 2].",
   expect="Reordering a set's rows gives exactly the same prediction.")
+
+P("law-dale-tabular", "Dale's-law MLP on tabular data", "Laws",
+  "A small classifier whose neurons are each excitatory or inhibitory, as in cortex. When the data come from a "
+  "process that respects that split, the network does not have to learn each weight's sign: on laws.py's task it "
+  "matched a plain network trained on more than 4x the data, from 512 rows on.",
+  [_S(title="Input — 20 features, [20]",
+      why="Order the columns so the excitatory ones come first: the law takes the first ⌈0.8·20⌉ = 16 as excitatory.",
+      nodes=[_N("Input", {"shape": [20]})]),
+   _S(title="DaleLinear — 32 units, 80% excitatory",
+      why=("The law: W_eff = softplus(W)·diag(s), s = +1 for the first 16 inputs and −1 for the last 4, so every "
+           "input's outgoing weights keep one sign for any weights. [20] in, [32] out."),
+      nodes=[_N("DaleLinear", {"units": 32, "frac": 0.8}), _N("Activation", {"kind": "relu"})]),
+   _S(title="DaleLinear head — 3 classes",
+      why="The hidden units obey the law too: the first 26 excite, the last 6 inhibit.",
+      nodes=[_N("DaleLinear", {"units": 3, "frac": 0.8}), _N("Output", {"task": "classification"})])],
+  ["laws", "biology", "dale", "excitatory", "inhibitory", "tabular", "classification"], difficulty="intermediate",
+  data="A CSV with 20 feature columns, excitatory ones first, and a label column with 3 classes.",
+  expect="Level with a plain MLP on small data; ahead from a few hundred rows, if the data respect the E/I split.",
+  caution="If the inputs are not split the way the law assumes, the constraint is a handicap, not a prior.")
 
 P("law-working-memory", "Working-memory classifier", "Laws",
   "Find what matters in a long list with a hard capacity of four slots. Averaging a 40-item list dilutes one "

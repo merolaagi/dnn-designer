@@ -664,14 +664,16 @@ tested numerically on untrained, scrambled layers in `tests/test_laws.py`.
 
 The Laws page has three sections:
 
-- **Data savers, confirmed:** Hamiltonian, Deep Sets and working memory. Each has a guided
-  project.
+- **Data savers, confirmed:** Hamiltonian, Deep Sets, working memory and Dale's law. Each has a
+  guided project.
 - **Still being measured:** Lagrangian. With Tanh it is stable and ahead at n=8 and n=512,
   but level at 32 and 128.
 - **Guarantees, measured:** convex and Lipschitz. They are not data savers, so the
   property they promise is measured instead.
 
-Hebbian fast weights are shelved: the block stays in the palette, but it is off the page.
+Hebbian fast weights are shelved: the block stays in the palette, but it is off the page. A law
+appears on the page only beside a measurement, so the SelfPaced recipe, which has no arm yet, is
+not listed there.
 
 `laws.py` asks each law the one question that matters: does a law-built network need less
 data than a plain one on a task the law describes? It trains both at several data sizes and

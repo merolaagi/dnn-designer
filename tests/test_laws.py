@@ -7,6 +7,7 @@ which law failed and by how much, rather than loosening the tolerance.
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -369,7 +370,7 @@ def _():
     if not HAVE_TORCH:
         return skip()
     import laws
-    assert set(laws.ARMS) >= {"physics", "math", "lagrangian", "biology", "psychology"}, sorted(laws.ARMS)
+    assert set(laws.ARMS) >= {"physics", "math", "lagrangian", "biology", "psychology", "dale"}, sorted(laws.ARMS)
     assert set(laws.GUARANTEES) == {"convex", "lipschitz"} and not set(laws.ARMS) & set(laws.GUARANTEES)
     for name in laws.ARMS:
         res = laws.run_arm(name, [8, 16], seeds=1, steps=5, lr=1e-3, quiet=True)
@@ -380,9 +381,43 @@ def _():
         assert res["kind"] == "guarantee" and "verdict" not in res and res["rows"], (name, res)
         assert all(0 <= r["plain"] and 0 <= r["law"] for r in res["rows"])
         json.dumps(res)
+    _, _, (xt, yt) = laws.ARMS["dale"]()["data"](8, 0)                 # a task any model can guess is no test
+    share = torch.bincount(yt, minlength=3).float() / len(yt)
+    assert share.max().item() < 0.6, f"the Dale task's labels are lopsided: {share.tolist()}"
     labels = [r["label"] for r in laws.run_guarantee("lipschitz", 16, 1, 5, 1e-3, quiet=True)["rows"]]
     assert labels == ["no nudge", "worst nudge of norm 0.3", "worst nudge of norm 1.0", "worst nudge of norm 3.0"]
     assert laws.overview()["guarantees"] and all(a["status"] != "shelved" for a in laws.overview()["arms"])
+
+
+@check("a saved run the card cannot label is treated as not run, and every listed law has a measurement")
+def _():
+    import tempfile
+    import agentlab as AL
+    import laws
+    real = AL._dir
+    tmp = Path(tempfile.mkdtemp())
+    AL._dir = lambda: tmp
+    try:
+        old = {"arm": "convex", "rows": [{"n": 8, "plain": 3.8, "law": 4.9}], "verdict": "an old data run"}
+        laws.result_path("convex").write_text(json.dumps(old))              # a 4.35 data-efficiency run of convex
+        assert laws.saved("convex") is None
+        assert next(g for g in laws.overview()["guarantees"] if g["arm"] == "convex")["result"] is None
+        partial = {"kind": "guarantee", "n": 512, "rows": [{"plain": 1.0, "law": 0.0}]}   # no labels
+        laws.result_path("lipschitz").write_text(json.dumps(partial))
+        assert laws.saved("lipschitz") is None
+        good = {"kind": "guarantee", "n": 512, "rows": [{"label": "no nudge", "plain": 0.08, "law": 0.09}]}
+        laws.result_path("lipschitz").write_text(json.dumps(good))
+        assert laws.saved("lipschitz")["rows"][0]["label"] == "no nudge"
+        laws.result_path("math").write_text(json.dumps(good))             # a guarantee file where a data run belongs
+        assert laws.saved("math") is None
+    finally:
+        AL._dir = real
+    page = (ROOT / "frontend" / "index.html").read_text()
+    listed = re.findall(r'^  \["[a-z]+", "[^"]+", "[^"]+", "[^"]*", "([a-z]*)"\],$', page[page.index("const LAW_LIST"):], re.M)
+    import laws as L
+    measured = set(L.ARMS) | set(L.GUARANTEES)
+    assert listed and "" in listed and all(a in measured or a == "" for a in listed)   # the page filters by arm
+    assert "LAW_LIST.filter(x => measured.has(x[4]))" in page and 'fixed n = ' in page and "Not yet run" in page
 
 
 @check("a verdict says a loss is a loss, before the law's first win as well as after it")

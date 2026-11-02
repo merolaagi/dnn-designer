@@ -83,7 +83,7 @@ def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
         if not quiet:
             print(f"  n={n:5d}   plain {row['plain']:.4f}   law {row['law']:.4f}"
                   f"   plain/law = {row['ratio']:.1f}x")
-    return {"arm": name, "law": spec["law_name"], "task": spec["task"],
+    return {"arm": name, "kind": "data", "law": spec["law_name"], "task": spec["task"],
             "params": {"plain": _count(spec["plain"]()), "law": _count(spec["law"]())},
             "measure": spec.get("measure", "error"), "sizes": sizes, "seeds": seeds, "steps": steps,
             "rows": rows, "verdict": _verdict(rows)}
@@ -327,6 +327,75 @@ def biology_arm():
 
 
 # ---------------------------------------------------------------------------
+# arm 3b — biology: Dale's law, on tabular data made by a network that obeys it
+# ---------------------------------------------------------------------------
+
+@arm("dale")
+def dale_arm():
+    """Tabular classification, 20 features into 3 classes, labelled by a teacher network that obeys Dale's
+    law: its first 16 inputs only excite and the last 4 only inhibit, and likewise its hidden units, with 5%
+    of labels flipped. The law-built MLP (DaleLinear → ReLU → DaleLinear) is told which inputs are excitatory,
+    as a neuroscientist would be; the plain MLP of the same size must learn every weight's sign from data.
+    Error is the share of 2000 fresh rows classified wrongly."""
+    import math as _m
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from lawsource import build
+
+    Dale = build("DaleLinear")
+    D, H, C = 20, 32, 3
+
+    def signs(n, frac=0.8):
+        s = torch.ones(n)
+        s[int(_m.ceil(frac * n)):] = -1.0
+        return s
+
+    g0 = torch.Generator().manual_seed(1234)               # one fixed teacher for every seed and size
+    W1 = torch.rand(16, D, generator=g0) * signs(D)
+    b1 = -torch.rand(16, generator=g0) * 2
+    W2 = torch.rand(C, 16, generator=g0) * signs(16)
+
+    def raw(x):
+        return F.relu(x @ W1.t() + b1) @ W2.t()
+
+    # standardise each class's score over the input range, so the three classes come out roughly balanced
+    # (left raw, one class won almost every row and any model scored near zero by guessing it)
+    ref = raw(torch.rand(20000, D, generator=g0) * 2)
+    mu, sd = ref.mean(0), ref.std(0) + 1e-6
+
+    def teacher(x):
+        return (raw(x) - mu) / sd
+
+    def make(n, g):
+        x = torch.rand(n, D, generator=g) * 2
+        y = teacher(x).argmax(1)
+        flip = torch.rand(n, generator=g) < 0.05
+        y = torch.where(flip, torch.randint(0, C, (n,), generator=g), y)
+        return x, y
+
+    def data(n, seed):
+        g = torch.Generator().manual_seed(seed)
+        x, y = make(n, g)
+        xt = torch.rand(2000, D, generator=g) * 2
+        return x, y, (xt, teacher(xt).argmax(1))
+
+    def loss(model, xs, ys):
+        return F.cross_entropy(model(xs), ys)
+
+    def error(model, test):
+        xt, yt = test
+        with torch.no_grad():
+            return float((model(xt).argmax(1) != yt).float().mean())
+
+    return {"law": lambda: nn.Sequential(Dale(D, H, frac=0.8), nn.ReLU(), Dale(H, C, frac=0.8)),
+            "plain": lambda: nn.Sequential(nn.Linear(D, H), nn.ReLU(), nn.Linear(H, C)),
+            "data": data, "loss": loss, "error": error,
+            "task": "3-class tabular data labelled by a Dale's-law teacher (5% label noise), error rate on 2000 fresh rows",
+            "law_name": "Dale's law (excitatory and inhibitory neurons)", "measure": "error rate"}
+
+
+# ---------------------------------------------------------------------------
 # arm 4 — psychology: a working-memory bottleneck vs averaging, on finding one item in a long list
 # ---------------------------------------------------------------------------
 
@@ -505,13 +574,13 @@ def convex_guarantee():
         return float((descend(model, starts) < 0.25).float().mean())
 
     def distance(model, starts):
-        return float(descend(model, starts).median())
+        return float(descend(model, starts).mean())
 
     return {"law": lambda: Convex(D, hidden=64, layers=2, out=1),
             "plain": lambda: nn.Sequential(nn.Linear(D, 64), nn.Softplus(), nn.Linear(64, 64), nn.Softplus(), nn.Linear(64, 1)),
             "data": data, "loss": lambda m, xs, ys: ((m(xs) - ys) ** 2).mean(),
             "measures": [("descents from outside the data that reach the minimum", reached),
-                         ("median distance of where they end from the minimum", distance)],
+                         ("mean distance of where they end from the minimum", distance)],
             "better": ["higher", "lower"], "unit": "share of 100 starts, then distance",
             "task": "fit a convex 4-D energy on n points in [-3, 3]⁴, then descend it from 100 starts outside that box",
             "law_name": "convexity (input-convex network)"}
@@ -589,17 +658,40 @@ def result_path(name: str):
     return results_dir() / f"laws_{name}.json"
 
 
-def saved(name: str):
+def _num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v
+
+
+def usable(result, kind: str) -> bool:
+    """Whether a saved run has what its card draws. A file from another kind of run (an old data-efficiency
+    run of what is now a guarantee test, say) or one missing fields is treated as no run at all, so the page
+    never shows numbers the card cannot honestly label."""
+    if not isinstance(result, dict) or not isinstance(result.get("rows"), list) or not result["rows"]:
+        return False
+    rows = result["rows"]
+    if kind == "guarantee":
+        return result.get("kind") == "guarantee" and _num(result.get("n")) and all(
+            isinstance(r, dict) and isinstance(r.get("label"), str) and r["label"]
+            and _num(r.get("plain")) and _num(r.get("law")) for r in rows)
+    return result.get("kind", "data") == "data" and all(
+        isinstance(r, dict) and _num(r.get("n")) and _num(r.get("plain")) and _num(r.get("law")) for r in rows)
+
+
+def saved(name: str, kind: str = ""):
     try:
-        return json.loads(result_path(name).read_text())
+        r = json.loads(result_path(name).read_text())
     except (OSError, ValueError):
         return None
+    kind = kind or ("guarantee" if name in GUARANTEES else "data")
+    return r if usable(r, kind) else None
 
 
 # Where each law stands, from the measurements on the development machine (CHANGELOG has the numbers).
 # confirmed: a data saver on its own task. measuring: not settled yet. shelved: no gap after a fair try;
 # the block stays in the palette, but the Laws page does not show it.
 STATUS = {"physics": "confirmed", "math": "confirmed", "psychology": "confirmed",
+          # level up to n=128; from n=512 clearly ahead (0.094 against 0.185, and 0.043 against 0.103 at 2048)
+          "dale": "confirmed",
           # with Tanh it no longer blows up and is ahead at n=8 and n=512, but level at 32 and 128: not yet clean
           "lagrangian": "measuring",
           # with a normalised write, still no recall (error ≥ 0.93 where answering zero scores 1.0); its only

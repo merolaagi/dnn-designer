@@ -8367,7 +8367,7 @@ const LAW_LIST = [
   ["mathematics", "Permutation invariance", "InvariantPool", "ρ(Σ φ(xᵢ)): the order of a set's rows cannot change the output.", "math"],
   ["mathematics", "Convexity", "ConvexPotential", "Non-negative hidden weights and convex activations: one minimum, no spurious wells.", "convex"],
   ["mathematics", "Lipschitz bound", "LipschitzLinear", "The applied weight's largest singular value is held at or below L, so the layer can never be steeper than L.", "lipschitz"],
-  ["biology", "Dale's law", "DaleLinear", "Each input neuron is excitatory or inhibitory: every weight column keeps one sign.", ""],
+  ["biology", "Dale's law", "DaleLinear", "Each input neuron is excitatory or inhibitory: every weight column keeps one sign.", "dale"],
   ["biology", "Hebbian locality", "HebbianFastWeights", "Fast synapses change only by λA + η ĥĥᵀ from local activity, never by the optimizer.", "biology"],
   ["psychology", "Capacity limit", "WorkingMemory", "Exactly K slots leave, however long the input: Cowan's 4 ± 1, as architecture.", "psychology"],
   ["learning", "Curriculum", "SelfPaced (recipe)", "An example trains only while its loss is under a threshold that rises each epoch.", ""],
@@ -8397,7 +8397,8 @@ function lawsChart(r){
 }
 
 function lawsDataCard(a, d){
-  const r = a.result, live = r && r.status === "running";
+  const live = a.result && a.result.status === "running";
+  const r = live || lawsUsable(a.result, "data") ? a.result : null;
   const meta = r && r.rows && r.rows.length ? `${r.seeds} seed${r.seeds === 1 ? "" : "s"}, ${r.steps} steps${r.seconds ? ", " + Math.round(r.seconds) + " s" : ""}${r.finished ? ", " + ago(r.finished) : ""}` : "";
   return `<div class="lawcard">
     <header><b>${alEsc(a.arm)}</b><span>${alEsc(a.law)}</span>${meta ? `<small>${alEsc(meta)}</small>` : ""}</header>
@@ -8410,11 +8411,22 @@ function lawsDataCard(a, d){
   </div>`;
 }
 
+function lawsUsable(r, kind){
+  // a saved run without what this card needs (another kind of run, or missing fields) counts as not run
+  if (!r || !Array.isArray(r.rows)) return false;
+  const num = v => typeof v === "number" && isFinite(v);
+  if (kind === "guarantee") return r.kind === "guarantee" && num(r.n)
+    && r.rows.every(x => x && typeof x.label === "string" && x.label && num(x.plain) && num(x.law));
+  return (r.kind || "data") === "data" && r.rows.every(x => x && num(x.n) && num(x.plain) && num(x.law));
+}
+
 function lawsGuaranteeCard(a, d){
-  const r = a.result, live = r && r.status === "running";
+  const live = a.result && a.result.status === "running";
+  const r = live || lawsUsable(a.result, "guarantee") ? a.result : null;
   const rows = (r && r.rows) || [];
   const fmt = (v, x) => (x.better || a.better) === "higher" ? (v * 100).toFixed(0) + "%" : v.toPrecision(3);
-  const meta = rows.length ? `n=${r.n}, ${r.seeds} seed${r.seeds === 1 ? "" : "s"}, ${r.steps} steps${r.seconds ? ", " + Math.round(r.seconds) + " s" : ""}${r.finished ? ", " + ago(r.finished) : ""}` : "";
+  const n = (r && r.n) || d.guarantee_n;
+  const meta = `fixed n = ${n}` + (rows.length && !live ? ` · ${r.seeds} seed${r.seeds === 1 ? "" : "s"}, ${r.steps} steps${r.seconds ? ", " + Math.round(r.seconds) + " s" : ""}${r.finished ? ", " + ago(r.finished) : ""}` : "");
   const better = (x, y, row) => (row.better || a.better) === "higher" ? x > y : x < y;
   return `<div class="lawcard">
     <header><b>${alEsc(a.arm)}</b><span>${alEsc(a.law)}</span>${meta ? `<small>${alEsc(meta)}</small>` : ""}</header>
@@ -8432,7 +8444,7 @@ function lawsGuaranteeCard(a, d){
 function lawsIdle(r){
   return r && r.status === "error" ? `<p class="verdict none">The run failed: ${alEsc(r.error || "")}</p>`
     : r && r.status === "stopped" ? `<p class="verdict none">Stopped before it finished; nothing was saved.</p>`
-    : `<p class="verdict none">Not run on this machine yet. Nothing is drawn from numbers this machine did not produce.</p>`;
+    : `<p class="verdict none">Not yet run on this machine. Nothing is drawn from numbers this machine did not produce.</p>`;
 }
 
 function lawsActs(a, live, note){
@@ -8450,7 +8462,8 @@ async function renderLawsPage(){
   const all = d.arms.concat(d.guarantees);
   if (all.some(a => a.result && a.result.status === "running"))
     lawsTimer = setTimeout(() => { if (document.body.dataset.page === "pageLaws") renderLawsPage(); }, 3000);
-  const shelved = new Set(d.shelved || []);
+  // a law is listed only beside a measurement: an arm or a guarantee test on this page (shelved ones are not)
+  const measured = new Set(d.arms.concat(d.guarantees).map(a => a.arm));
   const confirmed = d.arms.filter(a => a.status === "confirmed"), measuring = d.arms.filter(a => a.status !== "confirmed");
   const section = (title, lead, cards) => cards ? `<div class="lawsec"><h4>${title}</h4><p class="lead">${lead}</p>
     <div class="lawarms">${cards}</div></div>` : "";
@@ -8458,7 +8471,7 @@ async function renderLawsPage(){
     <div class="lawlist"><h3>Laws</h3>
       <p class="lead">Layers whose structure enforces a law, so it holds for every value of the weights and never has to
       be learned from data. On the right, what each one has been shown to buy.</p>
-      ${LAW_LIST.filter(x => !shelved.has(x[4])).map(([fam, law, layer, line]) => `<div class="lawlaw"><i>${fam}</i><b>${alEsc(law)}</b> · <code>${alEsc(layer)}</code><span>${alEsc(line)}</span></div>`).join("")}
+      ${LAW_LIST.filter(x => measured.has(x[4])).map(([fam, law, layer, line]) => `<div class="lawlaw"><i>${fam}</i><b>${alEsc(law)}</b> · <code>${alEsc(layer)}</code><span>${alEsc(line)}</span></div>`).join("")}
     </div>
     <div><div class="lawhead"><h3>Measured here</h3>
       <div class="lawkey"><span class="plain">plain network</span><span class="law">law-built network</span></div></div>

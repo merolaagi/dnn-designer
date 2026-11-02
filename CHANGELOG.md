@@ -1,5 +1,40 @@
 # Changelog
 
+## 4.37.0
+
+- **Guarantee cards only show results they can label.** Earlier versions
+  saved convex and Lipschitz runs as data-efficiency runs (rows by n, no
+  labels). That kind of file, or one missing a field, is now treated as not
+  run, on the server and on the page, and the card says "Not yet run". It
+  never draws old numbers. Every row carries its own label from the JSON,
+  and the header always shows the fixed n (512).
+- **Convex reports mean distance** from the true minimum, not median, next
+  to the share of descents that reach it. Rerun at n=512: reached the
+  minimum, plain 100%, law 0%; mean distance, plain 0.194 ± 0.040, law
+  0.350 ± 0.049.
+- **Lipschitz rerun at n=512** (plain against law): no nudge 0.082 against
+  0.085; norm 0.3: 0.134 against 0.134; norm 1.0: 0.273 against 0.289;
+  norm 3.0: 0.774 against 0.883.
+- **Dale's law has an arm and is a confirmed data saver.** The task is
+  3-class tabular data labelled by a teacher network that obeys Dale's law
+  (16 excitatory and 4 inhibitory inputs, 5% label noise), with classes
+  balanced. The first version of this teacher put every row in one class,
+  so any model scored near zero by guessing it; a test now checks the
+  balance. A DaleLinear MLP against a plain MLP of the same size, error
+  rate: n=32 0.407 against 0.396, n=128 0.197 against 0.195 (both level),
+  n=512 0.094 against 0.185, n=2048 0.043 against 0.103. That is more than
+  4× less data from n=512. New guided project: *Dale's-law MLP on tabular
+  data*.
+- **Lagrangian** with `--steps 4000 --lr 1e-3` (Tanh, the default since
+  4.36; ε = 1e-3): n=8 0.334 against 1.33, n=32 0.047 against 0.235 (tie,
+  because the plain seeds differ widely), n=128 0.048 against 0.020 (seeds
+  overlap), n=512 0.019 against 0.060. It does not lose at n=512. It is
+  level in the middle, so it stays under "being measured".
+- **No law is listed on the Laws page without a measurement beside it.**
+  The list on the left shows only laws with an arm or a guarantee test
+  there, so the SelfPaced recipe is not listed and shelved Hebbian is not
+  either.
+
 ## 4.36.0
 
 - **The Laws page now has three sections.**
