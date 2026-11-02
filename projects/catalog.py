@@ -415,3 +415,60 @@ P("fusion-two-tower", "Combine sensors and context", "Multi-input",
              "be sure which tower gets which."))],
   ["multiinput", "fusion", "tabular", "towers"], difficulty="intermediate",
   data="One CSV; assign column groups to each Input in the training form.")
+
+
+# ---------------------------------------------------------------- laws (law-built layers that earned a project)
+# Only laws whose laws.py arm beat a plain network on its own task get a project here; the others
+# (convex, Lipschitz, Hebbian, Dale) wait until a run shows they save data.
+
+P("law-lagrangian-pendulum", "Pendulum by Lagrangian", "Laws",
+  "Learn a pendulum's motion as one scalar Lagrangian. Euler–Lagrange turns it into accelerations, "
+  "so energy is conserved for any weights. On laws.py's pendulum it needed about 16x less data than a plain network.",
+  [_S(title="Input — state (q, q̇), [2]",
+      why="Angle and angular velocity, as measured. A Lagrangian works in these coordinates directly: no momenta needed.",
+      nodes=[_N("Input", {"shape": [2]})]),
+   _S(title="LagrangianField — mechanical form",
+      why=("The law: d/dt ∂L/∂q̇ = ∂L/∂q, solved for q̈ inside the layer. The mechanical form builds "
+           "L = ½q̇ᵀM(q)q̇ − V(q) with M positive definite, so the mass matrix can always be inverted. "
+           "[2] in, [2] out: (q̇, q̈)."),
+      nodes=[_N("LagrangianField", {"hidden": 64, "eps": 1e-3, "form": "mechanical"})],
+      alternatives="form = general lets L be any network; trained on a pendulum its rollouts blew up.",
+      watch="It differentiates twice per step: expect each epoch to take several times a plain network's."),
+   _S(title="Output — regression on dz/dt", why="Targets are the measured (q̇, q̈) at each state.",
+      nodes=[_N("Output", {"task": "regression"})])],
+  ["laws", "physics", "lagrangian", "energy", "pendulum", "regression"], difficulty="advanced",
+  data="A CSV of states and their time derivatives: q, q̇ → q̇, q̈ (from a simulation or differenced measurements).",
+  expect="Rollouts that keep their energy; in laws.py, error 0.016 at n=32 where a plain network needed far more data.")
+
+P("law-deepsets-regression", "Set regression by Deep Sets", "Laws",
+  "Predict a property of a set of points that cannot depend on their order. The architecture cannot see order, "
+  "so it never has to learn that it doesn't matter: on laws.py's task, more than 64x less data than a flat MLP.",
+  [_S(title="Input — a set of 6 points, [6, 2]",
+      why="Six rows of two features. A flat network would see these 12 numbers in one fixed order.",
+      nodes=[_N("Input", {"shape": [6, 2]})]),
+   _S(title="InvariantPool — ρ(Σ φ(xᵢ))",
+      why=("The law: every permutation-invariant function of a set has this form (Zaheer et al. 2017). φ reads "
+           "each point alone, the sum forgets the order, ρ reads the sum. [6, 2] in, [1] out."),
+      nodes=[_N("InvariantPool", {"hidden": 32, "out": 1, "pool": "sum"})],
+      alternatives="pool = mean when the set's size varies and the target is an average; max for 'is any point …'."),
+   _S(title="Output — regression", why="One number per set.", nodes=[_N("Output", {"task": "regression"})])],
+  ["laws", "mathematics", "deep sets", "permutation", "invariance", "set", "regression"], difficulty="intermediate",
+  data="A CSV with 12 feature columns (6 points × 2) and a target; the Input reshapes them to [6, 2].",
+  expect="Reordering a set's rows gives exactly the same prediction.")
+
+P("law-working-memory", "Working-memory classifier", "Laws",
+  "Find what matters in a long list with a hard capacity of four slots. Averaging a 40-item list dilutes one "
+  "telling item forty-fold; four attention slots can hold it. On laws.py's task, more than 16x less data.",
+  [_S(title="Input — a list of 40 items, [40, 8]", why="A sequence of items of 8 features each.",
+      nodes=[_N("Input", {"shape": [40, 8]})]),
+   _S(title="WorkingMemory — 4 slots",
+      why=("The law: a capacity limit (Cowan's 4 ± 1). Four learned queries attend over the 40 items and only "
+           "the four slot vectors go on: [40, 8] in, [4, 8] out, for any list length."),
+      nodes=[_N("WorkingMemory", {"slots": 4})],
+      alternatives="More slots if the task needs more items held at once; the capacity is the point, so keep it small."),
+   _S(title="Flatten and classify", why="The four slots, side by side, to a class score.",
+      nodes=[_N("Flatten", {}), _N("Linear", {"units": 4}, label="head"), _N("Output", {"task": "classification"})])],
+  ["laws", "psychology", "working memory", "attention", "capacity", "sequence", "classification"],
+  difficulty="intermediate",
+  data="Lists of items as a CSV of 320 columns (40 × 8), reshaped by the Input; one label per list.",
+  expect="Learns from a few dozen lists where a mean-pooled classifier stays near chance.")

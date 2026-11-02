@@ -1,5 +1,75 @@
 # Changelog
 
+## 4.35.0
+
+- **Law-built layers.** Seven new blocks under `Laws · …` in the palette.
+  Each one's structure enforces a law for every value of the weights:
+  - `LagrangianField`: Euler–Lagrange; energy is conserved.
+  - `ConvexPotential`: the output is convex in the input.
+  - `LipschitzLinear`: the operator norm stays at or under a bound.
+  - `InvariantPool`: Deep Sets; reordering a set's rows changes nothing.
+  - `DaleLinear`: Dale's law; each input neuron is excitatory or
+    inhibitory.
+  - `HebbianFastWeights`: fast synapses change only by a local Hebbian
+    rule.
+  - `WorkingMemory`: a hard capacity of K slots.
+
+  There is also a `SelfPaced` curriculum recipe. The class sources live in
+  `lawsource.py`, so the block on the canvas, the generated file and the
+  measurement all run the same text.
+- **Every guarantee is tested numerically** on untrained, scrambled layers
+  (`tests/test_laws.py`, 17 checks, run by `release.sh`). The tests found
+  and fixed:
+  - **`LipschitzLinear` broke its own bound.** One power-iteration step can
+    only under-estimate the largest singular value, so on all 50 layers
+    tried the weight it applied was over the bound, by up to 1.55×. It now
+    uses the exact spectral norm. The `iterations` parameter is gone.
+  - **`LagrangianField` blew up when trained.** A general network for L does
+    not keep the mass ∂²L/∂q̇² invertible, and pendulum rollouts reached
+    errors around 24,000. The new default, `form="mechanical"`, builds
+    L = ½q̇ᵀM(q)q̇ − V(q) with M positive definite by construction (Deep
+    Lagrangian Networks). The general form is still available.
+  - **`ConvexPotential` could not be trained.** Its non-negative weights
+    started at softplus(0) ≈ 0.69, so the untrained output was about 1,500
+    against a target of about 10. They now start near 1/hidden.
+- **`laws.py`: does the law save data?** Each arm trains a plain and a
+  law-built network at several data sizes and states the result in one
+  sentence. A difference inside the seed-to-seed spread counts as a tie,
+  not a win. Results on the development machine (sizes 8 to 512, 2 seeds,
+  1,500 steps):
+  - Hamiltonian (pendulum): ahead from n=32; the plain model doesn't reach
+    it even at n=512, more than 16× less data.
+  - Deep Sets (set regression): ahead from n=8, more than 64× less data.
+  - Lagrangian, mechanical form (pendulum): ahead from n=8, about 16× less
+    data.
+  - Working memory (find one of 4 prototypes in a list of 40): ahead from
+    n=32, more than 16× less data; the mean-pool baseline never learns.
+  - Hebbian fast weights (pattern recall): not a saving. Neither it nor the
+    GRU learned recall. With hand-set weights the layer only reaches 0.70
+    from the cue's 1.0, because it reads the cue through the same slow
+    weights that write memory and has no settling loop.
+  - Convex (descend a fitted convex energy): not a saving; the plain network
+    is better from n=32.
+  - Lipschitz (error under a worst-case nudge): ahead at n=32 and 128,
+    behind at n=512; not a saving.
+- **Laws page** (rail, after Studies). The laws, one line each, beside each
+  arm's error-against-data curve and its verdict. **Run** starts an arm in
+  the background, and rows appear as each size finishes. Curves are drawn
+  only from runs made on this machine (saved per account under
+  `studies/`); nothing ships pre-drawn.
+- **Maths tab:** an entry for each of the seven layers. Each has the
+  equation, the guarantee, and the parameter count worked out from the
+  node's own numbers, plus this machine's measured verdict once there is
+  one.
+- **Needs panel:**
+  - `LagrangianField` and `HamiltonianField` differentiate inside
+    `forward()`, so they need gradients even when evaluating.
+  - `HebbianFastWeights` warns when a sequence is longer than 512, because
+    it runs step by step in Python.
+- **Guided projects, only for the laws that won:** *Pendulum by
+  Lagrangian*, *Set regression by Deep Sets* and *Working-memory
+  classifier*.
+
 ## 4.34.2
 
 - **A step cut off by the output limit is tried again with more room.**

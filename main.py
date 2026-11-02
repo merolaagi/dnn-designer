@@ -1145,6 +1145,36 @@ class RadarSettings(BaseModel):
     auto: Optional[int] = None
 
 
+class LawsRun(BaseModel):
+    sizes: Optional[List[int]] = None
+    seeds: Optional[int] = None
+    steps: Optional[int] = None
+
+
+@app.get("/api/laws")
+def laws_view():
+    """The law-built layers' data-efficiency arms, each with its last run on this machine."""
+    import laws
+    return laws.overview()
+
+
+@app.post("/api/laws/{arm}/run")
+def laws_run(arm: str, body: LawsRun):
+    import laws
+    try:
+        return laws.start(arm, body.sizes, body.seeds, body.steps)
+    except KeyError:
+        raise HTTPException(404, detail={"message": f"There is no arm called {arm}."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.post("/api/laws/{arm}/stop")
+def laws_stop(arm: str):
+    import laws
+    return laws.stop(arm)
+
+
 @app.get("/api/radar")
 def radar_view():
     r = radar.view()

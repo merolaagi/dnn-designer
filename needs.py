@@ -141,6 +141,21 @@ def requirements(g: Graph, report: Dict[str, Any]) -> Dict[str, Any]:
                          f"guarantees a unique equilibrium and the solver may "
                          f"not converge. That is deliberate for a comparison, "
                          f"and wrong for a model you mean to keep.")
+    if "LagrangianField" in used or "HamiltonianField" in used:
+        which = " and ".join(n for n in ("HamiltonianField", "LagrangianField") if n in used)
+        notes.append(f"{which} differentiates inside forward(), so it needs gradients even when "
+                     f"evaluating: run it outside torch.no_grad() (the layer turns them back on for itself), "
+                     f"and expect each step to cost several times a plain layer's"
+                     + (" (LagrangianField differentiates twice)." if "LagrangianField" in used else "."))
+    long_hebb = []
+    for n in g.nodes:
+        if n.type == "HebbianFastWeights":
+            shape = (report["nodes"].get(n.id) or {}).get("out_shape") or []
+            if shape and shape[0] > 512:
+                long_hebb.append(f"{n.label or n.type} (L = {shape[0]})")
+    if long_hebb:
+        notes.append(f"{', '.join(long_hebb)}: the fast weights are written one step at a time in a Python loop, "
+                     f"so a sequence over 512 long is slow to train. Shorten it, or chunk it first.")
     if "EquilibriumCRN" in used:
         # the equilibrium solver runs to 1e-10, which single precision cannot
         # reach, so this is a property of the layer rather than a preference

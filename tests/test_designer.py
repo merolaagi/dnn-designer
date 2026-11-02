@@ -4615,9 +4615,9 @@ def _():
     # every category the palette can show needs a glyph, or tiles come out blank
     import re
 
-    glyphs = set(re.findall(r'\n  "?([A-Za-z ]+)"?:\s*"M',
-                            PAGE[PAGE.index("const GLYPHS"):
-                                 PAGE.index("const QUICK_ADD")]))
+    glyphs = {quoted or bare for quoted, bare in
+              re.findall(r'\n  (?:"([^"\n]+)"|([A-Za-z]+)):\s*"M',
+                         PAGE[PAGE.index("const GLYPHS"):PAGE.index("const QUICK_ADD")])}
     categories = {spec.category for spec in layers.REGISTRY.values()}
     missing = sorted(c for c in categories if c not in glyphs)
     assert not missing, f"no glyph for: {missing}"

@@ -643,6 +643,36 @@ the original call in its values and appears in the import summary. Emitting a
 multi-line module repr inline would produce a file that does not parse, and
 substituting something plausible would produce a file that parses and is wrong.
 
+## Laws: layers whose structure is a law
+
+The **Laws** page (rail, after Studies) and the `Laws · …` palette categories hold layers
+that enforce a law from physics, mathematics, neuroscience or psychology for every value
+of the weights, so it never has to be learned from data:
+
+| Layer | Law | Holds for any weights |
+|---|---|---|
+| `LagrangianField` | Euler–Lagrange | energy q̇·∂L/∂q̇ − L is conserved; the mechanical form keeps the mass matrix positive definite |
+| `ConvexPotential` | convexity | f is convex in its input: one minimum |
+| `LipschitzLinear` | Lipschitz bound | ‖W_eff‖₂ ≤ L, from the exact largest singular value |
+| `InvariantPool` | permutation invariance | reordering a set's rows changes nothing (Deep Sets) |
+| `DaleLinear` | Dale's law | each input neuron is excitatory or inhibitory |
+| `HebbianFastWeights` | Hebbian locality | fast synapses change only by a local rule, never by the optimizer |
+| `WorkingMemory` | capacity limit | exactly K vectors leave, however long the input |
+
+Plus the `SelfPaced` training recipe (a curriculum without a teacher). Each guarantee is
+tested numerically on untrained, scrambled layers in `tests/test_laws.py`.
+
+`laws.py` asks each law the one question that matters: does a law-built network need less
+data than a plain one on a task the law describes? It trains both at several data sizes and
+says, in one sentence, where the law starts to win and how much more data the plain model
+needs to match it. A difference inside the seed-to-seed spread is a tie. The Laws page draws
+those curves only from runs made on this machine (press **Run** on an arm), or run them here:
+
+```
+python laws.py                      every arm
+python laws.py physics --sizes 8 32 128 512 --seeds 3 --save
+```
+
 ## Blocks: the plug-in system
 
 Everything past the core layers is a file in `blocks/`. Drop one in, press Reload

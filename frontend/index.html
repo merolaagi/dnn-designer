@@ -258,7 +258,7 @@ body.resizing-v{cursor:row-resize;user-select:none}
 }
 .panelhead h2{flex:none;border:none}
 #pageBuild, #pageRuns, #pageChat, #pageExtend, #pagePaper,
-#pageAgents, #pagePad, #pageDomains, #pageScouts, #pageRadar,
+#pageAgents, #pagePad, #pageDomains, #pageScouts, #pageRadar, #pageLaws,
 #pageCodebase, #pageMaths, #pageWorkbench, #pagePhysics,
 #pageAgentLab{background:var(--paper)}
 #pageTalk{background:var(--paper)}
@@ -1596,6 +1596,27 @@ table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
 .md-lib{display:flex;flex-direction:column;gap:6px}
 .md-doc{display:flex;align-items:center;gap:10px;justify-content:space-between;border:1px solid var(--paper-3);border-radius:8px;padding:8px 10px;background:#fff}
 .md-doc small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+.lawwrap{max-width:1240px;margin:0 auto;padding:24px 26px 40px;display:grid;grid-template-columns:300px 1fr;gap:22px}
+.lawlist h3,.lawhead h3{margin:0 0 6px;font-size:20px;font-weight:600}
+.lawlist p.lead{margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.lawlaw{border-left:3px solid var(--paper-3);padding:6px 0 6px 10px;margin:0 0 10px}
+.lawlaw b{font-size:13px}.lawlaw span{display:block;font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:2px}
+.lawlaw i{display:block;font-style:normal;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+.lawarms{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
+.lawcard{background:#fff;border:1px solid var(--paper-3);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.lawcard header{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
+.lawcard header b{font-size:14px}.lawcard header span{font-size:12px;min-width:0}
+.lawcard header small{flex-basis:100%;color:var(--muted);font-size:11px}
+.lawcard .task{font-size:11.5px;color:var(--muted);line-height:1.5;margin:0}
+.lawcard .verdict{font-size:12.5px;line-height:1.55;margin:0}
+.lawcard .verdict.none{color:var(--muted)}
+.lawcard svg{width:100%;height:auto;display:block}
+.lawcard .acts{display:flex;gap:8px;align-items:center}
+.lawcard .acts .st-msg{font-size:11.5px;color:var(--muted)}
+.lawkey{display:flex;gap:14px;font-size:11px;color:var(--muted)}
+.lawkey span::before{content:"";display:inline-block;width:14px;height:2px;margin-right:5px;vertical-align:middle;background:currentColor}
+.lawkey .plain{color:#8a8f98}.lawkey .law{color:#2D7DD2}
+@media (max-width:900px){.lawwrap{grid-template-columns:1fr;padding:16px 12px 32px}.lawarms{grid-template-columns:1fr}}
 .rdbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
 .rdbar .note{font-size:12px;color:var(--muted);margin-right:auto}
 .rdchip{padding:5px 11px;border-radius:14px;border:1px solid var(--paper-3);background:#fff;font-size:12px;cursor:pointer}
@@ -3060,6 +3081,7 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
     <button data-page="pageScouts"><i>&#9906;</i>Scouts</button>
     <button data-page="pageRadar"><i>&#9737;</i>AI radar</button>
     <button data-page="pageAgents"><i>&#9881;</i>Studies</button>
+    <button data-page="pageLaws"><i>&#8721;</i>Laws</button>
     <button data-page="pageRuns"><i>&#8635;</i>Run history</button>
     <button data-page="pageChat"><i>&#9998;</i>Chat</button>
 
@@ -3256,6 +3278,10 @@ table.al-study tr.k-hurts td:first-child,table.al-study tr.k-hurts.verdict td{bo
       </div>
     </div>
   </section>
+  <section class="page" id="pageLaws">
+    <div class="scroll" id="lawsMain"></div>
+  </section>
+
   <section class="page" id="pageAgents">
     <div class="runwrap">
       <div class="runlist" id="agentSide"></div>
@@ -4139,6 +4165,10 @@ const GLYPHS = {
   Pretrained: "M9 3l6 3v5l-6 4-6-4v-5z",
   Structure: "M4 3h7l4 4v8h-11z M11 3v4h4",
   Custom: "M9 5a4 4 0 1 0 0 8a4 4 0 1 0 0-8 M9 2v2 M9 14v2 M2 9h2 M14 9h2",
+  "Laws · physics": "M3 14c2-9 4-9 6 0s4 9 6 0 M9 3v3",
+  "Laws · mathematics": "M4 4h10 M4 4l5 5-5 5h10",
+  "Laws · biology": "M5 9a2 2 0 1 0 0-.1 M13 9a2 2 0 1 0 0-.1 M7 9h4 M5 7v-4 M13 11v4",
+  "Laws · psychology": "M3 5h3v8h-3z M7.5 5h3v8h-3z M12 5h3v8h-3z",
 };
 
 // what people reach for most often, in the order they usually reach for it
@@ -6173,6 +6203,7 @@ const PAGE_SETUP = {
   pageDomains: renderDomainsPage,
   pageScouts: renderScoutsPage,
   pageRadar: renderRadarPage,
+  pageLaws: renderLawsPage,
   pageCodebase: renderCodebasePage,
   pageMaths: renderMathsPage,
   pageWorkbench: renderWorkbenchPage,
@@ -8317,6 +8348,87 @@ function codebaseOverview(s){
    equation with this network's own numbers. The findings are actionable for the
    same reason: an imported class can be opened on the canvas, because it has
    already been built once to earn its place on the list. */
+
+/* ============================ Laws ============================ */
+
+const LAW_LIST = [
+  ["physics", "Hamilton", "HamiltonianField", "Motion comes from the gradient of one learned energy H, so H is conserved for any weights."],
+  ["physics", "Euler–Lagrange", "LagrangianField", "Motion is derived from one learned Lagrangian L in measured coordinates; the energy q̇·∂L/∂q̇ − L is conserved."],
+  ["mathematics", "Permutation invariance", "InvariantPool", "ρ(Σ φ(xᵢ)): the order of a set's rows cannot change the output."],
+  ["mathematics", "Convexity", "ConvexPotential", "Non-negative hidden weights and convex activations: one minimum, no spurious wells."],
+  ["mathematics", "Lipschitz bound", "LipschitzLinear", "The applied weight's largest singular value is held at or below L, so the layer can never be steeper than L."],
+  ["biology", "Dale's law", "DaleLinear", "Each input neuron is excitatory or inhibitory: every weight column keeps one sign."],
+  ["biology", "Hebbian locality", "HebbianFastWeights", "Fast synapses change only by λA + η hhᵀ from local activity, never by the optimizer."],
+  ["psychology", "Capacity limit", "WorkingMemory", "Exactly K slots leave, however long the input: Cowan's 4 ± 1, as architecture."],
+  ["learning", "Curriculum", "SelfPaced (recipe)", "An example trains only while its loss is under a threshold that rises each epoch."],
+];
+let lawsTimer = null;
+
+function lawsChart(r){
+  // error against n on a log x axis, two lines, drawn only from rows a run on this machine produced
+  const rows = (r && r.rows) || [];
+  if (!rows.length) return "";
+  const W = 380, H = 190, L = 46, R = 12, T = 10, B = 30;
+  const ns = rows.map(x => x.n), vals = rows.flatMap(x => [x.plain, x.law]).filter(v => v > 0);
+  const lx0 = Math.log(Math.min(...ns)), lx1 = Math.log(Math.max(...ns)) || lx0 + 1;
+  const ly0 = Math.log(Math.min(...vals)), ly1 = Math.log(Math.max(...vals));
+  const sx = n => L + (lx1 === lx0 ? (W - L - R) / 2 : (Math.log(n) - lx0) / (lx1 - lx0) * (W - L - R));
+  const sy = v => T + (ly1 === ly0 ? (H - T - B) / 2 : (1 - (Math.log(Math.max(v, 1e-12)) - ly0) / (ly1 - ly0)) * (H - T - B));
+  const fmt = v => v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toPrecision(2);
+  const line = (key, color) => `<polyline fill="none" stroke="${color}" stroke-width="2" points="${rows.map(x => `${sx(x.n).toFixed(1)},${sy(x[key]).toFixed(1)}`).join(" ")}"/>`
+    + rows.map(x => `<circle cx="${sx(x.n).toFixed(1)}" cy="${sy(x[key]).toFixed(1)}" r="3" fill="${color}"><title>n=${x.n}: ${key} ${fmt(x[key])}</title></circle>`).join("");
+  const yTicks = [Math.exp(ly0), Math.exp((ly0 + ly1) / 2), Math.exp(ly1)];
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="error against the number of examples, plain and law">
+    <line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="#d6d9de"/><line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="#d6d9de"/>
+    ${ns.map(n => `<text x="${sx(n).toFixed(1)}" y="${H - B + 14}" font-size="10" text-anchor="middle" fill="#7a808a">${n}</text>`).join("")}
+    <text x="${(L + W - R) / 2}" y="${H - 3}" font-size="10" text-anchor="middle" fill="#7a808a">examples, n (log scale)</text>
+    ${yTicks.map(v => `<text x="${L - 5}" y="${(sy(v) + 3).toFixed(1)}" font-size="10" text-anchor="end" fill="#7a808a">${fmt(v)}</text>`).join("")}
+    ${line("plain", "#8a8f98")}${line("law", "#2D7DD2")}</svg>`;
+}
+
+async function renderLawsPage(){
+  const host = $("lawsMain");
+  let d;
+  try{ d = await (await fetch(API + "/api/laws")).json(); }
+  catch { host.innerHTML = `<div class="lawwrap"><div class="runfail">The server did not answer.</div></div>`; return; }
+  clearTimeout(lawsTimer);
+  const running = d.arms.some(a => a.result && a.result.status === "running");
+  if (running) lawsTimer = setTimeout(() => { if (document.body.dataset.page === "pageLaws") renderLawsPage(); }, 3000);
+  host.innerHTML = `<div class="lawwrap">
+    <div class="lawlist"><h3>Laws</h3>
+      <p class="lead">Layers whose structure enforces a law, so it holds for every value of the weights and never has to
+      be learned from data. Each arm on the right measures the one claim that matters: does the law-built network
+      need less data than a plain one on a task the law describes?</p>
+      ${LAW_LIST.map(([fam, law, layer, line]) => `<div class="lawlaw"><i>${fam}</i><b>${alEsc(law)}</b> · <code>${alEsc(layer)}</code><span>${alEsc(line)}</span></div>`).join("")}
+    </div>
+    <div><div class="lawhead"><h3>Data efficiency, measured here</h3>
+      <div class="lawkey"><span class="plain">plain network</span><span class="law">law-built network</span></div></div>
+      <div class="lawarms" style="margin-top:12px">${d.arms.map(a => {
+        const r = a.result, live = r && r.status === "running";
+        const meta = r && r.rows && r.rows.length ? `${r.seeds} seed${r.seeds === 1 ? "" : "s"}, ${r.steps} steps${r.seconds ? ", " + Math.round(r.seconds) + " s" : ""}${r.finished ? ", " + ago(r.finished) : ""}` : "";
+        return `<div class="lawcard">
+          <header><b>${alEsc(a.arm)}</b><span>${alEsc(a.law)}</span>${meta ? `<small>${alEsc(meta)}</small>` : ""}</header>
+          <p class="task">${alEsc(a.task)}. Lower is better (${alEsc(a.measure)}).</p>
+          ${lawsChart(r)}
+          ${r && r.verdict ? `<p class="verdict">${alEsc(r.verdict)}</p>`
+            : live ? `<p class="verdict none">Running: ${r.rows.length} of ${r.sizes.length} sizes done.</p>`
+            : r && r.status === "error" ? `<p class="verdict none">The run failed: ${alEsc(r.error || "")}</p>`
+            : r && r.status === "stopped" ? `<p class="verdict none">Stopped before it finished; nothing was saved.</p>`
+            : `<p class="verdict none">Not run on this machine yet. No curve is drawn from numbers this machine did not produce.</p>`}
+          <div class="acts">${live ? `<button class="btn" data-lawstop="${a.arm}">Stop</button>`
+            : `<button class="btn go" data-lawrun="${a.arm}">${r && r.rows && r.rows.length ? "Run again" : "Run"}</button>`}
+            <span class="st-msg">${live ? "Rows appear as each size finishes." : `sizes ${d.defaults.sizes.join(", ")} · ${d.defaults.seeds} seeds`}</span></div>
+        </div>`; }).join("")}</div></div></div>`;
+  host.querySelectorAll("[data-lawrun]").forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = "Starting…";
+    const r = await fetch(API + `/api/laws/${b.dataset.lawrun}/run`, {method: "POST", headers: {"content-type": "application/json"}, body: "{}"});
+    if (!r.ok){ const e = await r.json().catch(() => ({})); b.textContent = (e.detail && e.detail.message) || "Could not start"; return; }
+    renderLawsPage();
+  });
+  host.querySelectorAll("[data-lawstop]").forEach(b => b.onclick = async () => {
+    await fetch(API + `/api/laws/${b.dataset.lawstop}/stop`, {method: "POST"}); renderLawsPage();
+  });
+}
 
 /* ============================ AI radar ============================ */
 
@@ -11297,7 +11409,7 @@ function mathDiagram(entry){
   if (NO_DIAGRAM.has(kind)) return "";
   return "";
 }
-const NO_DIAGRAM = new Set(["dynamics", "graph", "factorised", "sampling",
+const NO_DIAGRAM = new Set(["dynamics", "graph", "factorised", "sampling", "law",
                             "equation", "block", "energy", "solve", "search",
                             "elementwise", "external"]);
 

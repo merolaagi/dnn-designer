@@ -1090,10 +1090,162 @@ ENTRIES.update({"HamiltonianField": _hamiltonian,
                 "ODEBlock": _ode, "GraphConv": _graph_conv,
                 "Sampling": _sampling})
 
+# --------------------------------------------------------------------------
+# law-built layers (lawsource.py): the law is the structure, so it holds for any weights
+# --------------------------------------------------------------------------
+
+def _w(ins, i=-1):
+    return ins[0][i] if ins and ins[0] else 0
+
+
+def _lagrangian(p, ins, out):
+    d, h = _w(ins), int(p.get("hidden", 64))
+    return {
+        "family": "law", "title": "Lagrangian field (Euler–Lagrange)",
+        "equation": "q̈ = (∇²_{q̇q̇} L + εI)⁻¹ [ ∇_q L − (∇²_{q̇q} L) q̇ ]",
+        "shape": f"z = (q, q̇) ∈ ℝ^{_fmt(d)}: {_fmt(d // 2)} positions, {_fmt(d // 2)} velocities; returns (q̇, q̈)",
+        "symbols": [("L", f"a learned Lagrangian: a softplus network ℝ^{_fmt(d)} → ℝ, hidden {_fmt(h)}"),
+                    ("ε", f"{p.get('eps', 1e-3)}, added to the mass matrix ∇²_{{q̇q̇}}L before solving")],
+        "arithmetic": [
+            ("the law", "d/dt ∂L/∂q̇ = ∂L/∂q, solved for q̈ inside forward"),
+            ("guarantee, any weights", "E = q̇·∂L/∂q̇ − L is constant along the motion (exactly with ε = 0)"),
+            ("parameters", f"{_fmt(d)}·{_fmt(h)}+{_fmt(h)} + {_fmt(h)}·{_fmt(h)}+{_fmt(h)} + {_fmt(h)}+1 = "
+                           + _fmt(_count("LagrangianField", p, ins, out))),
+        ],
+        "freedom": ["Works in measured coordinates (positions and velocities), with no momenta needed.",
+                    "Each forward pass differentiates twice, so it costs several times a plain layer; "
+                    "its inputs must allow gradients."] + _measured("lagrangian"),
+    }
+
+
+def _convex(p, ins, out):
+    d, h, k, o = _w(ins), int(p.get("hidden", 64)), int(p.get("layers", 2)), int(p.get("out", 1))
+    return {
+        "family": "law", "title": "Input-convex network",
+        "equation": "z₁ = σ(W₀y + b₀),   z_{i+1} = σ(softplus(W_z) z_i + W_y y + b),   f(y) = last z",
+        "shape": f"y ∈ ℝ^{_fmt(d)} → f(y) ∈ ℝ^{_fmt(o)}, {_fmt(k)} layer(s) of {_fmt(h)}",
+        "symbols": [("σ", "softplus: convex and non-decreasing"),
+                    ("softplus(W_z)", "the hidden-to-hidden weights, never negative")],
+        "arithmetic": [
+            ("the law", "a non-negative sum of convex functions, through a convex non-decreasing σ, is convex"),
+            ("guarantee, any weights", "f(½a + ½b) ≤ ½f(a) + ½f(b): one minimum, no spurious wells"),
+            ("parameters", _fmt(_count("ConvexPotential", p, ins, out))),
+        ],
+        "freedom": ["Only convex functions can be represented: a target with two wells cannot be fitted."]
+                   + _measured("convex"),
+    }
+
+
+def _lipschitz(p, ins, out):
+    d, u, b = _w(ins), int(p.get("units", 64)), float(p.get("bound", 1.0))
+    return {
+        "family": "law", "title": "Lipschitz-bounded linear map",
+        "equation": f"W_eff = W · min(1, {b:g} / σ_max(W)),   y = W_eff x + b",
+        "shape": f"ℝ^{_fmt(d)} → ℝ^{_fmt(u)}",
+        "symbols": [("σ_max(W)", "the largest singular value, computed exactly (power iteration only "
+                                 "under-estimates it, which would let the bound be broken)")],
+        "arithmetic": [
+            ("guarantee, any weights", f"‖W_eff‖₂ ≤ {b:g}, so ‖f(x) − f(x′)‖ ≤ {b:g}·‖x − x′‖"),
+            ("in a stack", "with 1-Lipschitz activations (ReLU, tanh) the network's bound is the product of the layers'"),
+            ("parameters", f"{_fmt(d)}·{_fmt(u)} + {_fmt(u)} = " + _fmt(_count("LipschitzLinear", p, ins, out))),
+        ],
+        "freedom": ["The bound limits how steep the function may be, so a target steeper than the product of "
+                    "bounds cannot be fitted."] + _measured("lipschitz"),
+    }
+
+
+def _invariant(p, ins, out):
+    n, d = (ins[0][0], ins[0][-1]) if ins and ins[0] and len(ins[0]) == 2 else (0, 0)
+    pool = p.get("pool", "sum")
+    return {
+        "family": "law", "title": "Deep Sets (permutation-invariant pooling)",
+        "equation": f"f(X) = ρ( {pool}ᵢ φ(xᵢ) )",
+        "shape": f"a set of {_fmt(n)} rows of {_fmt(d)} → ℝ^{_fmt(int(p.get('out', 16)))}",
+        "symbols": [("φ", "a small network applied to each row alone"), ("ρ", "a small network on the pooled result")],
+        "arithmetic": [
+            ("guarantee, any weights", "f(X) = f(PX) for every reordering P of the rows"),
+            ("why it is enough", "every permutation-invariant function of a set has this form (Zaheer et al. 2017)"),
+            ("parameters", _fmt(_count("InvariantPool", p, ins, out))),
+        ],
+        "freedom": ["Order cannot be seen at all, so a target that depends on order cannot be fitted."]
+                   + _measured("math"),
+    }
+
+
+def _dale(p, ins, out):
+    d, u, frac = _w(ins), int(p.get("units", 64)), float(p.get("frac", 0.8))
+    import math
+    e = int(math.ceil(frac * d)) if d else 0
+    return {
+        "family": "law", "title": "Dale's law",
+        "equation": "W_eff = softplus(W) · diag(s),   s_j = +1 (excitatory) or −1 (inhibitory)",
+        "shape": f"ℝ^{_fmt(d)} → ℝ^{_fmt(u)}: inputs 1–{_fmt(e)} excitatory, {_fmt(e + 1)}–{_fmt(d)} inhibitory"
+                 if d else "inputs split into excitatory and inhibitory",
+        "symbols": [("s", f"each input neuron's fixed sign: the first ⌈{frac:g}·n⌉ are excitatory")],
+        "arithmetic": [
+            ("guarantee, any weights", "every column of W_eff has one sign: a neuron never both excites and inhibits"),
+            ("parameters", f"{_fmt(d)}·{_fmt(u)} + {_fmt(u)} = " + _fmt(_count("DaleLinear", p, ins, out))),
+        ],
+        "freedom": ["Not measured on its own yet: the biology arm measures the Hebbian layer."],
+    }
+
+
+def _hebbian(p, ins, out):
+    d = _w(ins)
+    return {
+        "family": "law", "title": "Hebbian fast weights",
+        "equation": f"h_t = tanh(W x_t + b + A_t x_t),   A_{{t+1}} = {p.get('decay', 0.9)}·A_t + {p.get('rate', 0.5)}·h_t h_tᵀ",
+        "shape": f"a sequence [L, {_fmt(d)}] → [L, {_fmt(d)}], causal",
+        "symbols": [("A", "the fast synapses: start at zero each sequence, never a parameter"),
+                    ("W, b", "the slow weights, trained by backprop")],
+        "arithmetic": [
+            ("guarantee, any weights", "A changes only by the local rule from the activity at its two ends; "
+                                       "no gradient reaches it"),
+            ("parameters", f"{_fmt(d)}·{_fmt(d)} + {_fmt(d)} = " + _fmt(_count("HebbianFastWeights", p, ins, out))),
+        ],
+        "freedom": ["Steps run one after another in Python, so it is slow on long sequences (over ~512)."]
+                   + _measured("biology"),
+    }
+
+
+def _working_memory(p, ins, out):
+    k = int(p.get("slots", 4))
+    L, d = (ins[0][0], ins[0][-1]) if ins and ins[0] and len(ins[0]) == 2 else (0, 0)
+    return {
+        "family": "law", "title": "Working memory (a capacity of K slots)",
+        "equation": "S = LayerNorm( W_o · softmax(Q Kᵀ/√d) V + Q ),   Q = W_q·slots,  K = W_k X,  V = W_v X",
+        "shape": f"[{_fmt(L)}, {_fmt(d)}] → [{_fmt(k)}, {_fmt(d)}]: {_fmt(k)} slots, whatever the length",
+        "symbols": [("slots", f"{_fmt(k)} learned queries (Cowan's 4 ± 1)"), ("X", "the input items")],
+        "arithmetic": [
+            ("guarantee, any weights", f"exactly {_fmt(k)} vectors leave, for 3 items or 3,000"),
+            ("parameters", f"{_fmt(k)}·{_fmt(d)} + 4·({_fmt(d)}² + {_fmt(d)}) + 2·{_fmt(d)} = "
+                           + _fmt(_count("WorkingMemory", p, ins, out))),
+        ],
+        "freedom": ["Everything downstream sees only the K slots: a task that needs more than K separate items "
+                    "at once cannot be done."] + _measured("psychology"),
+    }
+
+
+def _measured(arm):
+    """The verdict of this law's last run on this machine (Laws page), or a pointer to run it."""
+    try:
+        import laws
+        r = laws.saved(arm)
+    except Exception:  # noqa: BLE001
+        r = None
+    if not r:
+        return [f"Not measured on this machine yet: Laws → {arm} → Run."]
+    return [f"Measured here ({r.get('task')}): {r.get('verdict')}"]
+
+
+ENTRIES.update({"LagrangianField": _lagrangian, "ConvexPotential": _convex, "LipschitzLinear": _lipschitz,
+                "InvariantPool": _invariant, "DaleLinear": _dale, "HebbianFastWeights": _hebbian,
+                "WorkingMemory": _working_memory})
+
 #: Families whose content is the equation itself. They are declared here
 #: rather than left to fall through, so a family cannot go undrawn by
 #: accident — which is how "equation" went unnoticed.
-NO_DIAGRAM = {"dynamics", "graph", "factorised", "sampling", "equation"}
+NO_DIAGRAM = {"dynamics", "graph", "factorised", "sampling", "equation", "law"}
 
 
 # --------------------------------------------------------------------------
