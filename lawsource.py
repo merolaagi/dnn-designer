@@ -25,7 +25,7 @@ from __future__ import annotations
 import math
 
 NAMES = ["LagrangianField", "ConvexPotential", "LipschitzLinear", "InvariantPool",
-         "DaleLinear", "HebbianFastWeights", "WorkingMemory"]
+         "DaleLinear", "HebbianFastWeights", "WorkingMemory", "SetHamiltonian"]
 
 # ---------------------------------------------------------------------------
 # physics
@@ -321,6 +321,59 @@ class WorkingMemory(nn.Module):
         return self.norm(self.out(att @ v) + q)
 '''
 
+SET_HAMILTONIAN = '''
+class SetHamiltonian(nn.Module):
+    """Two laws in one layer: energy conservation and permutation invariance.
+
+    The input is a set of N particles, each a row (q, p) of width dim. One
+    scalar energy is built the Deep Sets way, so relabelling the particles
+    cannot change it:
+
+        H(Z) = Σᵢ φ(zᵢ) + ½ Σ_{i≠j} ψ(zᵢ, zⱼ)
+
+    and the motion is Hamilton's: dqᵢ/dt = ∂H/∂pᵢ, dpᵢ/dt = −∂H/∂qᵢ. Both
+    properties hold for any weights: dH/dt = 0 along the motion, and relabelling
+    the input particles relabels the output motion the same way (equivariance).
+    A plain network on the flattened state has to learn both from data — every
+    ordering of the same configuration is a new example to it, and conservation
+    is something it can only approximate. Input [N, dim], output [N, dim].
+    """
+    def __init__(self, dim, hidden=64, pairwise=True):
+        super().__init__()
+        if dim % 2:
+            raise ValueError(f"SetHamiltonian needs an even particle width, got {dim}")
+        self.n = dim // 2
+        self.one = nn.Sequential(nn.Linear(dim, hidden), nn.Tanh(),
+                                 nn.Linear(hidden, hidden), nn.Tanh(),
+                                 nn.Linear(hidden, 1))
+        self.pair = (nn.Sequential(nn.Linear(2 * dim, hidden), nn.Tanh(),
+                                   nn.Linear(hidden, hidden), nn.Tanh(),
+                                   nn.Linear(hidden, 1))
+                     if pairwise else None)
+
+    def energy(self, z):                       # z: [B, N, dim] -> [B]
+        e = self.one(z).sum(dim=(1, 2))
+        if self.pair is not None:
+            B, N, D = z.shape
+            zi = z.unsqueeze(2).expand(B, N, N, D)
+            zj = z.unsqueeze(1).expand(B, N, N, D)
+            pair = self.pair(torch.cat([zi, zj], dim=-1)).squeeze(-1)   # [B, N, N]
+            mask = ~torch.eye(N, dtype=torch.bool, device=z.device)
+            e = e + 0.5 * (pair * mask).sum(dim=(1, 2))
+        return e
+
+    def forward(self, z):
+        lead = z.shape[:-2]
+        z = z.reshape(-1, z.shape[-2], z.shape[-1])
+        with torch.enable_grad():
+            if not z.requires_grad:
+                z = z.requires_grad_(True)
+            H = self.energy(z).sum()
+            g = torch.autograd.grad(H, z, create_graph=True)[0]
+            out = torch.cat([g[..., self.n:], -g[..., :self.n]], dim=-1)
+        return out.reshape(*lead, z.shape[-2], z.shape[-1])
+'''
+
 SOURCES = {
     "LagrangianField": LAGRANGIAN,
     "ConvexPotential": CONVEX,
@@ -329,6 +382,7 @@ SOURCES = {
     "DaleLinear": DALE,
     "HebbianFastWeights": HEBBIAN,
     "WorkingMemory": WORKING_MEMORY,
+    "SetHamiltonian": SET_HAMILTONIAN,
 }
 
 
@@ -372,4 +426,7 @@ def learnables(name: str, **k) -> int:
     if name == "WorkingMemory":
         d = k["dim"]
         return k["slots"] * d + 4 * (d * d + d) + 2 * d
+    if name == "SetHamiltonian":
+        d, h = k["dim"], k["hidden"]
+        return _mlp(d, h, h, 1) + (_mlp(2 * d, h, h, 1) if k.get("pairwise", True) else 0)
     raise KeyError(name)

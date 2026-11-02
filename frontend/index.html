@@ -4178,6 +4178,7 @@ const GLYPHS = {
   "Laws · mathematics": "M4 4h10 M4 4l5 5-5 5h10",
   "Laws · biology": "M5 9a2 2 0 1 0 0-.1 M13 9a2 2 0 1 0 0-.1 M7 9h4 M5 7v-4 M13 11v4",
   "Laws · psychology": "M3 5h3v8h-3z M7.5 5h3v8h-3z M12 5h3v8h-3z",
+  "Laws · composed": "M3 9a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M9 9a3 3 0 1 0 6 0a3 3 0 1 0-6 0",
 };
 
 // what people reach for most often, in the order they usually reach for it
@@ -8369,17 +8370,21 @@ const LAW_LIST = [
   ["mathematics", "Lipschitz bound", "LipschitzLinear", "The applied weight's largest singular value is held at or below L, so the layer can never be steeper than L.", "lipschitz"],
   ["biology", "Dale's law", "DaleLinear", "Each input neuron is excitatory or inhibitory: every weight column keeps one sign.", "dale"],
   ["biology", "Hebbian locality", "HebbianFastWeights", "Fast synapses change only by λA + η ĥĥᵀ from local activity, never by the optimizer.", "biology"],
+  ["composed", "Energy + permutation", "SetHamiltonian", "One energy H(Z) = Σφ(zᵢ) + ½Σψ(zᵢ,zⱼ) over a set of particles: conserved, and relabelling the particles relabels their motion.", "compose"],
   ["psychology", "Capacity limit", "WorkingMemory", "Exactly K slots leave, however long the input: Cowan's 4 ± 1, as architecture.", "psychology"],
   ["learning", "Curriculum", "SelfPaced (recipe)", "An example trains only while its loss is under a threshold that rises each epoch.", ""],
 ];
 let lawsTimer = null;
 
-function lawsChart(r){
-  // error against n on a log x axis, two lines, drawn only from rows a run on this machine produced
+function lawsChart(r, ghosts){
+  // error against n on a log x axis, two lines, drawn only from rows a run on this machine produced;
+  // ghosts are other arms' curves, faint and dashed behind, on the same axes for scale only
   const rows = (r && r.rows) || [];
   if (!rows.length) return "";
+  ghosts = (ghosts || []).filter(g => g.rows && g.rows.length);
   const W = 380, H = 190, L = 46, R = 12, T = 10, B = 30;
-  const ns = rows.map(x => x.n), vals = rows.flatMap(x => [x.plain, x.law]).filter(v => v > 0);
+  const ns = rows.concat(...ghosts.map(g => g.rows)).map(x => x.n);
+  const vals = rows.concat(...ghosts.map(g => g.rows)).flatMap(x => [x.plain, x.law]).filter(v => v > 0);
   const lx0 = Math.log(Math.min(...ns)), lx1 = Math.log(Math.max(...ns)) || lx0 + 1;
   const ly0 = Math.log(Math.min(...vals)), ly1 = Math.log(Math.max(...vals));
   const sx = n => L + (lx1 === lx0 ? (W - L - R) / 2 : (Math.log(n) - lx0) / (lx1 - lx0) * (W - L - R));
@@ -8387,23 +8392,26 @@ function lawsChart(r){
   const fmt = v => v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toPrecision(2);
   const line = (key, color) => `<polyline fill="none" stroke="${color}" stroke-width="2" points="${rows.map(x => `${sx(x.n).toFixed(1)},${sy(x[key]).toFixed(1)}`).join(" ")}"/>`
     + rows.map(x => `<circle cx="${sx(x.n).toFixed(1)}" cy="${sy(x[key]).toFixed(1)}" r="3" fill="${color}"><title>n=${x.n}: ${key} ${fmt(x[key])}</title></circle>`).join("");
+  const ghost = g => ["plain", "law"].map(key => `<polyline fill="none" stroke="${key === "law" ? "#2D7DD2" : "#8a8f98"}" stroke-opacity=".28" stroke-width="1.5" stroke-dasharray="4 3" points="${g.rows.map(x => `${sx(x.n).toFixed(1)},${sy(x[key]).toFixed(1)}`).join(" ")}"><title>${g.label} (${key}, a different task)</title></polyline>`).join("")
+    + `<text x="${(sx(g.rows[g.rows.length - 1].n) - 2).toFixed(1)}" y="${(sy(g.rows[g.rows.length - 1].law) - 4).toFixed(1)}" font-size="9" text-anchor="end" fill="#9aa0a8">${g.label}</text>`;
   const yTicks = [Math.exp(ly0), Math.exp((ly0 + ly1) / 2), Math.exp(ly1)];
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="error against the number of examples, plain and law">
     <line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="#d6d9de"/><line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="#d6d9de"/>
     ${ns.map(n => `<text x="${sx(n).toFixed(1)}" y="${H - B + 14}" font-size="10" text-anchor="middle" fill="#7a808a">${n}</text>`).join("")}
     <text x="${(L + W - R) / 2}" y="${H - 3}" font-size="10" text-anchor="middle" fill="#7a808a">examples, n (log scale)</text>
     ${yTicks.map(v => `<text x="${L - 5}" y="${(sy(v) + 3).toFixed(1)}" font-size="10" text-anchor="end" fill="#7a808a">${fmt(v)}</text>`).join("")}
-    ${line("plain", "#8a8f98")}${line("law", "#2D7DD2")}</svg>`;
+    ${ghosts.map(ghost).join("")}${line("plain", "#8a8f98")}${line("law", "#2D7DD2")}</svg>`;
 }
 
-function lawsDataCard(a, d){
+function lawsDataCard(a, d, ghosts){
   const live = a.result && a.result.status === "running";
   const r = live || lawsUsable(a.result, "data") ? a.result : null;
   const meta = r && r.rows && r.rows.length ? `${r.seeds} seed${r.seeds === 1 ? "" : "s"}, ${r.steps} steps${r.seconds ? ", " + Math.round(r.seconds) + " s" : ""}${r.finished ? ", " + ago(r.finished) : ""}` : "";
   return `<div class="lawcard">
     <header><b>${alEsc(a.arm)}</b><span>${alEsc(a.law)}</span>${meta ? `<small>${alEsc(meta)}</small>` : ""}</header>
     <p class="task">${alEsc(a.task)}. Lower is better (${alEsc(a.measure)}).</p>
-    ${lawsChart(r)}
+    ${lawsChart(r, ghosts)}
+    ${ghosts && ghosts.some(g => g.rows && g.rows.length) ? `<p class="task">Faint, dashed: ${ghosts.filter(g => g.rows && g.rows.length).map(g => alEsc(g.label)).join(" and ")}, the one-law arms, on their own tasks. They share the axes for scale only; they are not the same task, so they do not show two laws against one.</p>` : ""}
     ${r && r.verdict ? `<p class="verdict">${alEsc(r.verdict)}</p>`
       : live ? `<p class="verdict none">Running: ${r.rows.length} of ${r.sizes.length} sizes done.</p>`
       : lawsIdle(r)}
@@ -8464,7 +8472,10 @@ async function renderLawsPage(){
     lawsTimer = setTimeout(() => { if (document.body.dataset.page === "pageLaws") renderLawsPage(); }, 3000);
   // a law is listed only beside a measurement: an arm or a guarantee test on this page (shelved ones are not)
   const measured = new Set(d.arms.concat(d.guarantees).map(a => a.arm));
-  const confirmed = d.arms.filter(a => a.status === "confirmed"), measuring = d.arms.filter(a => a.status !== "confirmed");
+  const confirmed = d.arms.filter(a => a.status === "confirmed"), composed = d.arms.filter(a => a.status === "composed");
+  const measuring = d.arms.filter(a => a.status !== "confirmed" && a.status !== "composed");
+  const ghostOf = name => { const g = d.arms.find(x => x.arm === name); return g && lawsUsable(g.result, "data") ? {label: name, rows: g.result.rows} : null; };
+  const ghosts = ["physics", "math"].map(ghostOf).filter(Boolean);
   const section = (title, lead, cards) => cards ? `<div class="lawsec"><h4>${title}</h4><p class="lead">${lead}</p>
     <div class="lawarms">${cards}</div></div>` : "";
   host.innerHTML = `<div class="lawwrap">
@@ -8475,6 +8486,8 @@ async function renderLawsPage(){
     </div>
     <div><div class="lawhead"><h3>Measured here</h3>
       <div class="lawkey"><span class="plain">plain network</span><span class="law">law-built network</span></div></div>
+      ${section("Composed", "Two confirmed laws in one layer. Judged by its own run against a plain network, like every arm.",
+                composed.map(a => lawsDataCard(a, d, ghosts)).join(""))}
       ${section("Data savers, confirmed", "The law-built network needs less data than a plain one on a task the law describes. Each curve is error against data, from a run on this machine.",
                 confirmed.map(a => lawsDataCard(a, d)).join(""))}
       ${section("Still being measured", "Not settled yet: no guided project until a run shows a clear gap.", measuring.map(a => lawsDataCard(a, d)).join(""))}

@@ -455,6 +455,67 @@ def psychology_arm():
 
 
 # ---------------------------------------------------------------------------
+# composed — two confirmed laws in one layer (SetHamiltonian: energy + permutation)
+# ---------------------------------------------------------------------------
+
+@arm("compose")
+def compose_arm():
+    """Three identical particles on a line, coupled by springs and each in an
+    anharmonic well. The plain MLP sees the six numbers flattened, in one
+    order. SetHamiltonian sees a set and derives motion from one energy, so
+    it gets conservation *and* indifference to particle order for free. This
+    is the first model built on two laws at once; the gap should exceed
+    either law alone."""
+    import torch
+    import torch.nn as nn
+    from conservation import _rk4
+    from lawsource import build
+
+    SetHamiltonian = build("SetHamiltonian")
+    N, k = 3, 1.0
+
+    def field(z):                          # z: [B, N, 2]
+        q, p = z[..., 0], z[..., 1]
+        dq = p
+        coupling = k * (N * q - q.sum(-1, keepdim=True))     # Σⱼ k (qᵢ − qⱼ)
+        dp = -coupling - q ** 3
+        return torch.stack([dq, dp], dim=-1)
+
+    def data(n, seed):
+        g = torch.Generator().manual_seed(seed)
+        z = (torch.rand(n, N, 2, generator=g) * 2 - 1) * torch.tensor([1.5, 1.0])
+        z0 = torch.tensor([[[1.0, 0.0], [-0.5, 0.3], [0.2, -0.4]]])
+        truth = _rk4(field, z0, 0.05, 1200)
+        return z, field(z), truth
+
+    class Flat(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.net = nn.Sequential(nn.Linear(2 * N, 64), nn.Tanh(),
+                                     nn.Linear(64, 64), nn.Tanh(), nn.Linear(64, 2 * N))
+        def forward(self, z):
+            return self.net(z.flatten(-2)).reshape(*z.shape[:-2], N, 2)
+
+    def plain():
+        return Flat()
+
+    def law():
+        return SetHamiltonian(2, hidden=48, pairwise=True)
+
+    def loss(model, xs, ys):
+        return ((model(xs) - ys) ** 2).mean()
+
+    def error(model, truth):
+        with torch.enable_grad():
+            path = _rk4(lambda z: model(z), truth[0], 0.05, len(truth) - 1).detach()
+        return float(((path - truth) ** 2).mean().sqrt())
+
+    return {"law": law, "plain": plain, "data": data, "loss": loss, "error": error,
+            "task": "3 coupled particles, rollout RMSE over 60 time units",
+            "law_name": "energy conservation + permutation invariance (SetHamiltonian)"}
+
+
+# ---------------------------------------------------------------------------
 # guarantees, measured: not "does it save data" but "does the guarantee buy what it promises"
 # ---------------------------------------------------------------------------
 #
@@ -696,7 +757,9 @@ STATUS = {"physics": "confirmed", "math": "confirmed", "psychology": "confirmed"
           "lagrangian": "measuring",
           # with a normalised write, still no recall (error ≥ 0.93 where answering zero scores 1.0); its only
           # lead was over a GRU doing worse than zero, which is not a data saving
-          "biology": "shelved"}
+          "biology": "shelved",
+          # two laws in one layer; shown in its own group, judged by its own run
+          "compose": "composed"}
 GUARANTEE_N = 512
 
 

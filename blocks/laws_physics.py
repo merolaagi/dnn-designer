@@ -39,3 +39,32 @@ install(Block(
     torch_init=lambda p, ins: (f"LagrangianField({ins[0][-1]}, {int(p['hidden'])}, eps={float(p['eps'])}, "
                                f"form={str(p.get('form', 'mechanical'))!r}, activation={str(p.get('activation', 'tanh'))!r})"),
 ))
+
+
+def set_hamiltonian_infer(p, shapes):
+    s = list(shapes[0])
+    if len(s) != 2:
+        raise ShapeError(f"SetHamiltonian reads a set of particles as [N, 2d]; got {s}.")
+    if s[1] % 2:
+        raise ShapeError(f"Each particle row is (q, p), so its width must be even; got {s[1]}.")
+    return s
+
+
+install(Block(
+    name="SetHamiltonian",
+    category="Laws · composed",
+    doc="Energy conservation + permutation invariance in one layer. H(Z) = "
+        "Σφ(zᵢ) + ½Σψ(zᵢ,zⱼ) over a set of particles, motion from Hamilton's "
+        "equations. Conserved and relabelling-equivariant for any weights.",
+    params=[
+        Param("hidden", "int", 64, min=1),
+        Param("pairwise", "bool", True,
+              help="Include a ψ(zᵢ, zⱼ) term; needed whenever particles interact"),
+    ],
+    infer=set_hamiltonian_infer,
+    learnables=lambda p, ins, out: learnables("SetHamiltonian", dim=ins[0][-1],
+                                              hidden=int(p["hidden"]), pairwise=bool(p["pairwise"])),
+    prelude=SOURCES["SetHamiltonian"],
+    torch_init=lambda p, ins: (f"SetHamiltonian({ins[0][-1]}, {int(p['hidden'])}, "
+                               f"pairwise={bool(p['pairwise'])})"),
+))

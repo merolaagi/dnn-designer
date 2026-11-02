@@ -70,6 +70,7 @@ CASES = {
     "DaleLinear": ({"units": 9, "frac": 0.8}, [5], [10]),
     "HebbianFastWeights": ({"decay": 0.9, "rate": 0.5}, [5, 4], [9, 6]),
     "WorkingMemory": ({"slots": 4}, [3, 8], [300, 8]),
+    "SetHamiltonian": ({"hidden": 16, "pairwise": True}, [3, 2], [5, 4]),
 }
 
 
@@ -342,6 +343,65 @@ def _():
         assert rate.max().item() < 1e-6, f"seed {seed}: dE/dt is {rate.max().item():.2e} of |∇E||ż|, not zero"
 
 
+@check("SetHamiltonian, untrained: energy is unchanged by relabelling, and the motion relabels with the input (1e-5)")
+def _():
+    if not HAVE_TORCH:
+        return skip()
+    for seed, pairwise in ((0, True), (1, False)):
+        torch.manual_seed(seed)
+        layer = lawsource.build("SetHamiltonian")(4, hidden=16, pairwise=pairwise)
+        Z = torch.randn(8, 5, 4)
+        for _ in range(5):
+            perm = torch.randperm(5)
+            e_gap = (layer.energy(Z) - layer.energy(Z[:, perm])).abs().max().item()
+            assert e_gap < 1e-5, f"pairwise={pairwise}: energy changed by {e_gap:.2e} under a relabelling"
+            m_gap = (layer(Z[:, perm]) - layer(Z)[:, perm]).abs().max().item()
+            assert m_gap < 1e-5, f"pairwise={pairwise}: the motion of a relabelled set is off by {m_gap:.2e}"
+
+
+@check("SetHamiltonian, untrained: its own energy drifts by < 1e-3 over a 600-step RK4 rollout")
+def _():
+    if not HAVE_TORCH:
+        return skip()
+    for seed in range(2):
+        torch.manual_seed(seed)
+        layer = lawsource.build("SetHamiltonian")(2, hidden=32, pairwise=True)
+        z = torch.randn(1, 3, 2) * 0.5
+        with torch.no_grad():
+            e0 = layer.energy(z).item()
+        dt = 0.01
+        for _ in range(600):
+            k1 = layer(z).detach(); k2 = layer(z + dt / 2 * k1).detach()
+            k3 = layer(z + dt / 2 * k2).detach(); k4 = layer(z + dt * k3).detach()
+            z = z + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        with torch.no_grad():
+            drift = abs(layer.energy(z).item() - e0) / max(abs(e0), 1e-6)
+        assert drift < 1e-3, f"seed {seed}: energy drifted by {drift:.2e} of its value over 600 steps"
+
+
+@check("SetHamiltonian: the real parameter count is lawsource.learnables, and the shape is what the canvas says")
+def _():
+    if not HAVE_TORCH:
+        return skip()
+    for pairwise in (True, False):
+        for shape in ([3, 2], [5, 4]):
+            p = {"hidden": 24, "pairwise": pairwise}
+            layer = ctor_kwargs("SetHamiltonian", p, shape)
+            real = sum(q.numel() for q in layer.parameters())
+            want = lawsource.learnables("SetHamiltonian", dim=shape[-1], hidden=24, pairwise=pairwise)
+            assert real == want, f"{shape}, pairwise={pairwise}: torch {real}, learnables {want}"
+            g = graph_of("SetHamiltonian", p, shape)
+            rep = G.analyze(g)
+            assert rep["ok"] and rep["nodes"]["c"]["learnables"] == real, rep["errors"][:1]
+            out = layer(torch.randn(2, *shape))
+            assert list(out.shape[1:]) == rep["nodes"]["c"]["out_shape"] == shape, (shape, list(out.shape))
+    try:
+        ctor_kwargs("SetHamiltonian", {"hidden": 8, "pairwise": True}, [3, 3])
+        raise AssertionError("an odd particle width is refused")
+    except ValueError:
+        pass
+
+
 @check("SelfPaced admits only examples under the threshold, and the threshold rises each epoch")
 def _():
     if not HAVE_TORCH:
@@ -418,6 +478,10 @@ def _():
     measured = set(L.ARMS) | set(L.GUARANTEES)
     assert listed and "" in listed and all(a in measured or a == "" for a in listed)   # the page filters by arm
     assert "LAW_LIST.filter(x => measured.has(x[4]))" in page and 'fixed n = ' in page and "Not yet run" in page
+    assert page.index('section("Composed"') < page.index('section("Data savers, confirmed"')
+    assert "lawsDataCard(a, d, ghosts)" in page and "they are not the same task" in page
+    import laws as L2
+    assert L2.STATUS["compose"] == "composed" and next(a for a in L2.overview()["arms"] if a["arm"] == "compose")["status"] == "composed"
 
 
 @check("a verdict says a loss is a loss, before the law's first win as well as after it")

@@ -658,12 +658,15 @@ of the weights, so it never has to be learned from data:
 | `DaleLinear` | Dale's law | each input neuron is excitatory or inhibitory |
 | `HebbianFastWeights` | Hebbian locality | fast synapses change only by a local rule, never by the optimizer |
 | `WorkingMemory` | capacity limit | exactly K vectors leave, however long the input |
+| `SetHamiltonian` | energy + permutation (composed) | one energy over a set of particles: conserved, and relabelling particles relabels the motion |
 
 Plus the `SelfPaced` training recipe (a curriculum without a teacher). Each guarantee is
 tested numerically on untrained, scrambled layers in `tests/test_laws.py`.
 
-The Laws page has three sections:
+The Laws page has four sections:
 
+- **Composed:** SetHamiltonian, two confirmed laws in one layer, judged by its own run (compose
+  arm). On three coupled particles neither it nor the plain network beat doing nothing yet.
 - **Data savers, confirmed:** Hamiltonian, Deep Sets, working memory and Dale's law. Each has a
   guided project.
 - **Still being measured:** Lagrangian. With Tanh it is stable and ahead at n=8 and n=512,

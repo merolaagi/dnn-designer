@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.38.0
+
+- **First composed law: SetHamiltonian.** One learned energy
+  H(Z) = Σ φ(zᵢ) + ½ Σ ψ(zᵢ, zⱼ) over a set of particles, so the motion
+  conserves H and relabelling the particles relabels the motion. The block,
+  the generated code and the harness all run the same source text from
+  lawsource.py. New palette group "Laws · composed", a mathbook entry, a
+  project (three particles), and a "Composed" section on the Laws page,
+  with the physics and math curves shown faintly for scale only.
+- **Guarantee tests pass:** energy invariance and motion equivariance under
+  permutation (1e-5, with and without the pairwise term), own-energy drift
+  under 600 RK4 steps below 1e-3, parameter count against learnables, and
+  canvas shapes.
+- **compose arm (3 coupled particles, rollout RMSE over 60 time units):**
+  "The law was ahead at n=8 but behind at n=512; it is not a data saver
+  here." Plain against law: n=8 12.61 against 0.81, n=32 8.59 against 0.97,
+  n=128 5.58 against 0.97, n=512 0.749 against 0.975. Doing nothing scores
+  0.857 (never move) and 0.690 (predict zero), so neither model learned
+  this rollout; the arm is left as given.
+
 ## 4.37.0
 
 - **Guarantee cards only show results they can label.** Earlier versions

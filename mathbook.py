@@ -1245,7 +1245,27 @@ def _measured(arm):
     return [f"Measured here ({r.get('task')}): {r.get('verdict')}"]
 
 
-ENTRIES.update({"LagrangianField": _lagrangian, "ConvexPotential": _convex, "LipschitzLinear": _lipschitz,
+def _set_hamiltonian(p, ins, out):
+    n, d = (ins[0][0], ins[0][-1]) if ins and ins[0] and len(ins[0]) == 2 else (0, 0)
+    h, pair = int(p.get("hidden", 64)), bool(p.get("pairwise", True))
+    return {
+        "family": "law", "title": "Set Hamiltonian (two laws: energy and permutation)",
+        "equation": "H(Z) = Σᵢ φ(zᵢ)" + (" + ½ Σ_{i≠j} ψ(zᵢ, zⱼ)" if pair else "")
+                    + ",   dqᵢ/dt = ∂H/∂pᵢ,   dpᵢ/dt = −∂H/∂qᵢ",
+        "shape": f"a set of {_fmt(n)} particles, each (q, p) of width {_fmt(d)} → their motion, [{_fmt(n)}, {_fmt(d)}]",
+        "symbols": [("φ", f"a network on one particle, hidden {_fmt(h)}")]
+                   + ([("ψ", "a network on an ordered pair of particles; the sum runs over both orders")] if pair else []),
+        "arithmetic": [
+            ("energy, any weights", "dH/dt = ∇Hᵀ J ∇H = 0: H is conserved along the motion"),
+            ("relabelling, any weights", "H(PZ) = H(Z), and the motion of PZ is P times the motion of Z"),
+            ("parameters", _fmt(_count("SetHamiltonian", p, ins, out))),
+        ],
+        "freedom": ["Every particle is treated alike: particles of different kinds would need a type feature in each row.",
+                    "The pair term costs N² evaluations per step."] + _measured("compose"),
+    }
+
+
+ENTRIES.update({"SetHamiltonian": _set_hamiltonian, "LagrangianField": _lagrangian, "ConvexPotential": _convex, "LipschitzLinear": _lipschitz,
                 "InvariantPool": _invariant, "DaleLinear": _dale, "HebbianFastWeights": _hebbian,
                 "WorkingMemory": _working_memory})
 

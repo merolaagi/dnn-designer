@@ -493,3 +493,23 @@ P("law-working-memory", "Working-memory classifier", "Laws",
   difficulty="intermediate",
   data="Lists of items as a CSV of 320 columns (40 × 8), reshaped by the Input; one label per list.",
   expect="Learns from a few dozen lists where a mean-pooled classifier stays near chance.")
+
+P("law-set-hamiltonian-particles", "Three particles by SetHamiltonian", "Laws",
+  "Learn the motion of three identical interacting particles from one energy of the whole set. Hamilton's equations "
+  "conserve it, and relabelling the particles relabels their motion, for any weights: two laws in one layer.",
+  [_S(title="Input — 3 particles, each (q, p), [3, 2]",
+      why="A set of three rows, one per particle: position and momentum. The order of the rows means nothing.",
+      nodes=[_N("Input", {"shape": [3, 2]})]),
+   _S(title="SetHamiltonian — with the pair term",
+      why=("The laws: H(Z) = Σᵢ φ(zᵢ) + ½ Σ_{i≠j} ψ(zᵢ, zⱼ), the Deep Sets form, so H ignores the particles' order; "
+           "the motion is dqᵢ/dt = ∂H/∂pᵢ, dpᵢ/dt = −∂H/∂qᵢ, so H is conserved. [3, 2] in, [3, 2] out."),
+      nodes=[_N("SetHamiltonian", {"hidden": 48, "pairwise": True})],
+      alternatives="pairwise = false when the particles do not interact; the pair term costs N² per step.",
+      watch="It differentiates inside forward(), so it needs gradients even when evaluating."),
+   _S(title="Output — regression on the field", why="Targets are each particle's measured (q̇, ṗ).",
+      nodes=[_N("Output", {"task": "regression"})])],
+  ["laws", "composed", "hamiltonian", "deep sets", "particles", "energy", "permutation", "regression"],
+  difficulty="advanced",
+  data="A CSV of 6 state columns (3 particles × q, p) and 6 target columns (their q̇, ṗ); the Input reshapes to [3, 2].",
+  caution=("On laws.py's 60-time-unit rollout it was not yet a data saver: neither it nor a plain network beat predicting "
+           "no motion. The guarantees hold; whether they buy data on this task is still open."))
