@@ -418,27 +418,29 @@ P("fusion-two-tower", "Combine sensors and context", "Multi-input",
 
 
 # ---------------------------------------------------------------- laws (law-built layers that earned a project)
-# Only laws whose laws.py arm beat a plain network on its own task get a project here; the others
-# (convex, Lipschitz, Hebbian, Dale) wait until a run shows they save data.
+# Only laws confirmed as data savers by laws.py get a project here (laws.STATUS == "confirmed"): Hamiltonian,
+# Deep Sets and working memory. Lagrangian waits for its rerun; convex and Lipschitz are measured as
+# guarantees, not data savers; Hebbian and Dale have not shown a gap.
 
-P("law-lagrangian-pendulum", "Pendulum by Lagrangian", "Laws",
-  "Learn a pendulum's motion as one scalar Lagrangian. Euler–Lagrange turns it into accelerations, "
-  "so energy is conserved for any weights. On laws.py's pendulum it needed about 16x less data than a plain network.",
-  [_S(title="Input — state (q, q̇), [2]",
-      why="Angle and angular velocity, as measured. A Lagrangian works in these coordinates directly: no momenta needed.",
+P("law-hamiltonian-pendulum", "Pendulum by Hamiltonian", "Laws",
+  "Learn a pendulum's motion as one scalar energy H. Hamilton's equations read the motion off its gradient, "
+  "so H is conserved for any weights. On laws.py's pendulum, from 32 examples it beat a plain network "
+  "trained on 16 times as many.",
+  [_S(title="Input — state (q, p), [2]",
+      why="Angle and momentum. With unit mass the momentum is the angular velocity, so measured states serve.",
       nodes=[_N("Input", {"shape": [2]})]),
-   _S(title="LagrangianField — mechanical form",
-      why=("The law: d/dt ∂L/∂q̇ = ∂L/∂q, solved for q̈ inside the layer. The mechanical form builds "
-           "L = ½q̇ᵀM(q)q̇ − V(q) with M positive definite, so the mass matrix can always be inverted. "
-           "[2] in, [2] out: (q̇, q̈)."),
-      nodes=[_N("LagrangianField", {"hidden": 64, "eps": 1e-3, "form": "mechanical"})],
-      alternatives="form = general lets L be any network; trained on a pendulum its rollouts blew up.",
-      watch="It differentiates twice per step: expect each epoch to take several times a plain network's."),
-   _S(title="Output — regression on dz/dt", why="Targets are the measured (q̇, q̈) at each state.",
+   _S(title="HamiltonianField — field mode",
+      why=("The law: dq/dt = ∂H/∂p, dp/dt = −∂H/∂q. The layer learns H, a network from the state to one number, "
+           "and returns dz/dt from its gradient, so ∇Hᵀ·ż = 0: energy cannot drift, whatever the weights. "
+           "[2] in, [2] out."),
+      nodes=[_N("HamiltonianField", {"hidden": 64, "dissipative": False, "mode": "field"})],
+      alternatives="dissipative = true adds a learned friction, for a pendulum that slows down.",
+      watch="It differentiates inside forward(), so it needs gradients even when evaluating."),
+   _S(title="Output — regression on dz/dt", why="Targets are the measured (q̇, ṗ) at each state.",
       nodes=[_N("Output", {"task": "regression"})])],
-  ["laws", "physics", "lagrangian", "energy", "pendulum", "regression"], difficulty="advanced",
-  data="A CSV of states and their time derivatives: q, q̇ → q̇, q̈ (from a simulation or differenced measurements).",
-  expect="Rollouts that keep their energy; in laws.py, error 0.016 at n=32 where a plain network needed far more data.")
+  ["laws", "physics", "hamiltonian", "energy", "pendulum", "regression"], difficulty="intermediate",
+  data="A CSV of states and their time derivatives: q, p → q̇, ṗ (from a simulation or differenced measurements).",
+  expect="Long rollouts that keep their energy; in laws.py, error 0.034 at n=32, which the plain network did not reach even at n=512.")
 
 P("law-deepsets-regression", "Set regression by Deep Sets", "Laws",
   "Predict a property of a set of points that cannot depend on their order. The architecture cannot see order, "

@@ -27,6 +27,8 @@ install(Block(
     params=[
         Param("hidden", "int", 64, min=1),
         Param("eps", "float", 1e-3, help="Added to the mass matrix before solving, for stability"),
+        Param("activation", "select", "tanh", options=["tanh", "softplus"],
+              help="Inside the networks that make L; both are smooth enough to differentiate twice"),
         Param("form", "select", "mechanical", options=["mechanical", "general"],
               help="mechanical: L = ½q̇ᵀM(q)q̇ − V(q) with M positive definite (stable). general: any L"),
     ],
@@ -35,5 +37,5 @@ install(Block(
                                               form=str(p.get("form", "mechanical"))),
     prelude=SOURCES["LagrangianField"],
     torch_init=lambda p, ins: (f"LagrangianField({ins[0][-1]}, {int(p['hidden'])}, eps={float(p['eps'])}, "
-                               f"form={str(p.get('form', 'mechanical'))!r})"),
+                               f"form={str(p.get('form', 'mechanical'))!r}, activation={str(p.get('activation', 'tanh'))!r})"),
 ))

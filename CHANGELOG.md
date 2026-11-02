@@ -1,5 +1,57 @@
 # Changelog
 
+## 4.36.0
+
+- **The Laws page now has three sections.**
+  - **Data savers, confirmed:** Hamiltonian, Deep Sets and working memory,
+    each with a guided project. The new one is *Pendulum by Hamiltonian*;
+    *Set regression by Deep Sets* and *Working-memory classifier* were
+    already there.
+  - **Still being measured:** Lagrangian. Its guided project is withdrawn
+    until it wins cleanly.
+  - **Guarantees, measured:** convex and Lipschitz.
+
+  Shelved arms are left off the page. Each arm's standing is
+  `laws.STATUS`.
+- **Lagrangian rerun** at 4,000 steps, learning rate 1e-3, ε = 1e-4. Pendulum
+  rollout error, plain against law, with seed-to-seed spreads:
+  - With Softplus: n=8: 1.33 against 0.385; n=32: 0.235 against 0.030;
+    n=128: 0.020 against 0.041; n=512: 0.060 against 0.253 ± 0.252. One seed
+    blew up at n=512, so it lost there.
+  - With Tanh (now the default activation): n=8: 1.33 against 0.317;
+    n=32: 0.235 ± 0.200 against 0.044; n=128: 0.020 against 0.025;
+    n=512: 0.060 against 0.023. Nothing blew up, and it wins at n=8 and
+    n=512. At n=32 and n=128 the seeds' ranges overlap (at n=32 because the
+    plain network's own seeds differ so much), so it stays under "being
+    measured".
+  - `LagrangianField` has an `activation` parameter (`tanh` or `softplus`).
+    `laws.py --set key=value` passes options to an arm.
+- **Convex and Lipschitz are guarantee tests now,** not data-efficiency
+  arms. They run at n=512, plain against law, with no verdict.
+  - Convex: 100 descents from starts outside the training box. Plain reached
+    the true minimum (within 0.25) on 100% of them, convex on 0%. Median
+    distance from the minimum: 0.19 against 0.35. Both fits turned out to
+    have one minimum on this energy, since every descent of each model ends
+    at one point. The plain network's is simply closer to the truth, so the
+    guarantee bought nothing here and cost accuracy.
+  - Lipschitz: RMSE under the worst nudge 10 steps of projected gradient
+    ascent can find. No nudge: 0.082 against 0.085; norm 0.3: 0.134 against
+    0.134; norm 1.0: 0.273 against 0.289; norm 3.0: 0.774 against 0.883. With
+    512 examples of a smooth target, the plain network is already as
+    robust.
+- **Hebbian is shelved.** Each write to the fast memory is now normalised
+  with `LayerNorm` before it is stored. It has no learned scale or shift,
+  because the write is outside the gradient and those would never train.
+  Rerun at n = 32, 128, 512, 2048 (Hebbian against GRU): 1.61 against 1.08,
+  1.17 against 1.12, 0.98 against 1.44, 0.93 against 1.07. Its lead from
+  n=512 is only over a GRU doing worse than always answering zero (1.0);
+  the Hebbian model itself never gets meaningfully below 1.0, so there is no
+  recall. The block stays in the palette and the arm can still be run by
+  hand, but it is off the Laws page.
+- **The verdict says a loss is a loss.** A size where the plain model was
+  ahead before the law's first win used to be described as "within the
+  noise".
+
 ## 4.35.0
 
 - **Law-built layers.** Seven new blocks under `Laws · …` in the palette.

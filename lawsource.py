@@ -36,12 +36,12 @@ class MechanicalLagrangian(nn.Module):
     """L(q, q̇) = ½ q̇ᵀ M(q) q̇ − V(q), with M(q) = C(q)C(q)ᵀ + εI and C lower-triangular with a positive
     diagonal: the mass matrix is positive definite for any weights (Lutter et al., Deep Lagrangian
     Networks, 2019), so Euler–Lagrange can always be solved for q̈."""
-    def __init__(self, n, hidden, eps):
+    def __init__(self, n, hidden, eps, act=nn.Softplus):
         super().__init__()
         self.n, self.eps = n, float(eps)
-        self.mass = nn.Sequential(nn.Linear(n, hidden), nn.Softplus(), nn.Linear(hidden, hidden), nn.Softplus(),
+        self.mass = nn.Sequential(nn.Linear(n, hidden), act(), nn.Linear(hidden, hidden), act(),
                                   nn.Linear(hidden, n * (n + 1) // 2))
-        self.potential = nn.Sequential(nn.Linear(n, hidden), nn.Softplus(), nn.Linear(hidden, hidden), nn.Softplus(),
+        self.potential = nn.Sequential(nn.Linear(n, hidden), act(), nn.Linear(hidden, hidden), act(),
                                        nn.Linear(hidden, 1))
         self.register_buffer("rows", torch.tril_indices(n, n)[0])
         self.register_buffer("cols", torch.tril_indices(n, n)[1])
@@ -75,19 +75,22 @@ class LagrangianField(nn.Module):
     inverted. form="general" lets a network be any L: more general, but nothing
     keeps ∇²_{q̇q̇} L invertible, and trained on a pendulum its rollouts blew up.
     """
-    def __init__(self, dim, hidden=64, eps=1e-3, form="mechanical"):
+    def __init__(self, dim, hidden=64, eps=1e-3, form="mechanical", activation="tanh"):
         super().__init__()
         if dim % 2:
             raise ValueError(f"LagrangianField needs an even width, got {dim}")
+        if activation not in ("softplus", "tanh"):
+            raise ValueError(f"activation is softplus or tanh, not {activation!r}")
         self.n = dim // 2
         self.eps = float(eps)
         self.form = form
+        act = nn.Tanh if activation == "tanh" else nn.Softplus   # both twice differentiable, as the solve needs
         if form == "mechanical":
-            self.lagrangian = MechanicalLagrangian(self.n, hidden, eps)
+            self.lagrangian = MechanicalLagrangian(self.n, hidden, eps, act)
         elif form == "general":
             self.lagrangian = nn.Sequential(
-                nn.Linear(dim, hidden), nn.Softplus(),
-                nn.Linear(hidden, hidden), nn.Softplus(),
+                nn.Linear(dim, hidden), act(),
+                nn.Linear(hidden, hidden), act(),
                 nn.Linear(hidden, 1))
         else:
             raise ValueError(f"form is mechanical or general, not {form!r}")
@@ -253,9 +256,9 @@ class HebbianFastWeights(nn.Module):
     Slow weights W are trained by backprop. A fast matrix A starts at zero each
     sequence and after every step is updated by
 
-        A ← λ A + η h hᵀ          (decay, then “neurons that fire together wire together”)
+        A ← λ A + η ĥ ĥᵀ          (decay, then “neurons that fire together wire together”)
 
-    where h is the step's own output. A's update uses only the activity at its
+    where ĥ is the step's own output, layer-normalised before it is written. A's update uses only the activity at its
     two ends — the rule is local, as a synapse's must be — and A is never touched
     by the optimizer. Reading A h recalls recent patterns; the decay λ is the
     forgetting. Input [L, dim], output [L, dim]; causal, so step t sees A from
@@ -264,6 +267,9 @@ class HebbianFastWeights(nn.Module):
     def __init__(self, dim, decay=0.9, rate=0.5):
         super().__init__()
         self.slow = nn.Linear(dim, dim)
+        # what is written is normalised, so one strong step cannot swamp the memory. No learned scale and
+        # shift: the write is outside the gradient (that is the locality), so they would never be trained.
+        self.norm = nn.LayerNorm(dim, elementwise_affine=False)
         self.decay = float(decay)
         self.rate = float(rate)
 
@@ -276,7 +282,7 @@ class HebbianFastWeights(nn.Module):
             trace.append(A)
             h = torch.tanh(self.slow(xt) + torch.bmm(A, xt.unsqueeze(-1)).squeeze(-1))
             outs.append(h)
-            hd = h.detach()                   # the rule sees activity only: no gradient reaches A
+            hd = self.norm(h.detach())        # the rule sees activity only: no gradient reaches A
             A = self.decay * A + self.rate * torch.bmm(hd.unsqueeze(-1), hd.unsqueeze(-2))
         out = torch.stack(outs, dim=1)
         return (out, trace) if return_fast else out

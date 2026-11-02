@@ -28,6 +28,8 @@ import time
 from typing import Any, Callable, Dict, List
 
 ARMS: Dict[str, Callable] = {}
+# options an arm may read, set from the command line with --set key=value (e.g. eps=1e-4 activation=tanh)
+OPTIONS: Dict[str, Any] = {}
 
 
 def arm(name):
@@ -125,8 +127,16 @@ def _verdict(rows) -> str:
     if first == len(rows) - 1 and len(rows) > 1:
         return (f"Only at the largest size, n={at['n']}, is the law model ahead ({at['law']:.3g} against "
                 f"{at['plain']:.3g}); that is not enough to call it a data saving. Try larger sizes.")
-    lead = "" if first == 0 else (f"Below n={at['n']} the two are within the noise of each other (at n={rows[0]['n']}: "
-                                  f"plain {rows[0]['plain']:.3g}, law {rows[0]['law']:.3g}). ")
+    before = states[:first]
+    if not before:
+        lead = ""
+    elif "behind" in before:
+        lost = rows[before.index("behind")]
+        lead = (f"Below n={at['n']} the plain model was ahead (at n={lost['n']}: plain {lost['plain']:.3g}, "
+                f"law {lost['law']:.3g}). ")
+    else:
+        lead = (f"Below n={at['n']} the two are within the noise of each other (at n={rows[0]['n']}: "
+                f"plain {rows[0]['plain']:.3g}, law {rows[0]['law']:.3g}). ")
     tail = (f" At n={', '.join(map(str, ties))} the seeds' ranges overlap, so the lead there is within the noise."
             if ties else "")
     matched = next((r["n"] for r in rows if r["plain"] <= at["law"]), None)
@@ -251,7 +261,8 @@ def lagrangian_arm():
     learns one scalar L(q, q̇) and the motion is derived from it."""
     spec = physics_arm()
     LagrangianField = __import__("lawsource").build("LagrangianField")
-    spec["law"] = lambda: LagrangianField(2, hidden=64)
+    eps, act = float(OPTIONS.get("eps", 1e-3)), str(OPTIONS.get("activation", "tanh"))
+    spec["law"] = lambda: LagrangianField(2, hidden=64, eps=eps, activation=act)
     spec["law_name"] = "Euler–Lagrange (Lagrangian field)"
     return spec
 
@@ -375,16 +386,66 @@ def psychology_arm():
 
 
 # ---------------------------------------------------------------------------
-# arm 5 — mathematics: convexity, judged by where gradient descent on the fitted energy ends up
+# guarantees, measured: not "does it save data" but "does the guarantee buy what it promises"
 # ---------------------------------------------------------------------------
+#
+# Convexity and a Lipschitz bound are not data savers on their tasks (the plain network did as
+# well or better with data). What they promise is different: one minimum wherever you start, and a
+# bounded change under a bounded nudge. These measure exactly that, plain against law, at a fixed
+# amount of data, with no data-efficiency verdict.
 
-@arm("convex")
-def convex_arm():
-    """A convex energy in 4-D (a tilted quadratic plus a log-sum-exp), sampled at N points. Each
-    model is fitted to the samples, then gradient descent runs on the fitted model from 100 random
-    starts. A convex fit has one minimum, so every start lands in the same place; a plain MLP can
-    have spurious wells. Error is the mean distance of the 100 end points from the true minimiser,
-    so a fit with extra wells, or one minimum in the wrong place, both count."""
+GUARANTEES: Dict[str, Callable] = {}
+
+
+def guarantee(name):
+    def wrap(fn):
+        GUARANTEES[name] = fn
+        return fn
+    return wrap
+
+
+def run_guarantee(name: str, n: int = 512, seeds: int = 2, steps: int = 1500, lr: float = 3e-3,
+                  quiet: bool = False, on_row: Callable = None, stop: Callable = None) -> Dict[str, Any]:
+    """Fit plain and law on n examples, per seed, then take every measure of the guarantee."""
+    import torch
+    spec = GUARANTEES[name]()
+    per = {label: {"plain": [], "law": []} for label, _ in spec["measures"]}
+    for seed in range(seeds):
+        if stop and stop():
+            break
+        torch.manual_seed(seed)
+        xs, ys, extra = spec["data"](n, seed)
+        for kind in ("plain", "law"):
+            torch.manual_seed(seed)
+            model = spec[kind]()
+            _fit(model, xs, ys, spec["loss"], steps, lr)
+            for label, measure in spec["measures"]:
+                per[label][kind].append(measure(model, extra))
+    rows = []
+    betters = spec["better"] if isinstance(spec["better"], list) else [spec["better"]] * len(spec["measures"])
+    for (label, _), better in zip(spec["measures"], betters):
+        row = {"label": label, "better": better}
+        for kind in ("plain", "law"):
+            vals = per[label][kind]
+            row[kind] = sum(vals) / max(1, len(vals))
+            row[kind + "_spread"] = (max(vals) - min(vals)) / 2 if vals else 0.0
+        rows.append(row)
+        if on_row:
+            on_row(row)
+        if not quiet:
+            print(f"  {label:44s}  plain {row['plain']:.4f} ±{row['plain_spread']:.4f}   "
+                  f"law {row['law']:.4f} ±{row['law_spread']:.4f}")
+    return {"arm": name, "kind": "guarantee", "law": spec["law_name"], "task": spec["task"], "n": n,
+            "seeds": seeds, "steps": steps, "better": spec["better"], "unit": spec["unit"], "rows": rows}
+
+
+@guarantee("convex")
+def convex_guarantee():
+    """A convex energy in 4-D, sampled at n points inside the box [-3, 3]⁴. Each model is fitted, then
+    gradient descent runs on it from 100 starts *outside* that box (every start has some coordinate
+    beyond ±3, out to ±6), where there was no data. A convex fit has one minimum, wherever you start;
+    a plain network is free to have wells, ridges or slopes out there. Measured: the share of the 100
+    descents that end within 0.25 of the true minimum."""
     import torch
     import torch.nn as nn
     from lawsource import build
@@ -399,66 +460,76 @@ def convex_arm():
         d = x - c
         return 0.5 * ((d @ A) * d).sum(-1, keepdim=True) + torch.logsumexp(x @ B.t(), dim=-1, keepdim=True)
 
-    def minimiser():
-        x = torch.zeros(1, D, requires_grad=True)
-        opt = torch.optim.LBFGS([x], max_iter=200, line_search_fn="strong_wolfe")
-        def closure():
-            opt.zero_grad()
-            e = energy(x).sum()
-            e.backward()
-            return e
-        opt.step(closure)
-        return x.detach()
+    x = torch.zeros(1, D, requires_grad=True)
+    opt = torch.optim.LBFGS([x], max_iter=200, line_search_fn="strong_wolfe")
 
-    x_star = minimiser()
+    def closure():
+        opt.zero_grad()
+        e = energy(x).sum()
+        e.backward()
+        return e
+    opt.step(closure)
+    x_star = x.detach()
+
+    def far_starts(g, count=100):
+        out = []
+        while len(out) < count:
+            p = torch.rand(D, generator=g) * 12 - 6
+            if p.abs().max() > 3:
+                out.append(p)
+        return torch.stack(out)
 
     def data(n, seed):
         g = torch.Generator().manual_seed(seed)
         x = torch.rand(n, D, generator=g) * 6 - 3
-        starts = torch.rand(100, D, generator=g) * 6 - 3
-        return x, energy(x), starts
+        return x, energy(x), far_starts(g)
 
-    def plain():
-        return nn.Sequential(nn.Linear(D, 64), nn.Softplus(), nn.Linear(64, 64), nn.Softplus(), nn.Linear(64, 1))
+    ends: Dict[str, Any] = {}
 
-    def law():
-        return Convex(D, hidden=64, layers=2, out=1)
+    def descend(model, starts):
+        # one descent per model, read by every measure; the model itself is the key (an id can be reused
+        # once the previous model is freed, which would hand the law model the plain model's descents)
+        if ends.get("model") is not model:
+            z = starts.clone().requires_grad_(True)
+            opt = torch.optim.Adam([z], lr=0.05)
+            for _ in range(600):
+                opt.zero_grad()
+                model(z).sum().backward()
+                opt.step()
+                with torch.no_grad():
+                    z.clamp_(-6, 6)
+            ends.update(model=model, dist=(z.detach() - x_star).norm(dim=1))
+        return ends["dist"]
 
-    def loss(model, xs, ys):
-        return ((model(xs) - ys) ** 2).mean()
+    def reached(model, starts):
+        return float((descend(model, starts) < 0.25).float().mean())
 
-    def error(model, starts):
-        x = starts.clone().requires_grad_(True)
-        opt = torch.optim.Adam([x], lr=0.05)
-        for _ in range(300):
-            opt.zero_grad()
-            model(x).sum().backward()
-            opt.step()
-            with torch.no_grad():
-                x.clamp_(-3, 3)                       # stay where there was data
-        return float((x.detach() - x_star).norm(dim=1).mean())
+    def distance(model, starts):
+        return float(descend(model, starts).median())
 
-    return {"law": law, "plain": plain, "data": data, "loss": loss, "error": error,
-            "task": "fit a convex 4-D energy, then descend it from 100 starts: mean distance from the true minimum",
-            "law_name": "convexity (input-convex network)", "measure": "distance from the minimum"}
+    return {"law": lambda: Convex(D, hidden=64, layers=2, out=1),
+            "plain": lambda: nn.Sequential(nn.Linear(D, 64), nn.Softplus(), nn.Linear(64, 64), nn.Softplus(), nn.Linear(64, 1)),
+            "data": data, "loss": lambda m, xs, ys: ((m(xs) - ys) ** 2).mean(),
+            "measures": [("descents from outside the data that reach the minimum", reached),
+                         ("median distance of where they end from the minimum", distance)],
+            "better": ["higher", "lower"], "unit": "share of 100 starts, then distance",
+            "task": "fit a convex 4-D energy on n points in [-3, 3]⁴, then descend it from 100 starts outside that box",
+            "law_name": "convexity (input-convex network)"}
 
 
-# ---------------------------------------------------------------------------
-# arm 6 — mathematics: a Lipschitz bound, judged by error under a worst-case nudge of the input
-# ---------------------------------------------------------------------------
-
-@arm("lipschitz")
-def lipschitz_arm():
-    """A 1-Lipschitz target in 8-D, y = sin(u·x) with |u| = 1. Each input of the test set is nudged
-    by 0.3 in the direction that most increases that model's error (one gradient-sign step, scaled
-    to norm 0.3), and the error is measured against the truth at the nudged point. A plain MLP fitted
-    to few points can be steep between them; a stack of 1-Lipschitz layers cannot."""
+@guarantee("lipschitz")
+def lipschitz_guarantee():
+    """A 1-Lipschitz target in 8-D, y = sin(u·x) with |u| = 1, fitted on n points. Each of 1000 test points
+    is then nudged by the worst nudge of a given size that 10 steps of projected gradient ascent can find,
+    against the error to the truth at the nudged point. A plain network can be steep between its data;
+    a stack of 1-Lipschitz layers cannot change by more than the nudge. Measured: RMSE with no nudge, and
+    under the worst nudge of norm 0.3, 1.0 and 3.0."""
     import torch
     import torch.nn as nn
     from lawsource import build
 
     Lip = build("LipschitzLinear")
-    D, EPS = 8, 0.3
+    D = 8
     u = torch.nn.functional.normalize(torch.tensor([1.0, -0.5, 0.3, 0.8, -0.2, 0.6, 0.1, -0.7]), dim=0)
 
     def truth(x):
@@ -467,29 +538,34 @@ def lipschitz_arm():
     def data(n, seed):
         g = torch.Generator().manual_seed(seed)
         x = torch.randn(n, D, generator=g)
-        xt = torch.randn(2000, D, generator=g)
-        return x, truth(x), xt
+        return x, truth(x), torch.randn(1000, D, generator=g)
 
-    def plain():
-        return nn.Sequential(nn.Linear(D, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 1))
+    def worst(eps):
+        def measure(model, xt):
+            delta = torch.zeros_like(xt)
+            if eps > 0:
+                for _ in range(10):
+                    delta.requires_grad_(True)
+                    x = xt + delta
+                    ((model(x) - truth(x)) ** 2).sum().backward()
+                    with torch.no_grad():
+                        step = delta.grad / (delta.grad.norm(dim=1, keepdim=True) + 1e-12)
+                        delta = delta + (eps / 4) * step
+                        norm = delta.norm(dim=1, keepdim=True)
+                        delta = delta * torch.clamp(eps / (norm + 1e-12), max=1.0)
+            x = (xt + delta).detach()
+            with torch.no_grad():
+                return float(((model(x) - truth(x)) ** 2).mean().sqrt())
+        return measure
 
-    def law():
-        return nn.Sequential(Lip(D, 64, bound=1.0), nn.ReLU(), Lip(64, 64, bound=1.0), nn.ReLU(), Lip(64, 1, bound=1.0))
-
-    def loss(model, xs, ys):
-        return ((model(xs) - ys) ** 2).mean()
-
-    def error(model, xt):
-        x = xt.clone().requires_grad_(True)
-        ((model(x) - truth(x)) ** 2).sum().backward()
-        g = x.grad
-        x2 = (xt + EPS * g / (g.norm(dim=1, keepdim=True) + 1e-12)).detach()
-        with torch.no_grad():
-            return float(((model(x2) - truth(x2)) ** 2).mean().sqrt())
-
-    return {"law": law, "plain": plain, "data": data, "loss": loss, "error": error,
-            "task": "fit y = sin(u·x) in 8-D; RMSE after a worst-case nudge of norm 0.3 on 2000 test points",
-            "law_name": "Lipschitz bound (1 per layer)", "measure": "RMSE under a nudge"}
+    return {"law": lambda: nn.Sequential(Lip(D, 64, bound=1.0), nn.ReLU(), Lip(64, 64, bound=1.0), nn.ReLU(), Lip(64, 1, bound=1.0)),
+            "plain": lambda: nn.Sequential(nn.Linear(D, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 1)),
+            "data": data, "loss": lambda m, xs, ys: ((m(xs) - ys) ** 2).mean(),
+            "measures": [("no nudge", worst(0.0)), ("worst nudge of norm 0.3", worst(0.3)),
+                         ("worst nudge of norm 1.0", worst(1.0)), ("worst nudge of norm 3.0", worst(3.0))],
+            "better": "lower", "unit": "RMSE against the truth",
+            "task": "fit y = sin(u·x) in 8-D on n points; RMSE on 1000 test points under the worst nudge of each size",
+            "law_name": "Lipschitz bound (1 per layer)"}
 
 
 # ---------------------------------------------------------------------------
@@ -520,40 +596,68 @@ def saved(name: str):
         return None
 
 
+# Where each law stands, from the measurements on the development machine (CHANGELOG has the numbers).
+# confirmed: a data saver on its own task. measuring: not settled yet. shelved: no gap after a fair try;
+# the block stays in the palette, but the Laws page does not show it.
+STATUS = {"physics": "confirmed", "math": "confirmed", "psychology": "confirmed",
+          # with Tanh it no longer blows up and is ahead at n=8 and n=512, but level at 32 and 128: not yet clean
+          "lagrangian": "measuring",
+          # with a normalised write, still no recall (error ≥ 0.93 where answering zero scores 1.0); its only
+          # lead was over a GRU doing worse than zero, which is not a data saving
+          "biology": "shelved"}
+GUARANTEE_N = 512
+
+
 def overview() -> Dict[str, Any]:
-    """Every arm: its law and task, and its last run on this machine (if any), or the run going now."""
-    out = []
+    """Every arm the page shows, by standing, and every guarantee test, each with its last run on this machine
+    (if any) or the run going now. Shelved arms are left out."""
+    arms, tests = [], []
     for name, fn in ARMS.items():
+        status = STATUS.get(name, "measuring")
+        if status == "shelved":
+            continue
         spec = fn()
-        live = _JOBS.get(name)
-        out.append({"arm": name, "law": spec["law_name"], "task": spec["task"],
-                    "measure": spec.get("measure", "error"), "doc": " ".join((fn.__doc__ or "").split()),
-                    "result": live or saved(name)})
-    return {"arms": out, "defaults": DEFAULTS}
+        arms.append({"arm": name, "kind": "data", "status": status, "law": spec["law_name"], "task": spec["task"],
+                     "measure": spec.get("measure", "error"), "doc": " ".join((fn.__doc__ or "").split()),
+                     "result": _JOBS.get(name) or saved(name)})
+    for name, fn in GUARANTEES.items():
+        spec = fn()
+        tests.append({"arm": name, "kind": "guarantee", "status": "guarantee", "law": spec["law_name"],
+                      "task": spec["task"], "better": spec["better"], "unit": spec["unit"],
+                      "doc": " ".join((fn.__doc__ or "").split()), "result": _JOBS.get(name) or saved(name)})
+    shelved = [n for n in ARMS if STATUS.get(n) == "shelved"]
+    return {"arms": arms, "guarantees": tests, "shelved": shelved, "defaults": DEFAULTS, "guarantee_n": GUARANTEE_N}
 
 
 def start(name: str, sizes=None, seeds=None, steps=None) -> Dict[str, Any]:
-    if name not in ARMS:
+    if name not in ARMS and name not in GUARANTEES:
         raise KeyError(name)
     if (_JOBS.get(name) or {}).get("status") == "running":
         return _JOBS[name]
     import threading
+    kind = "guarantee" if name in GUARANTEES else "data"
     cfg = {"sizes": [int(n) for n in (sizes or DEFAULTS["sizes"])][:8], "seeds": int(seeds or DEFAULTS["seeds"]),
            "steps": int(steps or DEFAULTS["steps"]), "lr": DEFAULTS["lr"]}
     if not cfg["sizes"] or min(cfg["sizes"]) < 2 or max(cfg["sizes"]) > 4096 or not 1 <= cfg["seeds"] <= 5 \
             or not 1 <= cfg["steps"] <= 10000:
         raise ValueError("Sizes between 2 and 4096 (up to 8 of them), 1 to 5 seeds, and up to 10,000 steps.")
-    spec = ARMS[name]()
-    job = {"arm": name, "law": spec["law_name"], "task": spec["task"], "status": "running", "rows": [],
+    spec = (GUARANTEES if kind == "guarantee" else ARMS)[name]()
+    job = {"arm": name, "kind": kind, "law": spec["law_name"], "task": spec["task"], "status": "running", "rows": [],
            "started": time.time(), "verdict": None, **cfg}
+    if kind == "guarantee":
+        job.update(n=GUARANTEE_N, better=spec["better"], unit=spec["unit"])
     _JOBS[name] = job
     _STOPS[name] = False
     path = result_path(name)
 
     def go():
         try:
-            res = run_arm(name, cfg["sizes"], cfg["seeds"], cfg["steps"], cfg["lr"], quiet=True,
-                          on_row=lambda r: job["rows"].append(r), stop=lambda: _STOPS.get(name))
+            if kind == "guarantee":
+                res = run_guarantee(name, GUARANTEE_N, cfg["seeds"], cfg["steps"], cfg["lr"], quiet=True,
+                                    on_row=lambda r: job["rows"].append(r), stop=lambda: _STOPS.get(name))
+            else:
+                res = run_arm(name, cfg["sizes"], cfg["seeds"], cfg["steps"], cfg["lr"], quiet=True,
+                              on_row=lambda r: job["rows"].append(r), stop=lambda: _STOPS.get(name))
             res.update(status="stopped" if _STOPS.get(name) else "done", started=job["started"],
                        seconds=round(time.time() - job["started"], 1), finished=time.time())
             if res["status"] == "done":
@@ -562,8 +666,8 @@ def start(name: str, sizes=None, seeds=None, steps=None) -> Dict[str, Any]:
         except Exception as exc:  # noqa: BLE001
             job.update(status="error", error=f"{type(exc).__name__}: {exc}")
         finally:
-            if job.get("status") != "running":
-                _JOBS.pop(name, None) if job["status"] == "done" else None
+            if job.get("status") == "done":
+                _JOBS.pop(name, None)
 
     import contextvars
     threading.Thread(target=contextvars.copy_context().run, args=(go,), daemon=True).start()
@@ -578,25 +682,40 @@ def stop(name: str) -> Dict[str, Any]:
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("arms", nargs="*", default=list(ARMS))
+    ap.add_argument("arms", nargs="*", default=list(ARMS) + list(GUARANTEES))
     ap.add_argument("--sizes", type=int, nargs="+", default=[8, 32, 128, 512])
+    ap.add_argument("--n", type=int, default=GUARANTEE_N, help="examples for a guarantee test (convex, lipschitz)")
     ap.add_argument("--seeds", type=int, default=2)
     ap.add_argument("--steps", type=int, default=1500)
     ap.add_argument("--lr", type=float, default=3e-3)
     ap.add_argument("--json", help="write the results here as well (one list, every arm)")
     ap.add_argument("--save", action="store_true", help="also save each arm where the Laws page reads it")
+    ap.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE",
+                    help="options an arm reads, e.g. --set eps=1e-4 activation=tanh (the lagrangian arm)")
     a = ap.parse_args()
 
+    for item in a.set:
+        key, _, value = item.partition("=")
+        OPTIONS[key.strip()] = value.strip()
     results = []
     for name in a.arms:
-        if name not in ARMS:
-            raise SystemExit(f"no arm called {name!r}; have {sorted(ARMS)}")
-        spec = ARMS[name]()
-        print(f"\n[{name}]  law: {spec['law_name']}\n  task: {spec['task']}")
+        if name not in ARMS and name not in GUARANTEES:
+            raise SystemExit(f"no arm called {name!r}; have {sorted(ARMS) + sorted(GUARANTEES)}")
         t0 = time.time()
-        res = run_arm(name, a.sizes, a.seeds, a.steps, a.lr)
-        res["seconds"] = round(time.time() - t0, 1)
-        print(f"  → {res['verdict']}  ({res['seconds']}s)")
+        if name in GUARANTEES:
+            spec = GUARANTEES[name]()
+            print(f"\n[{name}]  guarantee: {spec['law_name']}\n  task: {spec['task']} (n={a.n})")
+            res = run_guarantee(name, a.n, a.seeds, a.steps, a.lr)
+            res["seconds"] = round(time.time() - t0, 1)
+            print(f"  ({res['seconds']}s; no data-efficiency verdict for a guarantee)")
+        else:
+            spec = ARMS[name]()
+            print(f"\n[{name}]  law: {spec['law_name']}\n  task: {spec['task']}")
+            res = run_arm(name, a.sizes, a.seeds, a.steps, a.lr)
+            res["seconds"] = round(time.time() - t0, 1)
+            print(f"  → {res['verdict']}  ({res['seconds']}s)")
+        if OPTIONS:
+            res["options"] = dict(OPTIONS)
         results.append(res)
         if a.save:
             res.update(status="done", started=t0, finished=time.time())

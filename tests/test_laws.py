@@ -263,7 +263,7 @@ def _():
     A = torch.zeros(2, 4, 4)
     for t in range(6):
         assert torch.allclose(trace[t], A, atol=1e-6), f"step {t}: A is not what the Hebbian rule wrote"
-        h = out[:, t].detach()
+        h = torch.nn.functional.layer_norm(out[:, t].detach(), (4,))
         A = 0.9 * A + 0.5 * h.unsqueeze(-1) @ h.unsqueeze(-2)
     # and the gradient the optimizer sees is the one through the slow weights only:
     # rebuild the forward with every A frozen to the trace, and the gradients must match exactly
@@ -369,11 +369,34 @@ def _():
     if not HAVE_TORCH:
         return skip()
     import laws
-    assert set(laws.ARMS) >= {"physics", "math", "biology", "psychology", "convex", "lipschitz"}, sorted(laws.ARMS)
+    assert set(laws.ARMS) >= {"physics", "math", "lagrangian", "biology", "psychology"}, sorted(laws.ARMS)
+    assert set(laws.GUARANTEES) == {"convex", "lipschitz"} and not set(laws.ARMS) & set(laws.GUARANTEES)
     for name in laws.ARMS:
         res = laws.run_arm(name, [8, 16], seeds=1, steps=5, lr=1e-3, quiet=True)
         assert len(res["rows"]) == 2 and res["verdict"].endswith("."), (name, res)
         json.dumps(res)
+    for name in laws.GUARANTEES:                                 # guarantees: one size, every measure, no verdict
+        res = laws.run_guarantee(name, 16, seeds=1, steps=5, lr=1e-3, quiet=True)
+        assert res["kind"] == "guarantee" and "verdict" not in res and res["rows"], (name, res)
+        assert all(0 <= r["plain"] and 0 <= r["law"] for r in res["rows"])
+        json.dumps(res)
+    labels = [r["label"] for r in laws.run_guarantee("lipschitz", 16, 1, 5, 1e-3, quiet=True)["rows"]]
+    assert labels == ["no nudge", "worst nudge of norm 0.3", "worst nudge of norm 1.0", "worst nudge of norm 3.0"]
+    assert laws.overview()["guarantees"] and all(a["status"] != "shelved" for a in laws.overview()["arms"])
+
+
+@check("a verdict says a loss is a loss, before the law's first win as well as after it")
+def _():
+    import laws
+    rows = [{"n": 32, "plain": 1.08, "law": 1.61, "plain_spread": 0.004, "law_spread": 0.02},
+            {"n": 512, "plain": 1.44, "law": 0.98, "plain_spread": 0.003, "law_spread": 0.002},
+            {"n": 2048, "plain": 1.07, "law": 0.93, "plain_spread": 0.01, "law_spread": 0.01}]
+    v = laws._verdict(rows)
+    assert v.startswith("Below n=512 the plain model was ahead (at n=32"), v
+    tie = [dict(rows[0], law=1.09)] + rows[1:]
+    assert "within the noise" in laws._verdict(tie)
+    assert laws.STATUS["biology"] == "shelved" and "biology" not in [a["arm"] for a in laws.overview()["arms"]]
+    assert "biology" in laws.ARMS                              # shelved, not deleted: it can still be run by hand
 
 
 @check("the Laws page's Run starts an arm in the background, streams its rows, and saves only a finished run")
@@ -388,7 +411,8 @@ def _():
     tmp = Path(tempfile.mkdtemp())
     AL._dir = lambda: tmp
     try:
-        assert all(a["result"] is None for a in laws.overview()["arms"])          # nothing drawn before a run here
+        ov = laws.overview()
+        assert all(a["result"] is None for a in ov["arms"] + ov["guarantees"])    # nothing drawn before a run here
         try:
             laws.start("math", sizes=[1, 8])
             raise AssertionError("a size of 1 is refused")

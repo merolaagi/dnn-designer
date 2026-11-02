@@ -662,6 +662,17 @@ of the weights, so it never has to be learned from data:
 Plus the `SelfPaced` training recipe (a curriculum without a teacher). Each guarantee is
 tested numerically on untrained, scrambled layers in `tests/test_laws.py`.
 
+The Laws page has three sections:
+
+- **Data savers, confirmed:** Hamiltonian, Deep Sets and working memory. Each has a guided
+  project.
+- **Still being measured:** Lagrangian. With Tanh it is stable and ahead at n=8 and n=512,
+  but level at 32 and 128.
+- **Guarantees, measured:** convex and Lipschitz. They are not data savers, so the
+  property they promise is measured instead.
+
+Hebbian fast weights are shelved: the block stays in the palette, but it is off the page.
+
 `laws.py` asks each law the one question that matters: does a law-built network need less
 data than a plain one on a task the law describes? It trains both at several data sizes and
 says, in one sentence, where the law starts to win and how much more data the plain model
@@ -671,6 +682,8 @@ those curves only from runs made on this machine (press **Run** on an arm), or r
 ```
 python laws.py                      every arm
 python laws.py physics --sizes 8 32 128 512 --seeds 3 --save
+python laws.py lagrangian --steps 4000 --lr 1e-3 --set eps=1e-4 activation=tanh
+python laws.py convex lipschitz --n 512        the guarantee tests
 ```
 
 ## Blocks: the plug-in system

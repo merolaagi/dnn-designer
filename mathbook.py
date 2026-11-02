@@ -1235,6 +1235,12 @@ def _measured(arm):
         r = None
     if not r:
         return [f"Not measured on this machine yet: Laws → {arm} → Run."]
+    if r.get("kind") == "guarantee":
+        def pct(v, row):
+            return f"{v * 100:.0f}%" if (row.get("better") or r.get("better")) == "higher" else f"{v:.3g}"
+        parts = "; ".join(f"{row['label']}: plain {pct(row['plain'], row)}, law {pct(row['law'], row)}"
+                          for row in r.get("rows") or [])
+        return [f"Measured here at n={r.get('n')} ({r.get('unit')}): {parts}."]
     return [f"Measured here ({r.get('task')}): {r.get('verdict')}"]
 
 
