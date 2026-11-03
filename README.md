@@ -674,6 +674,14 @@ The Laws page has four sections:
 - **Guarantees, measured:** convex and Lipschitz. They are not data savers, so the
   property they promise is measured instead.
 
+A confirmed law appears under "Data savers, confirmed" only once it has a run on this machine; until then it
+waits under "Still being measured" with Run beside it.
+
+The motion arms (physics, Lagrangian, compose) are judged on the one-step field error on 2000 held-out states.
+A short rollout (10 time units) and the drift of the true energy along it are shown beside it. A long rollout
+is not the verdict: a model that keeps its energy but drifts in phase scores about √2 times worse there than one
+that loses its energy and comes to rest, so it rewards dissipation. Older long-rollout runs count as not run.
+
 Hebbian fast weights are shelved: the block stays in the palette, but it is off the page. A law
 appears on the page only beside a measurement, so the SelfPaced recipe, which has no arm yet, is
 not listed there.

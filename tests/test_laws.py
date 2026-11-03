@@ -436,13 +436,19 @@ def _():
         res = laws.run_arm(name, [8, 16], seeds=1, steps=5, lr=1e-3, quiet=True)
         assert len(res["rows"]) == 2 and res["verdict"].endswith("."), (name, res)
         json.dumps(res)
-        if name == "compose":                                    # its second error rides beside the first
-            assert res["extra"]["key"] == "field" and "held-out" in res["extra"]["label"], res
-            assert all(r["plain_field"] >= 0 and r["law_field"] >= 0 and "law_field_spread" in r for r in res["rows"])
+        if name in ("compose", "physics", "lagrangian"):          # judged on the field, rollout and energy beside it
+            assert res["primary"] == "field" and [e["key"] for e in res["errors"]] == ["field", "rollout", "energy"], res
+            assert "10 time units" in res["errors"][1]["label"] and "true energy" in res["errors"][2]["label"]
+            for r in res["rows"]:
+                assert r["plain"] == r["plain_field"] and r["law"] == r["law_field"], r
+                assert all(r[f"{k}_{e}"] >= 0 and f"{k}_{e}_spread" in r for k in ("plain", "law")
+                           for e in ("field", "rollout", "energy")), r
+            assert laws.ARMS[name]()["note"].startswith("Why the long rollout is not the verdict")
         else:
-            assert "extra" not in res and not any(k.endswith("_field") for r in res["rows"] for k in r), name
+            assert "errors" not in res and "primary" not in res, name
     html = (ROOT / "frontend" / "index.html").read_text()
-    assert "function lawsExtraTable" in html and "${lawsExtraTable(r)}" in html
+    assert "function lawsErrorsTable" in html and "${lawsErrorsTable(r)}" in html and "${alEsc(a.note)}" in html
+    assert 'a.status === "confirmed" && ran(a)' in html          # confirmed, but not run here: not listed as confirmed
     for name in laws.GUARANTEES:                                 # guarantees: one size, every measure, no verdict
         res = laws.run_guarantee(name, 16, seeds=1, steps=5, lr=1e-3, quiet=True)
         assert res["kind"] == "guarantee" and "verdict" not in res and res["rows"], (name, res)
@@ -477,6 +483,13 @@ def _():
         assert laws.saved("lipschitz")["rows"][0]["label"] == "no nudge"
         laws.result_path("math").write_text(json.dumps(good))             # a guarantee file where a data run belongs
         assert laws.saved("math") is None
+        long_run = {"kind": "data", "rows": [{"n": 8, "plain": 1.3, "law": 1.5}], "verdict": "a 60-unit rollout run"}
+        laws.result_path("physics").write_text(json.dumps(long_run))     # judged on the old long rollout
+        assert laws.saved("physics") is None
+        laws.result_path("physics").write_text(json.dumps(dict(long_run, primary="field")))
+        assert laws.saved("physics")["primary"] == "field"
+        laws.result_path("math").write_text(json.dumps(long_run))         # an arm with one error needs no primary
+        assert laws.saved("math") is not None
     finally:
         AL._dir = real
     page = (ROOT / "frontend" / "index.html").read_text()

@@ -54,17 +54,28 @@ def _fit(model, xs, ys, loss_fn, steps, lr):
     return float(loss.item())
 
 
+def _finite(v: float) -> float:
+    """A rollout that blows up is recorded as 1e6, not inf or nan, so the JSON stays valid and the
+    point still sorts as the worst."""
+    return v if math.isfinite(v) else 1e6
+
+
 def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
             quiet: bool = False, on_row: Callable = None, stop: Callable = None) -> Dict[str, Any]:
+    """An arm gives one error, or several ("errors": [{key, label, error(model, test, seed)}]) with one
+    of them named "primary". Every error is recorded per row as plain_<key> and law_<key>; the
+    primary one is also the row's plain and law, so the verdict and the chart are judged on it."""
     import torch
     spec = ARMS[name]()
-    extra = spec.get("extra")                  # {"key", "label", "error": fn(model, seed)}; reported, not judged
+    errors = spec.get("errors") or [{"key": "error", "label": spec.get("measure", "error"),
+                                     "error": lambda model, test, seed: spec["error"](model, test)}]
+    primary = spec.get("primary", errors[0]["key"])
+    assert primary in [e["key"] for e in errors], (name, primary)
     rows = []
     for n in sizes:
         if stop and stop():
             break
-        errs = {"plain": [], "law": []}
-        more = {"plain": [], "law": []}        # the arm's second error, if it has one
+        errs = {(kind, e["key"]): [] for kind in ("plain", "law") for e in errors}
         for seed in range(seeds):
             torch.manual_seed(seed)
             xs, ys, test = spec["data"](n, seed)
@@ -72,34 +83,85 @@ def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
                 torch.manual_seed(seed)
                 model = spec[kind]()
                 _fit(model, xs, ys, spec["loss"], steps, lr)
-                errs[kind].append(spec["error"](model, test))
-                if extra:
-                    more[kind].append(extra["error"](model, seed))
+                for e in errors:
+                    errs[(kind, e["key"])].append(_finite(float(e["error"](model, test, seed))))
         row = {"n": n}
-        for kind in errs:
-            vals = errs[kind]
-            row[kind] = sum(vals) / len(vals)
-            row[kind + "_spread"] = (max(vals) - min(vals)) / 2
-            if extra:
-                vals = more[kind]
-                row[kind + "_" + extra["key"]] = sum(vals) / len(vals)
-                row[kind + "_" + extra["key"] + "_spread"] = (max(vals) - min(vals)) / 2
+        for (kind, key), vals in errs.items():
+            mean, spread = sum(vals) / len(vals), (max(vals) - min(vals)) / 2
+            if len(errors) > 1:
+                row[f"{kind}_{key}"], row[f"{kind}_{key}_spread"] = mean, spread
+            if key == primary:
+                row[kind], row[kind + "_spread"] = mean, spread
         row["ratio"] = row["plain"] / max(row["law"], 1e-12)
         rows.append(row)
         if on_row:
             on_row(row)
         if not quiet:
+            more = "".join(f"   | {e['key']}: plain {row['plain_' + e['key']]:.4g}  law {row['law_' + e['key']]:.4g}"
+                           for e in errors if len(errors) > 1 and e["key"] != primary)
             print(f"  n={n:5d}   plain {row['plain']:.4f}   law {row['law']:.4f}"
-                  f"   plain/law = {row['ratio']:.1f}x"
-                  + (f"   | {extra['key']}: plain {row['plain_' + extra['key']]:.4f}"
-                     f"   law {row['law_' + extra['key']]:.4f}" if extra else ""))
+                  f"   plain/law = {row['ratio']:.1f}x" + more)
     out = {"arm": name, "kind": "data", "law": spec["law_name"], "task": spec["task"],
            "params": {"plain": _count(spec["plain"]()), "law": _count(spec["law"]())},
            "measure": spec.get("measure", "error"), "sizes": sizes, "seeds": seeds, "steps": steps, "lr": lr,
            "rows": rows, "verdict": _verdict(rows)}
-    if extra:
-        out["extra"] = {"key": extra["key"], "label": extra["label"], "first": extra.get("first", "error")}
+    if len(errors) > 1:
+        out["errors"] = [{"key": e["key"], "label": e["label"]} for e in errors]
+        out["primary"] = primary
     return out
+
+
+def _dynamics_errors(field, energy, sample, z0, dt: float = 0.05, units: float = 10.0):
+    """The three errors of a learned dynamics, for the arms whose law is about motion.
+
+    field    one-step field RMSE on 2000 held-out random states: the verdict. It asks whether the
+             model learned the motion, and it does not reward losing energy.
+    rollout  RMSE of a short rollout (10 time units) from a fixed start against the truth.
+    energy   the largest relative change of the TRUE energy along the model's rollout,
+             max_t |E(z_t) - E(z_0)| / |E(z_0)|: what conservation actually promises.
+
+    Why not a long rollout: over a long horizon a model that keeps its energy but drifts in phase ends
+    up at a random point of the right orbit, about √2 times the RMS error of one that loses its energy
+    and comes to rest, so a long-rollout error rewards dissipation, the opposite of the law."""
+    import torch
+    from conservation import _rk4
+
+    z_held = sample(2000, torch.Generator().manual_seed(10_000))     # states no training set contains
+    f_held = field(z_held)
+    n_steps = int(round(units / dt))
+    truth = _rk4(field, z0, dt, n_steps)
+    e0 = energy(z0)
+    last = [None, None]                                   # one rollout per model, shared by two errors
+
+    def path_of(model):
+        if last[0] is not model:
+            with torch.enable_grad():
+                last[0], last[1] = model, _rk4(lambda z: model(z), z0, dt, n_steps).detach()
+        return last[1]
+
+    def field_error(model, test, seed):
+        with torch.enable_grad():
+            pred = model(z_held.clone()).detach()
+        return float(((pred - f_held) ** 2).mean().sqrt())
+
+    def rollout_error(model, test, seed):
+        return float(((path_of(model) - truth) ** 2).mean().sqrt())
+
+    def energy_drift(model, test, seed):
+        return float(((energy(path_of(model)) - e0).abs() / e0.abs().clamp_min(1e-12)).max())
+
+    return truth, [
+        {"key": "field", "label": "one-step field RMSE, 2000 held-out states", "error": field_error},
+        {"key": "rollout", "label": f"rollout RMSE, {units:g} time units", "error": rollout_error},
+        {"key": "energy", "label": "relative drift of the true energy over that rollout", "error": energy_drift},
+    ]
+
+
+PHYSICS_NOTE = ("Why the long rollout is not the verdict: over 60 time units a model that keeps its energy but drifts "
+                "slightly in phase ends up anywhere on the right orbit, and scores about √2 times worse than one that "
+                "loses its energy and comes to rest. A long-rollout error therefore rewards dissipation, the opposite "
+                "of what conservation promises. The verdict is the one-step field error on 2000 held-out states; the "
+                "rollout is kept short (10 time units) and shown beside the drift of the true energy along it.")
 
 
 def _count(model) -> int:
@@ -166,28 +228,28 @@ def _verdict(rows) -> str:
 
 @arm("physics")
 def physics_arm():
-    """A pendulum. The data are (state, velocity) pairs; the error is how far
-    a long rollout drifts from the truth. The plain MLP learns dz/dt directly.
-    The Hamiltonian layer learns one scalar H and reads dz/dt off its gradient,
-    so energy is conserved for every value of the weights."""
+    """A pendulum. The data are (state, velocity) pairs. The plain MLP learns dz/dt directly. The
+    Hamiltonian layer learns one scalar H and reads dz/dt off its gradient, so energy is conserved for
+    every value of the weights. Judged on the one-step field error on held-out states; a short rollout
+    and the drift of the true energy along it are reported beside it."""
     import torch
     import torch.nn as nn
-    from conservation import _rk4, _truth, layer_class
+    from conservation import _truth, layer_class
 
     Hamiltonian = layer_class()
     field, energy = _truth(damping=0.0)
     dim, hidden = 2, 64
 
-    def data(n, seed):
-        g = torch.Generator().manual_seed(seed)
+    def sample(n, g):
         q = (torch.rand(n, 1, generator=g) * 2 - 1) * 2.5     # angles up to ~143°
         p = (torch.rand(n, 1, generator=g) * 2 - 1) * 1.5
-        z = torch.cat([q, p], dim=-1)
-        y = field(z)
-        # test: one long rollout from a fixed start, 60 time units
-        z0 = torch.tensor([[1.5, 0.0]])
-        truth = _rk4(field, z0, 0.05, 1200)
-        return z, y, truth
+        return torch.cat([q, p], dim=-1)
+
+    truth, errors = _dynamics_errors(field, energy, sample, torch.tensor([[1.5, 0.0]]))
+
+    def data(n, seed):
+        z = sample(n, torch.Generator().manual_seed(seed))
+        return z, field(z), truth
 
     def plain():
         return nn.Sequential(nn.Linear(dim, hidden), nn.Tanh(),
@@ -200,13 +262,9 @@ def physics_arm():
     def loss(model, xs, ys):
         return ((model(xs) - ys) ** 2).mean()
 
-    def error(model, truth):
-        with torch.enable_grad():   # Hamiltonian field differentiates inside forward
-            path = _rk4(lambda z: model(z), truth[0], 0.05, len(truth) - 1).detach()
-        return float(((path - truth) ** 2).mean().sqrt())
-
-    return {"law": law, "plain": plain, "data": data, "loss": loss, "error": error,
-            "task": "pendulum rollout RMSE over 60 time units",
+    return {"law": law, "plain": plain, "data": data, "loss": loss, "errors": errors, "primary": "field",
+            "measure": "one-step field RMSE on 2000 held-out states", "note": PHYSICS_NOTE,
+            "task": "pendulum: learn the motion from (state, velocity) pairs",
             "law_name": "energy conservation (Hamiltonian field)"}
 
 
@@ -481,7 +539,6 @@ def compose_arm():
     either law alone."""
     import torch
     import torch.nn as nn
-    from conservation import _rk4
     from lawsource import build
 
     SetHamiltonian = build("SetHamiltonian")
@@ -494,11 +551,18 @@ def compose_arm():
         dp = -coupling - q ** 3
         return torch.stack([dq, dp], dim=-1)
 
+    def energy(z):                         # H = Σ p²/2 + Σ q⁴/4 + (k/2) Σ_{i<j} (qᵢ − qⱼ)²
+        q, p = z[..., 0], z[..., 1]
+        pairs = (q.unsqueeze(-1) - q.unsqueeze(-2)) ** 2
+        return (0.5 * p ** 2 + 0.25 * q ** 4).sum(-1) + 0.25 * k * pairs.sum((-1, -2))
+
+    def sample(n, g):
+        return (torch.rand(n, N, 2, generator=g) * 2 - 1) * torch.tensor([1.5, 1.0])
+
+    truth, errors = _dynamics_errors(field, energy, sample, torch.tensor([[[1.0, 0.0], [-0.5, 0.3], [0.2, -0.4]]]))
+
     def data(n, seed):
-        g = torch.Generator().manual_seed(seed)
-        z = (torch.rand(n, N, 2, generator=g) * 2 - 1) * torch.tensor([1.5, 1.0])
-        z0 = torch.tensor([[[1.0, 0.0], [-0.5, 0.3], [0.2, -0.4]]])
-        truth = _rk4(field, z0, 0.05, 1200)
+        z = sample(n, torch.Generator().manual_seed(seed))
         return z, field(z), truth
 
     class Flat(nn.Module):
@@ -518,25 +582,9 @@ def compose_arm():
     def loss(model, xs, ys):
         return ((model(xs) - ys) ** 2).mean()
 
-    def error(model, truth):
-        with torch.enable_grad():
-            path = _rk4(lambda z: model(z), truth[0], 0.05, len(truth) - 1).detach()
-        return float(((path - truth) ** 2).mean().sqrt())
-
-    held = torch.Generator().manual_seed(10_000)    # 2000 states no training set contains
-    z_held = (torch.rand(2000, N, 2, generator=held) * 2 - 1) * torch.tensor([1.5, 1.0])
-    f_held = field(z_held)
-
-    def field_error(model, seed):
-        with torch.enable_grad():
-            pred = model(z_held.clone()).detach()
-        return float(((pred - f_held) ** 2).mean().sqrt())
-
-    return {"law": law, "plain": plain, "data": data, "loss": loss, "error": error,
-            "extra": {"key": "field", "first": "rollout RMSE",
-                      "label": "one-step field RMSE on 2000 held-out random states",
-                      "error": field_error},
-            "task": "3 coupled particles, rollout RMSE over 60 time units",
+    return {"law": law, "plain": plain, "data": data, "loss": loss, "errors": errors, "primary": "field",
+            "measure": "one-step field RMSE on 2000 held-out states", "note": PHYSICS_NOTE,
+            "task": "3 coupled particles: learn the motion from (state, velocity) pairs",
             "law_name": "energy conservation + permutation invariance (SetHamiltonian)"}
 
 
@@ -769,7 +817,22 @@ def saved(name: str, kind: str = ""):
     except (OSError, ValueError):
         return None
     kind = kind or ("guarantee" if name in GUARANTEES else "data")
-    return r if usable(r, kind) else None
+    if not usable(r, kind):
+        return None
+    if kind == "data" and name in ARMS and r.get("primary") != _primary(name):
+        return None          # judged on another error than the arm is judged on now (an old long-rollout run)
+    return r
+
+
+_PRIMARY: Dict[str, Any] = {}
+
+
+def _primary(name: str):
+    """The error an arm's verdict is judged on (None for an arm with one error)."""
+    if name not in _PRIMARY:
+        spec = ARMS[name]()
+        _PRIMARY[name] = spec.get("primary") if spec.get("errors") else None
+    return _PRIMARY[name]
 
 
 # Where each law stands, from the measurements on the development machine (CHANGELOG has the numbers).
@@ -799,6 +862,7 @@ def overview() -> Dict[str, Any]:
         spec = fn()
         arms.append({"arm": name, "kind": "data", "status": status, "law": spec["law_name"], "task": spec["task"],
                      "measure": spec.get("measure", "error"), "doc": " ".join((fn.__doc__ or "").split()),
+                     "note": spec.get("note", ""),
                      "result": _JOBS.get(name) or saved(name)})
     for name, fn in GUARANTEES.items():
         spec = fn()

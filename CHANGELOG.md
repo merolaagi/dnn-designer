@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.39.0
+
+- **An arm names the error it is judged on.** laws.py arms may give several
+  errors and name one `primary`; the verdict and the chart use it, and every
+  error is saved per row (plain_<key>, law_<key>, spreads). Arms with one
+  error are unchanged.
+- **physics, lagrangian and compose are judged on the one-step field RMSE on
+  2000 held-out states.** The rollout is cut to 10 time units and shown
+  beside a third column: the largest relative drift of the true energy
+  along it. Each card carries a note on why a long rollout is not the
+  verdict (a conservative model that drifts in phase scores about √2 times
+  worse than one that comes to rest). Saved runs judged on the old long
+  rollout count as not run.
+- **Verdicts:** compose: from n=8 ahead, about 16x less data.
+  physics: ahead only at n=512, not enough to call a data saving.
+  lagrangian (4000 steps, lr 1e-3): ahead at n=8, behind at n=128, not a
+  data saver here.
+- **A confirmed law is listed as confirmed only once it has a run on this
+  machine;** until then (Dale's law on a fresh machine) it waits under
+  "Still being measured".
+
 ## 4.38.1
 
 - **The compose arm reports a second error:** one-step field RMSE on 2000

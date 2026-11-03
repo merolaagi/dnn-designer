@@ -8410,9 +8410,10 @@ function lawsDataCard(a, d, ghosts){
   return `<div class="lawcard">
     <header><b>${alEsc(a.arm)}</b><span>${alEsc(a.law)}</span>${meta ? `<small>${alEsc(meta)}</small>` : ""}</header>
     <p class="task">${alEsc(a.task)}. Lower is better (${alEsc(a.measure)}).</p>
+    ${a.note ? `<p class="task">${alEsc(a.note)}</p>` : ""}
     ${lawsChart(r, ghosts)}
     ${ghosts && ghosts.some(g => g.rows && g.rows.length) ? `<p class="task">Faint, dashed: ${ghosts.filter(g => g.rows && g.rows.length).map(g => alEsc(g.label)).join(" and ")}, the one-law arms, on their own tasks. They share the axes for scale only; they are not the same task, so they do not show two laws against one.</p>` : ""}
-    ${lawsExtraTable(r)}
+    ${lawsErrorsTable(r)}
     ${r && r.verdict ? `<p class="verdict">${alEsc(r.verdict)}</p>`
       : live ? `<p class="verdict none">Running: ${r.rows.length} of ${r.sizes.length} sizes done.</p>`
       : lawsIdle(r)}
@@ -8420,16 +8421,17 @@ function lawsDataCard(a, d, ghosts){
   </div>`;
 }
 
-function lawsExtraTable(r){
-  // an arm's second error sits beside the first, row by row; the verdict is still on the first
-  const x = r && r.extra, k = x && x.key, num = v => typeof v === "number" && isFinite(v);
-  const rows = ((r && r.rows) || []).filter(o => num(o["plain_" + k]) && num(o["law_" + k]));
-  if (!k || !rows.length) return "";
-  const f = v => v.toPrecision(3);
+function lawsErrorsTable(r){
+  // an arm judged on one of several errors shows them all, row by row; the verdict column is marked
+  const errs = (r && Array.isArray(r.errors) && r.errors.length > 1) ? r.errors : null;
+  const num = v => typeof v === "number" && isFinite(v);
+  const rows = errs ? r.rows.filter(o => errs.every(e => num(o["plain_" + e.key]) && num(o["law_" + e.key]))) : [];
+  if (!rows.length) return "";
+  const f = v => v >= 1e6 ? "blew up" : v.toPrecision(3);
   const cell = (o, a, b) => `<td class="${o[a] < o[b] ? "win" : ""}">${f(o[a])}<small> ±${f(o[a + "_spread"] || 0)}</small></td>`;
-  return `<table class="lawtable"><thead><tr><th>n</th><th colspan="2">${alEsc(x.first || "error")}</th><th colspan="2">${alEsc(x.label)}</th></tr>
-    <tr><th></th><th>plain</th><th>law</th><th>plain</th><th>law</th></tr></thead><tbody>
-    ${rows.map(o => `<tr><td>${o.n}</td>${cell(o, "plain", "law")}${cell(o, "law", "plain")}${cell(o, "plain_" + k, "law_" + k)}${cell(o, "law_" + k, "plain_" + k)}</tr>`).join("")}
+  return `<table class="lawtable"><thead><tr><th>n</th>${errs.map(e => `<th colspan="2">${alEsc(e.label)}${e.key === r.primary ? " · the verdict" : ""}</th>`).join("")}</tr>
+    <tr><th></th>${errs.map(() => "<th>plain</th><th>law</th>").join("")}</tr></thead><tbody>
+    ${rows.map(o => `<tr><td>${o.n}</td>${errs.map(e => cell(o, "plain_" + e.key, "law_" + e.key) + cell(o, "law_" + e.key, "plain_" + e.key)).join("")}</tr>`).join("")}
     </tbody></table>`;
 }
 
@@ -8486,8 +8488,10 @@ async function renderLawsPage(){
     lawsTimer = setTimeout(() => { if (document.body.dataset.page === "pageLaws") renderLawsPage(); }, 3000);
   // a law is listed only beside a measurement: an arm or a guarantee test on this page (shelved ones are not)
   const measured = new Set(d.arms.concat(d.guarantees).map(a => a.arm));
-  const confirmed = d.arms.filter(a => a.status === "confirmed"), composed = d.arms.filter(a => a.status === "composed");
-  const measuring = d.arms.filter(a => a.status !== "confirmed" && a.status !== "composed");
+  // confirmed means confirmed on this machine: a confirmed arm with no run here yet waits under "Still being measured"
+  const ran = a => (a.result && a.result.status === "running") || lawsUsable(a.result, "data");
+  const confirmed = d.arms.filter(a => a.status === "confirmed" && ran(a)), composed = d.arms.filter(a => a.status === "composed");
+  const measuring = d.arms.filter(a => !confirmed.includes(a) && !composed.includes(a));
   const ghostOf = name => { const g = d.arms.find(x => x.arm === name); return g && lawsUsable(g.result, "data") ? {label: name, rows: g.result.rows} : null; };
   const ghosts = ["physics", "math"].map(ghostOf).filter(Boolean);
   const section = (title, lead, cards) => cards ? `<div class="lawsec"><h4>${title}</h4><p class="lead">${lead}</p>
