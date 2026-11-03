@@ -436,6 +436,13 @@ def _():
         res = laws.run_arm(name, [8, 16], seeds=1, steps=5, lr=1e-3, quiet=True)
         assert len(res["rows"]) == 2 and res["verdict"].endswith("."), (name, res)
         json.dumps(res)
+        if name == "compose":                                    # its second error rides beside the first
+            assert res["extra"]["key"] == "field" and "held-out" in res["extra"]["label"], res
+            assert all(r["plain_field"] >= 0 and r["law_field"] >= 0 and "law_field_spread" in r for r in res["rows"])
+        else:
+            assert "extra" not in res and not any(k.endswith("_field") for r in res["rows"] for k in r), name
+    html = (ROOT / "frontend" / "index.html").read_text()
+    assert "function lawsExtraTable" in html and "${lawsExtraTable(r)}" in html
     for name in laws.GUARANTEES:                                 # guarantees: one size, every measure, no verdict
         res = laws.run_guarantee(name, 16, seeds=1, steps=5, lr=1e-3, quiet=True)
         assert res["kind"] == "guarantee" and "verdict" not in res and res["rows"], (name, res)

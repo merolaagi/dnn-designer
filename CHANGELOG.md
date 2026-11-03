@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.38.1
+
+- **The compose arm reports a second error:** one-step field RMSE on 2000
+  held-out random states, next to the rollout RMSE, in the JSON (rows carry
+  plain_field / law_field and their spreads) and as a table on the card.
+  The verdict is still on the rollout. Other arms are unchanged.
+- **compose at 1500 steps, lr 3e-3** (rollout plain/law · field plain/law):
+  n=8 12.61/0.810 · 1.008/0.321; n=32 8.59/0.971 · 0.698/0.033;
+  n=128 5.58/0.973 · 0.208/0.016; n=512 0.749/0.975 · 0.051/0.011.
+- **compose at 4000 steps, lr 1e-3:** n=8 11.28/0.832 · 0.942/0.330;
+  n=32 6.89/1.031 · 0.693/0.029; n=128 2.55/0.985 · 0.223/0.011;
+  n=512 0.691/0.961 · 0.041/0.007. Same verdict.
+- The law learns the field better at every n (3x to 21x), yet its 60-unit
+  rollout stays at the do-nothing level (0.86 never move, 0.69 predict
+  zero): the rollout does not tell these models apart.
+
 ## 4.38.0
 
 - **First composed law: SetHamiltonian.** One learned energy

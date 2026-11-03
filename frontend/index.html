@@ -8412,11 +8412,25 @@ function lawsDataCard(a, d, ghosts){
     <p class="task">${alEsc(a.task)}. Lower is better (${alEsc(a.measure)}).</p>
     ${lawsChart(r, ghosts)}
     ${ghosts && ghosts.some(g => g.rows && g.rows.length) ? `<p class="task">Faint, dashed: ${ghosts.filter(g => g.rows && g.rows.length).map(g => alEsc(g.label)).join(" and ")}, the one-law arms, on their own tasks. They share the axes for scale only; they are not the same task, so they do not show two laws against one.</p>` : ""}
+    ${lawsExtraTable(r)}
     ${r && r.verdict ? `<p class="verdict">${alEsc(r.verdict)}</p>`
       : live ? `<p class="verdict none">Running: ${r.rows.length} of ${r.sizes.length} sizes done.</p>`
       : lawsIdle(r)}
     ${lawsActs(a, live, `sizes ${d.defaults.sizes.join(", ")} · ${d.defaults.seeds} seeds`)}
   </div>`;
+}
+
+function lawsExtraTable(r){
+  // an arm's second error sits beside the first, row by row; the verdict is still on the first
+  const x = r && r.extra, k = x && x.key, num = v => typeof v === "number" && isFinite(v);
+  const rows = ((r && r.rows) || []).filter(o => num(o["plain_" + k]) && num(o["law_" + k]));
+  if (!k || !rows.length) return "";
+  const f = v => v.toPrecision(3);
+  const cell = (o, a, b) => `<td class="${o[a] < o[b] ? "win" : ""}">${f(o[a])}<small> ±${f(o[a + "_spread"] || 0)}</small></td>`;
+  return `<table class="lawtable"><thead><tr><th>n</th><th colspan="2">${alEsc(x.first || "error")}</th><th colspan="2">${alEsc(x.label)}</th></tr>
+    <tr><th></th><th>plain</th><th>law</th><th>plain</th><th>law</th></tr></thead><tbody>
+    ${rows.map(o => `<tr><td>${o.n}</td>${cell(o, "plain", "law")}${cell(o, "law", "plain")}${cell(o, "plain_" + k, "law_" + k)}${cell(o, "law_" + k, "plain_" + k)}</tr>`).join("")}
+    </tbody></table>`;
 }
 
 function lawsUsable(r, kind){

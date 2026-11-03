@@ -58,11 +58,13 @@ def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
             quiet: bool = False, on_row: Callable = None, stop: Callable = None) -> Dict[str, Any]:
     import torch
     spec = ARMS[name]()
+    extra = spec.get("extra")                  # {"key", "label", "error": fn(model, seed)}; reported, not judged
     rows = []
     for n in sizes:
         if stop and stop():
             break
         errs = {"plain": [], "law": []}
+        more = {"plain": [], "law": []}        # the arm's second error, if it has one
         for seed in range(seeds):
             torch.manual_seed(seed)
             xs, ys, test = spec["data"](n, seed)
@@ -71,22 +73,33 @@ def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
                 model = spec[kind]()
                 _fit(model, xs, ys, spec["loss"], steps, lr)
                 errs[kind].append(spec["error"](model, test))
+                if extra:
+                    more[kind].append(extra["error"](model, seed))
         row = {"n": n}
         for kind in errs:
             vals = errs[kind]
             row[kind] = sum(vals) / len(vals)
             row[kind + "_spread"] = (max(vals) - min(vals)) / 2
+            if extra:
+                vals = more[kind]
+                row[kind + "_" + extra["key"]] = sum(vals) / len(vals)
+                row[kind + "_" + extra["key"] + "_spread"] = (max(vals) - min(vals)) / 2
         row["ratio"] = row["plain"] / max(row["law"], 1e-12)
         rows.append(row)
         if on_row:
             on_row(row)
         if not quiet:
             print(f"  n={n:5d}   plain {row['plain']:.4f}   law {row['law']:.4f}"
-                  f"   plain/law = {row['ratio']:.1f}x")
-    return {"arm": name, "kind": "data", "law": spec["law_name"], "task": spec["task"],
-            "params": {"plain": _count(spec["plain"]()), "law": _count(spec["law"]())},
-            "measure": spec.get("measure", "error"), "sizes": sizes, "seeds": seeds, "steps": steps,
-            "rows": rows, "verdict": _verdict(rows)}
+                  f"   plain/law = {row['ratio']:.1f}x"
+                  + (f"   | {extra['key']}: plain {row['plain_' + extra['key']]:.4f}"
+                     f"   law {row['law_' + extra['key']]:.4f}" if extra else ""))
+    out = {"arm": name, "kind": "data", "law": spec["law_name"], "task": spec["task"],
+           "params": {"plain": _count(spec["plain"]()), "law": _count(spec["law"]())},
+           "measure": spec.get("measure", "error"), "sizes": sizes, "seeds": seeds, "steps": steps, "lr": lr,
+           "rows": rows, "verdict": _verdict(rows)}
+    if extra:
+        out["extra"] = {"key": extra["key"], "label": extra["label"], "first": extra.get("first", "error")}
+    return out
 
 
 def _count(model) -> int:
@@ -510,7 +523,19 @@ def compose_arm():
             path = _rk4(lambda z: model(z), truth[0], 0.05, len(truth) - 1).detach()
         return float(((path - truth) ** 2).mean().sqrt())
 
+    held = torch.Generator().manual_seed(10_000)    # 2000 states no training set contains
+    z_held = (torch.rand(2000, N, 2, generator=held) * 2 - 1) * torch.tensor([1.5, 1.0])
+    f_held = field(z_held)
+
+    def field_error(model, seed):
+        with torch.enable_grad():
+            pred = model(z_held.clone()).detach()
+        return float(((pred - f_held) ** 2).mean().sqrt())
+
     return {"law": law, "plain": plain, "data": data, "loss": loss, "error": error,
+            "extra": {"key": "field", "first": "rollout RMSE",
+                      "label": "one-step field RMSE on 2000 held-out random states",
+                      "error": field_error},
             "task": "3 coupled particles, rollout RMSE over 60 time units",
             "law_name": "energy conservation + permutation invariance (SetHamiltonian)"}
 
