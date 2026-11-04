@@ -4311,6 +4311,22 @@ def checkpoint_graph(file: str):
     return graph
 
 
+@app.post("/api/checkpoints/{file}/isomorph")
+def checkpoint_to_isomorph(file: str):
+    """Send these weights to Isomorph's Weight space tab, where Claude can read what each part does."""
+    import isomorph_link
+
+    path = T.CHECKPOINTS / Path(file).name
+    if not path.exists():
+        raise HTTPException(404, detail={"message": "No checkpoint by that name."})
+    try:
+        return isomorph_link.send(path)
+    except ConnectionError as exc:
+        raise HTTPException(503, detail={"message": str(exc)})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
 @app.delete("/api/checkpoints/{file}")
 def delete_checkpoint(file: str):
     (T.CHECKPOINTS / Path(file).name).unlink(missing_ok=True)

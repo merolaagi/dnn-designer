@@ -14,6 +14,7 @@ import inspect
 import time
 import sys
 import uuid
+import urllib.parse
 from pathlib import Path
 
 os.environ["AGENTLAB_NO_PUSH"] = "1"          # the tests must never notify a real phone
@@ -4380,6 +4381,74 @@ def _():
     closing = walk.walkthrough(regression, batch=1)["closing"]
     assert closing["task"] == "regression"
     assert "not a score" in closing["note"], closing["note"]
+
+
+@check("a checkpoint's weights go to Isomorph as safetensors with its layers described, and a missing Isomorph is said plainly")
+def _():
+    import http.server
+    import struct
+    import tempfile
+    import threading
+
+    import torch
+
+    import isomorph_link
+    import main
+    from fastapi.testclient import TestClient
+
+    got = {}
+
+    class Fake(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers["content-length"]))
+            n = struct.unpack("<Q", body[:8])[0]
+            header = json.loads(body[8:8 + n])
+            got["header"], got["path"], got["size"] = header, self.path, len(body)
+            data = body[8 + n:]
+            w = header["fc.weight"]
+            got["first"] = struct.unpack("<f", data[w["data_offsets"][0]:w["data_offsets"][0] + 4])[0]
+            out = json.dumps({"spec": "import:x-1", "weights": 15, "tensors": len(header)}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(out)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Fake)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    ck = main.T.CHECKPOINTS
+    ck.mkdir(parents=True, exist_ok=True)
+    name = f"isotest_{uuid.uuid4().hex[:6]}.pt"
+    sd = {"fc.weight": torch.arange(12, dtype=torch.float32).reshape(3, 4) + 0.5, "fc.bias": torch.zeros(3),
+          "steps": torch.tensor(7)}
+    graph = {"nodes": [{"id": "i", "type": "Input", "params": {"shape": [4]}}, {"id": "d", "type": "Dense", "params": {"units": 3}}], "edges": []}
+    torch.save({"state_dict": sd, "graph": graph, "metrics": {"val_acc": 0.9}}, ck / name)
+    old = os.environ.get("ISOMORPH_URL")
+    try:
+        os.environ["ISOMORPH_URL"] = f"http://127.0.0.1:{srv.server_port}"
+        r = TestClient(main.app).post(f"/api/checkpoints/{name}/isomorph")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["url"].endswith("/#wsp/read/import:x-1"), d
+        assert set(got["header"]) == {"fc.weight", "fc.bias"}, got["header"]          # integer tensors are left out
+        assert got["header"]["fc.weight"] == {"dtype": "F32", "shape": [3, 4], "data_offsets": [0, 48]}
+        assert got["first"] == 0.5
+        assert "Input" in urllib.parse.unquote_plus(got["path"]) and "Dense" in urllib.parse.unquote_plus(got["path"])
+        os.environ["ISOMORPH_URL"] = "http://127.0.0.1:9"                                # nothing listens there
+        r = TestClient(main.app).post(f"/api/checkpoints/{name}/isomorph")
+        assert r.status_code == 503 and "./run.sh" in r.json()["detail"]["message"], r.text
+        assert TestClient(main.app).post("/api/checkpoints/nope.pt/isomorph").status_code == 404
+    finally:
+        srv.shutdown()
+        (ck / name).unlink(missing_ok=True)
+        if old is None:
+            os.environ.pop("ISOMORPH_URL", None)
+        else:
+            os.environ["ISOMORPH_URL"] = old
+    assert 'data-iso="${c.file}"' in PAGE and "/isomorph\", { method:\"POST\" }" in PAGE
+    assert isomorph_link.describe(graph, {"val_acc": 0.9}).startswith("A network built in Deep Network Designer")
 
 
 @check("precision can be measured on trained weights")

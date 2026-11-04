@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.40.0
+
+- **Saved weights can be read in Isomorph.** Each checkpoint has a "read"
+  button: it sends the weights (as safetensors) and a line describing the
+  layers to Isomorph 0.12.0's Weight space tab and opens it there, where
+  Claude reads what each part of the network does from its weights alone.
+  Isomorph must be running on this Mac (ISOMORPH_URL, default
+  http://127.0.0.1:47821; ISOMORPH_PUBLIC_URL for the link the browser opens;
+  ISOMORPH_PASSWORD if it has one). If it is not running, the button says so.
+
 ## 4.39.0
 
 - **An arm names the error it is judged on.** laws.py arms may give several

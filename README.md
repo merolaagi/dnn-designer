@@ -568,6 +568,13 @@ the metrics, and the design that produced them.
 does not match is reported and left freshly initialized — exactly what you want
 when keeping a trunk and resizing the head for a different class count.
 
+**read** sends a checkpoint's weights to [Isomorph](https://github.com/merolaagi/isomorph)
+(0.12.0 or later, running on the same Mac) and opens its Weight space tab, where
+Claude reads what each part of the network does from the weights alone. Settings:
+`ISOMORPH_URL` (default `http://127.0.0.1:47821`), `ISOMORPH_PUBLIC_URL` (the
+address the browser opens, if Isomorph has its own hostname) and
+`ISOMORPH_PASSWORD`.
+
 ## Importing an existing model
 
 The Import button takes pasted PyTorch source, a torchvision architecture by

@@ -13565,6 +13565,7 @@ async function refreshCheckpoints(){
       <span class="need">epoch ${c.epoch ?? "?"}${acc}${loss}</span>
       <button class="linkbtn" data-dl="${c.file}">get</button>
       <button class="linkbtn" data-open="${c.file}">open</button>
+      <button class="linkbtn" data-iso="${c.file}" title="Send these weights to Isomorph and have Claude read what each part does">read</button>
       <button class="linkbtn" data-rm="${c.file}">x</button></div>`;
   }).join("") : `<div class="help">No saved weights yet. A run writes its best epoch here.</div>`;
 
@@ -13581,6 +13582,16 @@ async function refreshCheckpoints(){
     clearSelection();
     render(); fitView(); analyze();
     toast("Opened the design that produced those weights");
+  }));
+  list.querySelectorAll("[data-iso]").forEach(b => b.addEventListener("click", async () => {
+    const win = window.open("about:blank");              // opened now, so a pop-up blocker allows it
+    b.textContent = "sending…";
+    const r = await fetch(API + "/api/checkpoints/" + encodeURIComponent(b.dataset.iso) + "/isomorph", { method:"POST" });
+    const d = await r.json().catch(() => ({}));
+    b.textContent = "read";
+    if (!r.ok){ if (win) win.close(); toast((d.detail && d.detail.message) || "Could not reach Isomorph"); return; }
+    if (win) win.location = d.url; else window.open(d.url);
+    toast(`Sent ${d.weights.toLocaleString()} weights to Isomorph's Weight space`);
   }));
   list.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", async () => {
     await fetch(API + "/api/checkpoints/" + encodeURIComponent(b.dataset.rm), { method:"DELETE" });
