@@ -1618,6 +1618,20 @@ table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
 .lawsec p.lead{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.55;max-width:760px}
 .lawtable{width:100%;border-collapse:collapse;font-size:12.5px}
 .lawscroll{overflow-x:auto;max-width:100%}
+.lawmap .lmgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.lawmap .lmax{font-size:11.5px;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.04em}
+.lawmap .lmq{background:#fff;border:1px solid var(--paper-3);border-radius:12px;padding:12px 14px;min-width:0}
+.lawmap .lmq.keep{border-color:#2F6FE4;box-shadow:inset 3px 0 0 #2F6FE4}
+.lawmap .lmq b{display:block}
+.lawmap .lawtable td,.lawmap .lawtable th{text-align:left;vertical-align:top}
+.lawmap .lawtable td.win{font-weight:600}
+.lawmap .lawtable td small{font-weight:400}
+.lawmap .lmq small{display:block;color:var(--muted);margin-bottom:6px}
+.lawmap .lmq ul{margin:0;padding-left:16px;font-size:13px}
+.lawmap .lmq li i{font-style:normal;font-size:11px;color:var(--muted);margin-left:6px}
+.lawmap .lmq .none{font-size:12.5px;color:var(--muted);margin:0}
+.lawmap .lmdetails{margin-top:10px}
+.lawmap .lmdetails td small{display:block;color:var(--muted);font-size:11px;max-width:320px}
 .lawtable th{text-align:right;font-weight:600;color:var(--muted);font-size:11px;padding:4px 6px;border-bottom:1px solid var(--paper-3)}
 .lawtable th:first-child{text-align:left}
 .lawtable td{text-align:right;padding:6px;border-bottom:1px solid var(--paper-3);font-variant-numeric:tabular-nums}
@@ -8436,6 +8450,40 @@ function lawsErrorsTable(r){
     </tbody></table></div>`;
 }
 
+const LAWS_BOXES = [["head start", "Training finds it · building it in helps"], ["redundant", "Training finds it · building it in adds little"],
+                    ["keep", "Training does not find it · building it in helps"], ["drop or rethink", "Training does not find it · building it in did not help"]];
+
+async function lawsMapFill(){
+  const host = $("lawsMap");
+  if (!host) return;
+  let m;
+  try { m = await (await fetch(API + "/api/laws/map")).json(); } catch { host.innerHTML = ""; return; }
+  const word = v => v === "yes" ? "yes" : v === "no" ? "no" : v === "partly" ? "partly" : v === "mixed" ? "mixed" : "–";
+  const cls = v => v === "yes" ? "win" : v === "no" ? "" : "";
+  const quad = ([key, line]) => {
+    const items = m.rows.filter(r => r.box === key);
+    return `<div class="lmq${key === "keep" ? " keep" : ""}"><b>${alEsc(key[0].toUpperCase() + key.slice(1))}</b><small>${alEsc(line)}</small>
+      ${items.length ? `<ul>${items.map(r => `<li title="${alEsc(r.app)}">${alEsc(r.law.length > 70 ? r.law.slice(0, 68) + "…" : r.law)}<i>${r.app === "Isomorph" ? "Isomorph" : "here"}</i></li>`).join("")}</ul>` : `<p class="none">none yet</p>`}</div>`;
+  };
+  const red = m.redundancy && m.redundancy.groups ? m.redundancy.groups.filter(g => g.length > 1) : [];
+  const flat = m.redundancy && m.redundancy.vs_random ? m.redundancy.vs_random.filter(x => !x.separates).map(x => x.law) : [];
+  const waiting = m.rows.filter(r => r.box === "not measured");
+  const never = m.rows.filter(r => r.box === "never built in");
+  host.innerHTML = `<div class="lawsec lawmap"><h4>Every law, both apps</h4>
+    <p class="lead">Two questions for each law. Does training make a plain network obey it by itself (measured at the largest size, against the same network untrained)? Does building it in help (this app's arms and guarantee tests, Isomorph's efficiency levers)?
+    ${m.isomorph ? `Isomorph ${alEsc(m.isomorph_version || "")} answered.` : `Isomorph is not connected (${alEsc(m.isomorph_error || "")}), so only this app's laws are shown.`}</p>
+    <div class="lmgrid"><div class="lmax">building it in helps</div><div class="lmax">adds little</div>${LAWS_BOXES.map(quad).join("")}</div>
+    ${never.length ? `<p class="lead" style="margin-top:10px"><b>Never built in.</b> Found (or looked for) in trained weights, but no layer here and no Isomorph lever builds them in yet: ${never.map(r => alEsc(r.law) + ` (${alEsc(r.emerges_why)})`).join("; ")}.</p>` : ""}
+    ${red.length || flat.length ? `<p class="lead" style="margin-top:10px">Isomorph's weight laws: ${red.length ? `saying the same thing: ${red.map(g => g.join(" and ")).join("; ")}. ` : ""}${flat.length ? `No better than random at telling trained weights apart: ${flat.join(", ")}.` : ""}</p>` : ""}
+    <details class="lmdetails"><summary>Every law, with its numbers (${m.rows.length}${waiting.length ? `, ${waiting.length} not measured yet` : ""})</summary>
+    <div class="lawscroll"><table class="lawtable"><thead><tr><th>Law</th><th>Where</th><th>Training finds it?</th><th>Building it in helps?</th><th>Verdict</th></tr></thead><tbody>
+    ${m.rows.map(r => `<tr><td>${alEsc(r.law)}</td><td>${alEsc(r.app === "Isomorph" ? "Isomorph" : "here")}</td>
+      <td class="${cls(r.emerges)}" title="${alEsc(r.emerges_why || "")}">${word(r.emerges)}<small> ${alEsc(r.emerges_why || "")}</small></td>
+      <td class="${cls(r.helps)}" title="${alEsc(r.helps_why || "")}">${word(r.helps)}<small> ${alEsc(r.helps_why || "")}</small></td>
+      <td>${alEsc(r.box)}</td></tr>`).join("")}
+    </tbody></table></div></details></div>`;
+}
+
 function lawsUsable(r, kind){
   // a saved run without what this card needs (another kind of run, or missing fields) counts as not run
   if (!r || !Array.isArray(r.rows)) return false;
@@ -8503,7 +8551,7 @@ async function renderLawsPage(){
       be learned from data. On the right, what each one has been shown to buy.</p>
       ${LAW_LIST.filter(x => measured.has(x[4])).map(([fam, law, layer, line]) => `<div class="lawlaw"><i>${fam}</i><b>${alEsc(law)}</b> · <code>${alEsc(layer)}</code><span>${alEsc(line)}</span></div>`).join("")}
     </div>
-    <div><div class="lawhead"><h3>Measured here</h3>
+    <div><div id="lawsMap"></div><div class="lawhead"><h3>Measured here</h3>
       <div class="lawkey"><span class="plain">plain network</span><span class="law">law-built network</span></div></div>
       ${section("Composed", "Two confirmed laws in one layer. Judged by its own run against a plain network, like every arm.",
                 composed.map(a => lawsDataCard(a, d, ghosts)).join(""))}
@@ -8513,6 +8561,7 @@ async function renderLawsPage(){
       ${section("Guarantees, measured", "Not data savers on their tasks. What they promise is a property, so that is what is measured: plain against law at a fixed amount of data, with no data-efficiency verdict.",
                 d.guarantees.map(a => lawsGuaranteeCard(a, d)).join(""))}
     </div></div>`;
+  lawsMapFill();
   host.querySelectorAll("[data-lawrun]").forEach(b => b.onclick = async () => {
     b.disabled = true; b.textContent = "Starting…";
     const r = await fetch(API + `/api/laws/${b.dataset.lawrun}/run`, {method: "POST", headers: {"content-type": "application/json"}, body: "{}"});

@@ -1158,6 +1158,19 @@ def laws_view():
     return laws.overview()
 
 
+@app.get("/api/laws/map")
+def laws_map():
+    """Every law in one table, this app's and Isomorph's: does training find it, does building it in help."""
+    import isomorph_link
+    import laws
+
+    try:
+        iso, err = isomorph_link.get_json("/api/laws/map"), None
+    except ConnectionError as exc:
+        iso, err = None, str(exc)
+    return laws.lawmap(iso, err)
+
+
 @app.post("/api/laws/{arm}/run")
 def laws_run(arm: str, body: LawsRun):
     import laws

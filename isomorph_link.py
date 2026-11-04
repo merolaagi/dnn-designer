@@ -97,3 +97,21 @@ def send(path, name=""):
                               "Start it with ./run.sh in ~/Sites/isomorph, or set ISOMORPH_URL.")
     info["url"] = f"{public_url()}/#wsp/read/{info['spec']}"
     return info
+
+
+def get_json(path, timeout=10):
+    """GET an Isomorph API path; raises ConnectionError with a plain reason."""
+    headers = {}
+    pw = os.environ.get("ISOMORPH_PASSWORD")
+    if pw:
+        headers["authorization"] = "Basic " + base64.b64encode(f"dnn:{pw}".encode()).decode()
+    req = urllib.request.Request(f"{base_url()}{path}", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise ConnectionError("That Isomorph is older than 0.13.0 and cannot share its laws. Upgrade it.")
+        raise ConnectionError(f"Isomorph answered {e.code}.")
+    except (urllib.error.URLError, OSError) as e:
+        raise ConnectionError(f"Isomorph is not answering at {base_url()} ({getattr(e, 'reason', e)}).")

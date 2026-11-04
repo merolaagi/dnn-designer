@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.41.0
+
+- **Every law, both apps.** The Laws page opens with one table of every law,
+  this app's and Isomorph's, each answering two questions: does training make
+  a plain network obey it by itself, and does building it in help? Four boxes:
+  head start, redundant, keep, drop or rethink; plus the weight laws nothing
+  builds in yet. Isomorph 0.13.0 must be running for its rows
+  (`ISOMORPH_URL`); without it the table shows this app's laws alone.
+- **Each arm measures emergence.** At the largest size, how far the plain
+  network breaks the law after training, against the same network untrained
+  and against the law-built one: volume change of the learned motion
+  (physics, Lagrangian, compose), sensitivity to reordering (math), sign
+  mixing per unit (Dale), midpoint convexity (convex), share of points
+  steeper than the bound (Lipschitz). Working memory and Hebbian have no
+  plain counterpart and are marked so.
+- **First table, from runs at the defaults:** training finds the
+  pendulum's volume preservation (0.80 untrained to 0.010 trained) and the
+  convex shape (0.56 to 0), so those laws land in redundant; it does not
+  find order-blindness (0.95 to 0.58) or one sign per unit (0.30 to 0.39,
+  training mixes signs further), and building those in helps, so they land
+  in keep; training pushes the plain network past the Lipschitz bound (0 to
+  0.13 of points) and the bound did not help here.
+
 ## 4.40.1
 
 - The three-error table on the physics, Lagrangian and compose cards

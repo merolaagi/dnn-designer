@@ -71,6 +71,7 @@ def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
                                      "error": lambda model, test, seed: spec["error"](model, test)}]
     primary = spec.get("primary", errors[0]["key"])
     assert primary in [e["key"] for e in errors], (name, primary)
+    viol = {"untrained": [], "plain": [], "law": []}      # how far each model breaks the law (largest size)
     rows = []
     for n in sizes:
         if stop and stop():
@@ -82,9 +83,13 @@ def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
             for kind in ("plain", "law"):
                 torch.manual_seed(seed)
                 model = spec[kind]()
+                if kind == "plain" and n == sizes[-1] and spec.get("violation"):
+                    viol["untrained"].append(_finite(float(spec["violation"]["fn"](model))))
                 _fit(model, xs, ys, spec["loss"], steps, lr)
                 for e in errors:
                     errs[(kind, e["key"])].append(_finite(float(e["error"](model, test, seed))))
+                if n == sizes[-1] and spec.get("violation"):
+                    viol[kind].append(_finite(float(spec["violation"]["fn"](model))))
         row = {"n": n}
         for (kind, key), vals in errs.items():
             mean, spread = sum(vals) / len(vals), (max(vals) - min(vals)) / 2
@@ -108,7 +113,28 @@ def run_arm(name: str, sizes: List[int], seeds: int, steps: int, lr: float,
     if len(errors) > 1:
         out["errors"] = [{"key": e["key"], "label": e["label"]} for e in errors]
         out["primary"] = primary
+    if viol["plain"] and len(rows) == len(sizes):
+        out["emergence"] = emergence(spec["violation"]["label"], sizes[-1], viol)
     return out
+
+
+def emergence(label, n, viol):
+    """Does training make a plain network obey the law by itself? Compare how far the plain network breaks
+    it after training with how far it broke it at initialisation (same seeds), and with the law-built one."""
+    mean = lambda xs: sum(xs) / len(xs) if xs else None
+    u, t, w = mean(viol["untrained"]), mean(viol["plain"]), mean(viol["law"])
+    ratio = t / u if u and u > 0 else None
+    if t is None:
+        verdict = "unknown"
+    elif ratio is None:                       # the untrained network already obeys it
+        verdict = "yes" if t <= 0.01 else "no"
+    elif ratio <= 0.2:
+        verdict = "yes"                       # training removed at least 80% of the violation
+    elif ratio >= 0.8:
+        verdict = "no"                        # training left it (or made it worse)
+    else:
+        verdict = "partly"
+    return {"label": label, "n": n, "untrained": u, "trained": t, "law": w, "ratio": ratio, "verdict": verdict}
 
 
 def _dynamics_errors(field, energy, sample, z0, dt: float = 0.05, units: float = 10.0):
@@ -155,6 +181,43 @@ def _dynamics_errors(field, energy, sample, z0, dt: float = 0.05, units: float =
         {"key": "rollout", "label": f"rollout RMSE, {units:g} time units", "error": rollout_error},
         {"key": "energy", "label": "relative drift of the true energy over that rollout", "error": energy_drift},
     ]
+
+
+def _liouville(sample, count=256):
+    """How far a learned motion is from preserving volume (Liouville): mean |trace of its Jacobian| over
+    mean |Jacobian|, on held-out states. Every Hamiltonian motion has trace exactly 0."""
+    import torch
+
+    z0 = sample(count, torch.Generator().manual_seed(20_000))
+
+    def fn(model):
+        z = z0.clone().requires_grad_(True)
+        with torch.enable_grad():
+            f = model(z).reshape(count, -1)
+            rows = [torch.autograd.grad(f[:, k].sum(), z, retain_graph=True)[0].reshape(count, -1) for k in range(f.shape[1])]
+        J = torch.stack(rows, 1)                         # [count, out, in]
+        tr = J.diagonal(dim1=1, dim2=2).sum(-1).abs()
+        return float(tr.mean() / (J.flatten(1).norm(dim=1).mean() + 1e-12))
+    return {"label": "volume change of the learned motion, |trace J| / |J| (0 = a Hamiltonian motion)", "fn": fn}
+
+
+def _sign_mixing(model):
+    """Dale's law broken: per input unit of each Linear layer, the share of its outgoing weight on the
+    minority sign (0 = one sign per unit, about 0.4 for random weights)."""
+    import torch
+
+    vals = []
+    for m in model.modules():
+        W = getattr(m, "weight", None)
+        if isinstance(m, torch.nn.Linear) and W is not None:
+            W = W.detach()
+            pos, neg = W.clamp(min=0).sum(0), (-W).clamp(min=0).sum(0)
+            vals.append((torch.minimum(pos, neg) / (pos + neg + 1e-12)).mean())
+        elif hasattr(m, "effective_weight"):
+            W = m.effective_weight().detach()
+            pos, neg = W.clamp(min=0).sum(0), (-W).clamp(min=0).sum(0)
+            vals.append((torch.minimum(pos, neg) / (pos + neg + 1e-12)).mean())
+    return float(torch.stack(vals).mean()) if vals else float("nan")
 
 
 PHYSICS_NOTE = ("Why the long rollout is not the verdict: over 60 time units a model that keeps its energy but drifts "
@@ -263,7 +326,7 @@ def physics_arm():
         return ((model(xs) - ys) ** 2).mean()
 
     return {"law": law, "plain": plain, "data": data, "loss": loss, "errors": errors, "primary": "field",
-            "measure": "one-step field RMSE on 2000 held-out states", "note": PHYSICS_NOTE,
+            "measure": "one-step field RMSE on 2000 held-out states", "note": PHYSICS_NOTE, "violation": _liouville(sample),
             "task": "pendulum: learn the motion from (state, velocity) pairs",
             "law_name": "energy conservation (Hamiltonian field)"}
 
@@ -316,7 +379,18 @@ def math_arm():
         with torch.no_grad():
             return float(((model(xt) - yt) ** 2).mean().sqrt())
 
+    probe = torch.rand(500, N, D, generator=torch.Generator().manual_seed(20_000)) * 4 - 2
+    perms = [torch.randperm(N, generator=torch.Generator().manual_seed(20_001 + i)) for i in range(4)]
+
+    def order_sensitivity(model):
+        with torch.no_grad():
+            y = model(probe)
+            d = torch.stack([(model(probe[:, p]) - y).abs().mean() for p in perms]).mean()
+            return float(d / (y.std() + 1e-12))
+
     return {"law": law, "plain": plain, "data": data, "loss": loss, "error": error,
+            "violation": {"label": "change of the output when the set is reordered, over its spread (0 = order-blind)",
+                          "fn": order_sensitivity},
             "task": "symmetric function of a 6-point set, RMSE on 2000 fresh sets",
             "law_name": "permutation invariance (Deep Sets)"}
 
@@ -462,6 +536,7 @@ def dale_arm():
     return {"law": lambda: nn.Sequential(Dale(D, H, frac=0.8), nn.ReLU(), Dale(H, C, frac=0.8)),
             "plain": lambda: nn.Sequential(nn.Linear(D, H), nn.ReLU(), nn.Linear(H, C)),
             "data": data, "loss": loss, "error": error,
+            "violation": {"label": "share of each unit's outgoing weight on its minority sign (0 = one sign per unit)", "fn": _sign_mixing},
             "task": "3-class tabular data labelled by a Dale's-law teacher (5% label noise), error rate on 2000 fresh rows",
             "law_name": "Dale's law (excitatory and inhibitory neurons)", "measure": "error rate"}
 
@@ -583,7 +658,7 @@ def compose_arm():
         return ((model(xs) - ys) ** 2).mean()
 
     return {"law": law, "plain": plain, "data": data, "loss": loss, "errors": errors, "primary": "field",
-            "measure": "one-step field RMSE on 2000 held-out states", "note": PHYSICS_NOTE,
+            "measure": "one-step field RMSE on 2000 held-out states", "note": PHYSICS_NOTE, "violation": _liouville(sample),
             "task": "3 coupled particles: learn the motion from (state, velocity) pairs",
             "law_name": "energy conservation + permutation invariance (SetHamiltonian)"}
 
@@ -613,6 +688,7 @@ def run_guarantee(name: str, n: int = 512, seeds: int = 2, steps: int = 1500, lr
     import torch
     spec = GUARANTEES[name]()
     per = {label: {"plain": [], "law": []} for label, _ in spec["measures"]}
+    viol = {"untrained": [], "plain": [], "law": []}
     for seed in range(seeds):
         if stop and stop():
             break
@@ -621,9 +697,13 @@ def run_guarantee(name: str, n: int = 512, seeds: int = 2, steps: int = 1500, lr
         for kind in ("plain", "law"):
             torch.manual_seed(seed)
             model = spec[kind]()
+            if kind == "plain" and spec.get("violation"):
+                viol["untrained"].append(_finite(float(spec["violation"]["fn"](model))))
             _fit(model, xs, ys, spec["loss"], steps, lr)
             for label, measure in spec["measures"]:
                 per[label][kind].append(measure(model, extra))
+            if spec.get("violation"):
+                viol[kind].append(_finite(float(spec["violation"]["fn"](model))))
     rows = []
     betters = spec["better"] if isinstance(spec["better"], list) else [spec["better"]] * len(spec["measures"])
     for (label, _), better in zip(spec["measures"], betters):
@@ -638,8 +718,11 @@ def run_guarantee(name: str, n: int = 512, seeds: int = 2, steps: int = 1500, lr
         if not quiet:
             print(f"  {label:44s}  plain {row['plain']:.4f} ±{row['plain_spread']:.4f}   "
                   f"law {row['law']:.4f} ±{row['law_spread']:.4f}")
-    return {"arm": name, "kind": "guarantee", "law": spec["law_name"], "task": spec["task"], "n": n,
-            "seeds": seeds, "steps": steps, "better": spec["better"], "unit": spec["unit"], "rows": rows}
+    out = {"arm": name, "kind": "guarantee", "law": spec["law_name"], "task": spec["task"], "n": n,
+           "seeds": seeds, "steps": steps, "better": spec["better"], "unit": spec["unit"], "rows": rows}
+    if viol["plain"] and len(viol["plain"]) == seeds:
+        out["emergence"] = emergence(spec["violation"]["label"], n, viol)
+    return out
 
 
 @guarantee("convex")
@@ -710,7 +793,17 @@ def convex_guarantee():
     def distance(model, starts):
         return float(descend(model, starts).mean())
 
-    return {"law": lambda: Convex(D, hidden=64, layers=2, out=1),
+    ga = torch.Generator().manual_seed(20_000)
+    pa, pb = torch.rand(2000, D, generator=ga) * 12 - 6, torch.rand(2000, D, generator=ga) * 12 - 6
+
+    def midpoint_breaks(model):
+        with torch.no_grad():
+            fa, fb, fm = model(pa), model(pb), model((pa + pb) / 2)
+            tol = 1e-4 * (fa.abs().mean() + fb.abs().mean())
+            return float((fm > (fa + fb) / 2 + tol).float().mean())
+
+    return {"violation": {"label": "share of 2000 pairs in [-6, 6]⁴ where f(midpoint) > the mean of the ends (0 = convex)", "fn": midpoint_breaks},
+            "law": lambda: Convex(D, hidden=64, layers=2, out=1),
             "plain": lambda: nn.Sequential(nn.Linear(D, 64), nn.Softplus(), nn.Linear(64, 64), nn.Softplus(), nn.Linear(64, 1)),
             "data": data, "loss": lambda m, xs, ys: ((m(xs) - ys) ** 2).mean(),
             "measures": [("descents from outside the data that reach the minimum", reached),
@@ -761,7 +854,16 @@ def lipschitz_guarantee():
                 return float(((model(x) - truth(x)) ** 2).mean().sqrt())
         return measure
 
-    return {"law": lambda: nn.Sequential(Lip(D, 64, bound=1.0), nn.ReLU(), Lip(64, 64, bound=1.0), nn.ReLU(), Lip(64, 1, bound=1.0)),
+    xg = torch.randn(1000, D, generator=torch.Generator().manual_seed(20_000))
+
+    def steeper_than_one(model):
+        x = xg.clone().requires_grad_(True)
+        with torch.enable_grad():
+            g = torch.autograd.grad(model(x).sum(), x)[0]
+        return float((g.norm(dim=1) > 1.0 + 1e-6).float().mean())
+
+    return {"violation": {"label": "share of 1000 points where the gradient is steeper than the bound 1 (0 = within it)", "fn": steeper_than_one},
+            "law": lambda: nn.Sequential(Lip(D, 64, bound=1.0), nn.ReLU(), Lip(64, 64, bound=1.0), nn.ReLU(), Lip(64, 1, bound=1.0)),
             "plain": lambda: nn.Sequential(nn.Linear(D, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 1)),
             "data": data, "loss": lambda m, xs, ys: ((m(xs) - ys) ** 2).mean(),
             "measures": [("no nudge", worst(0.0)), ("worst nudge of norm 0.3", worst(0.3)),
@@ -973,3 +1075,129 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# one table of every law, across this app and Isomorph
+# ---------------------------------------------------------------------------
+#
+# Each law asks two questions. Does training make a plain network obey it by itself (emergence)? Does
+# building it in help (this app's arms and guarantee tests, Isomorph's efficiency levers)? The four answers:
+#
+#                      building it in helps          building it in does not help
+#   training finds it  head start                    redundant
+#   training does not  keep: it adds what training   drop or rethink
+#                      does not find
+
+BOXES = {("yes", "yes"): "head start", ("yes", "no"): "redundant", ("no", "yes"): "keep", ("no", "no"): "drop or rethink"}
+BOX_LINES = {"head start": "Training finds it; building it in gets there with less data.",
+             "redundant": "Training finds it anyway; building it in adds little.",
+             "keep": "Training does not find it; building it in helps.",
+             "drop or rethink": "Training does not find it, and building it in did not help here.",
+             "never built in": "Measured in trained weights, but no layer or lever builds it in yet: a candidate to build and test.",
+             "not measured": "One of the two questions has no measurement yet."}
+LEVER_OF = {"spikes": "rank", "low-rank": "rank", "redundancy": "share", "sparsity": "topk", "lab": "seed"}
+LEVER_LABEL = {"rank": "factor matrices to low rank", "share": "share block weights across layers",
+               "topk": "keep only the strongest neurons", "seed": "start from symmetry-derived waves"}
+
+
+def box(emerges, helps, built=True):
+    e = "yes" if emerges == "yes" else "no" if emerges in ("no", "partly") else None
+    h = "yes" if helps == "yes" else "no" if helps in ("no", "mixed") else None
+    if e and h is None and not built:
+        return "never built in"
+    return BOXES.get((e, h), "not measured")
+
+
+def _helps(result):
+    """From a saved run: did building the law in help, beyond the seeds' spread?"""
+    if not result or not result.get("rows"):
+        return None, "not run here yet"
+    if result.get("kind") == "guarantee":
+        better = []
+        for r in result["rows"]:
+            hi = (r.get("better") or result.get("better")) == "higher"
+            lp, ll = r["plain"], r["law"]
+            sp, sl = r.get("plain_spread", 0), r.get("law_spread", 0)
+            if (ll - sl > lp + sp) if hi else (ll + sl < lp - sp):
+                better.append("law")
+            elif (lp - sp > ll + sl) if hi else (lp + sp < ll - sl):
+                better.append("plain")
+        n = len(result["rows"])
+        lw, pl = better.count("law"), better.count("plain")
+        why = f"law better on {lw} of {n} measures, plain on {pl}"
+        return ("yes" if lw > n / 2 else "no" if pl >= lw else "mixed"), why
+    states = [_state(r) for r in result["rows"]]
+    ahead, behind = "ahead" in states, "behind" in states
+    why = result.get("verdict", "")
+    if ahead and not behind:
+        return "yes", why
+    if ahead and behind:
+        return "mixed", why
+    return "no", why
+
+
+def lawmap(iso=None, iso_error=None):
+    rows = []
+    for name, fn in list(ARMS.items()) + list(GUARANTEES.items()):
+        status = STATUS.get(name, "guarantee" if name in GUARANTEES else "measuring")
+        spec = fn()
+        res = _JOBS.get(name) if (_JOBS.get(name) or {}).get("status") == "done" else None
+        res = res or saved(name)
+        helps, why = _helps(res)
+        em = (res or {}).get("emergence")
+        if not spec.get("violation"):
+            emerges, ewhy = None, "no plain counterpart to test"
+        elif not em:
+            emerges, ewhy = None, "run it again to measure"
+        else:
+            emerges = em["verdict"]
+            ewhy = (f"{em['label']}: untrained {em['untrained']:.3g}, trained {em['trained']:.3g}, law-built {em['law']:.3g} "
+                    f"(n={em['n']})")
+        rows.append({"law": spec["law_name"], "arm": name, "app": "Deep Network Designer", "status": status,
+                     "emerges": emerges, "emerges_why": ewhy, "helps": helps, "helps_why": why, "box": box(emerges, helps)})
+    iso_rows, redundancy = [], None
+    if iso:
+        levers = {}
+        for r in iso.get("rules", []):
+            if r.get("kind") == "lever" and r.get("lever"):
+                levers.setdefault(r["lever"], []).append(r.get("status"))
+        def lever_helps(lv):
+            st = levers.get(lv) or []
+            if not st:
+                return None, f"lever '{LEVER_LABEL.get(lv, lv)}' not tested yet"
+            if "holds" in st and "rejected" not in st:
+                return "yes", f"lever '{LEVER_LABEL[lv]}' held ({st.count('holds')} of {len(st)} tasks)"
+            if "holds" in st:
+                return "mixed", f"lever '{LEVER_LABEL[lv]}' held on {st.count('holds')} of {len(st)} tasks"
+            return "no", f"lever '{LEVER_LABEL[lv]}' did not hold ({len(st)} tasks)"
+        for l in iso.get("laws", []):
+            if l.get("kind") != "emergent":
+                continue
+            of, have = l.get("of", 0), l.get("have", 0)
+            emerges = None if not of else "yes" if have >= 0.75 * of else "no" if have == 0 else "partly"
+            lv = LEVER_OF.get(l["id"])
+            helps, hwhy = lever_helps(lv) if lv else (None, "nothing builds it in yet")
+            built = bool(lv)
+            if l["id"] == "sign_coherence":
+                built = True
+                helps, hwhy = next(((r["helps"], f"Dale's law arm here: {r['helps_why']}") for r in rows if r["arm"] == "dale"), (helps, hwhy))
+            iso_rows.append({"law": l["label"], "arm": l["id"], "app": "Isomorph", "status": l.get("field"),
+                             "emerges": emerges, "emerges_why": f"holds in {have} of {of} models tested" if of else "no model tested",
+                             "helps": helps, "helps_why": hwhy, "box": box(emerges, helps, built)})
+        for r in iso.get("rules", []):
+            lv = LEVER_OF.get(r.get("kind"))
+            if not lv:
+                continue
+            helps, hwhy = lever_helps(lv)
+            conf = r.get("confidence")
+            emerges = "yes" if conf in ("strong", "moderate") else "partly" if conf == "weak" else None
+            iso_rows.append({"law": r["statement"], "arm": r["id"], "app": "Isomorph", "status": f"rule, {conf}",
+                             "emerges": emerges, "emerges_why": f"{r.get('support', 0)} models support it, {r.get('counter', 0)} against",
+                             "helps": helps, "helps_why": hwhy, "box": box(emerges, helps)})
+        redundancy = iso.get("redundancy")
+    counts = {}
+    for r in rows + iso_rows:
+        counts[r["box"]] = counts.get(r["box"], 0) + 1
+    return {"rows": rows + iso_rows, "counts": counts, "boxes": BOX_LINES, "isomorph": bool(iso),
+            "isomorph_error": iso_error, "isomorph_version": (iso or {}).get("version"), "redundancy": redundancy}

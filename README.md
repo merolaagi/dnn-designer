@@ -670,7 +670,9 @@ of the weights, so it never has to be learned from data:
 Plus the `SelfPaced` training recipe (a curriculum without a teacher). Each guarantee is
 tested numerically on untrained, scrambled layers in `tests/test_laws.py`.
 
-The Laws page has four sections:
+The Laws page opens with **Every law, both apps**: each law, this app's and [Isomorph](https://github.com/merolaagi/isomorph)'s (0.13.0 or later, `ISOMORPH_URL`), sorted by two answers: does training make a plain network obey it by itself (each arm measures this at its largest size, against the same network untrained), and does building it in help. Head start, redundant, keep, drop or rethink, and the weight laws nothing builds in yet.
+
+Below it, the page has four sections:
 
 - **Composed:** SetHamiltonian, two confirmed laws in one layer, judged by its own run (compose
   arm). On three coupled particles neither it nor the plain network beat doing nothing yet.

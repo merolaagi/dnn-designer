@@ -425,6 +425,47 @@ def _():
     assert "loss" in rec.evaluate(ctx, [x], y)
 
 
+@check("every law gets both questions: does training find it, does building it in help; one table with Isomorph's")
+def _():
+    if not HAVE_TORCH:
+        return skip()
+    import laws
+    # emergence: measured at the largest size, against the same plain network untrained
+    for name in ("physics", "math", "dale", "compose"):
+        e = laws.run_arm(name, [8, 16], seeds=1, steps=5, lr=1e-3, quiet=True)["emergence"]
+        assert e["n"] == 16 and e["verdict"] in ("yes", "no", "partly") and e["untrained"] > 0, (name, e)
+        assert e["law"] < 1e-4, (name, e)                       # the law-built network obeys its own law
+    assert "emergence" not in laws.run_arm("psychology", [8], seeds=1, steps=2, lr=1e-3, quiet=True)   # no plain counterpart
+    for g in ("convex", "lipschitz"):
+        e = laws.run_guarantee(g, 16, seeds=1, steps=5, lr=1e-3, quiet=True)["emergence"]
+        assert e["law"] <= 1e-6 and e["verdict"] in ("yes", "no", "partly"), (g, e)
+    assert laws.emergence("x", 8, {"untrained": [1.0], "plain": [0.1], "law": [0.0]})["verdict"] == "yes"
+    assert laws.emergence("x", 8, {"untrained": [1.0], "plain": [0.9], "law": [0.0]})["verdict"] == "no"
+    assert laws.emergence("x", 8, {"untrained": [0.0], "plain": [0.2], "law": [0.0]})["verdict"] == "no"      # training broke it
+    assert [laws.box(*k) for k in (("yes", "yes"), ("yes", "no"), ("no", "yes"), ("partly", "no"), (None, "yes"))] == \
+        ["head start", "redundant", "keep", "drop or rethink", "not measured"]
+    # the table, without Isomorph and with a reply shaped like Isomorph's /api/laws/map
+    alone = laws.lawmap(None, "not running")
+    assert not alone["isomorph"] and {r["arm"] for r in alone["rows"]} >= {"physics", "math", "dale", "convex", "lipschitz"}
+    iso = {"version": "0.13.0", "laws": [{"id": "spikes", "label": "Spikes", "kind": "emergent", "have": 5, "of": 6},
+                                         {"id": "sign_coherence", "label": "One sign per unit", "kind": "emergent", "have": 0, "of": 5},
+                                         {"id": "benford", "label": "Benford", "kind": "preserved", "have": 0, "of": 6}],
+           "rules": [{"id": "R-1", "kind": "lever", "lever": "rank", "status": "holds", "statement": "rank holds"},
+                     {"id": "R-2", "kind": "redundancy", "statement": "layers repeat", "confidence": "moderate", "support": 4, "counter": 0},
+                     {"id": "R-3", "kind": "lever", "lever": "share", "status": "rejected", "statement": "share fails"}],
+           "redundancy": {"groups": [["spikes", "sv_powerlaw"]], "vs_random": []}}
+    m = laws.lawmap(iso)
+    by = {r["arm"]: r for r in m["rows"] if r["app"] == "Isomorph"}
+    assert by["spikes"]["box"] == "head start" and by["R-2"]["box"] == "redundant", by
+    assert by["sign_coherence"]["emerges"] == "no" and "Dale" in by["sign_coherence"]["helps_why"]
+    assert "benford" not in by                                     # a preserved law is not an emergence question
+    iso["laws"].append({"id": "balance", "label": "Balance", "kind": "emergent", "have": 5, "of": 5})
+    assert {r["arm"]: r for r in laws.lawmap(iso)["rows"]}["balance"]["box"] == "never built in"
+    assert sum(m["counts"].values()) == len(m["rows"]) and m["redundancy"]["groups"]
+    page = (ROOT / "frontend" / "index.html").read_text()
+    assert "async function lawsMapFill" in page and 'id="lawsMap"' in page and "Every law, both apps" in page
+
+
 @check("laws.py: every arm runs end to end at a tiny size and gives a verdict sentence")
 def _():
     if not HAVE_TORCH:
