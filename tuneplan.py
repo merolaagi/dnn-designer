@@ -11,7 +11,8 @@ did not. This is the gradient choice, built into training:
      rank that holds 90% of that gradient's energy (at most 16);
   3. matrices are taken in that order until the budget (a share of the loaded weights) is spent; each gets a
      delta W + U V^T with U starting at zero, so training starts exactly where the checkpoint is;
-  4. every loaded weight is frozen; layers the checkpoint did not fill (a resized head) train in full.
+  4. every loaded weight is frozen, except the head (the last Linear or convolution, which writes the answer
+     and has to change most on a new task): it trains in full, as do layers the checkpoint did not fill.
 
 Saved checkpoints hold the merged weights (W + U V^T), so they load like any other.
 """
@@ -97,24 +98,44 @@ def plan(cands, reads, budget):
     return pick, used
 
 
-def apply(model, loaded_keys, batches, loss_fn, budget_frac=0.01, seed=0) -> Dict[str, Any]:
-    """Plan and attach the adapters; freeze every loaded weight. Returns the plan for the run's log."""
+def head_of(model):
+    """The last weight-bearing Linear or convolution in the model: the layer that writes the answer."""
+    import torch
+
+    last = None
+    for mname, mod in model.named_modules():
+        if isinstance(mod, (torch.nn.Linear, torch.nn.Conv1d, torch.nn.Conv2d)) and getattr(mod, "weight", None) is not None:
+            last = (mname, mod)
+    return last
+
+
+def apply(model, loaded_keys, batches, loss_fn, budget_frac=0.01, seed=0, head=True) -> Dict[str, Any]:
+    """Plan and attach the adapters; freeze every loaded weight except the head's. Returns the plan for the run's log.
+
+    The head (the last Linear or convolution) trains in full by default: on a new task it is the layer that has
+    to change most, and in a small network it is often too wide for any adapter the budget allows."""
     import torch
     import torch.nn.utils.parametrize as P
 
-    cands = candidates(model, loaded_keys)
-    if not cands:
+    hd = head_of(model) if head else None
+    head_keys = set()
+    if hd:
+        head_keys = {f"{hd[0]}.{n}" if hd[0] else n for n, _ in hd[1].named_parameters(recurse=False)}
+    cands = [c for c in candidates(model, loaded_keys) if c["name"] not in head_keys]
+    if not cands and not head_keys:
         return {"ok": False, "reason": "No weight matrix was loaded from the checkpoint, so there is nothing to adapt."}
-    reads = read_gradient(model, cands, batches, loss_fn)
+    reads = read_gradient(model, cands, batches, loss_fn) if cands else []
     loaded_total = sum(int(math.prod(c["shape"])) for c in cands)
-    smallest = min(c["shape"][0] + int(math.prod(c["shape"][1:])) for c in cands)
-    budget = max(int(budget_frac * loaded_total), smallest)
-    pick, used = plan(cands, reads, budget)
-    if not pick:
+    # never so small that the matrix the gradient pushes hardest cannot take even a rank-1 adapter
+    top = max(range(len(cands)), key=lambda i: reads[i]["grad_rel"]) if cands else None
+    floor = cands[top]["shape"][0] + int(math.prod(cands[top]["shape"][1:])) if cands else 0
+    budget = max(int(budget_frac * loaded_total), floor)
+    pick, used = plan(cands, reads, budget) if cands else ([], 0)
+    if not pick and not head_keys:
         return {"ok": False, "reason": "The gradient on these batches is zero everywhere the checkpoint loaded."}
     loaded = set(loaded_keys)
     for full, p in model.named_parameters():
-        if full in loaded:
+        if full in loaded and full not in head_keys:
             p.requires_grad_(False)
     adapters = []
     for i, r in pick:
@@ -123,10 +144,12 @@ def apply(model, loaded_keys, batches, loss_fn, budget_frac=0.01, seed=0) -> Dic
         lr = _lowrank(torch, c["shape"], r, seed * 7919 + i).to(p.device, p.dtype)
         P.register_parametrization(c["module"], c["attr"], lr)
         adapters.append({"name": c["name"], "shape": list(c["shape"]), "rank": r, "grad_rel": round(reads[i]["grad_rel"], 5)})
-    fresh = sum(p.numel() for n_, p in model.named_parameters() if p.requires_grad and "parametrizations" not in n_)
+    head_values = sum(p.numel() for n_, p in model.named_parameters() if n_ in head_keys and p.requires_grad)
+    fresh = sum(p.numel() for n_, p in model.named_parameters() if p.requires_grad and "parametrizations" not in n_ and n_ not in head_keys)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return {"ok": True, "adapters": adapters, "adapter_values": used, "loaded_weights": loaded_total, "budget": budget,
             "budget_frac": budget_frac, "fresh_values": fresh, "trainable": trainable,
+            "head": hd[0] if hd else None, "head_values": head_values,
             "skipped": len(cands) - len(pick), "candidates": len(cands)}
 
 

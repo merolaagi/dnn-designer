@@ -443,14 +443,27 @@ if HAVE_TORCH:
         assert plan["adapters"] and plan["adapter_values"] <= plan["budget"], plan
         assert plan["trainable"] < full / 2 and job.learnables == plan["trainable"], plan          # most of the network is frozen
         assert all(a["rank"] >= 1 for a in plan["adapters"]) and plan["fresh_values"] == 0       # nothing was left fresh
+        assert plan["head"] == "linear_3", plan                                                     # the last Linear trains in full
+        assert plan["head_values"] == 4 * 32 + 4 and not any(a["name"].startswith(plan["head"] + ".") for a in plan["adapters"])
         out = next(e["file"] for e in evs if e["kind"] == "checkpoint" and e["tag"] == "last")
         sd = torch.load(T.CHECKPOINTS / out, map_location="cpu", weights_only=False)["state_dict"]
         assert not any("parametrizations" in k for k in sd), list(sd)[:6]                         # merged, loads as usual
         before = torch.load(T.CHECKPOINTS / base, map_location="cpu", weights_only=False)["state_dict"]
         assert set(sd) == set(before)
         moved = [k for k in sd if k.endswith("weight") and not torch.allclose(sd[k], before[k])]
-        assert moved and len(moved) <= len(plan["adapters"]), (moved, plan["adapters"])           # only adapted matrices changed
-        assert all(torch.equal(sd[k], before[k]) for k in sd if k.endswith("bias"))               # loaded biases were frozen
+        assert moved and len(moved) <= len(plan["adapters"]) + 1, (moved, plan["adapters"])       # only adapted matrices and the head changed
+        assert all(torch.equal(sd[k], before[k]) for k in sd if k.endswith("bias") and not k.startswith(plan["head"] + "."))
+        # a model whose head is most of it (the canvas starter): even at a tiny budget the matrix the gradient
+        # pushes hardest gets an adapter and the head still trains, instead of 41 values doing all the work
+        torch.manual_seed(0)
+        wide = torch.nn.Sequential(torch.nn.Linear(16, 8), torch.nn.ReLU(), torch.nn.Linear(8, 8), torch.nn.ReLU(),
+                                   torch.nn.Flatten(), torch.nn.Linear(8, 3))
+        keys = [k for k, _ in wide.named_parameters()]
+        xb, yb = torch.randn(32, 16), torch.randint(0, 3, (32,))
+        loss = lambda x, y: (None, torch.nn.functional.cross_entropy(wide(x), y))
+        tp = tuneplan.apply(wide, keys, [(xb, yb)], loss, budget_frac=0.0001)
+        assert tp["ok"] and tp["head"] == "5" and tp["head_values"] == 27 and len(tp["adapters"]) >= 1, tp
+        assert tp["budget"] >= min(a["shape"][0] + a["shape"][1] for a in tp["adapters"]), tp
         _, warn = run({"tune": "planned"})                                                        # no checkpoint: says so, trains normally
         assert any(e["kind"] == "warning" and "needs a checkpoint" in e["message"] for e in warn)
         for f in (base, out):

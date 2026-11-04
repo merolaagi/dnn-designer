@@ -13426,7 +13426,7 @@ function buildTrainForm(){
       <select id="t_tune"><option value="">every weight</option><option value="planned">planned: small adapters where the gradient points</option></select>
       <div class="row" style="gap:8px;margin-top:6px" id="t_tune_budget_row"><label style="margin:0">Adapter budget, % of loaded weights</label>
         <input type="number" id="t_tune_budget" value="1" min="0.01" max="50" step="0.1" style="width:80px"></div>
-      <div class="help">Planned reads the gradient of a few batches from the checkpoint, puts low-rank adapters on the matrices it pushes hardest, and freezes the rest (a resized head still trains in full). Isomorph's planner found this beat tuning every matrix, the last blocks or random ones at the same budget; saved weights are merged, so they load as usual.</div></div>
+      <div class="help">Planned reads the gradient of a few batches from the checkpoint, puts low-rank adapters on the matrices it pushes hardest, trains the head (the last layer) in full, and freezes the rest. Isomorph's planner found this beat tuning every matrix, the last blocks or random ones at the same budget; saved weights are merged, so they load as usual.</div></div>
 
     <div id="trainError" class="trainerr" style="display:none"></div>
 
@@ -13913,7 +13913,8 @@ async function startTraining(){
     } else if (m.kind === "plan"){
       logLine(`planned fine-tuning: <b>${m.adapters.length}</b> adapter${m.adapters.length === 1 ? "" : "s"}, `
         + `<b>${m.adapter_values.toLocaleString()}</b> adapter values (${(m.budget_frac * 100).toFixed(2)}% budget of ${m.loaded_weights.toLocaleString()} loaded weights)`
-        + `${m.fresh_values ? ` + ${m.fresh_values.toLocaleString()} fresh values` : ""}; every loaded weight frozen`);
+        + `${m.head ? ` + the head (${m.head}, ${m.head_values.toLocaleString()} values) in full` : ""}`
+        + `${m.fresh_values ? ` + ${m.fresh_values.toLocaleString()} fresh values` : ""}; every other loaded weight frozen`);
       m.adapters.slice(0, 8).forEach(a => logLine(`&nbsp;&nbsp;${a.name} ${a.shape.join("×")} · rank ${a.rank} · gradient/weight ${a.grad_rel}`));
       if (m.adapters.length > 8) logLine(`&nbsp;&nbsp;and ${m.adapters.length - 8} more`);
       $("trainStatus").textContent = `${m.trainable.toLocaleString()} trainable`;

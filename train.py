@@ -1435,7 +1435,8 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                 if len(batches) >= 4:
                     break
             frac = min(max(float(cfg.get("tune_budget", 0.01)), 1e-4), 0.5)
-            tp = tuneplan.apply(model, loaded_keys, batches, forward_loss, budget_frac=frac)
+            tp = tuneplan.apply(model, loaded_keys, batches, forward_loss, budget_frac=frac,
+                                head=bool(cfg.get("tune_head", True)))
             if tp["ok"]:
                 job.learnables = tp["trainable"]
                 params = [p for p in model.parameters() if p.requires_grad]

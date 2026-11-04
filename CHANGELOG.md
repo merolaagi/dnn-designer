@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.42.1
+
+- **Planned fine-tuning trains the head.** The last Linear or convolution
+  now trains in full, and the budget is never below a rank-1 adapter on the
+  matrix the gradient pushes hardest. In 4.42.0 a model whose head is most of
+  its weights (the canvas starter: Conv2d → … → Flatten → Linear) got one
+  rank-1 adapter, 41 values, and reached 0.40 test accuracy on new
+  Fashion-MNIST classes where tuning every weight reached 0.91; it now reaches
+  0.914, with the convolution frozen except its adapter.
+
 ## 4.42.0
 
 - **Law layers carry their verdict on the canvas.** Each law layer's chip
