@@ -408,6 +408,75 @@ if HAVE_TORCH:
         assert len(losses) == 3, losses
         assert losses[-1] < losses[0], f"reconstruction did not improve: {losses}"
 
+    @check("planned fine-tuning: adapters where the gradient points, loaded weights frozen, merged weights saved")
+    def _():
+        import torch
+        import train as T
+        import tuneplan
+
+        payload = build(
+            [("i", "Input", {"shape": [16]}), ("a", "Linear", {"units": 32}), ("r", "Activation", {"kind": "relu"}),
+             ("b", "Linear", {"units": 32}), ("s", "Activation", {"kind": "relu"}), ("c", "Linear", {"units": 4}),
+             ("o", "Output", {})],
+            [("i", "a", 0), ("a", "r", 0), ("r", "b", 0), ("b", "s", 0), ("s", "c", 0), ("c", "o", 0)], "TunePlan")
+        g, rep = analyzed(payload)
+        assert rep["ok"], rep["errors"]
+        code = codegen.to_pytorch(g, rep)
+
+        def run(cfg):
+            job = T.start(code, {"dataset": "synthetic", "epochs": 2, "device": "cpu", "train_samples": 256,
+                                 "graph": payload, **cfg}, [[16]], ["i"], [4], ["classification"], "TunePlan")
+            evs = []
+            while True:
+                ev = job.events.get(timeout=180)
+                evs.append(ev)
+                if ev["kind"] == "error":
+                    raise AssertionError(ev.get("message"))
+                if ev["kind"] == "finished":
+                    return job, evs
+
+        _, first = run({})
+        base = next(e["file"] for e in first if e["kind"] == "checkpoint" and e["tag"] == "last")
+        job, evs = run({"init_from": base, "tune": "planned", "tune_budget": 0.05})
+        plan = next(e for e in evs if e["kind"] == "plan")
+        full = sum(int(torch.Size(a).numel()) for a in ([32, 16], [32, 32], [4, 32]))
+        assert plan["adapters"] and plan["adapter_values"] <= plan["budget"], plan
+        assert plan["trainable"] < full / 2 and job.learnables == plan["trainable"], plan          # most of the network is frozen
+        assert all(a["rank"] >= 1 for a in plan["adapters"]) and plan["fresh_values"] == 0       # nothing was left fresh
+        out = next(e["file"] for e in evs if e["kind"] == "checkpoint" and e["tag"] == "last")
+        sd = torch.load(T.CHECKPOINTS / out, map_location="cpu", weights_only=False)["state_dict"]
+        assert not any("parametrizations" in k for k in sd), list(sd)[:6]                         # merged, loads as usual
+        before = torch.load(T.CHECKPOINTS / base, map_location="cpu", weights_only=False)["state_dict"]
+        assert set(sd) == set(before)
+        moved = [k for k in sd if k.endswith("weight") and not torch.allclose(sd[k], before[k])]
+        assert moved and len(moved) <= len(plan["adapters"]), (moved, plan["adapters"])           # only adapted matrices changed
+        assert all(torch.equal(sd[k], before[k]) for k in sd if k.endswith("bias"))               # loaded biases were frozen
+        _, warn = run({"tune": "planned"})                                                        # no checkpoint: says so, trains normally
+        assert any(e["kind"] == "warning" and "needs a checkpoint" in e["message"] for e in warn)
+        for f in (base, out):
+            (T.CHECKPOINTS / f).unlink(missing_ok=True)
+        for e in first + evs + warn:
+            if e["kind"] == "checkpoint":
+                (T.CHECKPOINTS / e["file"]).unlink(missing_ok=True)
+        page = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text()
+        assert 'id="t_tune"' in page and 'config.tune = "planned"' in page and 'm.kind === "plan"' in page
+
+    @check("law layers carry their standing in the law table, on the canvas and in the design agents' catalog")
+    def _():
+        import laws
+        import main
+
+        v = laws.block_verdicts(max_age=0)
+        assert set(v) <= set(laws.BLOCK_ARM) and {"InvariantPool", "DaleLinear", "HamiltonianField"} <= set(v), sorted(v)
+        assert all(x["box"] in laws.BOX_LINES for x in v.values())
+        cat = main.designer_op("layer_catalog", {})
+        by = {x["type"]: x for x in cat["layers"]}
+        assert by["InvariantPool"]["law_table"]["box"] == v["InvariantPool"]["box"], by["InvariantPool"]
+        assert "law_table" not in by["Linear"] and "prefer a 'keep' or 'head start' law" in cat["note"]
+        page = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text()
+        assert "async function loadLawVerdicts" in page and "LAW_CHIP[lv.box]" in page
+        assert "lawverdict law-" in page and "/api/laws/verdicts" in page
+
     @check("the DDIM sampler stays inside the data range")
     def _():
         import torch

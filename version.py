@@ -3,4 +3,4 @@
 Bump this and CHANGELOG.md together; the header and /health both read it.
 """
 
-__version__ = "4.41.0"
+__version__ = "4.42.0"

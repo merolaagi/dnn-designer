@@ -440,6 +440,17 @@ body.resizing-v{cursor:row-resize;user-select:none}
 .node-preview{font-family:var(--mono);font-size:9.5px;fill:#4A5A70}
 .node-chip{fill:#EEF2F7;stroke:#D3DBE5;stroke-width:.8}
 .node-chip-text{font-family:var(--mono);font-size:8.5px;fill:#5C6B7F;letter-spacing:.04em}
+.node-chip.law-keep{fill:#E6F4EA;stroke:#3DA35D}
+.node-chip.law-head-start{fill:#E8F0FB;stroke:#2D7DD2}
+.node-chip.law-redundant{fill:#FFF4DE;stroke:#F0A202}
+.node-chip.law-drop-or-rethink{fill:#FDECEC;stroke:#FF5F56}
+.lawverdict{margin:8px 0 10px;padding:8px 10px;border-radius:8px;border-left:3px solid #94A5B8;background:#F5F8FB;font-size:12px;line-height:1.45}
+.lawverdict b{display:block;text-transform:none}
+.lawverdict span{display:block;color:var(--muted);margin-bottom:4px}
+.lawverdict i{font-style:normal;font-weight:600}
+.lawverdict small{display:block;color:var(--muted);font-size:11px}
+.lawverdict.law-keep{border-left-color:#3DA35D}.lawverdict.law-head-start{border-left-color:#2D7DD2}
+.lawverdict.law-redundant{border-left-color:#F0A202}.lawverdict.law-drop-or-rethink{border-left-color:#FF5F56}
 .node-preview-bg{fill:#F5F8FB;stroke:#E4EAF1;stroke-width:.8}
 .node text{pointer-events:none;user-select:none}
 .node-kill{opacity:0;cursor:pointer}
@@ -3643,6 +3654,7 @@ async function boot(){
   renderSheetTabs();
   render();
   analyze();
+  loadLawVerdicts();
 
   // the launch pad opens first: the canvas is one click away and always was,
   // but arriving at an empty canvas tells you nothing about what this can do
@@ -4614,8 +4626,20 @@ function wirePath(a, b){
   return `M${p1.x},${p1.y} C${p1.x},${p1.y + dy} ${p2.x},${p2.y - dy} ${p2.x},${p2.y}`;
 }
 
+// Each law layer's standing in the law table (Laws page): does training find the law by itself, does
+// building it in help. Shown as the block's chip and in the Layer panel.
+const LAW_CHIP = {"keep": "KEEP", "head start": "HEAD START", "redundant": "REDUNDANT", "drop or rethink": "DROP?", "not measured": "UNMEASURED"};
+async function loadLawVerdicts(){
+  try { const d = await (await fetch(API + "/api/laws/verdicts")).json(); state.lawVerdicts = d.blocks || {}; }
+  catch { state.lawVerdicts = {}; }
+  render();
+  if (state.sel) renderInspector();
+}
+
 function badgeFor(n){
   const spec = specOf(n.type) || {};
+  const lv = state.lawVerdicts && state.lawVerdicts[n.type];
+  if (lv) return LAW_CHIP[lv.box] || "LAW";
   if (spec.kind === "runtime") return "RUNTIME";
   if (spec.source === "block") return "BLOCK";
   if (n.type === "Input") return (n.params.dtype === "long") ? "IDS" : "IN";
@@ -4762,7 +4786,8 @@ function render(){
       if (label){
         const w = label.length * 5.6 + 10;
         const bx = W - w - (box.shape === "data" ? skew + 4 : 9);
-        el("rect", { class:"node-chip", x:bx, y: single ? H/2 - 7 : 9,
+        const lawBox = state.lawVerdicts && state.lawVerdicts[n.type] ? state.lawVerdicts[n.type].box : "";
+        el("rect", { class:"node-chip" + (lawBox ? " law-" + lawBox.replace(/[^a-z]+/g, "-") : ""), x:bx, y: single ? H/2 - 7 : 9,
                      width:w, height:14, rx:3.5 }, g);
         const t = el("text", { class:"node-chip-text", x:bx + w/2,
                                y: single ? H/2 + 3 : 19, "text-anchor":"middle" }, g);
@@ -5032,6 +5057,21 @@ function renderInspector(){
       b.classList.toggle("on", b.dataset.page === "pageExtend"));
     openBlock(code.origin, "blocks");
   });
+
+  const lv = state.lawVerdicts && state.lawVerdicts[n.type];
+  if (lv){
+    const yes = v => v === "yes" ? "yes" : v === "no" ? "no" : v === "partly" ? "partly" : v === "mixed" ? "mixed" : "not measured";
+    const lawBox = document.createElement("div");
+    lawBox.className = "lawverdict law-" + lv.box.replace(/[^a-z]+/g, "-");
+    lawBox.innerHTML = `<b>Law table: ${lv.box}</b> <span>${lv.line}</span>
+      <div><i>Training finds it?</i> ${yes(lv.emerges)}<small> ${lv.emerges_why ? lv.emerges_why.replace(/</g, "&lt;") : ""}</small></div>
+      <div><i>Building it in helps?</i> ${yes(lv.helps)}<small> ${lv.helps_why ? lv.helps_why.replace(/</g, "&lt;") : ""}</small></div>
+      <button class="linkbtn" id="btnLawPage">See it on the Laws page</button>`;
+    body.appendChild(lawBox);
+    lawBox.querySelector("#btnLawPage").addEventListener("click", () => {
+      const b = document.querySelector('#rail button[data-page="pageLaws"]'); if (b) b.click();
+    });
+  }
 
   const testSlot = document.createElement("div");
   testSlot.id = "testSlot";
@@ -8456,6 +8496,7 @@ const LAWS_BOXES = [["head start", "Training finds it · building it in helps"],
 async function lawsMapFill(){
   const host = $("lawsMap");
   if (!host) return;
+  loadLawVerdicts();
   let m;
   try { m = await (await fetch(API + "/api/laws/map")).json(); } catch { host.innerHTML = ""; return; }
   const word = v => v === "yes" ? "yes" : v === "no" ? "no" : v === "partly" ? "partly" : v === "mixed" ? "mixed" : "–";
@@ -13381,6 +13422,11 @@ function buildTrainForm(){
     <div class="field wide"><label>Start from checkpoint</label>
       <select id="t_init"><option value="">random initialization</option></select>
       <div class="help">Matching tensors are copied; a resized head is reported and left fresh.</div></div>
+    <div class="field wide" id="t_tune_row" style="display:none"><label>What to tune</label>
+      <select id="t_tune"><option value="">every weight</option><option value="planned">planned: small adapters where the gradient points</option></select>
+      <div class="row" style="gap:8px;margin-top:6px" id="t_tune_budget_row"><label style="margin:0">Adapter budget, % of loaded weights</label>
+        <input type="number" id="t_tune_budget" value="1" min="0.01" max="50" step="0.1" style="width:80px"></div>
+      <div class="help">Planned reads the gradient of a few batches from the checkpoint, puts low-rank adapters on the matrices it pushes hardest, and freezes the rest (a resized head still trains in full). Isomorph's planner found this beat tuning every matrix, the last blocks or random ones at the same budget; saved weights are merged, so they load as usual.</div></div>
 
     <div id="trainError" class="trainerr" style="display:none"></div>
 
@@ -13393,6 +13439,13 @@ function buildTrainForm(){
       <div id="ckptList" class="cols" style="max-height:104px"></div>
     </div>`;
 
+  const tuneRow = () => {
+    $("t_tune_row").style.display = $("t_init").value ? "" : "none";
+    $("t_tune_budget_row").style.display = $("t_tune").value === "planned" ? "" : "none";
+  };
+  $("t_init").addEventListener("change", tuneRow);
+  $("t_tune").addEventListener("change", tuneRow);
+  tuneRow();
   $("btnStart").addEventListener("click", startTraining);
   $("btnStop").addEventListener("click", stopTraining);
   $("t_dataset").addEventListener("change", onDatasetChange);
@@ -13794,6 +13847,10 @@ async function startTraining(){
     }
   }
   if ($("t_init").value) config.init_from = $("t_init").value;
+  if ($("t_init").value && $("t_tune").value === "planned"){
+    config.tune = "planned";
+    config.tune_budget = (+$("t_tune_budget").value || 1) / 100;
+  }
   $("btnStart").disabled = true;
   $("trainStatus").textContent = "starting";
 
@@ -13853,6 +13910,13 @@ async function startTraining(){
       let line = `loaded <b>${m.loaded}</b> tensors from ${m.file}`;
       if (m.skipped_count) line += ` · ${m.skipped_count} left fresh (${m.skipped.join(", ")})`;
       logLine(line);
+    } else if (m.kind === "plan"){
+      logLine(`planned fine-tuning: <b>${m.adapters.length}</b> adapter${m.adapters.length === 1 ? "" : "s"}, `
+        + `<b>${m.adapter_values.toLocaleString()}</b> adapter values (${(m.budget_frac * 100).toFixed(2)}% budget of ${m.loaded_weights.toLocaleString()} loaded weights)`
+        + `${m.fresh_values ? ` + ${m.fresh_values.toLocaleString()} fresh values` : ""}; every loaded weight frozen`);
+      m.adapters.slice(0, 8).forEach(a => logLine(`&nbsp;&nbsp;${a.name} ${a.shape.join("×")} · rank ${a.rank} · gradient/weight ${a.grad_rel}`));
+      if (m.adapters.length > 8) logLine(`&nbsp;&nbsp;and ${m.adapters.length - 8} more`);
+      $("trainStatus").textContent = `${m.trainable.toLocaleString()} trainable`;
     } else if (m.kind === "checkpoint"){
       if (m.tag === "last") refreshChatModels();
       logLine(`saved <b>${m.file}</b>${m.val_loss !== undefined ? ` at val loss ${m.val_loss}` : ""}`);

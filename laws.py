@@ -1201,3 +1201,31 @@ def lawmap(iso=None, iso_error=None):
         counts[r["box"]] = counts.get(r["box"], 0) + 1
     return {"rows": rows + iso_rows, "counts": counts, "boxes": BOX_LINES, "isomorph": bool(iso),
             "isomorph_error": iso_error, "isomorph_version": (iso or {}).get("version"), "redundancy": redundancy}
+
+
+# ---------------------------------------------------------------------------
+# the table, per canvas block: what the canvas and the design agents show beside a law layer
+# ---------------------------------------------------------------------------
+
+BLOCK_ARM = {"HamiltonianField": "physics", "LagrangianField": "lagrangian", "SetHamiltonian": "compose",
+             "InvariantPool": "math", "DaleLinear": "dale", "WorkingMemory": "psychology",
+             "HebbianFastWeights": "biology", "ConvexPotential": "convex", "LipschitzLinear": "lipschitz"}
+_VERDICT_CACHE: Dict[str, Any] = {}
+
+
+def block_verdicts(max_age: float = 30.0) -> Dict[str, Any]:
+    """For each law layer: its box in the law table and the two answers behind it, from runs on this machine."""
+    now = time.time()
+    if _VERDICT_CACHE.get("at", 0) > now - max_age and not any((j or {}).get("status") == "running" for j in _JOBS.values()):
+        return _VERDICT_CACHE["value"]
+    rows = {r["arm"]: r for r in lawmap(None)["rows"]}
+    out = {}
+    for block, arm in BLOCK_ARM.items():
+        r = rows.get(arm)
+        if not r:
+            continue
+        out[block] = {"arm": arm, "law": r["law"], "box": r["box"], "line": BOX_LINES.get(r["box"], ""),
+                      "emerges": r["emerges"], "emerges_why": r["emerges_why"], "helps": r["helps"], "helps_why": r["helps_why"],
+                      "status": r["status"]}
+    _VERDICT_CACHE.update(at=now, value=out)
+    return out

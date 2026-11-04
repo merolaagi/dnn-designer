@@ -568,6 +568,12 @@ the metrics, and the design that produced them.
 does not match is reported and left freshly initialized — exactly what you want
 when keeping a trunk and resizing the head for a different class count.
 
+**What to tune** appears once a checkpoint is chosen. *Planned* reads the gradient of a few training
+batches, puts small low-rank adapters on the loaded matrices it pushes hardest (within a budget, 1% of
+the loaded weights by default), and freezes every loaded weight; a resized head still trains in full.
+Saved weights are merged, so they load like any other checkpoint. (Isomorph's fine-tune planner found
+this gradient choice beat tuning every matrix, the last blocks or random ones at the same budget.)
+
 **read** sends a checkpoint's weights to [Isomorph](https://github.com/merolaagi/isomorph)
 (0.12.0 or later, running on the same Mac) and opens its Weight space tab, where
 Claude reads what each part of the network does from the weights alone. Settings:
@@ -671,6 +677,8 @@ Plus the `SelfPaced` training recipe (a curriculum without a teacher). Each guar
 tested numerically on untrained, scrambled layers in `tests/test_laws.py`.
 
 The Laws page opens with **Every law, both apps**: each law, this app's and [Isomorph](https://github.com/merolaagi/isomorph)'s (0.13.0 or later, `ISOMORPH_URL`), sorted by two answers: does training make a plain network obey it by itself (each arm measures this at its largest size, against the same network untrained), and does building it in help. Head start, redundant, keep, drop or rethink, and the weight laws nothing builds in yet.
+
+On the canvas, each law layer's chip shows the same verdict, and its Layer panel the two answers behind it.
 
 Below it, the page has four sections:
 

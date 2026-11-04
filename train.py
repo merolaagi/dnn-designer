@@ -1003,8 +1003,10 @@ def save_checkpoint(job: Job, model, graph, epoch: int, metrics: Dict[str, Any],
 
     safe = re.sub(r"[^0-9A-Za-z._-]+", "-", name_hint).strip("-")[:40] or "model"
     path = CHECKPOINTS / f"{safe}_{job.id}_{tag}.pt"
+    import tuneplan
+
     torch.save({
-        "state_dict": {k: v.cpu() for k, v in model.state_dict().items()},
+        "state_dict": {k: v.cpu() for k, v in tuneplan.merged_state_dict(model).items()},
         "graph": graph,
         "epoch": epoch,
         "metrics": metrics,
@@ -1052,7 +1054,7 @@ def list_checkpoints() -> List[Dict[str, Any]]:
     return out
 
 
-def load_into(model, file: str, strict: bool = False) -> Dict[str, Any]:
+def load_into(model, file: str, strict: bool = False, keys_out: Optional[List[str]] = None) -> Dict[str, Any]:
     """Copy weights from a checkpoint into a freshly built model.
 
     Non-strict is the default on purpose: replacing the final layer for a new
@@ -1081,6 +1083,8 @@ def load_into(model, file: str, strict: bool = False) -> Dict[str, Any]:
             f"{path.name} does not match this graph: {len(skipped)} tensors differ."
         )
     model.load_state_dict(own)
+    if keys_out is not None:
+        keys_out.extend(loaded)
     return {"file": path.name, "loaded": len(loaded), "skipped": skipped[:8],
             "skipped_count": len(skipped), "missing_count": len(missing)}
 
@@ -1315,10 +1319,18 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
         job.emit("ready", device=device, learnables=job.learnables,
                  inputs=len(in_shapes), outputs=len(tasks))
 
+        loaded_keys: List[str] = []
         if cfg.get("init_from"):
             report = load_into(model, cfg["init_from"],
-                               strict=bool(cfg.get("init_strict")))
+                               strict=bool(cfg.get("init_strict")), keys_out=loaded_keys)
             job.emit("weights", **report)
+        planned = cfg.get("tune") == "planned"
+        if planned and not cfg.get("init_from"):
+            job.emit("warning", message="Planned fine-tuning needs a checkpoint to start from; training every weight instead.")
+            planned = False
+        if planned and cfg.get("recipe"):
+            job.emit("warning", message="Planned fine-tuning does not combine with a training recipe yet; training every weight.")
+            planned = False
 
         if cfg.get("recipe"):
             _run_recipe(job, model, cfg, in_shapes, out_shape,
@@ -1413,6 +1425,29 @@ def _run(job: Job, source: str, cfg: Dict[str, Any], in_shapes, in_ids,
                     term = crit(o, _shape_target(yb, task, o.size(0)))
                 total = term * w if total is None else total + term * w
             return outs[0], total
+
+        if planned:
+            import tuneplan
+
+            batches = []
+            for xs, yb in train_loader:
+                batches.append(([_match(x.to(device), wants_double) for x in xs], yb.to(device)))
+                if len(batches) >= 4:
+                    break
+            frac = min(max(float(cfg.get("tune_budget", 0.01)), 1e-4), 0.5)
+            tp = tuneplan.apply(model, loaded_keys, batches, forward_loss, budget_frac=frac)
+            if tp["ok"]:
+                job.learnables = tp["trainable"]
+                params = [p for p in model.parameters() if p.requires_grad]
+                optimizer = {
+                    "adam": lambda: torch.optim.Adam(params, lr=lr),
+                    "adamw": lambda: torch.optim.AdamW(params, lr=lr),
+                    "sgd": lambda: torch.optim.SGD(params, lr=lr, momentum=0.9),
+                    "rmsprop": lambda: torch.optim.RMSprop(params, lr=lr),
+                }[cfg.get("optimizer", "adamw")]()
+                job.emit("plan", **{k: v for k, v in tp.items() if k != "ok"})
+            else:
+                job.emit("warning", message=f"Planned fine-tuning was not possible ({tp['reason']}); training every weight.")
 
         for epoch in range(1, job.epochs + 1):
             if job.stop.is_set():

@@ -1158,6 +1158,13 @@ def laws_view():
     return laws.overview()
 
 
+@app.get("/api/laws/verdicts")
+def laws_verdicts():
+    """Each law layer's standing in the law table, for the canvas and the design agents."""
+    import laws
+    return {"blocks": laws.block_verdicts(), "boxes": laws.BOX_LINES}
+
+
 @app.get("/api/laws/map")
 def laws_map():
     """Every law in one table, this app's and Isomorph's: does training find it, does building it in help."""
@@ -3559,7 +3566,23 @@ def _designer_op(op: str, args: Dict[str, Any]) -> Dict[str, Any]:
             out.append({"type": name, "category": spec.category,
                         "params": {p["name"]: p.get("options") or p["default"] for p in spec.params},
                         "doc": (spec.doc or "").split(". ")[0][:140]})
-        return {"layers": out, "note": "Use the type and param names exactly. Shapes exclude the batch."}
+        try:
+            import laws
+            verdicts = laws.block_verdicts()
+        except Exception:  # noqa: BLE001
+            verdicts = {}
+        for item in out:
+            v = verdicts.get(item["type"])
+            if v:
+                item["law_table"] = {"box": v["box"], "meaning": v["line"], "training_finds_it": v["emerges"],
+                                     "building_it_in_helps": v["helps"]}
+        note = "Use the type and param names exactly. Shapes exclude the batch."
+        if verdicts:
+            note += (" Law layers carry law_table, measured on this machine: prefer a 'keep' or 'head start' law when the "
+                     "task has that structure (it adds what training does not find, or needs less data); a 'redundant' law "
+                     "adds little because training finds it anyway; 'drop or rethink' did not help here; 'not measured' "
+                     "has no run yet. Say which you chose and why.")
+        return {"layers": out, "note": note}
     name = str(args.get("name") or "").strip()
     if op == "design_network":
         if not name:

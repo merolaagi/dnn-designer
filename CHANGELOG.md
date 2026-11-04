@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.42.0
+
+- **Law layers carry their verdict on the canvas.** Each law layer's chip
+  shows its box in the law table (KEEP, HEAD START, REDUNDANT, DROP?,
+  UNMEASURED), from runs on this machine, and the Layer panel shows the two
+  answers behind it: does training find the law by itself, and does building
+  it in help. The design agents' layer catalog carries the same, with a note
+  to prefer keep and head-start laws when the task has that structure.
+- **Planned fine-tuning from a checkpoint.** With Start from checkpoint set,
+  What to tune can be "planned": one backward pass over a few batches, then
+  low-rank adapters (rank for 90% of the gradient, at most 16) on the loaded
+  matrices the gradient pushes hardest, within a budget (1% of the loaded
+  weights by default). Every loaded weight is frozen; a resized head trains
+  in full. This is Isomorph's fine-tune planner's gradient choice, which beat
+  tuning every matrix, the last blocks and random matrices at the same budget
+  on its test. Saved checkpoints hold the merged weights, so they load as
+  usual. The run's log lists each adapter and the trainable count.
+
 ## 4.41.0
 
 - **Every law, both apps.** The Laws page opens with one table of every law,
