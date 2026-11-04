@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.40.1
+
+- The three-error table on the physics, Lagrangian and compose cards
+  scrolls inside its card instead of running past the card's edge.
+
 ## 4.40.0
 
 - **Saved weights can be read in Isomorph.** Each checkpoint has a "read"

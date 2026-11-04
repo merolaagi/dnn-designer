@@ -1603,7 +1603,7 @@ table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
 .lawlaw b{font-size:13px}.lawlaw span{display:block;font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:2px}
 .lawlaw i{display:block;font-style:normal;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
 .lawarms{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px}
-.lawcard{background:#fff;border:1px solid var(--paper-3);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.lawcard{background:#fff;border:1px solid var(--paper-3);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .lawcard header{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
 .lawcard header b{font-size:14px}.lawcard header span{font-size:12px;min-width:0}
 .lawcard header small{flex-basis:100%;color:var(--muted);font-size:11px}
@@ -1617,6 +1617,7 @@ table.runtable td span{display:block;font-size:9.5px;color:var(--muted)}
 .lawsec{margin:16px 0 4px}.lawsec h4{margin:0 0 4px;font-size:14px;font-weight:600}
 .lawsec p.lead{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.55;max-width:760px}
 .lawtable{width:100%;border-collapse:collapse;font-size:12.5px}
+.lawscroll{overflow-x:auto;max-width:100%}
 .lawtable th{text-align:right;font-weight:600;color:var(--muted);font-size:11px;padding:4px 6px;border-bottom:1px solid var(--paper-3)}
 .lawtable th:first-child{text-align:left}
 .lawtable td{text-align:right;padding:6px;border-bottom:1px solid var(--paper-3);font-variant-numeric:tabular-nums}
@@ -8429,10 +8430,10 @@ function lawsErrorsTable(r){
   if (!rows.length) return "";
   const f = v => v >= 1e6 ? "blew up" : v.toPrecision(3);
   const cell = (o, a, b) => `<td class="${o[a] < o[b] ? "win" : ""}">${f(o[a])}<small> ±${f(o[a + "_spread"] || 0)}</small></td>`;
-  return `<table class="lawtable"><thead><tr><th>n</th>${errs.map(e => `<th colspan="2">${alEsc(e.label)}${e.key === r.primary ? " · the verdict" : ""}</th>`).join("")}</tr>
+  return `<div class="lawscroll"><table class="lawtable"><thead><tr><th>n</th>${errs.map(e => `<th colspan="2">${alEsc(e.label)}${e.key === r.primary ? " · the verdict" : ""}</th>`).join("")}</tr>
     <tr><th></th>${errs.map(() => "<th>plain</th><th>law</th>").join("")}</tr></thead><tbody>
     ${rows.map(o => `<tr><td>${o.n}</td>${errs.map(e => cell(o, "plain_" + e.key, "law_" + e.key) + cell(o, "law_" + e.key, "plain_" + e.key)).join("")}</tr>`).join("")}
-    </tbody></table>`;
+    </tbody></table></div>`;
 }
 
 function lawsUsable(r, kind){
