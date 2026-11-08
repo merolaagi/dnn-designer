@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.43.0
+
+- **The vix look.** The designer now wears the Ink UI kit (the vix HQ look):
+  Inter type, warm greys, one gold accent, selection as a soft gold tint, and
+  outlined primary buttons (Train, Go) instead of solid blue ones.
+- **Section tabs and one search.** The rail's headings (Home, Definitions,
+  Executions, Status) are now tabs under the header, and the rail lists the
+  current section's pages with line icons. The tabs follow whichever page is
+  open, however it was opened. The search box beside them (⌘K / Ctrl K) finds a
+  page or a layer in this design; picking a layer takes you to it on the
+  canvas. The canvas finder is still on the canvas toolbar.
+- Pages sit on white, launch-pad cards and status chips follow the kit, and
+  tables use tabular figures. Law chips keep their own status colours.
+
 ## 4.42.1
 
 - **Planned fine-tuning trains the head.** The last Linear or convolution

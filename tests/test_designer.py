@@ -1248,6 +1248,22 @@ def _():
             f"{name} loads a design without bringing the canvas up"
 
 
+@check("the vix look: section tabs from the rail's headings, line icons, one search for pages and layers")
+def _():
+    assert 'id="inkTabs"' in PAGE and 'id="inkQ"' in PAGE, "no section tabs or search under the header"
+    assert "--accent:#b07a1e" in PAGE and "--sel-bg:#f7e9cc" in PAGE, "the ink tokens are missing"
+    css = PAGE[PAGE.index("<style>"): PAGE.index("</style>")]
+    blue = [l for l in css.splitlines() if "#2D7DD2" in l and "law-" not in l]           # law chips keep their status colours
+    assert not blue, f"a blue accent is left in the chrome: {blue[:3]}"
+    assert 'e.key.toLowerCase() === "k"){ e.preventDefault(); inkSearchFocus();' in PAGE, "Cmd K does not open the search"
+    shell = PAGE[PAGE.index("const INK = (() => {"):]
+    assert 'classList.contains("group")' in shell and "MutationObserver(sync)" in shell, "the tabs do not follow the rail"
+    rail = PAGE[PAGE.index('<nav id="rail">'):PAGE.index("</nav>", PAGE.index('<nav id="rail">'))]
+    keys = set(re.findall(r'data-page="(\w+)"', rail))
+    icons = PAGE[PAGE.index("const INK_KEY = {"):PAGE.index("const inkIcon")]
+    assert all(k in icons for k in keys), [k for k in keys if k not in icons]
+
+
 @check("the launch pad is what opens")
 def _():
     import re
