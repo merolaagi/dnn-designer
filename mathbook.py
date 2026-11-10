@@ -1265,6 +1265,73 @@ def _set_hamiltonian(p, ins, out):
     }
 
 
+def _dims(shape) -> str:
+    return "[" + ", ".join(_fmt(v) for v in (shape if isinstance(shape, (list, tuple)) else [shape])) + "]"
+
+
+RULE_LINES = {
+    "energy": ("energy", "the output is the motion J∇H of the learned scalar H, so dH/dt = 0 along it"),
+    "permutation": ("permutation", "H or f is a sum over rows (and over pairs of rows), so f(PX) = f(X) for every reordering P"),
+    "rotation": ("rotation", "only dot products xᵢ·xⱼ are read, so f(XR) = f(X) for every rotation R"),
+    "translation": ("translation", "positions are read as qᵢ − q̄, so f(q + c) = f(q) for every shift c"),
+    "reflection": ("reflection", "f(x) = ½(g(x) + g(−x)), so f(−x) = f(x)"),
+    "monotone": ("monotone", "first-layer weights on the named inputs keep one sign and later weights are ≥ 0, so ∂f/∂xᵢ keeps that sign"),
+    "convex": ("convex", "hidden-to-hidden weights are ≥ 0 and activations convex and non-decreasing, so f is convex in x"),
+    "additive": ("additive", "f(x) = Σᵢ gᵢ(xᵢ), so ∂²f/∂xᵢ∂xⱼ = 0 for i ≠ j"),
+}
+
+
+def _rulenet(p, ins, out):
+    import rulesource
+    rules = [r.strip() for r in str(p.get("rules") or "").replace("+", ",").split(",") if r.strip() in RULE_LINES]
+    shape = ins[0] if ins and ins[0] else []
+    if "energy" in rules:
+        inner = "Σᵢ φ(zᵢ) + ½ Σ_{i≠j} ψ(zᵢ, zⱼ)" if "permutation" in rules else "h(z)"
+        equation = f"H(z) = {inner};   dq/dt = ∂H/∂p,   dp/dt = −∂H/∂q"
+    elif "additive" in rules:
+        equation = "f(x) = Σᵢ gᵢ(xᵢ)"
+    elif "permutation" in rules:
+        equation = "f(X) = ρ( Σᵢ φ(xᵢ) + ½ Σ_{i≠j} ψ(xᵢ, xⱼ) )"
+    else:
+        equation = "f(x) = h(x)"
+    try:
+        signs = [int(float(v)) for v in str(p.get("signs") or "").split(",") if v.strip()] or None
+        count = rulesource.learnables(shape, out=int(p.get("out", 1)), rules=rules, hidden=int(p.get("hidden", 32)),
+                                      k=int(p.get("k", 1)), momenta=bool(p.get("momenta")), signs=signs)
+    except Exception:  # noqa: BLE001 - a combination that cannot be built has no count
+        count = None
+    return {
+        "family": "law", "title": "A network assembled from rules (" + (", ".join(rules) or "none") + ")",
+        "equation": equation,
+        "shape": f"{_dims(shape)} → {_dims(out)}",
+        "symbols": [("φ, ψ, ρ, h, g", "small networks; which of them exist depends on the rules"),
+                    ("z = (q, p)", "with energy: each row is positions then momenta")],
+        "arithmetic": [(f"guarantee, any weights: {name}", line) for name, line in (RULE_LINES[r] for r in rules)]
+                      + ([("parameters", _fmt(count))] if count is not None else []),
+        "freedom": ["Each rule narrows what can be fitted: a target that breaks a rule cannot be learned by this network.",
+                    "With energy, every pass needs a derivative of H, so it runs slower than a plain network of its size."],
+    }
+
+
+def _seqnet(p, ins, out):
+    rule = p.get("rule", "slots")
+    equation = {"slots": "S = softmax(Q Kᵀ/√d) V;   y = W · vec(S)",
+                "fastweights": "A ← λA + η ĥĥᵀ;   h_t = tanh(W x_t + A x_t);   y = R h_L",
+                "permutation": "y = ρ( meanₜ φ(x_t) )"}.get(rule, "")
+    line = {"slots": "exactly K slot vectors leave, whatever the length L",
+            "fastweights": "A is written by the local rule and never by the optimizer",
+            "permutation": "the items are averaged, so their order cannot matter"}.get(rule, "")
+    return {
+        "family": "law", "title": f"A sequence model with one rule built in ({rule})",
+        "equation": equation,
+        "shape": f"{_dims(ins[0] if ins else [])} → {_dims(out)}",
+        "symbols": [("K", f"{int(p.get('slots', 4))} slots") if rule == "slots" else ("x_t", "the item at step t")],
+        "arithmetic": [("guarantee, any weights", line)],
+        "freedom": ["One rule at a time: the three are different answers to what a sequence model should keep."],
+    }
+
+
+ENTRIES.update({"RuleNet": _rulenet, "SeqNet": _seqnet})
 ENTRIES.update({"SetHamiltonian": _set_hamiltonian, "LagrangianField": _lagrangian, "ConvexPotential": _convex, "LipschitzLinear": _lipschitz,
                 "InvariantPool": _invariant, "DaleLinear": _dale, "HebbianFastWeights": _hebbian,
                 "WorkingMemory": _working_memory})

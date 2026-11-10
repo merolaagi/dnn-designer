@@ -3019,7 +3019,7 @@ header{height:64px;padding:0 22px 0 24px;border-bottom:0;box-shadow:none;gap:12p
 
 /* pages read like documents on white */
 #pageBuild,#pageRuns,#pageChat,#pageExtend,#pagePaper,#pageAgents,#pagePad,#pageDomains,#pageScouts,#pageRadar,#pageLaws,
-#pageCodebase,#pageMaths,#pageWorkbench,#pagePhysics,#pageAgentLab,#pageTalk,#pageSettings{background:#fff}
+#pageCodebase,#pageMaths,#pageWorkbench,#pagePhysics,#pageAgentLab,#pageTalk,#pageSettings,#pageSuper{background:#fff}
 .padhead h2{font:600 30px var(--ui);letter-spacing:-.015em;color:var(--head)}
 .padhead p{font-size:15px}
 .padsection h4{font:500 13px var(--ui);letter-spacing:0;text-transform:none;color:var(--accent)}
@@ -3045,6 +3045,77 @@ td{border-bottom-color:var(--paper-3)!important}
 .panelhead{background:#fff}
 .paltabs button.on,.ptabs button.on{color:var(--sel-ink);border-color:var(--accent)}
 #statusbar{background:#e6f4ec;border-top-color:#cfe6d8;color:#1f6b3c}
+
+/* ---- Super agent: a run read as a document ---- */
+.sa{max-width:1080px;margin:0 auto;padding:34px 32px 60px;font-size:15px;line-height:1.6;color:var(--text)}
+.sa h1{font:600 30px var(--ui);letter-spacing:-.015em;margin:0 0 8px;color:var(--head)}
+.sa h2{font:600 20px var(--ui);margin:36px 0 10px;color:var(--head)}
+.sa h3{font:600 16.5px var(--ui);margin:26px 0 6px;color:var(--head)}
+.sa .lead{color:var(--muted);max-width:760px;margin:0 0 20px}
+.sa-start{border:1px solid var(--paper-3);border-radius:12px;padding:16px;background:#fff}
+.sa-start textarea{width:100%;min-height:58px;resize:vertical;border:1px solid var(--paper-3);border-radius:6px;padding:10px 12px;
+  font:15px/1.5 var(--ui);color:var(--text);background:var(--paper)}
+.sa-start textarea:focus{background:#fff}
+.sa-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.sa-row select{height:36px;border:1px solid var(--paper-3);border-radius:4px;padding:0 10px;font:14px var(--ui);background:#fff;color:var(--text)}
+.sa-row .grow{flex:1}
+.sa-btn{height:36px;padding:0 16px;border-radius:4px;border:1px solid var(--paper-3);background:#fff;color:var(--text);font:500 14px var(--ui)}
+.sa-btn:hover{background:var(--hover)}
+.sa-btn.go{border-color:var(--sel-line);color:var(--sel-ink);font-weight:600}
+.sa-btn.go:hover{background:var(--sel-bg);border-color:var(--sel-ink)}
+.sa-btn:disabled{opacity:.5;cursor:default}
+.sa-note{font-size:13px;color:var(--muted);margin-top:10px}
+.sa-err{color:#c0392b;font-size:13.5px;margin-top:10px}
+.sa-steps{display:flex;gap:0;margin:22px 0 6px;border:1px solid var(--paper-3);border-radius:8px;overflow:hidden}
+.sa-steps div{flex:1;padding:9px 6px;text-align:center;font-size:12.5px;color:var(--faint);border-right:1px solid var(--paper-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sa-steps div:last-child{border-right:0}
+.sa-steps .done{color:var(--text)}
+.sa-steps .cur{background:var(--sel-bg);color:var(--sel-ink);font-weight:600}
+.sa-status{display:flex;gap:12px;align-items:center;font-size:13.5px;color:var(--muted);margin:8px 0 0}
+.sa-status b{color:var(--text);font-weight:600}
+.sa-verdict{border-left:3px solid var(--accent);padding:4px 0 4px 16px;margin:22px 0 4px}
+.sa-verdict b{display:block;font:600 19px/1.4 var(--ui);color:var(--head)}
+.sa-verdict ul{margin:8px 0 0;padding-left:18px}
+.sa-verdict li{margin:3px 0}
+.sa-verdict p{margin:8px 0 0;color:var(--muted);font-size:13.5px}
+.sa-log{font-size:13px;color:var(--muted);margin:10px 0 0;border-top:1px solid var(--paper-3)}
+.sa-log div{padding:6px 0;border-bottom:1px solid var(--paper-3);display:flex;gap:12px}
+.sa-log i{font-style:normal;color:var(--faint);min-width:46px;font-variant-numeric:tabular-nums}
+.sa-log span{color:var(--text)}
+.sa-log small{display:block;color:var(--muted);font-size:12.5px}
+.sa-swarm{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px;margin-top:10px}
+.sa-as{border:1px solid var(--paper-3);border-radius:12px;padding:12px 14px;background:#fff;font-size:13.5px}
+.sa-as b{display:block;font-weight:600;color:var(--head)}
+.sa-as .q{color:var(--muted);font-size:12.5px;margin:2px 0 8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sa-as .n{font-variant-numeric:tabular-nums}
+.sa-as details{margin-top:6px;font-size:12.5px}
+.sa-as summary{cursor:pointer;color:var(--link)}
+.sa-as a{display:block;color:var(--text);text-decoration:none;margin:4px 0;line-height:1.35}
+.sa-as a:hover{color:var(--link)}
+.sa-chip{display:inline-block;font:600 11px/18px var(--ui);padding:0 8px;border-radius:999px;background:var(--paper-2);color:var(--muted);margin-left:6px;vertical-align:1px}
+.sa-chip.ok{background:#e6f4ec;color:#1f8a4c}.sa-chip.warn{background:#fbf0dc;color:#a86a0c}.sa-chip.bad{background:#fbe7e5;color:#c0392b}
+.sa-chip.run{background:var(--sel-bg);color:var(--sel-ink)}
+.sa table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+.sa th{text-align:left;font-weight:600;padding:9px 10px 9px 0;border-bottom:1px solid #d6d6d2;vertical-align:bottom}
+.sa td{padding:9px 10px 9px 0;border-bottom:1px solid var(--paper-3);vertical-align:top}
+.sa td.r,.sa th.r{text-align:right;padding-right:0;padding-left:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sa tr.win td{background:var(--accent-bg)}
+.sa tr.base td{color:var(--muted)}
+.sa td small{display:block;color:var(--muted);font-size:12.5px}
+.sa .quote{color:var(--muted);font-size:13px}
+.sa-fig{margin:14px 0 4px}
+.sa-fig svg{display:block;width:100%;max-width:640px;height:auto}
+.sa-fig figcaption,.sa-cap{font-size:12.5px;color:var(--muted);margin-top:6px}
+.sa-legend{display:flex;gap:4px 16px;flex-wrap:wrap;padding-left:58px;max-width:640px;font-size:12.5px;color:var(--muted);margin-top:4px}
+.sa-legend span::before{content:"";display:inline-block;width:18px;height:0;border-top:2px solid var(--k);margin-right:6px;vertical-align:middle}
+.sa-legend span.dash::before{border-top-style:dashed}
+.sa-hand{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.sa-hand a{text-decoration:none;display:inline-flex;align-items:center}
+.sa details.more{margin-top:14px}
+.sa details.more>summary{cursor:pointer;color:var(--link);font-size:14px}
+.sa-runs td:first-child{max-width:520px}
+.sa-runs tr{cursor:pointer}
+.sa-runs tr:hover td{background:var(--hover)}
 
 @media (max-width:880px){
   header{height:56px;padding-left:56px}
@@ -3238,6 +3309,7 @@ td{border-bottom-color:var(--paper-3)!important}
     <button data-page="pageTalk"><i>&#10078;</i>Talk to agents</button>
 
     <div class="group">Executions</div>
+    <button data-page="pageSuper"><i>&#10038;</i>Super agent</button>
     <button data-page="pageDesign" data-side="run"><i>&#9199;</i>Run a batch</button>
     <button data-page="pageDesign" data-side="train"><i>&#9654;</i>Train</button>
     <button data-page="pageMaths"><i>&#8747;</i>Maths &rarr; layers</button>
@@ -3530,6 +3602,10 @@ td{border-bottom-color:var(--paper-3)!important}
 
 <section class="page" id="pageCodebase">
   <div class="scroll" id="codeMain"></div>
+</section>
+
+<section class="page" id="pageSuper">
+  <div class="scroll" id="superMain"></div>
 </section>
 
 <section class="page" id="pageRadar">
@@ -6399,6 +6475,7 @@ const PAGE_SETUP = {
   pageDomains: renderDomainsPage,
   pageScouts: renderScoutsPage,
   pageRadar: renderRadarPage,
+  pageSuper: renderSuperPage,
   pageLaws: renderLawsPage,
   pageCodebase: renderCodebasePage,
   pageMaths: renderMathsPage,
@@ -8742,6 +8819,216 @@ async function renderLawsPage(){
   });
   host.querySelectorAll("[data-lawstop]").forEach(b => b.onclick = async () => {
     await fetch(API + `/api/laws/${b.dataset.lawstop}/stop`, {method: "POST"}); renderLawsPage();
+  });
+}
+
+/* ============================ Super agent ============================ */
+
+let saTimer = null, saOpen = null, saOverview = null;
+const SA_COLORS = ["var(--c2)", "var(--c5)", "var(--c4)", "var(--c6)", "var(--c7)", "var(--c3)", "var(--c2)", "var(--c5)"];
+const saNum = v => v == null ? "—" : (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : Math.abs(v) >= 0.001 ? v.toPrecision(3) : v === 0 ? "0" : v.toExponential(1));
+const saRules = r => r.join(" + ");
+
+async function saCall(path, method, body){
+  const r = await fetch(API + path, {method: method || "GET", headers: {"content-type": "application/json"},
+                                     body: body ? JSON.stringify(body) : undefined});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((d.detail && d.detail.message) || "The server said no.");
+  return d;
+}
+
+async function renderSuperPage(){
+  const host = $("superMain");
+  if (!host.querySelector(".sa")) host.innerHTML = `<div class="sa">
+    <h1>Super agent</h1>
+    <p class="lead">Give it a goal and it runs the whole line by itself: assistants go out to read, the rules they bring back
+    become structure, candidate networks are built from those rules, trained on mock data against a conventional network,
+    and the winner is slimmed and handed to the canvas. It reports what was measured, including when nothing won.</p>
+    <div class="sa-start">
+      <textarea id="saGoal" placeholder="What should it build? For example: a small, fast model of how two bound bodies move"></textarea>
+      <div class="sa-row">
+        <select id="saBudget" aria-label="How much work">
+          <option value="quick">Quick: 1 task, about a minute</option>
+          <option value="standard" selected>Standard: 2 tasks, about 5 minutes</option>
+          <option value="thorough">Thorough: 3 tasks, about 25 minutes</option>
+        </select>
+        <span class="grow"></span>
+        <button class="sa-btn" id="saPick">Let it pick from Radar</button>
+        <button class="sa-btn go" id="saGo">Start</button>
+      </div>
+      <div class="sa-note" id="saMode"></div>
+      <div class="sa-err" id="saErr"></div>
+    </div>
+    <div id="saRun"></div>
+    <div id="saRuns"></div>
+    <div id="saLib"></div>
+  </div>`;
+  const begin = async pick => {
+    $("saErr").textContent = "";
+    try{
+      const run = await saCall("/api/superagent", "POST", {goal: $("saGoal").value, budget: $("saBudget").value, pick});
+      saOpen = run.id; saPoll();
+    } catch(e){ $("saErr").textContent = e.message; }
+  };
+  $("saGo").onclick = () => begin(false);
+  $("saPick").onclick = () => begin(true);
+  try{ saOverview = await saCall("/api/superagent"); } catch(e){ $("saErr").textContent = e.message; return; }
+  $("saMode").textContent = saOverview.live ? "A model is connected: the assistants read for meaning."
+    : "No model is connected in Settings: the assistants will match rules by vocabulary, and the report will say so.";
+  const running = saOverview.runs.find(r => r.status === "running");
+  if (running) saOpen = running.id;
+  else if (!saOpen && saOverview.runs.length) saOpen = saOverview.runs[0].id;
+  saRunsList(); saLibrary();
+  if (saOpen) saPoll();
+}
+
+function saRunsList(){
+  const runs = (saOverview && saOverview.runs) || [];
+  $("saRuns").innerHTML = runs.length ? `<h2>Runs</h2><table class="sa-runs"><thead><tr><th>Goal</th><th>Result</th><th class="r">Took</th></tr></thead><tbody>${
+    runs.map(r => `<tr data-run="${alEsc(r.id)}"><td>${alEsc((r.goal || "").slice(0, 140))}<small>${alEsc(new Date((r.started || 0) * 1000).toLocaleString())}</small></td>
+      <td>${r.status === "running" ? '<span class="sa-chip run">running</span>' : r.status === "error" ? '<span class="sa-chip bad">failed</span>'
+        : r.status === "stopped" ? '<span class="sa-chip warn">stopped</span>' : alEsc(r.verdict || "")}</td>
+      <td class="r">${ago2(r.seconds)}</td></tr>`).join("")}</tbody></table>` : "";
+  $("saRuns").querySelectorAll("[data-run]").forEach(tr => tr.onclick = () => { saOpen = tr.dataset.run; saPoll(); window.scrollTo(0, 0); $("superMain").scrollTop = 0; });
+}
+
+function ago2(s){ return s == null ? "" : s < 90 ? Math.round(s) + " s" : Math.round(s / 60) + " min"; }
+
+function saLibrary(){
+  const o = saOverview; if (!o) return;
+  $("saLib").innerHTML = `<details class="more"><summary>What it can build in, and the mock tasks it trains on</summary>
+    <table><thead><tr><th>Rule</th><th>What it says</th><th>How the network holds it</th><th>After</th></tr></thead><tbody>${
+      o.rules.map(r => `<tr><td><b>${alEsc(r.name)}</b></td><td>${alEsc(r.statement)}</td><td>${alEsc(r.built)}</td><td class="quote">${alEsc(r.source)}</td></tr>`).join("")}</tbody></table>
+    <table><thead><tr><th>Kind of problem</th><th>Mock tasks</th></tr></thead><tbody>${
+      o.kinds.map(k => `<tr><td><b>${alEsc(k.name)}</b></td><td>${k.tasks.map(t => alEsc(t.name)).join("; ")}</td></tr>`).join("")}</tbody></table></details>`;
+}
+
+async function saPoll(){
+  clearTimeout(saTimer);
+  if (!saOpen || document.body.dataset.page !== "pageSuper") return;
+  let d;
+  try{ d = await saCall("/api/superagent/" + encodeURIComponent(saOpen)); }
+  catch(e){ $("saRun").innerHTML = `<div class="sa-err">${alEsc(e.message)}</div>`; return; }
+  saDraw(d);
+  $("saGo").disabled = $("saPick").disabled = d.status === "running";
+  if (d.status === "running") saTimer = setTimeout(saPoll, 2000);
+  else { try{ saOverview = await saCall("/api/superagent"); saRunsList(); } catch {} }
+}
+
+function saChart(T){
+  const W = 640, H = 280, L = 58, R = 16, Tp = 14, B = 40;
+  const series = [{name: "conventional", rows: T.baseline.rows || [], color: "#5a5a5a", dash: true}]
+    .concat(T.candidates.map((c, i) => ({name: saRules(c.rules), rows: c.rows, color: i === T.winner ? "var(--c1)" : SA_COLORS[i % SA_COLORS.length], lead: i === T.winner})));
+  const pts = series.flatMap(s => s.rows.map(r => Math.max(r.error, 1e-9)));
+  if (!pts.length) return "";
+  const xs = T.sizes, lx = v => Math.log10(v);
+  let lo = Math.floor(Math.log10(Math.min(...pts)) * 2) / 2, hi = Math.ceil(Math.log10(Math.max(...pts)) * 2) / 2;
+  if (hi - lo < 0.5) hi = lo + 0.5;
+  const X = n => L + (W - L - R) * (xs.length < 2 ? 0.5 : (lx(n) - lx(xs[0])) / (lx(xs[xs.length - 1]) - lx(xs[0])));
+  const Y = e => Tp + (H - Tp - B) * (1 - (Math.log10(Math.max(e, 1e-9)) - lo) / (hi - lo));
+  let g = `<rect x="${L}" y="${Tp}" width="${W - L - R}" height="${H - Tp - B}" fill="none" stroke="var(--paper-3)"/>`;
+  for (let t = Math.ceil(lo); t <= hi; t++){
+    const y = Y(Math.pow(10, t));
+    g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--paper-3)"/><text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="11.5" fill="var(--muted)">${t >= 0 ? Math.pow(10, t) : "0." + "0".repeat(-t - 1) + "1"}</text>`;
+  }
+  xs.forEach(n => { g += `<text x="${X(n)}" y="${H - B + 18}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${n}</text>`; });
+  g += `<text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle" font-size="12" fill="var(--muted)">training examples</text>`;
+  series.slice().sort((a, b) => (a.lead ? 1 : 0) - (b.lead ? 1 : 0)).forEach(s => {
+    const path = s.rows.map((r, i) => (i ? "L" : "M") + X(r.n).toFixed(1) + " " + Y(r.error).toFixed(1)).join(" ");
+    g += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="${s.lead ? 2.6 : 1.5}" ${s.dash ? 'stroke-dasharray="5 4"' : ""}/>`;
+    s.rows.forEach(r => { g += `<circle cx="${X(r.n).toFixed(1)}" cy="${Y(r.error).toFixed(1)}" r="${s.lead ? 4 : 3}" fill="${s.lead ? s.color : "#fff"}" stroke="${s.lead ? "#fff" : s.color}" stroke-width="1.5"/>`; });
+  });
+  return `<figure class="sa-fig"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Error against training examples">${g}</svg>
+    <div class="sa-legend">${series.map(s => `<span class="${s.dash ? "dash" : ""}" style="--k:${s.color}">${alEsc(s.name)}</span>`).join("")}</div>
+    <figcaption>Error against the number of training examples, both on log scales; lower is better. Measured as the ${alEsc(T.measure)}.</figcaption></figure>`;
+}
+
+function saTask(d, T){
+  const names = Object.fromEntries((d.rules || []).map(r => [r.id, r.name]));
+  const extra = T.errors.filter(e => e.key !== T.primary);
+  const last = rows => rows && rows.length ? rows[rows.length - 1] : null;
+  const errs = rows => T.sizes.map(n => { const r = (rows || []).find(x => x.n === n); return `<td class="r">${r ? saNum(r.error) : "…"}</td>`; }).join("");
+  const more = rows => extra.map(e => `<td class="r">${last(rows) ? saNum(last(rows)[e.key]) : "…"}</td>`).join("");
+  const head = `<tr><th>Network</th><th class="r">Weights</th>${T.sizes.map(n => `<th class="r">n = ${n}</th>`).join("")}${
+    extra.map(e => `<th class="r" title="${alEsc(e.label)}">${alEsc(e.short || e.key)}</th>`).join("")}<th class="r">Against it</th><th class="r">1,000 rows</th></tr>`;
+  const base = T.baseline ? `<tr class="base"><td>Conventional<small>${alEsc(T.baseline.kind)}</small></td><td class="r">${(T.baseline.params || 0).toLocaleString()}</td>${
+    errs(T.baseline.rows)}${more(T.baseline.rows)}<td class="r">1×</td><td class="r">${T.baseline.ms != null ? T.baseline.ms + " ms" : "…"}</td></tr>` : "";
+  const cands = T.candidates.map((c, i) => `<tr class="${i === T.winner ? "win" : ""}"><td><b>${alEsc(saRules(c.rules))}</b>${
+      i === T.winner ? '<span class="sa-chip ok">winner</span>' : c.losses.length ? '<span class="sa-chip bad">lost</span>' : c.wins.length ? '<span class="sa-chip warn">partial</span>' : '<span class="sa-chip">no difference</span>'}${
+      c.untrue.length ? `<small>${alEsc(c.untrue.map(r => names[r] || r).join(", "))}: not true of this task</small>` : ""}</td>
+    <td class="r">${c.params.toLocaleString()}</td>${errs(c.rows)}${more(c.rows)}<td class="r">${c.gain}×</td><td class="r">${c.ms} ms</td></tr>`).join("");
+  const breaks = T.baseline && T.baseline.breaks ? Object.entries(T.baseline.breaks).filter(([, v]) => v != null) : [];
+  const win = T.winner != null ? T.candidates[T.winner] : null;
+  const q = `?task=${encodeURIComponent(T.id)}`;
+  return `<h3>${alEsc(T.name)}</h3><p>${alEsc(T.summary)}</p>
+    ${T.candidates.length ? saChart(T) : ""}
+    <table><thead>${head}</thead><tbody>${base}${cands}</tbody></table>
+    <div class="sa-cap">Each number is the mean over ${T.seeds} seeds after ${T.steps.toLocaleString()} training steps. “Against it” is the conventional
+      network's error divided by this one's, averaged over the sizes: above 1× is better. A network is the winner only if it is ahead
+      beyond the spread across seeds at half the sizes or more, and behind at none.${extra.length ? " " + extra.map(e => `${alEsc(e.short || e.key)}: ${alEsc(e.label)}, at the largest size`).join("; ") + "." : ""}</div>
+    ${win && T.slim ? `<p><b>Slimmed.</b> Shrunk to ${T.slim.params.toLocaleString()} weights (hidden width ${T.slim.hidden}), ${T.slim.smaller}× smaller than the conventional
+      network, with error ${saNum(T.slim.error)} against its ${saNum(last(T.baseline.rows).error)}. One pass over 1,000 rows takes ${T.slim.ms} ms against ${T.baseline.ms} ms${
+      win.rules.includes("energy") ? " (a motion read off an energy needs a derivative on every pass, which is why it is slower to run)" : ""}.</p>
+      <div class="sa-hand"><button class="sa-btn go" data-canvas="${alEsc(T.id)}">Open on the canvas</button>
+      <a class="sa-btn" href="${API}/api/superagent/${encodeURIComponent(d.id)}/model.py${q}" download>Download the model file</a></div>` : ""}
+    ${breaks.length ? `<details class="more"><summary>How far each trained network is from obeying the rules</summary>
+      <table><thead><tr><th>Rule</th><th>What is measured (0 means it holds)</th><th class="r">Conventional</th>${win ? '<th class="r">Winner</th>' : ""}</tr></thead><tbody>${
+        breaks.map(([r, v]) => { const rule = (d.rules || []).find(x => x.id === r) || {};
+          return `<tr><td><b>${alEsc(rule.name || r)}</b></td><td>${alEsc(rule.check || "")}</td><td class="r">${saNum(v)}</td>${
+            win ? `<td class="r">${win.holds && win.holds[r] != null ? saNum(win.holds[r]) : "not built in"}</td>` : ""}</tr>`; }).join("")}</tbody></table></details>` : ""}`;
+}
+
+function saDraw(d){
+  const at = d.stages.findIndex(s => s.id === d.stage);
+  const done = d.status === "done";
+  const steps = d.stages.map((s, i) => `<div class="${done || i < at ? "done" : i === at ? "cur" : ""}">${alEsc(s.name)}</div>`).join("");
+  const chip = {running: '<span class="sa-chip run">running</span>', done: '<span class="sa-chip ok">finished</span>',
+                stopped: '<span class="sa-chip warn">stopped</span>', error: '<span class="sa-chip bad">failed</span>'}[d.status] || "";
+  const swarm = (d.swarm || []).map(a => `<div class="sa-as"><b>${alEsc(a.angle)}<span class="sa-chip ${a.status === "done" ? "ok" : a.status === "unreachable" ? "warn" : a.status === "reading" ? "run" : ""}">${
+      a.status === "unreachable" ? "no answer" : alEsc(a.status)}</span></b>
+    <div class="q">${alEsc(a.query)}</div>
+    <span class="n">${a.papers.length} papers · ${a.cards} rule cards</span>${a.note ? `<div class="q">${alEsc(a.note)}</div>` : ""}
+    ${a.papers.length ? `<details><summary>What it looked at</summary>${a.papers.map(p => `<a href="${alEsc(p.url)}" target="_blank" rel="noopener">${alEsc(p.title)} <span class="quote">${alEsc(p.year || "")}</span></a>`).join("")}</details>` : ""}</div>`).join("");
+  const rules = (d.rules || []).length ? `<h2>Rules</h2><table><thead><tr><th>Rule</th><th>What it says</th><th>How the network holds it</th><th>Where it came from</th></tr></thead><tbody>${
+    d.rules.map(r => `<tr><td><b>${alEsc(r.name)}</b></td><td>${alEsc(r.statement)}</td><td>${alEsc(r.built)}</td>
+      <td>${r.evidence ? `${r.evidence} card${r.evidence > 1 ? "s" : ""} from reading` : `the lab's library<small>${alEsc(r.source)}</small>`}</td></tr>`).join("")}</tbody></table>
+    ${(d.cards || []).length ? `<details class="more"><summary>The ${d.cards.length} rule cards the assistants brought back</summary><table><thead><tr><th>Rule</th><th>The words that state it</th><th>Read in</th></tr></thead><tbody>${
+      d.cards.map(c => `<tr><td><b>${alEsc(((d.rules || []).find(r => r.id === c.rule) || {}).name || c.rule)}</b><small>${c.by === "model" ? "read by the model" : "matched by vocabulary"}</small></td>
+        <td class="quote">“${alEsc(c.quote)}”</td><td><a href="${alEsc(c.url)}" target="_blank" rel="noopener">${alEsc(c.title)}</a> ${alEsc(c.year || "")}</td></tr>`).join("")}</tbody></table></details>` : ""}
+    ${(d.unbuilt || []).length ? `<details class="more"><summary>${d.unbuilt.length === 1 ? "1 rule was" : d.unbuilt.length + " rules were"} read that it cannot build in yet</summary><table><thead><tr><th>Rule</th><th>How it might be built</th><th>Read in</th></tr></thead><tbody>${
+      d.unbuilt.map(c => `<tr><td><b>${alEsc(c.name || "A rule")}</b><small>${alEsc(c.statement || "")}</small></td><td>${alEsc(c.build || "")}</td>
+        <td><a href="${alEsc(c.url)}" target="_blank" rel="noopener">${alEsc(c.title)}</a></td></tr>`).join("")}</tbody></table></details>` : ""}` : "";
+  const log = (d.log || []).slice(done ? -200 : -7).map(l => `<div><i>${ago2(l.at)}</i><span>${alEsc(l.text)}${l.detail ? `<small>${alEsc(l.detail)}</small>` : ""}</span></div>`).join("");
+  $("saRun").innerHTML = `
+    <h2>${alEsc(d.goal.length > 110 ? d.goal.slice(0, 110) + "…" : d.goal)}</h2>
+    ${d.source ? `<div class="sa-note">Picked from Radar: <a href="${alEsc(d.source.url)}" target="_blank" rel="noopener">${alEsc(d.source.title || "")}</a></div>` : ""}
+    <div class="sa-steps">${steps}</div>
+    <div class="sa-status">${chip}<span>${ago2(d.seconds)}</span>${d.status === "running" ? '<button class="sa-btn" id="saStop">Stop</button>' : ""}</div>
+    ${d.error ? `<div class="sa-err">${alEsc(d.error)}</div>` : ""}
+    ${d.verdict ? `<div class="sa-verdict"><b>${alEsc(d.verdict)}</b><ul>${(d.lines || []).map(l => `<li>${alEsc(l)}</li>`).join("")}</ul><p>${alEsc(d.reading || "")}</p></div>` : ""}
+    ${d.brief ? `<p><b>${alEsc(d.brief.kind_name)}.</b> Mock tasks: ${alEsc((d.brief.task_names || []).join("; "))}. ${alEsc(d.brief.why || "")}</p>` : ""}
+    ${done ? "" : `<div class="sa-log">${log}</div>`}
+    ${(d.tasks || []).length ? `<h2>What was built and measured</h2>${d.tasks.map(T => saTask(d, T)).join("")}` : ""}
+    ${swarm ? `<h2>Research swarm</h2><div class="sa-swarm">${swarm}</div>` : ""}
+    ${rules}
+    ${done ? `<details class="more"><summary>Everything it did, in order</summary><div class="sa-log">${log}</div></details>` : ""}`;
+  const stop = $("saStop");
+  if (stop) stop.onclick = async () => { stop.disabled = true; try{ await saCall(`/api/superagent/${encodeURIComponent(d.id)}/stop`, "POST"); } catch {} };
+  $("saRun").querySelectorAll("[data-canvas]").forEach(b => b.onclick = async () => {
+    let g;
+    try{ g = await saCall(`/api/superagent/${encodeURIComponent(d.id)}/canvas?task=${encodeURIComponent(b.dataset.canvas)}`); }
+    catch(e){ toast(e.message); return; }
+    pushHistory();
+    state.book = null;
+    state.graph = {name: g.name, nodes: g.nodes, edges: g.edges};
+    state.seq = g.nodes.length + g.edges.length + 700;
+    $("gname").value = g.name;
+    state.version = null;
+    clearSelection();
+    showPage("pageDesign");
+    document.querySelectorAll("#rail button[data-page]").forEach(x => x.classList.toggle("on", x.dataset.page === "pageDesign" && !x.dataset.side));
+    render(); fitView(); analyze();
+    toast("The winning network is on the canvas");
   });
 }
 
@@ -18146,12 +18433,13 @@ const INK_ICONS = {
   ask:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m6.3 6.3 2.1 2.1M15.6 15.6l2.1 2.1M6.3 17.7l2.1-2.1M15.6 8.4l2.1-2.1"/>',
   needs:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/>',
   settings:'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  super:'<path d="M12 3l2.2 5.3L20 9l-4.3 3.9L17 19l-5-3-5 3 1.3-6.1L4 9l5.8-.7z"/>',
   dot:'<circle cx="12" cy="12" r="3"/>'
 };
 const INK_KEY = {pagePad:"pad", pageDesign:"canvas", pageBuild:"projects", pageDomains:"domains", pagePaper:"paper",
   pageExtend:"blocks", pageAgentLab:"agentlab", pageTalk:"talk", pageMaths:"mathlayers", pageWorkbench:"workbench",
   pagePhysics:"physics", pageCodebase:"codebase", pageScouts:"scouts", pageRadar:"radar", pageAgents:"studies",
-  pageLaws:"laws", pageRuns:"runs", pageChat:"chat", pageSettings:"settings",
+  pageLaws:"laws", pageRuns:"runs", pageSuper:"super", pageChat:"chat", pageSettings:"settings",
   "side:code":"code", "side:math":"math", "side:story":"story", "side:run":"run", "side:train":"train",
   "side:ask":"ask", "side:needs":"needs", "pal:layers":"layers", "pal:files":"files"};
 const inkIcon = k => `<svg class="ink-i" viewBox="0 0 24 24" aria-hidden="true">${INK_ICONS[k] || INK_ICONS.dot}</svg>`;

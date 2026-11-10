@@ -1195,6 +1195,72 @@ def laws_stop(arm: str):
     return laws.stop(arm)
 
 
+class SuperAgentStart(BaseModel):
+    goal: Optional[str] = ""
+    budget: Optional[str] = "standard"
+    pick: Optional[bool] = False
+
+
+@app.get("/api/superagent")
+def superagent_overview():
+    """What the super agent can build for, the rules it holds, and its runs."""
+    import superagent
+    return superagent.overview()
+
+
+@app.post("/api/superagent")
+def superagent_start(body: SuperAgentStart):
+    """Give it a goal (or let it pick one from Radar) and it runs from reading to a measured model."""
+    import superagent
+    try:
+        return superagent.start(body.goal or "", body.budget or "standard", bool(body.pick))
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/superagent/{run_id}")
+def superagent_read(run_id: str):
+    import superagent
+    try:
+        return superagent.read(run_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+
+
+@app.post("/api/superagent/{run_id}/stop")
+def superagent_stop(run_id: str):
+    import superagent
+    try:
+        return superagent.stop(run_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+
+
+@app.get("/api/superagent/{run_id}/canvas")
+def superagent_canvas(run_id: str, task: str = ""):
+    """The winning network as a design the canvas can open."""
+    import superagent
+    try:
+        return superagent.to_canvas(run_id, task)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
+@app.get("/api/superagent/{run_id}/model.py")
+def superagent_file(run_id: str, task: str = ""):
+    import superagent
+    try:
+        text = superagent.model_file(run_id, task)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+    return Response(text, media_type="text/x-python",
+                    headers={"Content-Disposition": f'attachment; filename="rulenet-{task or "model"}.py"'})
+
+
 @app.get("/api/radar")
 def radar_view():
     r = radar.view()

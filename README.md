@@ -716,6 +716,33 @@ python laws.py lagrangian --steps 4000 --lr 1e-3 --set eps=1e-4 activation=tanh
 python laws.py convex lipschitz --n 512        the guarantee tests
 ```
 
+
+## Super agent: from a goal to a measured model
+
+**Executions → Super agent.** One agent that runs the whole line by itself.
+Type a goal ("a small, fast model of how two bound bodies move") or let it
+pick one from Radar, choose how much work it may do, and press Start.
+
+1. **Brief.** The goal is matched to a kind of problem (dynamics, sets,
+   sequences, tables) and to the closest mock tasks.
+2. **Research swarm.** Assistants go out in parallel, one per angle, search
+   arXiv, read, and bring back rule cards: a rule, the words that state it,
+   and where it was read. Rules it has no construction for are listed as read
+   and not built.
+3. **Rules → structure.** Each rule is built into the network
+   (`rulesource.RuleNet`), then run with random weights: a rule that does not
+   hold exactly is dropped.
+4. **Mock data and training.** Data come from the task's own equations. Every
+   candidate and a conventional network no smaller than it are trained at
+   several sizes and seeds.
+5. **Slim and hand over.** The winner is shrunk while it stays ahead, saved
+   with its weights, opened on the canvas as a `RuleNet` block, and offered as
+   a standalone Python file.
+
+A candidate wins a size only beyond the spread across seeds, and the report
+says so when nothing wins. `python tests/test_superagent.py` checks the rules,
+the comparison and a whole run.
+
 ## Blocks: the plug-in system
 
 Everything past the core layers is a file in `blocks/`. Drop one in, press Reload

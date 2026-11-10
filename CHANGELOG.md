@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.44.0
+
+- **Super agent** (Executions → Super agent). Give it a goal, or let it pick
+  one from Radar, and it runs the whole line with nobody pressing anything:
+  assistants go out in parallel to read papers and bring back rule cards (the
+  rule, the words that state it, where it was read); each rule becomes
+  structure; candidate networks are assembled from the rules and checked by
+  running them with random weights; mock data is generated from the task's own
+  equations; every candidate and a conventional network no smaller than it are
+  trained at several sizes; the winner is slimmed while it stays ahead, and is
+  handed to the canvas with its weights and a standalone Python file.
+- **RuleNet** and **SeqNet** blocks (Laws · composed). RuleNet builds one
+  network from a list of rules, each held for any weights: energy,
+  permutation, rotation, translation, reflection, monotone, convex, additive.
+  They compose: a rotation-invariant energy conserves angular momentum, a
+  translation-invariant one conserves total momentum (measured: drift 2.5e-7
+  against 0.04 for the conventional network).
+- Thirteen mock tasks across four kinds of problem: dynamics and physics, sets
+  and symmetry, sequences and memory, tables and forecasts.
+- The comparison cannot flatter. A candidate wins a size only when its error
+  plus its spread across seeds is below the conventional network's minus its
+  spread; the conventional network is the better of a ReLU and a tanh MLP (a
+  GRU for sequences) and is never the smaller one; rules that are not true of
+  a task are built anyway and marked, and they lose. When nothing wins the
+  report says so. Measured here: two bound bodies, 6.9x more accurate with 54x
+  fewer weights; on demand against price, no rule-built network won.
+- Without a model in Settings the assistants match rules by vocabulary; when
+  the literature search cannot be reached the run carries on from the lab's
+  own rule library and the report says no paper was read.
+- `tests/test_superagent.py` (8 checks, run by `release.sh`).
+
 ## 4.43.0
 
 - **The vix look.** The designer now wears the Ink UI kit (the vix HQ look):
