@@ -739,6 +739,11 @@ pick one from Radar, choose how much work it may do, and press Start.
    with its weights, opened on the canvas as a `RuleNet` block, and offered as
    a standalone Python file.
 
+6. **Explain.** Every finding is given what it means and how far it reaches:
+   the conditions it was measured under and what it does not show
+   (`superexplain.py`). Nothing was trained on the goal's own data, and the
+   report says so.
+
 A candidate wins a size only beyond the spread across seeds, and the report
 says so when nothing wins. `python tests/test_superagent.py` checks the rules,
 the comparison and a whole run.

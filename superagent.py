@@ -13,6 +13,7 @@ law. This one runs the whole line, start to finish, with nobody pressing anythin
     measure    each candidate and a conventional network no smaller than it are trained on the same data
                at several sizes; error, the rules each one breaks, size and speed are recorded
     slim       the winner is shrunk while it still beats the conventional network at its full size
+    explain    each finding gets what it means and how far it reaches (superexplain.py)
     report     what was read, what was built, what was measured, and the model, on the canvas
 
 What it will not do is call something a win that was not measured as one. A candidate wins a size only
@@ -169,9 +170,9 @@ BUDGETS = {
     "standard": {"tasks": 2, "candidates": 5, "sizes": [16, 64, 256],      "seeds": 2, "steps": 900,  "papers": 6, "read": 1},
     "thorough": {"tasks": 3, "candidates": 8, "sizes": [16, 64, 256, 512], "seeds": 3, "steps": 1500, "papers": 8, "read": 2},
 }
-STAGES = ["brief", "swarm", "rules", "verify", "design", "measure", "slim", "report"]
+STAGES = ["brief", "swarm", "rules", "verify", "design", "measure", "slim", "explain", "report"]
 STAGE_NAMES = {"brief": "Brief", "swarm": "Research swarm", "rules": "Rules", "verify": "Verify", "design": "Design",
-               "measure": "Mock data and training", "slim": "Slim", "report": "Report"}
+               "measure": "Mock data and training", "slim": "Slim", "explain": "Explain", "report": "Report"}
 EXACT = 1e-4            # a rule "holds by construction" when its violation with random weights is below this
 ARXIV_PAUSE = 3.1       # arXiv asks for no more than one request every three seconds
 _ARXIV = threading.Lock()
@@ -974,7 +975,27 @@ def read(run_id: str) -> Dict[str, Any]:
     path = home() / f"{Path(run_id).name}.json"
     if not path.exists():
         raise KeyError(run_id)
-    return json.loads(path.read_text())
+    d = json.loads(path.read_text())
+    if not d.get("explain") and d.get("status") in ("done", "stopped"):      # a run from before it could explain itself
+        import superexplain
+        d["explain"] = superexplain.explain(d)
+    return d
+
+
+def reexplain(run_id: str) -> Dict[str, Any]:
+    """Explain a finished run again, with the model if one is connected now, and keep the result."""
+    import superexplain
+    run = RUNS.get(run_id)
+    if run and run.home == home() and run.status == "running":
+        raise ValueError("This run is still going. It explains itself when it finishes.")
+    d = read(run_id)
+    d["explain"] = superexplain.explain(d, ask=_ask if _live() else None)
+    if not d.get("stages") or len(d["stages"]) != len(STAGES):
+        d["stages"] = [{"id": s, "name": STAGE_NAMES[s]} for s in STAGES]
+    (home() / f"{Path(run_id).name}.json").write_text(json.dumps(d, indent=1))
+    if run and run.home == home():
+        run.data["explain"] = d["explain"]
+    return d
 
 
 def stop(run_id: str) -> Dict[str, Any]:
@@ -1248,6 +1269,12 @@ def _carry_out(run: Run, live: bool) -> None:
             run.save()
         except OSError:
             pass
+
+    # ---- explain -----------------------------------------------------------------------------
+    run.stage = "explain"
+    import superexplain
+    run.say("Explaining each finding: what it means and how far it reaches")
+    D["explain"] = superexplain.explain({**D, "goal": run.goal, "source": run.source}, ask=_ask if live else None)
 
     # ---- report ------------------------------------------------------------------------------
     run.stage = "report"

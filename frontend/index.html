@@ -3078,6 +3078,15 @@ td{border-bottom-color:var(--paper-3)!important}
 .sa-verdict ul{margin:8px 0 0;padding-left:18px}
 .sa-verdict li{margin:3px 0}
 .sa-verdict p{margin:8px 0 0;color:var(--muted);font-size:13.5px}
+.sa-ex table{table-layout:fixed}
+.sa-ex th:nth-child(1){width:34%}.sa-ex th:nth-child(2){width:33%}
+.sa-ex td{font-size:13.5px;line-height:1.55}
+.sa-ex td:first-child{padding-left:14px;border-left:3px solid var(--paper-3)}
+.sa-ex tr.good td:first-child{border-left-color:#3f9a70}.sa-ex tr.bad td:first-child{border-left-color:#d0524a}
+.sa-ex tr.caution td:first-child{border-left-color:#e9a23b}
+.sa-ex h3{margin-top:22px}
+.sa-bottom{border:1px solid var(--sel-line);background:var(--accent-bg);border-radius:12px;padding:14px 16px;margin:18px 0 0}
+.sa-bottom b{display:block;font-size:13px;color:var(--sel-ink);margin-bottom:4px}
 .sa-log{font-size:13px;color:var(--muted);margin:10px 0 0;border-top:1px solid var(--paper-3)}
 .sa-log div{padding:6px 0;border-bottom:1px solid var(--paper-3);display:flex;gap:12px}
 .sa-log i{font-style:normal;color:var(--faint);min-width:46px;font-variant-numeric:tabular-nums}
@@ -8978,6 +8987,23 @@ function saTask(d, T){
             win ? `<td class="r">${win.holds && win.holds[r] != null ? saNum(win.holds[r]) : "not built in"}</td>` : ""}</tr>`; }).join("")}</tbody></table></details>` : ""}`;
 }
 
+function saExplain(d){
+  const ex = d.explain;
+  if (!ex || !(ex.findings || []).length) return "";
+  const groups = [];
+  ex.findings.forEach(f => { let g = groups.find(x => x.about === f.about); if (!g){ g = {about: f.about, items: []}; groups.push(g); } g.items.push(f); });
+  const fit = ex.fit ? `<p><span class="sa-chip ${ex.fit === "near" ? "ok" : ex.fit === "far" ? "bad" : "warn"}" style="margin-left:0">${
+    {near: "close to the goal", loose: "a loose stand-in for the goal", far: "far from the goal"}[ex.fit]}</span> ${alEsc(ex.fit_why || "")}</p>` : "";
+  return `<div class="sa-ex"><h2>What the findings mean</h2>
+    <p class="sa-note" style="margin-top:0">${ex.by === "model" ? "The numbers in the first column are the run's own. The model wrote what they mean and how far they reach, and may not add numbers."
+      : "Worked out from the run's numbers. Connect a model in Settings and press Explain again to have it written for this goal."}
+      <button class="sa-btn" id="saExplain" style="height:28px;padding:0 10px;font-size:12.5px;margin-left:8px">Explain again</button></p>
+    ${fit}
+    ${groups.map(g => `<h3>${alEsc(g.about)}</h3><table><thead><tr><th>Finding</th><th>What it means</th><th>How far it reaches</th></tr></thead><tbody>${
+      g.items.map(f => `<tr class="${alEsc(f.tone || "")}"><td>${alEsc(f.finding)}</td><td>${alEsc(f.means)}</td><td>${alEsc(f.scope)}</td></tr>`).join("")}</tbody></table>`).join("")}
+    <div class="sa-bottom"><b>Bottom line</b>${alEsc(ex.bottom || "")}</div></div>`;
+}
+
 function saDraw(d){
   const at = d.stages.findIndex(s => s.id === d.stage);
   const done = d.status === "done";
@@ -9008,10 +9034,17 @@ function saDraw(d){
     ${d.verdict ? `<div class="sa-verdict"><b>${alEsc(d.verdict)}</b><ul>${(d.lines || []).map(l => `<li>${alEsc(l)}</li>`).join("")}</ul><p>${alEsc(d.reading || "")}</p></div>` : ""}
     ${d.brief ? `<p><b>${alEsc(d.brief.kind_name)}.</b> Mock tasks: ${alEsc((d.brief.task_names || []).join("; "))}. ${alEsc(d.brief.why || "")}</p>` : ""}
     ${done ? "" : `<div class="sa-log">${log}</div>`}
+    ${d.status !== "running" ? saExplain(d) : ""}
     ${(d.tasks || []).length ? `<h2>What was built and measured</h2>${d.tasks.map(T => saTask(d, T)).join("")}` : ""}
     ${swarm ? `<h2>Research swarm</h2><div class="sa-swarm">${swarm}</div>` : ""}
     ${rules}
     ${done ? `<details class="more"><summary>Everything it did, in order</summary><div class="sa-log">${log}</div></details>` : ""}`;
+  const again = $("saExplain");
+  if (again) again.onclick = async () => {
+    again.disabled = true; again.textContent = "Explaining…";
+    try{ saDraw(await saCall(`/api/superagent/${encodeURIComponent(d.id)}/explain`, "POST")); }
+    catch(e){ toast(e.message); again.disabled = false; again.textContent = "Explain again"; }
+  };
   const stop = $("saStop");
   if (stop) stop.onclick = async () => { stop.disabled = true; try{ await saCall(`/api/superagent/${encodeURIComponent(d.id)}/stop`, "POST"); } catch {} };
   $("saRun").querySelectorAll("[data-canvas]").forEach(b => b.onclick = async () => {

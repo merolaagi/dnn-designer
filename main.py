@@ -1236,6 +1236,18 @@ def superagent_stop(run_id: str):
         raise HTTPException(404, detail={"message": "No such run."})
 
 
+@app.post("/api/superagent/{run_id}/explain")
+def superagent_explain(run_id: str):
+    """Explain a finished run again: what each finding means and how far it reaches."""
+    import superagent
+    try:
+        return superagent.reexplain(run_id)
+    except KeyError:
+        raise HTTPException(404, detail={"message": "No such run."})
+    except ValueError as exc:
+        raise HTTPException(400, detail={"message": str(exc)})
+
+
 @app.get("/api/superagent/{run_id}/canvas")
 def superagent_canvas(run_id: str, task: str = ""):
     """The winning network as a design the canvas can open."""

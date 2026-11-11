@@ -25,6 +25,7 @@ except ImportError:
     HAVE_TORCH = False
 
 PASSED, FAILED = [], []
+KEEP = {}
 
 
 def check(name):
@@ -207,6 +208,7 @@ if HAVE_TORCH:
             assert SA.count(model) == T["slim"]["params"]
             assert SA.listing()[0]["id"] == d["id"] and SA.listing()[0]["won"] == 1
             json.dumps(d)
+            KEEP["won"], KEEP["home"] = d, home
         finally:
             SA.home, SA._search, SA._ask, SA._live = real
 
@@ -239,6 +241,101 @@ if HAVE_TORCH:
                     assert word in str(exc), str(exc)
         finally:
             SA.home, SA._search, SA._live = real
+
+    def _lost_run():
+        """A run in which the rule was true and still did not pay: ahead with little data, behind with more."""
+        rows = lambda errs: [{"n": n, "error": e, "spread": 0.002, "rmse": e, "rmse_spread": 0.002, "outside": o, "outside_spread": 0.01}   # noqa: E731
+                             for n, (e, o) in zip([16, 64, 256], errs)]
+        base, cand = rows([(0.20, 0.9), (0.05, 0.6), (0.010, 0.5)]), rows([(0.10, 0.4), (0.06, 0.3), (0.030, 0.2)])
+        return {"goal": "forecast fuel demand from price", "status": "done", "mode": "rehearsal", "reachable": False, "swarm": [],
+                "cards": [], "unbuilt": [], "papers_read": 0,
+                "brief": {"kind_name": "Tables and forecasts", "tasks": ["demand"], "task_names": ["demand against price"], "why": "x"},
+                "rules": [{"id": "monotone", "name": "Monotonicity", "evidence": 0}],
+                "tasks": [{"id": "demand", "name": "Demand against price", "holds": ["monotone"], "shape": [3], "sizes": [16, 64, 256],
+                           "seeds": 2, "steps": 2700, "primary": "rmse", "winner": None,
+                           "errors": [{"key": "rmse", "label": "error", "short": "rmse"},
+                                      {"key": "outside", "label": "error outside the range it was trained on", "short": "Outside range"}],
+                           "baseline": {"params": 4545, "kind": "MLP on the flattened input (tanh)", "rows": base, "ms": 0.2,
+                                        "breaks": {"monotone": 0.21}},
+                           "candidates": [{"rules": ["monotone"], "hidden": 32, "params": 1217, "rows": cand, "true": ["monotone"],
+                                           "untrue": [], "ms": 0.3, "holds": {"monotone": 0.0}, **SA.compare(cand, base)}]}]}
+
+    @check("every finding is explained: what it means and how far it reaches, for a win, a loss and a run that read nothing")
+    def _():
+        import superexplain as SX
+        d = KEEP["won"]
+        ex = d["explain"]                                            # the run explained itself before it reported
+        assert [s["id"] for s in d["stages"]][-2:] == ["explain", "report"]
+        ids = [f["id"] for f in ex["findings"]]
+        for want in ("fit", "reading", "two_body.result", "two_body.rules", "two_body.size", "two_body.breaks", "unbuilt"):
+            assert want in ids, (want, ids)
+        assert all(len(f[k]) > 30 for f in ex["findings"] for k in ("finding", "means", "scope")), "an empty explanation"
+        by = {f["id"]: f for f in ex["findings"]}
+        assert "Nothing was trained on data from the goal itself" in by["fit"]["scope"] and "two bound bodies" in by["fit"]["finding"]
+        assert "does not show that the rule is true of your problem" in by["reading"]["scope"]
+        assert "this one mock task" in by["two_body.result"]["scope"] and "not one tuned" in by["two_body.result"]["scope"]
+        assert "derivative" in by["two_body.size"]["means"]                                  # why an energy network runs slower
+        assert "by construction" in by["two_body.breaks"]["scope"] or "how it is wired" in by["two_body.breaks"]["scope"]
+        assert "does not support" in ex["bottom"] and "never trained on" in ex["bottom"]
+        # a loss: the rule is true of the task and still did not pay; the explanation must not call the rule false
+        lost = SX.explain(_lost_run())
+        by = {f["id"]: f for f in lost["findings"]}
+        r = by["demand.result"]
+        assert r["tone"] == "caution" and "ahead at 16" in r["finding"] and "behind at 64 and 256" in r["finding"], r["finding"]
+        assert "stopped helping once there were enough" in r["means"] and "does not show the rule is false" in r["scope"]
+        assert "guarantee" in r["scope"] and "demand.size" not in by and "demand.data" not in by     # nothing to slim, no saving claimed
+        assert by["demand.outside"]["tone"] == "good" and "where there were no examples" in by["demand.outside"]["means"]
+        assert "No paper was read" in by["reading"]["finding"] and "would be the same numbers" in by["reading"]["scope"]
+        assert "did not beat a conventional network" in lost["bottom"]
+        # a run that ended before measuring says so, rather than explaining numbers it does not have
+        cut = _lost_run()
+        cut["tasks"][0]["candidates"] = []
+        assert "not measured" in {f["id"]: f for f in SX.explain(cut)["findings"]}["demand.result"]["finding"]
+        assert "nothing to conclude" in SX.explain({**cut, "tasks": []})["bottom"]
+
+    @check("a model may reword what a finding means, but not add a number, and old runs are explained when opened")
+    def _():
+        import superexplain as SX
+        d = json.loads(json.dumps(KEEP["won"]))
+        draft = {f["id"]: f for f in SX.findings(d)}
+
+        def ask(system, prompt, max_tokens=0):
+            assert "never invent" in system.lower() and d["goal"] in prompt and "two_body.result" in prompt
+            return {"findings": [{"id": "two_body.result", "means": "For bodies joined by a spring, wiring in the conservation laws made the model clearly more accurate.",
+                                  "scope": "This was 99.7% accurate on real spacecraft data."},
+                                 {"id": "fit", "means": "short", "scope": "Only the mock task was trained on; your own system was not, so this is a pointer and not a result."},
+                                 {"id": "made-up", "means": "x" * 50, "scope": "y" * 50}],
+                    "fit": "near", "fit_why": "The goal is this task.", "bottom": "You can take the direction from this run, and you cannot take a finished model; train on your own data next."}
+        ex = SX.explain(d, ask=ask)
+        by = {f["id"]: f for f in ex["findings"]}
+        assert ex["by"] == "model" and ex["fit"] == "near" and ex["bottom"].startswith("You can take")
+        assert by["two_body.result"]["means"].startswith("For bodies joined")                 # reworded
+        assert by["two_body.result"]["scope"] == draft["two_body.result"]["scope"]            # 99.7 is in no finding: refused
+        assert by["two_body.result"]["finding"] == draft["two_body.result"]["finding"]        # the numbers are never the model's
+        assert by["fit"]["means"] == draft["fit"]["means"] and by["fit"]["scope"].startswith("Only the mock task")
+        assert "made-up" not in by
+        assert SX.explain(d, ask=lambda *a: None)["by"] == "numbers" and SX.explain(d, ask=lambda *a: "nonsense")["by"] == "numbers"
+        # a run saved before it could explain itself gets an explanation on reading, and Explain again keeps one
+        home = KEEP["home"]
+        real = (SA.home, SA._live, SA._ask)
+        SA.home, SA._live, SA._ask = (lambda: home), (lambda: True), ask
+        try:
+            old = {k: v for k, v in d.items() if k != "explain"}
+            old["id"] = "old-run"
+            (home / "old-run.json").write_text(json.dumps(old))
+            assert SA.read("old-run")["explain"]["by"] == "numbers"
+            assert "explain" not in json.loads((home / "old-run.json").read_text())           # reading does not rewrite the file
+            again = SA.reexplain("old-run")
+            assert again["explain"]["by"] == "model" and json.loads((home / "old-run.json").read_text())["explain"]["fit"] == "near"
+            import main
+            from fastapi.testclient import TestClient
+            c = TestClient(main.app)
+            assert c.post("/api/superagent/old-run/explain").json()["explain"]["by"] == "model"
+            assert c.post("/api/superagent/nope/explain").status_code == 404
+        finally:
+            SA.home, SA._live, SA._ask = real
+        page = (ROOT / "frontend" / "index.html").read_text()
+        assert "function saExplain" in page and "How far it reaches" in page and 'id="saExplain"' in page
 
     @check("the page, the rail and the server know the super agent")
     def _():

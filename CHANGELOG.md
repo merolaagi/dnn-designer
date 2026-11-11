@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.45.0
+
+- **The super agent explains its findings.** A new Explain step, and a "What
+  the findings mean" section at the top of every report. Each finding gets
+  three things: the measured fact with its numbers, what it means, and how far
+  it reaches (the conditions it was measured under and what it does not show).
+  It covers the match between the goal and the mock tasks, what was read, and
+  for each task the result, the data saving, which rule did the work, size and
+  speed, second measures, and what the conventional network failed to learn;
+  then a bottom line on what the run does and does not support.
+- It explains every case: a win, a rule that helped only with little data, a
+  rule that cost accuracy (without calling a true rule false), a winner that
+  cannot be told apart from the runner-up, rules that are not true of the
+  task, a slimmed network that gave up accuracy, a run that read no paper, and
+  a run that ended before measuring.
+- Works with no model: the explanation is worked out from the run's numbers.
+  With a model, it rewrites the meaning and the reach for the goal and judges
+  how close the mock tasks are to it (near, loose, far); a sentence containing
+  a number that is not in the finding is refused.
+- Runs from 4.44.0 are explained when opened, and **Explain again** redoes
+  any finished run.
+
 ## 4.44.0
 
 - **Super agent** (Executions → Super agent). Give it a goal, or let it pick
